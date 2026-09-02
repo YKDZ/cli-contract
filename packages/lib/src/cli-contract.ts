@@ -59,6 +59,7 @@ export type {
 } from "#/outcome-fact";
 
 const cliContractType = Symbol("CliContract.type");
+const executableCommandType = Symbol("ExecutableCommand.type");
 const helpCapabilities = new WeakSet<object>();
 const outputCapabilities = new WeakSet<object>();
 const compiledCliContracts = new WeakMap<object, RuntimeCompiledCli>();
@@ -436,6 +437,7 @@ export interface CompletionRootCommandDefinition<
   readonly kind: "rootCommand";
   readonly name: string;
   readonly description: string;
+  readonly helpSupplement?: string;
   readonly fields?: CheckedFieldDefinitions<Fields> &
     FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
     FieldIdentityContract<Fields>;
@@ -466,6 +468,7 @@ export interface DataRootCommandDefinition<
   readonly kind: "rootCommand";
   readonly name: string;
   readonly description: string;
+  readonly helpSupplement?: string;
   readonly fields: CheckedFieldDefinitions<Fields> &
     FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
     FieldIdentityContract<Fields>;
@@ -507,6 +510,122 @@ export type RootCommandDefinition<Command extends string, Dependencies> =
       DataVariantDefinitions,
       FailureVariantDefinitions
     >;
+
+export interface RootGroupDefinition {
+  readonly kind: "rootGroup";
+  readonly parent?: never;
+  readonly name: string;
+  readonly aliases?: readonly string[];
+  readonly description: string;
+  readonly helpSupplement?: string;
+  readonly handler?: never;
+}
+
+export interface CommandGroupDefinition<Parent extends string = string> {
+  readonly kind: "commandGroup";
+  readonly parent: Parent;
+  readonly name: string;
+  readonly aliases?: readonly string[];
+  readonly description: string;
+  readonly helpSupplement?: string;
+  readonly handler?: never;
+}
+
+type HierarchyCommandFacts<Parent extends string = string> = Readonly<{
+  readonly kind: "command";
+  readonly parent: Parent;
+  readonly aliases?: readonly string[];
+  readonly helpSupplement?: string;
+  readonly [executableCommandType]: true;
+}>;
+
+export type ExecutableCommandDefinition<
+  Command extends string = string,
+  Dependencies = unknown,
+> =
+  | (Omit<
+      CompletionRootCommandDefinition<
+        Command,
+        Dependencies,
+        FailureVariantDefinitions,
+        FieldDefinitions,
+        ContractSchema
+      >,
+      "kind"
+    > &
+      HierarchyCommandFacts)
+  | (Omit<
+      DataRootCommandDefinition<
+        Command,
+        Dependencies,
+        FieldDefinitions,
+        ContractSchema,
+        DataVariantDefinitions,
+        FailureVariantDefinitions
+      >,
+      "kind"
+    > &
+      HierarchyCommandFacts);
+
+export type CommandNodeDefinition =
+  | CommandGroupDefinition
+  | (HierarchyCommandFacts &
+      Readonly<{
+        readonly name: string;
+        readonly description: string;
+        readonly fields?: FieldDefinitions;
+        readonly input: ContractSchema;
+        readonly success:
+          | Readonly<{ readonly kind: "completion" }>
+          | Readonly<{
+              readonly kind: "data";
+              readonly variants: DataVariantDefinitions;
+            }>;
+        readonly failures: FailureVariantDefinitions;
+        readonly handler: unknown;
+      }>)
+  | RootGroupDefinition;
+
+export type HierarchyCliDefinition<Root extends string> =
+  RootCliDefinitionBase<Root> &
+    Readonly<{
+      readonly commands: Readonly<Record<string, CommandNodeDefinition>> &
+        Readonly<Record<Root, RootGroupDefinition>>;
+    }>;
+
+type HierarchyRawInput<Commands> = {
+  [Command in keyof Commands]: Commands[Command] extends Readonly<{
+    readonly kind: "command";
+    readonly fields: infer Fields extends FieldDefinitions;
+  }>
+    ? RawFieldInput<Fields>
+    : Commands[Command] extends Readonly<{ readonly kind: "command" }>
+      ? EmptyCliInput
+      : never;
+}[keyof Commands];
+
+type HierarchyResult<Commands> = {
+  [Command in keyof Commands]: Commands[Command] extends Readonly<{
+    readonly kind: "command";
+    readonly success: Readonly<{
+      readonly kind: "data";
+      readonly variants: infer Variants extends DataVariantDefinitions;
+    }>;
+    readonly failures: infer Failures extends FailureVariantDefinitions;
+  }>
+    ?
+        | DataFactUnion<Extract<Command, string>, Variants>
+        | FailureFactUnion<Extract<Command, string>, Failures>
+    : Commands[Command] extends Readonly<{
+          readonly kind: "command";
+          readonly success: Readonly<{ readonly kind: "completion" }>;
+          readonly failures: infer Failures extends FailureVariantDefinitions;
+        }>
+      ?
+          | CompletionFact<Extract<Command, string>>
+          | FailureFactUnion<Extract<Command, string>, Failures>
+      : never;
+}[keyof Commands];
 
 type RootIdentityContract<Root extends string> = string extends Root
   ? unknown
@@ -636,13 +755,57 @@ export interface RootCommandGrammar<Root extends string> {
   readonly id: Root;
   readonly name: string;
   readonly description: string;
+  readonly helpSupplement?: string;
   readonly fields: readonly FieldGrammar[];
   readonly usage: CommandUsage<Root>;
 }
 
-export interface CliGrammar<Root extends string> {
-  readonly root: RootCommandGrammar<Root>;
-  readonly nodes: readonly [];
+interface GroupGrammarBase<Command extends string> {
+  readonly id: Command;
+  readonly name: string;
+  readonly aliases: readonly string[];
+  readonly description: string;
+  readonly helpSupplement?: string;
+  readonly usage: CommandUsage<Command>;
+}
+
+export interface RootGroupGrammar<
+  Root extends string,
+> extends GroupGrammarBase<Root> {
+  readonly kind: "rootGroup";
+}
+
+export interface CommandGroupGrammar<
+  Command extends string = string,
+> extends GroupGrammarBase<Command> {
+  readonly kind: "commandGroup";
+  readonly parent: string;
+}
+
+export interface ExecutableCommandGrammar<
+  Command extends string = string,
+> extends GroupGrammarBase<Command> {
+  readonly kind: "command";
+  readonly parent: string;
+  readonly fields: readonly FieldGrammar[];
+}
+
+export type CommandGrammar<Command extends string = string> =
+  | CommandGroupGrammar<Command>
+  | ExecutableCommandGrammar<Command>;
+
+export type CliRootKind = "rootCommand" | "rootGroup";
+
+export interface CliGrammar<
+  Root extends string,
+  RootKind extends CliRootKind = CliRootKind,
+> {
+  readonly root: RootKind extends "rootGroup"
+    ? RootGroupGrammar<Root>
+    : RootCommandGrammar<Root>;
+  readonly nodes: RootKind extends "rootGroup"
+    ? readonly CommandGrammar[]
+    : readonly [];
   readonly controls: Readonly<{
     readonly help: Readonly<{ readonly longOption: "--help" }>;
     readonly output: Readonly<{
@@ -675,22 +838,117 @@ export interface RootCommandManifest {
   readonly kind: "rootCommand";
   readonly name: string;
   readonly description: string;
+  readonly helpSupplement?: string;
   readonly fields: readonly FieldGrammar[];
   readonly input: SchemaManifest;
   readonly success: CommandSuccessManifest;
   readonly failures: Readonly<Record<string, FailureVariantManifest>>;
 }
 
-export interface CliManifest<Root extends string> {
+export interface CommandGroupManifest {
+  readonly kind: "rootGroup" | "commandGroup";
+  readonly parent?: string;
+  readonly name: string;
+  readonly aliases: readonly string[];
+  readonly description: string;
+  readonly helpSupplement?: string;
+}
+
+export interface ExecutableCommandManifest extends Omit<
+  RootCommandManifest,
+  "kind"
+> {
+  readonly kind: "command";
+  readonly parent: string;
+  readonly aliases: readonly string[];
+  readonly helpSupplement?: string;
+}
+
+export interface CliManifest<
+  Root extends string,
+  RootKind extends CliRootKind = CliRootKind,
+> {
   readonly schemaVersion: "1";
   readonly root: Root;
-  readonly commands: Readonly<Record<Root, RootCommandManifest>>;
-  readonly controls: CliGrammar<Root>["controls"];
+  readonly commands: RootKind extends "rootGroup"
+    ? Readonly<Record<string, CommandGroupManifest | ExecutableCommandManifest>>
+    : Readonly<Record<Root, RootCommandManifest>>;
+  readonly controls: CliGrammar<Root, RootKind>["controls"];
+  readonly usageFailure: Readonly<{ readonly exitCode: number }>;
+  readonly wire: RootKind extends "rootGroup"
+    ? Readonly<Record<string, CommandWireManifest>>
+    : CommandWireManifest;
+}
+
+export interface CommandWireManifest {
+  readonly completion?: JsonObject;
+  readonly data?: Readonly<Record<string, JsonObject>>;
+  readonly failure?: Readonly<Record<string, JsonObject>>;
+}
+
+type HierarchyGrammarNode<Command extends string, Node> =
+  Node extends Readonly<{
+    readonly kind: "commandGroup";
+    readonly parent: infer Parent extends string;
+  }>
+    ? CommandGroupGrammar<Command> & Readonly<{ readonly parent: Parent }>
+    : Node extends Readonly<{
+          readonly kind: "command";
+          readonly parent: infer Parent extends string;
+        }>
+      ? ExecutableCommandGrammar<Command> &
+          Readonly<{ readonly parent: Parent }>
+      : never;
+
+type HierarchyNodeUnion<Commands, Root extends string> = {
+  [Command in Exclude<keyof Commands, Root>]: HierarchyGrammarNode<
+    Extract<Command, string>,
+    Commands[Command]
+  >;
+}[Exclude<keyof Commands, Root>];
+
+export interface HierarchyCliGrammar<Root extends string, Commands> {
+  readonly root: RootGroupGrammar<Root>;
+  readonly nodes: readonly HierarchyNodeUnion<Commands, Root>[];
+  readonly controls: CliGrammar<Root, "rootGroup">["controls"];
+}
+
+type HierarchyManifestNode<Node> =
+  Node extends Readonly<{
+    readonly kind: "rootGroup";
+  }>
+    ? CommandGroupManifest & Readonly<{ readonly kind: "rootGroup" }>
+    : Node extends Readonly<{
+          readonly kind: "commandGroup";
+          readonly parent: infer Parent extends string;
+        }>
+      ? CommandGroupManifest &
+          Readonly<{ readonly kind: "commandGroup"; readonly parent: Parent }>
+      : Node extends Readonly<{
+            readonly kind: "command";
+            readonly parent: infer Parent extends string;
+          }>
+        ? ExecutableCommandManifest & Readonly<{ readonly parent: Parent }>
+        : never;
+
+type HierarchyExecutableKeys<Commands> = {
+  [Command in keyof Commands]: Commands[Command] extends Readonly<{
+    readonly kind: "command";
+  }>
+    ? Command
+    : never;
+}[keyof Commands];
+
+export interface HierarchyCliManifest<Root extends string, Commands> {
+  readonly schemaVersion: "1";
+  readonly root: Root;
+  readonly commands: Readonly<{
+    [Command in keyof Commands]: HierarchyManifestNode<Commands[Command]>;
+  }>;
+  readonly controls: HierarchyCliGrammar<Root, Commands>["controls"];
   readonly usageFailure: Readonly<{ readonly exitCode: number }>;
   readonly wire: Readonly<{
-    readonly completion?: JsonObject;
-    readonly data?: Readonly<Record<string, JsonObject>>;
-    readonly failure?: Readonly<Record<string, JsonObject>>;
+    [Command in HierarchyExecutableKeys<Commands>]: CommandWireManifest;
   }>;
 }
 
@@ -699,43 +957,102 @@ export interface CliContract<
   Dependencies = unknown,
   RawInput = Readonly<Record<string, unknown>>,
   Result extends OutcomeFact = OutcomeFact,
+  RootKind extends CliRootKind = CliRootKind,
+  Commands = never,
 > {
-  readonly grammar: CliGrammar<Root>;
-  readonly manifest: CliManifest<Root>;
+  readonly grammar: [Commands] extends [never]
+    ? CliGrammar<Root, RootKind>
+    : HierarchyCliGrammar<Root, Commands>;
+  readonly manifest: [Commands] extends [never]
+    ? CliManifest<Root, RootKind>
+    : HierarchyCliManifest<Root, Commands>;
   readonly [cliContractType]: Readonly<{
     readonly dependencies: Dependencies;
     readonly rawInput: RawInput;
     readonly result: Result;
     readonly root: Root;
+    readonly commands: [Commands] extends [never] ? Root : keyof Commands;
   }>;
 }
 
 export type CliContractDependencies<Contract> =
-  Contract extends CliContract<string, infer Dependencies, unknown>
+  Contract extends CliContract<
+    infer _Root,
+    infer Dependencies,
+    unknown,
+    OutcomeFact,
+    CliRootKind,
+    infer _Commands
+  >
     ? Dependencies
     : never;
 
 export type CliContractRawInput<Contract> =
-  Contract extends CliContract<string, unknown, infer RawInput>
+  Contract extends CliContract<
+    infer _Root,
+    unknown,
+    infer RawInput,
+    OutcomeFact,
+    CliRootKind,
+    infer _Commands
+  >
     ? RawInput
     : never;
 
 export type CliContractResult<Contract> =
-  Contract extends CliContract<string, unknown, unknown, infer Result>
+  Contract extends CliContract<
+    infer _Root,
+    unknown,
+    unknown,
+    infer Result,
+    CliRootKind,
+    infer _Commands
+  >
     ? Result
     : never;
 
 export type CliContractRoot<Contract> =
-  Contract extends CliContract<infer Root, unknown, unknown> ? Root : never;
+  Contract extends CliContract<
+    infer Root,
+    unknown,
+    unknown,
+    OutcomeFact,
+    CliRootKind,
+    infer Commands
+  >
+    ? [Commands] extends [never]
+      ? Root
+      : Extract<keyof Commands, string>
+    : never;
 
 export interface DefineCli<Dependencies> {
+  readonly command: <const Command extends string>(
+    command: Command,
+  ) => DefineCommand<Command, Dependencies>;
+
+  <
+    const Root extends string,
+    const Commands extends Readonly<Record<string, CommandNodeDefinition>>,
+  >(
+    definition: HierarchyCliDefinition<Root> &
+      Readonly<{ readonly commands: Commands }>,
+  ): CliContract<
+    Root,
+    Dependencies,
+    HierarchyRawInput<Commands>,
+    HierarchyResult<Commands>,
+    "rootGroup",
+    Commands
+  >;
+
   <const Root extends string, const Failures extends FailureVariantDefinitions>(
     definition: CompletionRootCliDefinition<Root, Dependencies, Failures>,
   ): CliContract<
     Root,
     Dependencies,
     EmptyCliInput,
-    CompletionFact<Root> | FailureFactUnion<Root, Failures>
+    CompletionFact<Root> | FailureFactUnion<Root, Failures>,
+    "rootCommand"
   >;
 
   <
@@ -760,7 +1077,8 @@ export interface DefineCli<Dependencies> {
     Root,
     Dependencies,
     RawFieldInput<Fields>,
-    CompletionFact<Root> | FailureFactUnion<Root, Failures>
+    CompletionFact<Root> | FailureFactUnion<Root, Failures>,
+    "rootCommand"
   >;
 
   <
@@ -782,7 +1100,101 @@ export interface DefineCli<Dependencies> {
     Root,
     Dependencies,
     RawFieldInput<Fields>,
-    DataFactUnion<Root, Variants> | FailureFactUnion<Root, Failures>
+    DataFactUnion<Root, Variants> | FailureFactUnion<Root, Failures>,
+    "rootCommand"
+  >;
+}
+
+type HierarchyCommandInput<Definition> = Omit<Definition, "kind"> &
+  Omit<HierarchyCommandFacts, typeof executableCommandType>;
+
+export interface DefineCommand<Command extends string, Dependencies> {
+  <
+    const Parent extends string,
+    const Failures extends FailureVariantDefinitions,
+  >(
+    definition: HierarchyCommandInput<
+      CompletionRootCommandDefinition<Command, Dependencies, Failures>
+    > &
+      Readonly<{ readonly parent: Parent }>,
+  ): Readonly<
+    Record<
+      Command,
+      Omit<
+        CompletionRootCommandDefinition<Command, Dependencies, Failures>,
+        "kind"
+      > &
+        HierarchyCommandFacts<Parent>
+    >
+  >;
+
+  <
+    const Fields extends FieldDefinitions,
+    InputSchema extends ContractSchema,
+    const Parent extends string,
+    const Failures extends FailureVariantDefinitions,
+  >(
+    definition: HierarchyCommandInput<
+      CompletionRootCommandDefinition<
+        Command,
+        Dependencies,
+        Failures,
+        Fields,
+        InputSchema
+      >
+    > &
+      Readonly<{ readonly fields: Fields; readonly parent: Parent }>,
+  ): Readonly<
+    Record<
+      Command,
+      Omit<
+        CompletionRootCommandDefinition<
+          Command,
+          Dependencies,
+          Failures,
+          Fields,
+          InputSchema
+        >,
+        "kind"
+      > &
+        HierarchyCommandFacts<Parent>
+    >
+  >;
+
+  <
+    const Fields extends FieldDefinitions,
+    InputSchema extends ContractSchema,
+    const Parent extends string,
+    const Variants extends DataVariantDefinitions,
+    const Failures extends FailureVariantDefinitions,
+  >(
+    definition: HierarchyCommandInput<
+      DataRootCommandDefinition<
+        Command,
+        Dependencies,
+        Fields,
+        InputSchema,
+        Variants,
+        Failures
+      >
+    > &
+      Readonly<{ readonly parent: Parent }>,
+  ): Readonly<
+    Record<
+      Command,
+      Omit<
+        DataRootCommandDefinition<
+          Command,
+          Dependencies,
+          Fields,
+          InputSchema,
+          Variants,
+          Failures
+        >,
+        "kind"
+      > &
+        HierarchyCommandFacts<Parent>
+    >
   >;
 }
 
@@ -802,12 +1214,32 @@ interface RuntimeCompiledCli {
       }>;
   readonly failures: Readonly<Record<string, RuntimeAtomicVariant>>;
   readonly handler: unknown;
+  readonly commands: Readonly<Record<string, RuntimeCompiledCommand>>;
 }
 
-type RuntimeCommandDefinition = Readonly<{
-  readonly kind: "rootCommand";
+interface RuntimeCompiledCommand {
+  readonly id: string;
+  readonly kind: "command" | "commandGroup" | "rootCommand" | "rootGroup";
+  readonly parent?: string;
   readonly name: string;
+  readonly aliases: readonly string[];
   readonly description: string;
+  readonly helpSupplement?: string;
+  readonly fields: readonly FieldGrammar[];
+  readonly usage: CommandUsage<string>;
+  readonly input?: ContractSchema;
+  readonly success?: RuntimeCompiledCli["success"];
+  readonly failures?: Readonly<Record<string, RuntimeAtomicVariant>>;
+  readonly handler?: unknown;
+}
+
+type RuntimeExecutableDefinition = Readonly<{
+  readonly kind: "command" | "rootCommand";
+  readonly parent?: string;
+  readonly name: string;
+  readonly aliases?: readonly string[];
+  readonly description: string;
+  readonly helpSupplement?: string;
   readonly fields?: FieldDefinitions;
   readonly input: ContractSchema;
   readonly success:
@@ -819,6 +1251,19 @@ type RuntimeCommandDefinition = Readonly<{
   readonly failures: FailureVariantDefinitions;
   readonly handler: unknown;
 }>;
+
+type RuntimeGroupDefinition = Readonly<{
+  readonly kind: "commandGroup" | "rootGroup";
+  readonly parent?: string;
+  readonly name: string;
+  readonly aliases?: readonly string[];
+  readonly description: string;
+  readonly helpSupplement?: string;
+}>;
+
+type RuntimeCommandDefinition =
+  | RuntimeExecutableDefinition
+  | RuntimeGroupDefinition;
 
 type RuntimeCliDefinition = RootCliDefinitionBase<string> &
   Readonly<{
@@ -847,10 +1292,25 @@ export function outputCapability(
 }
 
 export function defineCli<Dependencies = undefined>(): DefineCli<Dependencies> {
-  return compileCli as DefineCli<Dependencies>;
+  const define = ((definition: RuntimeCliDefinition) =>
+    compileCli(definition)) as DefineCli<Dependencies>;
+  Object.defineProperty(define, "command", {
+    configurable: true,
+    value: (command: string) => (definition: object) =>
+      Object.freeze({
+        [command]: Object.freeze({
+          ...definition,
+          [executableCommandType]: true,
+        }),
+      }),
+  });
+  return define;
 }
 
 function compileCli(definition: RuntimeCliDefinition): CliContract {
+  if (definition.commands[definition.root]?.kind === "rootGroup") {
+    return compileHierarchyCli(definition);
+  }
   const definitionIssues: ContractDefinitionIssue[] = [];
   const command = collectRootDefinitionIssues(definition, definitionIssues);
   if (command === undefined) {
@@ -914,6 +1374,9 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
       id: definition.root,
       name: command.name,
       description: command.description,
+      ...(command.helpSupplement === undefined
+        ? {}
+        : { helpSupplement: command.helpSupplement }),
       fields,
       usage,
     },
@@ -928,6 +1391,9 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
         kind: "rootCommand" as const,
         name: command.name,
         description: command.description,
+        ...(command.helpSupplement === undefined
+          ? {}
+          : { helpSupplement: command.helpSupplement }),
         fields,
         input: validInput,
         success: compiledSuccess.manifest,
@@ -943,7 +1409,10 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
         : { failure: compiledFailures.wire }),
     }),
   });
-  const contract = Object.freeze({ grammar, manifest }) as CliContract;
+  const contract = Object.freeze({
+    grammar,
+    manifest,
+  }) as unknown as CliContract;
 
   compiledCliContracts.set(contract, {
     contract,
@@ -956,8 +1425,233 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
     success: compiledSuccess.runtime,
     failures: compiledFailures.runtime,
     handler: command.handler,
+    commands: {
+      [definition.root]: {
+        id: definition.root,
+        kind: "rootCommand",
+        name: command.name,
+        aliases: Object.freeze([]),
+        description: command.description,
+        ...(command.helpSupplement === undefined
+          ? {}
+          : { helpSupplement: command.helpSupplement }),
+        fields,
+        usage,
+        input: command.input,
+        success: compiledSuccess.runtime,
+        failures: compiledFailures.runtime,
+        handler: command.handler,
+      },
+    },
   });
 
+  return contract;
+}
+
+function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
+  const issues: ContractDefinitionIssue[] = [];
+  collectCliBaseIssues(definition, issues);
+  const orderedIds = orderHierarchy(definition, issues);
+  if (issues.length > 0) {
+    throw new ContractDefinitionError(
+      issues as [ContractDefinitionIssue, ...ContractDefinitionIssue[]],
+    );
+  }
+
+  const controls = deepFreeze({
+    help: { longOption: definition.help.longOption },
+    output: {
+      defaultFormat: definition.output.defaultFormat,
+      formats: definition.output.formats,
+    },
+  });
+  const runtimeCommands: Record<string, RuntimeCompiledCommand> = {};
+  const grammarNodes: CommandGrammar[] = [];
+  const manifestCommands: Record<
+    string,
+    RootCommandManifest | CommandGroupManifest | ExecutableCommandManifest
+  > = {};
+  const wire: Record<string, CommandWireManifest> = {};
+
+  for (const id of orderedIds) {
+    const node = definition.commands[id] as RuntimeCommandDefinition;
+    const aliases = Object.freeze([...(node.aliases ?? [])]);
+    const usage = deepFreeze({
+      command: id,
+      synopsis:
+        node.kind === "rootGroup" || node.kind === "commandGroup"
+          ? `${commandPath(id, definition.commands)} <command>`
+          : createUsageSynopsis(commandPath(id, definition.commands), []),
+    });
+    if (node.kind === "rootGroup" || node.kind === "commandGroup") {
+      const compiledNode: RuntimeCompiledCommand = {
+        id,
+        kind: node.kind,
+        ...(node.parent === undefined ? {} : { parent: node.parent }),
+        name: node.name,
+        aliases,
+        description: node.description,
+        ...(node.helpSupplement === undefined
+          ? {}
+          : { helpSupplement: node.helpSupplement }),
+        fields: Object.freeze([]),
+        usage,
+      };
+      runtimeCommands[id] = compiledNode;
+      if (id !== definition.root) {
+        grammarNodes.push(
+          deepFreeze({
+            kind: "commandGroup" as const,
+            id,
+            parent: node.parent as string,
+            name: node.name,
+            aliases,
+            description: node.description,
+            ...(node.helpSupplement === undefined
+              ? {}
+              : { helpSupplement: node.helpSupplement }),
+            usage,
+          }),
+        );
+      }
+      manifestCommands[id] = deepFreeze({
+        kind: node.kind,
+        ...(node.parent === undefined ? {} : { parent: node.parent }),
+        name: node.name,
+        aliases,
+        description: node.description,
+        ...(node.helpSupplement === undefined
+          ? {}
+          : { helpSupplement: node.helpSupplement }),
+      });
+      continue;
+    }
+
+    const executable = node as RuntimeExecutableDefinition;
+    const input = compileContractSchema(
+      executable.input,
+      { command: id, location: "input" },
+      issues,
+    );
+    const compiledSuccess = compileSuccess(id, executable.success, issues);
+    const compiledFailures = compileFailures(id, executable.failures, issues);
+    const fields =
+      input === undefined
+        ? []
+        : compileInputFields(
+            executable.fields ?? {},
+            input.inputSchema,
+            id,
+            issues,
+          );
+    const leafUsage = deepFreeze({
+      command: id,
+      synopsis: createUsageSynopsis(
+        commandPath(id, definition.commands),
+        fields,
+      ),
+    });
+    runtimeCommands[id] = {
+      id,
+      kind: "command",
+      parent: executable.parent as string,
+      name: executable.name,
+      aliases,
+      description: executable.description,
+      ...(executable.helpSupplement === undefined
+        ? {}
+        : { helpSupplement: executable.helpSupplement }),
+      fields,
+      usage: leafUsage,
+      input: executable.input,
+      success: compiledSuccess.runtime,
+      failures: compiledFailures.runtime,
+      handler: executable.handler,
+    };
+    grammarNodes.push(
+      deepFreeze({
+        kind: "command" as const,
+        id,
+        parent: executable.parent as string,
+        name: executable.name,
+        aliases,
+        description: executable.description,
+        ...(executable.helpSupplement === undefined
+          ? {}
+          : { helpSupplement: executable.helpSupplement }),
+        fields,
+        usage: leafUsage,
+      }),
+    );
+    manifestCommands[id] = deepFreeze({
+      kind: "command" as const,
+      parent: executable.parent as string,
+      name: executable.name,
+      aliases,
+      description: executable.description,
+      ...(executable.helpSupplement === undefined
+        ? {}
+        : { helpSupplement: executable.helpSupplement }),
+      fields,
+      input: input as SchemaManifest,
+      success: compiledSuccess.manifest,
+      failures: compiledFailures.manifest,
+    });
+    wire[id] = deepFreeze({
+      ...compiledSuccess.wire,
+      ...(Object.keys(compiledFailures.wire).length === 0
+        ? {}
+        : { failure: compiledFailures.wire }),
+    });
+  }
+  if (issues.length > 0)
+    throw new ContractDefinitionError(
+      issues as [ContractDefinitionIssue, ...ContractDefinitionIssue[]],
+    );
+
+  const rootCommand = runtimeCommands[
+    definition.root
+  ] as RuntimeCompiledCommand;
+  const grammar = deepFreeze({
+    root: {
+      kind: "rootGroup" as const,
+      id: rootCommand.id,
+      name: rootCommand.name,
+      aliases: rootCommand.aliases,
+      description: rootCommand.description,
+      ...(rootCommand.helpSupplement === undefined
+        ? {}
+        : { helpSupplement: rootCommand.helpSupplement }),
+      usage: rootCommand.usage,
+    },
+    nodes: grammarNodes,
+    controls,
+  });
+  const manifest = deepFreeze({
+    schemaVersion: "1" as const,
+    root: definition.root,
+    commands: manifestCommands,
+    controls,
+    usageFailure: { exitCode: definition.usageFailureExitCode },
+    wire,
+  });
+  const contract = Object.freeze({
+    grammar,
+    manifest,
+  }) as unknown as CliContract;
+  compiledCliContracts.set(contract, {
+    contract,
+    root: definition.root,
+    description: rootCommand.description,
+    fields: rootCommand.fields,
+    usage: rootCommand.usage,
+    usageFailureExitCode: definition.usageFailureExitCode,
+    input: undefined as unknown as ContractSchema,
+    success: { kind: "completion" },
+    failures: {},
+    handler: undefined,
+    commands: deepFreeze(runtimeCommands),
+  });
   return contract;
 }
 
@@ -972,7 +1666,47 @@ export function getCompiledCli(contract: CliContract): RuntimeCompiledCli {
 function collectRootDefinitionIssues(
   definition: RuntimeCliDefinition,
   issues: ContractDefinitionIssue[],
-): RuntimeCommandDefinition | undefined {
+): RuntimeExecutableDefinition | undefined {
+  collectCliBaseIssues(definition, issues);
+  const commandKeys = Object.keys(definition.commands);
+  const command = definition.commands[definition.root];
+  if (command === undefined || commandKeys.length !== 1) {
+    issues.push({
+      code: "invalidRootCommandSet",
+      root: definition.root,
+      receivedCommands: commandKeys.sort(),
+    });
+  }
+  if (command === undefined) return undefined;
+  if (command.kind !== "rootCommand") {
+    issues.push({
+      code: "invalidRootCommandKind",
+      command: definition.root,
+      received: typeof command.kind === "string" ? command.kind : null,
+    });
+    return undefined;
+  }
+  if (command.name.length === 0) {
+    issues.push({
+      code: "missingCommandText",
+      command: definition.root,
+      field: "name",
+    });
+  }
+  if (command.description.length === 0) {
+    issues.push({
+      code: "missingCommandText",
+      command: definition.root,
+      field: "description",
+    });
+  }
+  return command;
+}
+
+function collectCliBaseIssues(
+  definition: RuntimeCliDefinition,
+  issues: ContractDefinitionIssue[],
+): void {
   if (!/^[a-z][A-Za-z0-9]*$/.test(definition.root)) {
     issues.push({
       code: "invalidCommandIdentity",
@@ -1009,40 +1743,155 @@ function collectRootDefinitionIssues(
       maximum: 255,
     });
   }
+}
 
-  const commandKeys = Object.keys(definition.commands);
-  const command = definition.commands[definition.root];
-  if (command === undefined || commandKeys.length !== 1) {
-    issues.push({
-      code: "invalidRootCommandSet",
-      root: definition.root,
-      receivedCommands: commandKeys.sort(),
-    });
+function orderHierarchy(
+  definition: RuntimeCliDefinition,
+  issues: ContractDefinitionIssue[],
+): string[] {
+  const ids = Object.keys(definition.commands);
+  if (!ids.some((id) => definition.commands[id]?.parent === definition.root)) {
+    issues.push({ code: "rootGroupWithoutChildren", command: definition.root });
   }
-  if (command === undefined) return undefined;
-  if (command.kind !== "rootCommand") {
-    issues.push({
-      code: "invalidRootCommandKind",
-      command: definition.root,
-      received: typeof command.kind === "string" ? command.kind : null,
-    });
-    return undefined;
+  for (const id of ids) {
+    const node = definition.commands[id] as RuntimeCommandDefinition;
+    if (!/^[a-z][A-Za-z0-9]*$/.test(id))
+      issues.push({ code: "invalidCommandIdentity", command: id });
+    if (node.name.length === 0)
+      issues.push({ code: "missingCommandText", command: id, field: "name" });
+    if (node.description.length === 0)
+      issues.push({
+        code: "missingCommandText",
+        command: id,
+        field: "description",
+      });
+    if (id === definition.root && node.kind !== "rootGroup") {
+      issues.push({
+        code: "invalidRootCommandKind",
+        command: id,
+        received: node.kind,
+      });
+    }
+    if (id === definition.root && node.parent !== undefined) {
+      issues.push({
+        code: "invalidCommandParent",
+        command: id,
+        parent: node.parent,
+      });
+    }
+    if (
+      id !== definition.root &&
+      (node.kind === "rootGroup" || node.kind === "rootCommand")
+    ) {
+      issues.push({
+        code: "invalidCommandNodeKind",
+        command: id,
+        received: node.kind,
+      });
+    }
+    if (
+      (node.kind === "rootGroup" || node.kind === "commandGroup") &&
+      "handler" in node
+    ) {
+      issues.push({ code: "invalidCommandHandler", command: id });
+    }
+    if (
+      id !== definition.root &&
+      (node.parent === undefined ||
+        definition.commands[node.parent] === undefined)
+    ) {
+      issues.push({
+        code: "invalidCommandParent",
+        command: id,
+        parent: node.parent ?? null,
+      });
+    } else if (
+      id !== definition.root &&
+      node.parent !== undefined &&
+      definition.commands[node.parent]?.kind !== "rootGroup" &&
+      definition.commands[node.parent]?.kind !== "commandGroup"
+    ) {
+      issues.push({
+        code: "invalidCommandParent",
+        command: id,
+        parent: node.parent,
+      });
+    }
+    for (const spelling of [node.name, ...(node.aliases ?? [])]) {
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(spelling)) {
+        issues.push({ code: "invalidCommandSpelling", command: id, spelling });
+      }
+    }
   }
-  if (command.name.length === 0) {
+
+  const cycleMembers = ids.filter((id) => {
+    const visited = new Set<string>();
+    let current: string | undefined = id;
+    while (
+      current !== undefined &&
+      definition.commands[current] !== undefined
+    ) {
+      if (visited.has(current)) return true;
+      visited.add(current);
+      current = definition.commands[current]?.parent;
+    }
+    return false;
+  });
+  if (cycleMembers.length > 0)
     issues.push({
-      code: "missingCommandText",
-      command: definition.root,
-      field: "name",
+      code: "commandHierarchyCycle",
+      commands: Object.freeze(cycleMembers),
     });
+
+  for (const parent of ids) {
+    const spellings = new Map<string, string[]>();
+    for (const child of ids.filter(
+      (id) => definition.commands[id]?.parent === parent,
+    )) {
+      const node = definition.commands[child] as RuntimeCommandDefinition;
+      for (const spelling of [node.name, ...(node.aliases ?? [])]) {
+        const owners = spellings.get(spelling) ?? [];
+        owners.push(child);
+        spellings.set(spelling, owners);
+      }
+    }
+    for (const [spelling, commands] of spellings) {
+      if (commands.length > 1) {
+        issues.push({
+          code: "duplicateCommandSpelling",
+          parent,
+          spelling,
+          commands: Object.freeze(commands),
+        });
+      }
+    }
   }
-  if (command.description.length === 0) {
-    issues.push({
-      code: "missingCommandText",
-      command: definition.root,
-      field: "description",
-    });
+
+  const ordered: string[] = [];
+  const visit = (id: string): void => {
+    if (ordered.includes(id)) return;
+    ordered.push(id);
+    for (const child of ids)
+      if (definition.commands[child]?.parent === id) visit(child);
+  };
+  if (definition.commands[definition.root] !== undefined)
+    visit(definition.root);
+  return [...ordered, ...ids.filter((id) => !ordered.includes(id))];
+}
+
+function commandPath(
+  id: string,
+  commands: RuntimeCliDefinition["commands"],
+): string {
+  const names: string[] = [];
+  let current: string | undefined = id;
+  while (current !== undefined) {
+    const node: RuntimeCommandDefinition | undefined = commands[current];
+    if (node === undefined) break;
+    names.unshift(node.name);
+    current = node.parent;
   }
-  return command;
+  return names.join(" ");
 }
 
 function compileFailures(
@@ -1071,7 +1920,7 @@ function compileFailures(
 
 function compileSuccess(
   command: string,
-  success: RuntimeCommandDefinition["success"],
+  success: RuntimeExecutableDefinition["success"],
   issues: ContractDefinitionIssue[],
 ): Readonly<{
   readonly runtime: RuntimeCompiledCli["success"];

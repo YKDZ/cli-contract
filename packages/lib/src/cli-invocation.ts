@@ -32,6 +32,12 @@ export interface UnknownOptionIssue {
   readonly option: string;
 }
 
+export interface UnknownCommandIssue {
+  readonly code: "unknownCommand";
+  readonly position: number;
+  readonly command: string;
+}
+
 export interface MissingOptionValueIssue {
   readonly code: "missingOptionValue";
   readonly position: number;
@@ -98,6 +104,7 @@ export type UsageIssue =
   | RepeatedOptionIssue
   | UnexpectedOptionValueIssue
   | UnexpectedPositionalIssue
+  | UnknownCommandIssue
   | UnknownOptionIssue;
 export type NonEmptyUsageIssues = readonly [UsageIssue, ...UsageIssue[]];
 
@@ -128,18 +135,54 @@ export function parseCliInvocation<const Contract extends CliContract>(
   argv: readonly string[],
 ): CliInvocation<Contract> {
   const compiled = getCompiledCli(cliContract);
-  const root = compiled.root as CliContractRoot<Contract>;
-  const usage = compiled.usage as CommandUsage<CliContractRoot<Contract>>;
+  let selected = compiled.commands[compiled.root];
+  if (selected === undefined)
+    throw new Error("compiled root command is missing");
+  let position = 0;
+  while (selected.kind === "rootGroup" || selected.kind === "commandGroup") {
+    const token = argv[position];
+    if (
+      token === undefined ||
+      token === compiled.contract.grammar.controls.help.longOption
+    ) {
+      return bindInvocation(cliContract, {
+        kind: "help",
+        command: selected.id as CliContractRoot<Contract>,
+      });
+    }
+    const child = Object.values(compiled.commands).find(
+      (candidate) =>
+        candidate.parent === selected?.id &&
+        (candidate.name === token || candidate.aliases.includes(token)),
+    );
+    if (child === undefined) {
+      const issue: UnknownCommandIssue | UnknownOptionIssue =
+        token.startsWith("-") && token !== "-"
+          ? { code: "unknownOption", position, option: token }
+          : { code: "unknownCommand", position, command: token };
+      return usageFailure(
+        cliContract,
+        selected.id as CliContractRoot<Contract>,
+        selected.usage as CommandUsage<CliContractRoot<Contract>>,
+        issue,
+      );
+    }
+    selected = child;
+    position += 1;
+  }
+  const command = selected.id as CliContractRoot<Contract>;
+  const usage = selected.usage as CommandUsage<CliContractRoot<Contract>>;
+  const fields = selected.fields;
 
   const input: Record<string, boolean | string | string[]> = {};
   const occurrencesByField = new Map<string, ParsedOptionOccurrence[]>();
-  const positionals = compiled.fields.filter(
+  const positionals = fields.filter(
     (field) =>
       field.kind === "positional" || field.kind === "variadicPositional",
   );
   let positionalIndex = 0;
   let optionsEnabled = true;
-  for (let position = 0; position < argv.length; position += 1) {
+  for (; position < argv.length; position += 1) {
     const token = argv[position] as string;
     if (optionsEnabled && token === "--") {
       optionsEnabled = false;
@@ -151,12 +194,12 @@ export function parseCliInvocation<const Contract extends CliContract>(
     ) {
       return bindInvocation(cliContract, {
         kind: "help",
-        command: root,
+        command,
       });
     }
     if (optionsEnabled && token.startsWith("-") && token !== "-") {
       const option = readOptionToken(token);
-      const field = compiled.fields.find(
+      const field = fields.find(
         (
           candidate,
         ): candidate is Extract<
@@ -171,7 +214,7 @@ export function parseCliInvocation<const Contract extends CliContract>(
               candidate.negatedLongOption === option.spelling)),
       );
       if (field === undefined) {
-        return usageFailure(cliContract, root, usage, {
+        return usageFailure(cliContract, command, usage, {
           code: "unknownOption",
           position,
           option: token,
@@ -179,7 +222,7 @@ export function parseCliInvocation<const Contract extends CliContract>(
       }
       if (field.kind === "flag") {
         if (option.value !== undefined) {
-          return usageFailure(cliContract, root, usage, {
+          return usageFailure(cliContract, command, usage, {
             code: "unexpectedOptionValue",
             position,
             field: field.key,
@@ -212,7 +255,7 @@ export function parseCliInvocation<const Contract extends CliContract>(
       }
       const value = argv[position + 1];
       if (value === undefined || (value.startsWith("-") && value !== "-")) {
-        return usageFailure(cliContract, root, usage, {
+        return usageFailure(cliContract, command, usage, {
           code: "missingOptionValue",
           position,
           field: field.key,
@@ -233,7 +276,7 @@ export function parseCliInvocation<const Contract extends CliContract>(
 
     const positional = positionals[positionalIndex];
     if (positional === undefined) {
-      return unexpectedPositional(cliContract, root, usage, position, token);
+      return unexpectedPositional(cliContract, command, usage, position, token);
     }
     if (positional.kind === "variadicPositional") {
       const values = input[positional.key];
@@ -247,14 +290,14 @@ export function parseCliInvocation<const Contract extends CliContract>(
   }
 
   const structuralIssues = collectStructuralIssues(
-    compiled.fields,
+    fields,
     input,
     occurrencesByField,
   );
   if (structuralIssues.length > 0) {
     return usageFailureFromIssues(
       cliContract,
-      root,
+      command,
       usage,
       structuralIssues as [UsageIssue, ...UsageIssue[]],
     );
@@ -262,7 +305,7 @@ export function parseCliInvocation<const Contract extends CliContract>(
 
   return bindInvocation(cliContract, {
     kind: "parsed",
-    command: root,
+    command,
     input: freezeRawInput(input) as CliContractRawInput<Contract>,
     outputFormat: "structured",
   });

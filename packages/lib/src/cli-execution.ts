@@ -88,19 +88,34 @@ export async function executeCli<const Contract extends CliContract>(
       },
     ]);
   }
+  const command = compiled.commands[options.invocation.command];
+  if (command === undefined) {
+    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+  }
 
   switch (options.invocation.kind) {
     case "help": {
-      const fieldHelp = compiled.fields
+      const fieldHelp = command.fields
         .map((field) => `${formatHelpField(field)}\t${field.description}\n`)
         .join("");
+      const commandHelp = Object.values(compiled.commands)
+        .filter((candidate) => candidate.parent === command.id)
+        .map(
+          (candidate) =>
+            `${[candidate.name, ...candidate.aliases].join(", ")}\t${candidate.description}\n`,
+        )
+        .join("");
+      const supplement =
+        command.helpSupplement === undefined
+          ? ""
+          : `${command.helpSupplement}\n`;
       await writeCliOutput(options.write, {
         destination: "stdout",
-        chunk: `${compiled.usage.synopsis}\n${compiled.description}\n${fieldHelp}${compiled.contract.grammar.controls.help.longOption}\n`,
+        chunk: `${command.usage.synopsis}\n${command.description}\n${commandHelp}${fieldHelp}${compiled.contract.grammar.controls.help.longOption}\n${supplement}`,
       });
       return Object.freeze({
         kind: "help",
-        command: compiled.root as CliContractRoot<Contract>,
+        command: command.id as CliContractRoot<Contract>,
         exitCode: 0,
       });
     }
@@ -111,16 +126,24 @@ export async function executeCli<const Contract extends CliContract>(
       });
       return Object.freeze({
         kind: "usageFailure",
-        command: compiled.root as CliContractRoot<Contract>,
+        command: command.id as CliContractRoot<Contract>,
         issues: options.invocation.issues,
         exitCode: compiled.usageFailureExitCode,
       });
     }
     case "parsed": {
+      if (
+        command.input === undefined ||
+        command.success === undefined ||
+        command.failures === undefined ||
+        command.handler === undefined
+      ) {
+        throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+      }
       const validation = validateSynchronously(
-        compiled.input,
+        command.input,
         options.invocation.input,
-        { command: compiled.root, location: "input" },
+        { command: command.id, location: "input" },
       );
       if (validation.issues !== undefined) {
         const issues = Object.freeze([
@@ -133,17 +156,31 @@ export async function executeCli<const Contract extends CliContract>(
         ]) as readonly [InputRejectedIssue];
         await writeCliOutput(options.write, {
           destination: "stderr",
-          chunk: `${compiled.usage.synopsis}\n`,
+          chunk: `${command.usage.synopsis}\n`,
         });
         return Object.freeze({
           kind: "usageFailure",
-          command: compiled.root as CliContractRoot<Contract>,
+          command: command.id as CliContractRoot<Contract>,
           issues,
           exitCode: compiled.usageFailureExitCode,
         });
       }
 
-      return executeApplicationResult(compiled, validation.value, options);
+      return executeApplicationResult(
+        {
+          ...compiled,
+          root: command.id,
+          description: command.description,
+          fields: command.fields,
+          usage: command.usage,
+          input: command.input,
+          success: command.success,
+          failures: command.failures,
+          handler: command.handler,
+        },
+        validation.value,
+        options,
+      );
     }
   }
 }

@@ -110,6 +110,39 @@ export type ContractDefinitionIssue =
       readonly command: string;
     }>
   | Readonly<{
+      readonly code: "invalidCommandNodeKind";
+      readonly command: string;
+      readonly received: string | null;
+    }>
+  | Readonly<{
+      readonly code: "invalidCommandHandler";
+      readonly command: string;
+    }>
+  | Readonly<{
+      readonly code: "invalidCommandParent";
+      readonly command: string;
+      readonly parent: string | null;
+    }>
+  | Readonly<{
+      readonly code: "invalidCommandSpelling";
+      readonly command: string;
+      readonly spelling: string;
+    }>
+  | Readonly<{
+      readonly code: "rootGroupWithoutChildren";
+      readonly command: string;
+    }>
+  | Readonly<{
+      readonly code: "commandHierarchyCycle";
+      readonly commands: readonly string[];
+    }>
+  | Readonly<{
+      readonly code: "duplicateCommandSpelling";
+      readonly parent: string;
+      readonly spelling: string;
+      readonly commands: readonly string[];
+    }>
+  | Readonly<{
       readonly code: "missingCommandText";
       readonly command: string;
       readonly field: "name" | "description";
@@ -232,6 +265,20 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `命令 ${issue.command} 的 kind 无效`;
     case "invalidCommandIdentity":
       return `命令身份 ${issue.command} 无效`;
+    case "invalidCommandNodeKind":
+      return `命令 ${issue.command} 的节点 kind 无效`;
+    case "invalidCommandHandler":
+      return `不可执行命令组 ${issue.command} 不能声明 handler`;
+    case "invalidCommandParent":
+      return `命令 ${issue.command} 的 parent ${issue.parent ?? "缺失"} 无效`;
+    case "invalidCommandSpelling":
+      return `命令 ${issue.command} 的 spelling ${issue.spelling} 无效`;
+    case "rootGroupWithoutChildren":
+      return `根命令组 ${issue.command} 没有子命令`;
+    case "commandHierarchyCycle":
+      return `命令层级存在环：${issue.commands.join(", ")}`;
+    case "duplicateCommandSpelling":
+      return `命令 ${issue.commands.join(", ")} 在 ${issue.parent} 下重复使用 spelling ${issue.spelling}`;
     case "missingCommandText":
       return `命令 ${issue.command} 缺少 ${issue.field}`;
     case "invalidFieldLongOption":
