@@ -125,9 +125,6 @@ catalogs:
     typescript-7:
       specifier: npm:typescript@^7.0.2
       version: 7.0.2
-    valibot:
-      specifier: ^1.4.2
-      version: 1.4.2
 
 importers:
 
@@ -154,9 +151,9 @@ importers:
 
   packages/lib:
     dependencies:
-      valibot:
-        specifier: 'catalog:'
-        version: 1.4.2(typescript@7.0.2)
+      '@standard-schema/spec':
+        specifier: ^1.1.0
+        version: 1.1.0
     devDependencies:
       '@cli-contract/typescript-config':
         specifier: workspace:*
@@ -484,6 +481,9 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@standard-schema/spec@1.1.0':
+    resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
+
   '@turbo/darwin-64@2.10.11':
     resolution: {integrity: sha512-v3R+1R/Ysozyo+p7Ri8MCIbndOvYt3DgPFrGLhrhQHfvyvbxyH3WyJj+A/2JTNmNleuAlh3JUyCV0iSVHIONTA==}
     cpu: [x64]
@@ -683,14 +683,6 @@ packages:
   undici-types@7.18.2:
     resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
 
-  valibot@1.4.2:
-    resolution: {integrity: sha512-gjdCvJ6d3RyHAneqxMYMW9QMCwYMb3jpOO0IyHZV1bnRHFBHrX3VkIILt5XYR0WhwHiH7Mty8ovuPZ/O3gamrg==}
-    peerDependencies:
-      typescript: '>=5'
-    peerDependenciesMeta:
-      typescript:
-        optional: true
-
 snapshots:
 
   '@oxfmt/binding-android-arm-eabi@0.58.0':
@@ -824,6 +816,8 @@ snapshots:
 
   '@oxlint/binding-win32-x64-msvc@1.80.0':
     optional: true
+
+  '@standard-schema/spec@1.1.0': {}
 
   '@turbo/darwin-64@2.10.11':
     optional: true
@@ -998,7 +992,3 @@ snapshots:
       '@typescript/typescript-win32-x64': 7.0.2
 
   undici-types@7.18.2: {}
-
-  valibot@1.4.2(typescript@7.0.2):
-    optionalDependencies:
-      typescript: 7.0.2
