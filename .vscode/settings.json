@@ -9,5 +9,6 @@
   "editor.formatOnSaveMode": "file",
   "oxc.configPath": "./oxlint.config.ts",
   "oxc.enable": true,
-  "oxc.fmt.configPath": "./oxfmt.config.ts"
+  "oxc.fmt.configPath": "./oxfmt.config.ts",
+  "js/ts.tsdk.path": "./node_modules/typescript-7/lib"
 }
