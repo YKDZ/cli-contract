@@ -1,0 +1,73 @@
+{
+  "boundaries": {
+    "tags": {
+      "contract-core": {
+        "dependencies": {
+          "allow": ["tooling"]
+        }
+      },
+      "contract-testing": {
+        "dependencies": {
+          "allow": ["contract-core", "tooling"]
+        }
+      },
+      "tooling": {
+        "dependencies": {
+          "allow": ["tooling"]
+        }
+      }
+    }
+  },
+  "globalPassThroughEnv": ["CARGO_HOME", "RUSTUP_HOME", "RUSTUP_TOOLCHAIN"],
+  "tasks": {
+    "//#boundaries": {
+      "cache": false
+    },
+    "//#format:check": {
+      "outputs": []
+    },
+    "//#format:write": {
+      "cache": false,
+      "dependsOn": ["//#lint:fix"]
+    },
+    "//#lint": {
+      "outputs": []
+    },
+    "//#lint:fix": {
+      "cache": false
+    },
+    "//#typecheck": {
+      "outputs": []
+    },
+    "build": {
+      "dependsOn": ["^build"]
+    },
+    "deployment": {
+      "cache": false
+    },
+    "format:check": {
+      "outputs": []
+    },
+    "format:write": {
+      "cache": false,
+      "dependsOn": ["lint:fix"]
+    },
+    "lint": {
+      "outputs": []
+    },
+    "lint:fix": {
+      "cache": false
+    },
+    "test": {
+      "outputs": []
+    },
+    "test:e2e": {
+      "cache": false,
+      "dependsOn": ["build"]
+    },
+    "typecheck": {
+      "dependsOn": ["^typecheck"],
+      "outputs": []
+    }
+  }
+}
