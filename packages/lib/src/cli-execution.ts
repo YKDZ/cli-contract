@@ -92,7 +92,7 @@ export async function executeCli<const Contract extends CliContract>(
   switch (options.invocation.kind) {
     case "help": {
       const fieldHelp = compiled.fields
-        .map((field) => `${field.longOption} <value>\t${field.description}\n`)
+        .map((field) => `${formatHelpField(field)}\t${field.description}\n`)
         .join("");
       await writeCliOutput(options.write, {
         destination: "stdout",
@@ -146,6 +146,22 @@ export async function executeCli<const Contract extends CliContract>(
       return executeApplicationResult(compiled, validation.value, options);
     }
   }
+}
+
+function formatHelpField(
+  field: ReturnType<typeof getCompiledCli>["fields"][number],
+): string {
+  const value =
+    field.kind === "positional"
+      ? `<${field.key}>`
+      : field.kind === "flag"
+        ? [field.longOption, field.shortAlias]
+            .filter((spelling) => spelling !== undefined)
+            .join(", ")
+        : `${[field.longOption, field.shortAlias]
+            .filter((spelling) => spelling !== undefined)
+            .join(", ")} <value>`;
+  return field.required ? value : `[${value}]`;
 }
 
 async function executeApplicationResult<Contract extends CliContract>(

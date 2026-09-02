@@ -146,37 +146,122 @@ export type CanonicalLongOption<Value extends string> = string extends Value
       : never
     : never;
 
+export type ShortOptionAlias<Value extends string> = string extends Value
+  ? `-${string}`
+  : Value extends `-${infer Body}`
+    ? Body extends AlphaNumeric
+      ? Value
+      : never
+    : never;
+
+export interface PositionalDefinition {
+  readonly kind: "positional";
+  readonly description: string;
+}
+
+export interface FlagDefinition<
+  LongOption extends `--${string}` = `--${string}`,
+  ShortAlias extends `-${string}` | undefined = `-${string}` | undefined,
+> {
+  readonly kind: "flag";
+  readonly longOption: LongOption;
+  readonly shortAlias?: ShortAlias;
+  readonly description: string;
+}
+
 export interface ValueOptionDefinition<
   LongOption extends `--${string}` = `--${string}`,
+  ShortAlias extends `-${string}` | undefined = `-${string}` | undefined,
 > {
   readonly kind: "valueOption";
   readonly longOption: LongOption;
+  readonly shortAlias?: ShortAlias;
   readonly description: string;
 }
+
+export type FieldDefinition =
+  | FlagDefinition
+  | PositionalDefinition
+  | ValueOptionDefinition;
+
+export type FieldDefinitions = Readonly<Record<string, FieldDefinition>>;
 
 export type ValueOptionDefinitions = Readonly<
   Record<string, ValueOptionDefinition>
 >;
 
+type RawFieldValue<Field extends FieldDefinition> = Field extends FlagDefinition
+  ? true
+  : string;
+
+export type RawFieldInput<Fields extends FieldDefinitions> = Readonly<{
+  [Field in keyof Fields]?: RawFieldValue<Fields[Field]>;
+}>;
+
 export type RawValueOptionInput<Fields extends ValueOptionDefinitions> =
-  Readonly<{ [Field in keyof Fields]?: string }>;
+  RawFieldInput<Fields>;
+
+export type FieldDefinitionsForInput<Input> = Readonly<{
+  [Field in Extract<keyof Input, string>]: FieldDefinition;
+}>;
 
 export type ValueOptionDefinitionsForInput<Input> = Readonly<{
   [Field in Extract<keyof Input, string>]: ValueOptionDefinition;
 }>;
 
-type CheckedValueOptionDefinitions<Fields extends ValueOptionDefinitions> = {
-  readonly [Field in keyof Fields]: Fields[Field] extends ValueOptionDefinition<
-    infer LongOption
-  >
-    ? LongOption extends CanonicalLongOption<LongOption>
-      ? Fields[Field]
-      : ContractTypeError<
-          "invalidCanonicalLongOption",
-          Readonly<{ readonly field: Field; readonly received: LongOption }>
-        >
-    : never;
+type CheckedFieldDefinition<
+  Field extends FieldDefinition,
+  Key,
+> = Field extends PositionalDefinition
+  ? Field
+  : Field extends FlagDefinition<infer LongOption, infer ShortAlias>
+    ? CheckedOptionDefinition<Field, Key, LongOption, ShortAlias>
+    : Field extends ValueOptionDefinition<infer LongOption, infer ShortAlias>
+      ? CheckedOptionDefinition<Field, Key, LongOption, ShortAlias>
+      : never;
+
+type CheckedOptionDefinition<
+  Field,
+  Key,
+  LongOption extends `--${string}`,
+  ShortAlias extends `-${string}` | undefined,
+> =
+  LongOption extends CanonicalLongOption<LongOption>
+    ? ShortAlias extends undefined
+      ? Field
+      : ShortAlias extends ShortOptionAlias<Extract<ShortAlias, string>>
+        ? Field
+        : ContractTypeError<
+            "invalidShortOptionAlias",
+            Readonly<{ readonly field: Key; readonly received: ShortAlias }>
+          >
+    : ContractTypeError<
+        "invalidCanonicalLongOption",
+        Readonly<{ readonly field: Key; readonly received: LongOption }>
+      >;
+
+type CheckedFieldDefinitions<Fields extends FieldDefinitions> = {
+  readonly [Field in keyof Fields]: CheckedFieldDefinition<
+    Fields[Field],
+    Field
+  >;
 };
+
+type InvalidFieldIdentities<Fields extends FieldDefinitions> = {
+  [Field in keyof Fields & string]: IsLowerCamelCase<Field> extends true
+    ? never
+    : Field;
+}[keyof Fields & string];
+
+type FieldIdentityContract<Fields extends FieldDefinitions> =
+  string extends keyof Fields
+    ? unknown
+    : InvalidFieldIdentities<Fields> extends never
+      ? unknown
+      : ContractTypeError<
+          "fieldMustBeLowerCamelCase",
+          Readonly<{ readonly fields: InvalidFieldIdentities<Fields> }>
+        >;
 
 export type RawValueOptionInputForSchema<InputSchema extends ContractSchema> =
   Readonly<{
@@ -189,19 +274,30 @@ export interface ContractTypeError<Code extends string, Evidence> {
 
 type InputStringKeys<Input> = Extract<keyof Input, string>;
 
-type NonStringInputKeys<Input> = {
-  [Field in InputStringKeys<Input>]: string extends Input[Field]
+type IncompatibleRawInputKeys<Fields extends FieldDefinitions, Input> = {
+  [Field in keyof Fields & InputStringKeys<Input>]: RawFieldValue<
+    Fields[Field]
+  > extends Input[Field]
     ? never
     : Field;
-}[InputStringKeys<Input>];
+}[keyof Fields & InputStringKeys<Input>];
 
-type RawStringInputContract<InputSchema extends ContractSchema> =
-  NonStringInputKeys<ContractSchemaInput<InputSchema>> extends never
+type RawFieldInputContract<
+  Fields extends FieldDefinitions,
+  InputSchema extends ContractSchema,
+> =
+  IncompatibleRawInputKeys<
+    Fields,
+    ContractSchemaInput<InputSchema>
+  > extends never
     ? unknown
     : ContractTypeError<
-        "fieldInputMustAcceptRawString",
+        "fieldInputMustAcceptRawValue",
         Readonly<{
-          readonly fields: NonStringInputKeys<ContractSchemaInput<InputSchema>>;
+          readonly fields: IncompatibleRawInputKeys<
+            Fields,
+            ContractSchemaInput<InputSchema>
+          >;
         }>
       >;
 
@@ -241,8 +337,9 @@ export interface CompletionHandlerContext<
   Command extends string,
   Dependencies,
   Failures extends FailureVariantDefinitions,
+  Input = EmptyCliInput,
 > {
-  readonly input: EmptyCliInput;
+  readonly input: Input;
   readonly dependencies: Dependencies;
   readonly outcome: CompletionOutcome<Command> &
     FailureOutcome<Command, Failures>;
@@ -265,15 +362,26 @@ export interface CompletionRootCommandDefinition<
   Command extends string,
   Dependencies,
   Failures extends FailureVariantDefinitions = Readonly<Record<never, never>>,
+  Fields extends FieldDefinitions = Readonly<Record<never, never>>,
+  InputSchema extends ContractSchema = ContractSchema<EmptyCliInput>,
 > {
   readonly kind: "rootCommand";
   readonly name: string;
   readonly description: string;
-  readonly input: ContractSchema<EmptyCliInput>;
+  readonly fields?: Fields &
+    FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
+    CheckedFieldDefinitions<Fields> &
+    FieldIdentityContract<Fields>;
+  readonly input: InputSchema & RawFieldInputContract<Fields, InputSchema>;
   readonly success: Readonly<{ readonly kind: "completion" }>;
   readonly failures: Failures & FailureVariantNameContract<Failures>;
   readonly handler: (
-    context: CompletionHandlerContext<Command, Dependencies, Failures>,
+    context: CompletionHandlerContext<
+      Command,
+      Dependencies,
+      Failures,
+      ContractSchemaOutput<InputSchema>
+    >,
   ) =>
     | CompletionFact<Command>
     | FailureFactUnion<Command, Failures>
@@ -283,7 +391,7 @@ export interface CompletionRootCommandDefinition<
 export interface DataRootCommandDefinition<
   Command extends string,
   Dependencies,
-  Fields extends ValueOptionDefinitions,
+  Fields extends FieldDefinitions,
   InputSchema extends ContractSchema,
   Variants extends DataVariantDefinitions,
   Failures extends FailureVariantDefinitions,
@@ -292,9 +400,10 @@ export interface DataRootCommandDefinition<
   readonly name: string;
   readonly description: string;
   readonly fields: Fields &
-    ValueOptionDefinitionsForInput<ContractSchemaInput<InputSchema>> &
-    CheckedValueOptionDefinitions<Fields>;
-  readonly input: InputSchema & RawStringInputContract<InputSchema>;
+    FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
+    CheckedFieldDefinitions<Fields> &
+    FieldIdentityContract<Fields>;
+  readonly input: InputSchema & RawFieldInputContract<Fields, InputSchema>;
   readonly success: Readonly<{
     readonly kind: "data";
     readonly variants: Variants & DataVariantNameContract<Variants>;
@@ -320,35 +429,50 @@ export type RootCommandDefinition<Command extends string, Dependencies> =
   | CompletionRootCommandDefinition<
       Command,
       Dependencies,
-      FailureVariantDefinitions
+      FailureVariantDefinitions,
+      FieldDefinitions,
+      ContractSchema
     >
   | DataRootCommandDefinition<
       Command,
       Dependencies,
-      ValueOptionDefinitions,
+      FieldDefinitions,
       ContractSchema,
       DataVariantDefinitions,
       FailureVariantDefinitions
     >;
 
-interface RootCliDefinitionBase<Root extends string> {
+type RootIdentityContract<Root extends string> = string extends Root
+  ? unknown
+  : IsLowerCamelCase<Root> extends true
+    ? unknown
+    : ContractTypeError<
+        "commandMustBeLowerCamelCase",
+        Readonly<{ readonly command: Root }>
+      >;
+
+type RootCliDefinitionBase<Root extends string> = RootIdentityContract<Root> & {
   readonly root: Root;
   readonly help: HelpCapability;
   readonly output: OutputCapability;
   readonly usageFailureExitCode: number;
-}
+};
 
 export type CompletionRootCliDefinition<
   Root extends string,
   Dependencies,
   Failures extends FailureVariantDefinitions = Readonly<Record<never, never>>,
+  Fields extends FieldDefinitions = Readonly<Record<never, never>>,
+  InputSchema extends ContractSchema = ContractSchema<EmptyCliInput>,
 > = RootCliDefinitionBase<Root> &
   Readonly<{
     readonly commands: Readonly<{
       readonly [Command in Root]: CompletionRootCommandDefinition<
         Command,
         Dependencies,
-        Failures
+        Failures,
+        Fields,
+        InputSchema
       >;
     }>;
   }>;
@@ -356,7 +480,7 @@ export type CompletionRootCliDefinition<
 export type DataRootCliDefinition<
   Root extends string,
   Dependencies,
-  Fields extends ValueOptionDefinitions,
+  Fields extends FieldDefinitions,
   InputSchema extends ContractSchema,
   Variants extends DataVariantDefinitions,
   Failures extends FailureVariantDefinitions,
@@ -375,30 +499,61 @@ export type DataRootCliDefinition<
   }>;
 
 export type RootCliDefinition<Root extends string, Dependencies> =
-  | CompletionRootCliDefinition<Root, Dependencies, FailureVariantDefinitions>
+  | CompletionRootCliDefinition<
+      Root,
+      Dependencies,
+      FailureVariantDefinitions,
+      FieldDefinitions,
+      ContractSchema
+    >
   | DataRootCliDefinition<
       Root,
       Dependencies,
-      ValueOptionDefinitions,
+      FieldDefinitions,
       ContractSchema,
       DataVariantDefinitions,
       FailureVariantDefinitions
     >;
 
-export interface ValueOptionGrammar<Field extends string = string> {
-  readonly kind: "valueOption";
+interface FieldGrammarBase<Field extends string> {
   readonly key: Field;
-  readonly longOption: CanonicalLongOption<string>;
   readonly description: string;
   readonly required: boolean;
 }
+
+export interface PositionalGrammar<
+  Field extends string = string,
+> extends FieldGrammarBase<Field> {
+  readonly kind: "positional";
+}
+
+export interface FlagGrammar<
+  Field extends string = string,
+> extends FieldGrammarBase<Field> {
+  readonly kind: "flag";
+  readonly longOption: CanonicalLongOption<string>;
+  readonly shortAlias?: ShortOptionAlias<string>;
+}
+
+export interface ValueOptionGrammar<
+  Field extends string = string,
+> extends FieldGrammarBase<Field> {
+  readonly kind: "valueOption";
+  readonly longOption: CanonicalLongOption<string>;
+  readonly shortAlias?: ShortOptionAlias<string>;
+}
+
+export type FieldGrammar<Field extends string = string> =
+  | FlagGrammar<Field>
+  | PositionalGrammar<Field>
+  | ValueOptionGrammar<Field>;
 
 export interface RootCommandGrammar<Root extends string> {
   readonly kind: "rootCommand";
   readonly id: Root;
   readonly name: string;
   readonly description: string;
-  readonly fields: readonly ValueOptionGrammar[];
+  readonly fields: readonly FieldGrammar[];
   readonly usage: CommandUsage<Root>;
 }
 
@@ -437,7 +592,7 @@ export interface RootCommandManifest {
   readonly kind: "rootCommand";
   readonly name: string;
   readonly description: string;
-  readonly fields: readonly ValueOptionGrammar[];
+  readonly fields: readonly FieldGrammar[];
   readonly input: SchemaManifest;
   readonly success: CommandSuccessManifest;
   readonly failures: Readonly<Record<string, FailureVariantManifest>>;
@@ -504,7 +659,32 @@ export interface DefineCli<Dependencies> {
 
   <
     const Root extends string,
-    const Fields extends ValueOptionDefinitions,
+    const Fields extends FieldDefinitions,
+    InputSchema extends ContractSchema,
+    const Failures extends FailureVariantDefinitions,
+  >(
+    definition: CompletionRootCliDefinition<
+      Root,
+      Dependencies,
+      Failures,
+      Fields,
+      InputSchema
+    > &
+      Readonly<{
+        readonly commands: Readonly<{
+          readonly [Command in Root]: Readonly<{ readonly fields: Fields }>;
+        }>;
+      }>,
+  ): CliContract<
+    Root,
+    Dependencies,
+    RawFieldInput<Fields>,
+    CompletionFact<Root> | FailureFactUnion<Root, Failures>
+  >;
+
+  <
+    const Root extends string,
+    const Fields extends FieldDefinitions,
     InputSchema extends ContractSchema,
     const Variants extends DataVariantDefinitions,
     const Failures extends FailureVariantDefinitions,
@@ -520,7 +700,7 @@ export interface DefineCli<Dependencies> {
   ): CliContract<
     Root,
     Dependencies,
-    RawValueOptionInput<Fields>,
+    RawFieldInput<Fields>,
     DataFactUnion<Root, Variants> | FailureFactUnion<Root, Failures>
   >;
 }
@@ -529,7 +709,7 @@ interface RuntimeCompiledCli {
   readonly contract: CliContract;
   readonly root: string;
   readonly description: string;
-  readonly fields: readonly ValueOptionGrammar[];
+  readonly fields: readonly FieldGrammar[];
   readonly usage: CommandUsage<string>;
   readonly usageFailureExitCode: number;
   readonly input: ContractSchema;
@@ -547,7 +727,7 @@ type RuntimeCommandDefinition = Readonly<{
   readonly kind: "rootCommand";
   readonly name: string;
   readonly description: string;
-  readonly fields?: ValueOptionDefinitions;
+  readonly fields?: FieldDefinitions;
   readonly input: ContractSchema;
   readonly success:
     | Readonly<{ readonly kind: "completion" }>
@@ -712,6 +892,12 @@ function collectRootDefinitionIssues(
   definition: RuntimeCliDefinition,
   issues: ContractDefinitionIssue[],
 ): RuntimeCommandDefinition | undefined {
+  if (!/^[a-z][A-Za-z0-9]*$/.test(definition.root)) {
+    issues.push({
+      code: "invalidCommandIdentity",
+      command: definition.root,
+    });
+  }
   if (!helpCapabilities.has(definition.help)) {
     issues.push({ code: "invalidCapability", capability: "help" });
   }
@@ -845,12 +1031,17 @@ function compileSuccess(
 
 function createUsageSynopsis(
   commandName: string,
-  fields: readonly ValueOptionGrammar[],
+  fields: readonly FieldGrammar[],
 ): string {
   return [
     commandName,
     ...fields.map((field) => {
-      const value = `${field.longOption} <value>`;
+      const value =
+        field.kind === "positional"
+          ? `<${field.key}>`
+          : field.kind === "flag"
+            ? field.longOption
+            : `${field.longOption} <value>`;
       return field.required ? value : `[${value}]`;
     }),
   ].join(" ");

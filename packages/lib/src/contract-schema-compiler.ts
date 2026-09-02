@@ -1,7 +1,7 @@
 import type {
+  FieldDefinitions,
+  FieldGrammar,
   SchemaManifest,
-  ValueOptionDefinitions,
-  ValueOptionGrammar,
 } from "#/cli-contract";
 import type {
   ContractDefinitionIssue,
@@ -77,11 +77,11 @@ export function compileContractSchema(
 }
 
 export function compileInputFields(
-  definitions: ValueOptionDefinitions,
+  definitions: FieldDefinitions,
   inputSchema: JsonObject,
   command: string,
   issues: ContractDefinitionIssue[],
-): readonly ValueOptionGrammar[] {
+): readonly FieldGrammar[] {
   if (inputSchema.type !== "object") {
     issues.push({
       code: "invalidInputSchemaShape",
@@ -123,12 +123,16 @@ export function compileInputFields(
     });
     return [];
   }
-  const incompatibleFields = fieldKeys.filter(
-    (key) => !schemaPropertyAcceptsRawString(schemaProperties[key]),
-  );
+  const incompatibleFields = fieldKeys.flatMap((field) => {
+    const expected: "boolean" | "string" =
+      definitions[field]?.kind === "flag" ? "boolean" : "string";
+    return schemaPropertyAcceptsRawValue(schemaProperties[field], expected)
+      ? []
+      : [{ field, expected }];
+  });
   if (incompatibleFields.length > 0) {
     issues.push({
-      code: "schemaFieldDoesNotAcceptRawString",
+      code: "schemaFieldDoesNotAcceptRawValue",
       command,
       location: "input",
       fields: incompatibleFields,
@@ -137,12 +141,48 @@ export function compileInputFields(
   }
 
   const fields = Object.entries(definitions).map(([key, field]) => {
-    if (!/^--[a-z0-9]+(?:-[a-z0-9]+)*$/.test(field.longOption)) {
+    if (!/^[a-z][A-Za-z0-9]*$/.test(key)) {
+      issues.push({ code: "invalidFieldIdentity", command, field: key });
+    }
+    const invalidKind = readInvalidFieldKind(field);
+    if (invalidKind !== undefined) {
+      issues.push({
+        code: "invalidFieldKind",
+        command,
+        field: key,
+        expected: ["positional", "flag", "valueOption"],
+        received: invalidKind,
+      });
+      return {
+        kind: "positional" as const,
+        key,
+        description: readFieldDescription(field),
+        required: required.has(key),
+      };
+    }
+    if (
+      field.kind !== "positional" &&
+      !/^--[a-z0-9]+(?:-[a-z0-9]+)*$/.test(field.longOption)
+    ) {
       issues.push({
         code: "invalidFieldLongOption",
         command,
         field: key,
-        received: field.longOption,
+        received:
+          typeof field.longOption === "string" ? field.longOption : null,
+      });
+    }
+    if (
+      field.kind !== "positional" &&
+      field.shortAlias !== undefined &&
+      !/^-[A-Za-z0-9]$/.test(field.shortAlias)
+    ) {
+      issues.push({
+        code: "invalidFieldShortAlias",
+        command,
+        field: key,
+        received:
+          typeof field.shortAlias === "string" ? field.shortAlias : null,
       });
     }
     if (field.description.length === 0) {
@@ -153,15 +193,14 @@ export function compileInputFields(
       });
     }
     return {
-      kind: "valueOption" as const,
+      ...field,
       key,
-      longOption: field.longOption,
-      description: field.description,
       required: required.has(key),
-    };
+    } as FieldGrammar;
   });
-  const fieldsByLongOption = new Map<string, ValueOptionGrammar[]>();
+  const fieldsByLongOption = new Map<string, FieldGrammar[]>();
   for (const field of fields) {
+    if (field.kind === "positional") continue;
     const matchingFields = fieldsByLongOption.get(field.longOption) ?? [];
     matchingFields.push(field);
     fieldsByLongOption.set(field.longOption, matchingFields);
@@ -176,7 +215,59 @@ export function compileInputFields(
       });
     }
   }
+  const fieldsByShortAlias = new Map<string, FieldGrammar[]>();
+  for (const field of fields) {
+    if (field.kind === "positional" || field.shortAlias === undefined) continue;
+    const matchingFields = fieldsByShortAlias.get(field.shortAlias) ?? [];
+    matchingFields.push(field);
+    fieldsByShortAlias.set(field.shortAlias, matchingFields);
+  }
+  for (const [spelling, matchingFields] of fieldsByShortAlias) {
+    if (matchingFields.length > 1) {
+      issues.push({
+        code: "duplicateFieldOptionSpelling",
+        command,
+        spelling,
+        fields: matchingFields.map((field) => field.key).sort(),
+      });
+    }
+  }
+  let precedingOptionalField: string | undefined;
+  for (const field of fields) {
+    if (field.kind !== "positional") continue;
+    if (!field.required) {
+      precedingOptionalField ??= field.key;
+    } else if (precedingOptionalField !== undefined) {
+      issues.push({
+        code: "requiredPositionalAfterOptional",
+        command,
+        field: field.key,
+        precedingOptionalField,
+      });
+    }
+  }
   return deepFreeze(fields);
+}
+
+function readInvalidFieldKind(field: unknown): string | null | undefined {
+  if (typeof field !== "object" || field === null || !("kind" in field)) {
+    return null;
+  }
+  const kind = field.kind;
+  return kind === "positional" || kind === "flag" || kind === "valueOption"
+    ? undefined
+    : typeof kind === "string"
+      ? kind
+      : null;
+}
+
+function readFieldDescription(field: unknown): string {
+  return typeof field === "object" &&
+    field !== null &&
+    "description" in field &&
+    typeof field.description === "string"
+    ? field.description
+    : "";
 }
 
 function copySchemaProjection(
@@ -254,7 +345,10 @@ function readRequiredSchemaKeys(
   return new Set(required);
 }
 
-function schemaPropertyAcceptsRawString(propertySchema: unknown): boolean {
+function schemaPropertyAcceptsRawValue(
+  propertySchema: unknown,
+  rawType: "boolean" | "string",
+): boolean {
   if (propertySchema === true) {
     return true;
   }
@@ -267,8 +361,8 @@ function schemaPropertyAcceptsRawString(propertySchema: unknown): boolean {
     return false;
   }
   return (
-    propertySchema.type === "string" ||
+    propertySchema.type === rawType ||
     (Array.isArray(propertySchema.type) &&
-      propertySchema.type.includes("string"))
+      propertySchema.type.includes(rawType))
   );
 }

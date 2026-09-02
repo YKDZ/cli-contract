@@ -11,6 +11,7 @@ import {
   type ContractSchemaInput,
   type ContractSchemaOutput,
   type EmptyCliInput,
+  type ShortOptionAlias,
 } from "@cli-contract/lib";
 import { toStandardJsonSchema } from "@valibot/to-json-schema";
 import * as v from "valibot";
@@ -147,6 +148,33 @@ function verifyTypeErrors() {
   const invalidLongOption: CanonicalLongOption<"--foo_bar"> = "--foo_bar";
   void invalidLongOption;
 
+  // @ts-expect-error short alias 必须是单个 ASCII 字母或数字。
+  const invalidShortAlias: ShortOptionAlias<"--f"> = "--f";
+  void invalidShortAlias;
+
+  // @ts-expect-error 命令身份必须是 lower camel case。
+  const invalidCommandIdentity: CompletionRootCliDefinition<
+    "bad-root",
+    undefined
+  > = {
+    root: "bad-root",
+    help: helpCapability(),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      "bad-root": {
+        kind: "rootCommand",
+        name: "bad-root",
+        description: "非法命令身份",
+        input: emptyInput,
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      },
+    },
+  };
+  void invalidCommandIdentity;
+
   // @ts-expect-error 根契约必须显式装配帮助能力。
   const missingHelpDefinition: CompletionRootCliDefinition<
     "fixture",
@@ -244,6 +272,76 @@ function verifyTypeErrors() {
           },
         },
         input: namedInput,
+        success: {
+          kind: "data",
+          variants: {
+            greeting: {
+              description: "问候",
+              schema: greetingData,
+              exitCode: 0,
+            },
+          },
+        },
+        failures: {},
+        handler: ({ outcome }) => outcome.data.greeting({ message: "nope" }),
+      },
+    },
+  });
+
+  defineCli()({
+    root: "invalidFields",
+    help: helpCapability(),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      invalidFields: {
+        kind: "rootCommand",
+        name: "invalid-fields",
+        description: "非法字段声明",
+        fields: {
+          // @ts-expect-error short alias 必须是单个 ASCII 字母或数字。
+          "bad-field": {
+            kind: "valueOption",
+            longOption: "--bad-field",
+            shortAlias: "-bad",
+            description: "非法字段",
+          },
+        },
+        input: namedInput,
+        success: {
+          kind: "data",
+          variants: {
+            greeting: {
+              description: "问候",
+              schema: greetingData,
+              exitCode: 0,
+            },
+          },
+        },
+        failures: {},
+        handler: ({ outcome }) => outcome.data.greeting({ message: "nope" }),
+      },
+    },
+  });
+
+  defineCli()({
+    root: "invalidIdentity",
+    help: helpCapability(),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      invalidIdentity: {
+        kind: "rootCommand",
+        name: "invalid-identity",
+        description: "非法字段身份",
+        // @ts-expect-error 字段身份必须是 lower camel case。
+        fields: {
+          "bad-field": {
+            kind: "positional",
+            description: "非法字段",
+          },
+        },
+        input: z.object({ "bad-field": z.string() }),
         success: {
           kind: "data",
           variants: {

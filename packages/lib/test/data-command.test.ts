@@ -284,10 +284,10 @@ void test("定义期拒绝与 value option 不相容的 Input JSON Schema", () =
       assert.ok(error instanceof ContractDefinitionError);
       assert.deepEqual(error.issues, [
         {
-          code: "schemaFieldDoesNotAcceptRawString",
+          code: "schemaFieldDoesNotAcceptRawValue",
           command: "greet",
           location: "input",
-          fields: ["name"],
+          fields: [{ field: "name", expected: "string" }],
         },
       ]);
       return true;

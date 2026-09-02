@@ -45,10 +45,13 @@ export type ContractDefinitionIssue =
       readonly unexpectedFields: readonly string[];
     }>
   | Readonly<{
-      readonly code: "schemaFieldDoesNotAcceptRawString";
+      readonly code: "schemaFieldDoesNotAcceptRawValue";
       readonly command: string;
       readonly location: "input";
-      readonly fields: readonly string[];
+      readonly fields: readonly Readonly<{
+        readonly field: string;
+        readonly expected: "boolean" | "string";
+      }>[];
     }>
   | Readonly<{
       readonly code: "invalidInputSchemaShape";
@@ -103,6 +106,10 @@ export type ContractDefinitionIssue =
       readonly received: string | null;
     }>
   | Readonly<{
+      readonly code: "invalidCommandIdentity";
+      readonly command: string;
+    }>
+  | Readonly<{
       readonly code: "missingCommandText";
       readonly command: string;
       readonly field: "name" | "description";
@@ -111,7 +118,37 @@ export type ContractDefinitionIssue =
       readonly code: "invalidFieldLongOption";
       readonly command: string;
       readonly field: string;
-      readonly received: string;
+      readonly received: string | null;
+    }>
+  | Readonly<{
+      readonly code: "invalidFieldIdentity";
+      readonly command: string;
+      readonly field: string;
+    }>
+  | Readonly<{
+      readonly code: "invalidFieldKind";
+      readonly command: string;
+      readonly field: string;
+      readonly expected: readonly ["positional", "flag", "valueOption"];
+      readonly received: string | null;
+    }>
+  | Readonly<{
+      readonly code: "invalidFieldShortAlias";
+      readonly command: string;
+      readonly field: string;
+      readonly received: string | null;
+    }>
+  | Readonly<{
+      readonly code: "duplicateFieldOptionSpelling";
+      readonly command: string;
+      readonly spelling: string;
+      readonly fields: readonly string[];
+    }>
+  | Readonly<{
+      readonly code: "requiredPositionalAfterOptional";
+      readonly command: string;
+      readonly field: string;
+      readonly precedingOptionalField: string;
     }>
   | Readonly<{
       readonly code: "duplicateFieldLongOption";
@@ -161,8 +198,8 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `${formatSchemaTarget(issue)} 的 ${issue.projection} 投影不是 JSON object`;
     case "schemaFieldSetMismatch":
       return `命令 ${issue.command} 的字段与输入模式属性不一致`;
-    case "schemaFieldDoesNotAcceptRawString":
-      return `命令 ${issue.command} 的输入字段 ${issue.fields.join(", ")} 不接受 raw string`;
+    case "schemaFieldDoesNotAcceptRawValue":
+      return `命令 ${issue.command} 的输入字段 ${issue.fields.map(({ field, expected }) => `${field} 不接受 raw ${expected}`).join(", ")}`;
     case "invalidInputSchemaShape":
       return `命令 ${issue.command} 的输入模式 ${issue.aspect} 无效`;
     case "invalidVariantName":
@@ -181,10 +218,22 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `CLI 根 ${issue.root} 必须对应唯一根命令`;
     case "invalidRootCommandKind":
       return `命令 ${issue.command} 的 kind 无效`;
+    case "invalidCommandIdentity":
+      return `命令身份 ${issue.command} 无效`;
     case "missingCommandText":
       return `命令 ${issue.command} 缺少 ${issue.field}`;
     case "invalidFieldLongOption":
       return `命令 ${issue.command} 的字段 ${issue.field} long option 无效`;
+    case "invalidFieldIdentity":
+      return `命令 ${issue.command} 的字段身份 ${issue.field} 无效`;
+    case "invalidFieldKind":
+      return `命令 ${issue.command} 的字段 ${issue.field} kind 无效`;
+    case "invalidFieldShortAlias":
+      return `命令 ${issue.command} 的字段 ${issue.field} short alias 无效`;
+    case "duplicateFieldOptionSpelling":
+      return `命令 ${issue.command} 的字段 ${issue.fields.join(", ")} 重复使用 option spelling ${issue.spelling}`;
+    case "requiredPositionalAfterOptional":
+      return `命令 ${issue.command} 的必填 positional ${issue.field} 位于可选 positional ${issue.precedingOptionalField} 之后`;
     case "duplicateFieldLongOption":
       return `命令 ${issue.command} 的字段 ${issue.fields.join(", ")} 重复使用 long option ${issue.longOption}`;
     case "missingFieldDescription":
