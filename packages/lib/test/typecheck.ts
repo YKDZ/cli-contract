@@ -7,8 +7,35 @@ import {
   type CanonicalLongOption,
   type CompletionRootCliDefinition,
   type ContractSchema,
+  type ContractSchemaInput,
+  type ContractSchemaOutput,
   type EmptyCliInput,
 } from "@cli-contract/lib";
+import { toStandardJsonSchema } from "@valibot/to-json-schema";
+import * as v from "valibot";
+import { z } from "zod";
+
+const realZodSchema = z
+  .object({ name: z.string() })
+  .transform(({ name }) => ({ normalizedName: name.toUpperCase() }))
+  .pipe(z.object({ normalizedName: z.string() }));
+const zodInput: ContractSchemaInput<typeof realZodSchema> = { name: "Ada" };
+const zodOutput: ContractSchemaOutput<typeof realZodSchema> = {
+  normalizedName: "ADA",
+};
+
+const realValibotSchema = toStandardJsonSchema(v.object({ name: v.string() }));
+const valibotInput: ContractSchemaInput<typeof realValibotSchema> = {
+  name: "Grace",
+};
+const valibotOutput: ContractSchemaOutput<typeof realValibotSchema> = {
+  name: "Grace",
+};
+
+void zodInput;
+void zodOutput;
+void valibotInput;
+void valibotOutput;
 
 declare const emptyInput: ContractSchema<EmptyCliInput>;
 declare const namedInput: ContractSchema<
@@ -85,6 +112,12 @@ const dataCli = defineCli()({
 });
 
 function verifyTypeErrors() {
+  const invalidZodOutput: ContractSchemaOutput<typeof realZodSchema> = {
+    // @ts-expect-error Zod 变换后的 Output 不再是 raw Input 形状。
+    name: "Ada",
+  };
+  void invalidZodOutput;
+
   // @ts-expect-error canonical long option 必须是小写 kebab-case。
   const invalidLongOption: CanonicalLongOption<"--foo_bar"> = "--foo_bar";
   void invalidLongOption;

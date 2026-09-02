@@ -61,6 +61,11 @@ export {
   type UsageIssue,
   type UsageFailure,
 } from "#/cli-invocation";
+export {
+  ContractDefinitionError,
+  type ContractDefinitionIssue,
+  type SchemaDefinitionTarget,
+} from "#/contract-definition-error";
 export type {
   ContractSchema,
   ContractSchemaInput,

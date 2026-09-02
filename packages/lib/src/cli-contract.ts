@@ -1,4 +1,8 @@
 import type { CommandUsage } from "#/cli-invocation";
+import {
+  ContractDefinitionError,
+  type ContractDefinitionIssue,
+} from "#/contract-definition-error";
 import type {
   ContractSchema,
   ContractSchemaInput,
@@ -6,7 +10,11 @@ import type {
   EmptyCliInput,
   JsonObject,
 } from "#/contract-schema";
-import { copyJsonObject, deepFreeze } from "#/json-value";
+import {
+  compileContractSchema,
+  compileInputFields,
+} from "#/contract-schema-compiler";
+import { deepFreeze } from "#/json-value";
 import type {
   CompletionFact,
   CompletionOutcome,
@@ -524,11 +532,43 @@ export function defineCli<Dependencies = undefined>(): DefineCli<Dependencies> {
 
 function compileCli(definition: RuntimeCliDefinition): CliContract {
   assertRootDefinition(definition);
+  const definitionIssues: ContractDefinitionIssue[] = [];
   const command = definition.commands[
     definition.root
   ] as RuntimeCommandDefinition;
-  const input = projectSchema(command.input);
-  const fields = compileFields(command.fields ?? {}, input.inputSchema);
+  const input = compileContractSchema(
+    command.input,
+    {
+      command: definition.root,
+      location: "input",
+    },
+    definitionIssues,
+  );
+  const compiledSuccess = compileSuccess(
+    definition.root,
+    command.success,
+    definitionIssues,
+  );
+  const fields =
+    input === undefined
+      ? []
+      : compileInputFields(
+          command.fields ?? {},
+          input.inputSchema,
+          definition.root,
+          definitionIssues,
+        );
+  if (definitionIssues.length > 0) {
+    throw new ContractDefinitionError(
+      definitionIssues as [
+        ContractDefinitionIssue,
+        ...ContractDefinitionIssue[],
+      ],
+    );
+  }
+  if (input === undefined) {
+    throw new TypeError("契约模式投影缺失");
+  }
   const usage = deepFreeze({
     command: definition.root,
     synopsis: createUsageSynopsis(command.name, fields),
@@ -552,7 +592,6 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
     nodes: [] as const,
     controls,
   });
-  const compiledSuccess = compileSuccess(definition.root, command.success);
   const manifest = deepFreeze({
     schemaVersion: "1" as const,
     root: definition.root,
@@ -629,66 +668,10 @@ function assertRootDefinition(definition: RuntimeCliDefinition): void {
   }
 }
 
-function compileFields(
-  definitions: ValueOptionDefinitions,
-  inputSchema: JsonObject,
-): readonly ValueOptionGrammar[] {
-  const schemaProperties = readSchemaProperties(inputSchema);
-  const schemaKeys = Object.keys(schemaProperties).sort();
-  const fieldKeys = Object.keys(definitions).sort();
-  if (schemaKeys.join("\0") !== fieldKeys.join("\0")) {
-    throw new TypeError("字段 key 必须与契约模式 Input 属性完全一致");
-  }
-  const required = readRequiredSchemaKeys(inputSchema);
-
-  return deepFreeze(
-    Object.entries(definitions).map(([key, field]) => {
-      if (!schemaPropertyAcceptsRawString(schemaProperties[key])) {
-        throw new TypeError(
-          `字段 ${key} 的契约模式 Input 属性必须接受 raw string`,
-        );
-      }
-      if (!/^--[a-z0-9]+(?:-[a-z0-9]+)*$/.test(field.longOption)) {
-        throw new TypeError(
-          `字段 ${key} 的 longOption 必须是 canonical kebab-case`,
-        );
-      }
-      if (field.description.length === 0) {
-        throw new TypeError(`字段 ${key} 的描述不能为空`);
-      }
-      return {
-        kind: "valueOption" as const,
-        key,
-        longOption: field.longOption,
-        description: field.description,
-        required: required.has(key),
-      };
-    }),
-  );
-}
-
-function schemaPropertyAcceptsRawString(propertySchema: unknown): boolean {
-  if (propertySchema === true) {
-    return true;
-  }
-  if (
-    typeof propertySchema !== "object" ||
-    propertySchema === null ||
-    Array.isArray(propertySchema) ||
-    !("type" in propertySchema)
-  ) {
-    return false;
-  }
-  return (
-    propertySchema.type === "string" ||
-    (Array.isArray(propertySchema.type) &&
-      propertySchema.type.includes("string"))
-  );
-}
-
 function compileSuccess(
   command: string,
   success: RuntimeCommandDefinition["success"],
+  issues: ContractDefinitionIssue[],
 ): Readonly<{
   readonly runtime: RuntimeCompiledCli["success"];
   readonly manifest: CommandSuccessManifest;
@@ -723,20 +706,30 @@ function compileSuccess(
     if (definition.description.length === 0) {
       throw new TypeError(`data 变体 ${variant} 的描述不能为空`);
     }
-    const schema = projectSchema(definition.schema);
+    const schema = compileContractSchema(
+      definition.schema,
+      {
+        command,
+        location: "data",
+        variant,
+      },
+      issues,
+    );
     variants[variant] = deepFreeze({
       description: definition.description,
       schema: definition.schema,
       exitCode: definition.exitCode,
     });
-    manifestVariants[variant] = deepFreeze({
-      description: definition.description,
-      exitCode: definition.exitCode,
-      ...schema,
-    });
-    wireVariants[variant] = deepFreeze(
-      createDataWireSchema(command, variant, schema.outputSchema),
-    );
+    if (schema !== undefined) {
+      manifestVariants[variant] = deepFreeze({
+        description: definition.description,
+        exitCode: definition.exitCode,
+        ...schema,
+      });
+      wireVariants[variant] = deepFreeze(
+        createDataWireSchema(command, variant, schema.outputSchema),
+      );
+    }
   }
   if (Object.keys(variants).length === 0) {
     throw new TypeError("data 命令必须声明至少一个具名变体");
@@ -747,43 +740,6 @@ function compileSuccess(
     manifest: { kind: "data" as const, variants: manifestVariants },
     wire: { data: wireVariants },
   });
-}
-
-function projectSchema(schema: ContractSchema): SchemaManifest {
-  return {
-    inputSchema: copyJsonObject(
-      schema["~standard"].jsonSchema.input({ target: "draft-2020-12" }),
-    ),
-    outputSchema: copyJsonObject(
-      schema["~standard"].jsonSchema.output({ target: "draft-2020-12" }),
-    ),
-  };
-}
-
-function readSchemaProperties(schema: JsonObject): JsonObject {
-  const properties = schema.properties;
-  if (
-    typeof properties !== "object" ||
-    properties === null ||
-    Array.isArray(properties)
-  ) {
-    throw new TypeError("契约模式 Input 必须公开 object properties");
-  }
-  return properties as JsonObject;
-}
-
-function readRequiredSchemaKeys(schema: JsonObject): ReadonlySet<string> {
-  const required = schema.required;
-  if (required === undefined) {
-    return new Set();
-  }
-  if (
-    !Array.isArray(required) ||
-    required.some((key) => typeof key !== "string")
-  ) {
-    throw new TypeError("JSON Schema required 必须是字符串数组");
-  }
-  return new Set(required);
 }
 
 function createUsageSynopsis(

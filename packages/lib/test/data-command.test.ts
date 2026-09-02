@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  ContractDefinitionError,
   defineCli,
   executeCli,
   helpCapability,
@@ -253,6 +254,7 @@ void test("定义期拒绝与 value option 不相容的 Input JSON Schema", () =
       jsonSchema: {
         ...greetingInputSchema["~standard"].jsonSchema,
         input: () => ({
+          $schema: "https://json-schema.org/draft/2020-12/schema",
           properties: { name: { type: "number" } },
           required: ["name"],
           type: "object",
@@ -264,6 +266,277 @@ void test("定义期拒绝与 value option 不相容的 Input JSON Schema", () =
   assert.throws(
     () =>
       createDataCli(() => undefined, greetingDataSchema, driftingInputSchema),
-    /必须接受 raw string/,
+    (error) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "schemaFieldDoesNotAcceptRawString",
+          command: "greet",
+          location: "input",
+          fields: ["name"],
+        },
+      ]);
+      return true;
+    },
   );
+});
+
+void test("定义期以闭合问题拒绝缺少标准 JSON Schema 能力的模式", () => {
+  const missingJsonSchema = {
+    "~standard": {
+      validate: greetingInputSchema["~standard"].validate,
+      vendor: "fixture",
+      version: 1,
+    },
+  } as unknown as ContractSchema<RawGreetingInput, GreetingInput>;
+
+  assert.throws(
+    () => createDataCli(() => undefined, greetingDataSchema, missingJsonSchema),
+    (error) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "missingSchemaCapability",
+          command: "greet",
+          location: "input",
+          capability: "jsonSchema",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("执行期拒绝 Standard Schema 返回的异步 validation", async () => {
+  const asynchronousSchema = {
+    "~standard": {
+      ...greetingInputSchema["~standard"],
+      validate() {
+        return Promise.resolve({ value: { name: "Ada" } });
+      },
+    },
+  } as unknown as ContractSchema<RawGreetingInput, GreetingInput>;
+
+  const cli = createDataCli(
+    () => undefined,
+    greetingDataSchema,
+    asynchronousSchema,
+  );
+  await assert.rejects(
+    executeCli(cli, {
+      invocation: parseCliInvocation(cli, ["--name", "Ada"]),
+      dependencies: undefined,
+      write: () => undefined,
+    }),
+    /契约模式验证必须同步完成/,
+  );
+});
+
+void test("定义期拒绝没有忠实返回 Draft 2020-12 方言的投影", () => {
+  const wrongDialectSchema: ContractSchema<RawGreetingInput, GreetingInput> = {
+    "~standard": {
+      ...greetingInputSchema["~standard"],
+      jsonSchema: {
+        ...greetingInputSchema["~standard"].jsonSchema,
+        input: () => ({
+          $schema: "http://json-schema.org/draft-07/schema#",
+          properties: { name: { type: "string" } },
+          required: ["name"],
+          type: "object",
+        }),
+      },
+    },
+  };
+
+  assert.throws(
+    () =>
+      createDataCli(() => undefined, greetingDataSchema, wrongDialectSchema),
+    (error) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "schemaDialectMismatch",
+          command: "greet",
+          location: "input",
+          projection: "input",
+          received: "http://json-schema.org/draft-07/schema#",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("定义期把无法导出的模式归入闭合问题而不泄漏 vendor 错误", () => {
+  const exportFailureSchema: ContractSchema<RawGreetingInput, GreetingInput> = {
+    "~standard": {
+      ...greetingInputSchema["~standard"],
+      jsonSchema: {
+        ...greetingInputSchema["~standard"].jsonSchema,
+        output() {
+          throw new Error("vendor-private export detail");
+        },
+      },
+    },
+  };
+
+  assert.throws(
+    () =>
+      createDataCli(() => undefined, greetingDataSchema, exportFailureSchema),
+    (error) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "schemaExportFailed",
+          command: "greet",
+          location: "input",
+          projection: "output",
+        },
+      ]);
+      assert.doesNotMatch(error.message, /vendor-private/);
+      return true;
+    },
+  );
+});
+
+void test("定义期拒绝不能忠实形成 JSON 值的 schema 投影", () => {
+  const invalidProjectionSchema = {
+    "~standard": {
+      ...greetingInputSchema["~standard"],
+      jsonSchema: {
+        ...greetingInputSchema["~standard"].jsonSchema,
+        output: () => new Date(),
+      },
+    },
+  } as unknown as ContractSchema<RawGreetingInput, GreetingInput>;
+
+  assert.throws(
+    () =>
+      createDataCli(
+        () => undefined,
+        greetingDataSchema,
+        invalidProjectionSchema,
+      ),
+    (error) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidSchemaProjection",
+          command: "greet",
+          location: "input",
+          projection: "output",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("defineCli 一次报告输入与 data 模式的全部定义问题", () => {
+  const missingInputCapability = {
+    "~standard": {
+      validate: greetingInputSchema["~standard"].validate,
+      vendor: "fixture",
+      version: 1,
+    },
+  } as unknown as ContractSchema<RawGreetingInput, GreetingInput>;
+  const wrongDataDialect: ContractSchema<GreetingData> = {
+    "~standard": {
+      ...greetingDataSchema["~standard"],
+      jsonSchema: {
+        ...greetingDataSchema["~standard"].jsonSchema,
+        output: () => ({
+          $schema: "http://json-schema.org/draft-07/schema#",
+          properties: { message: { type: "string" } },
+          required: ["message"],
+          type: "object",
+        }),
+      },
+    },
+  };
+
+  assert.throws(
+    () =>
+      createDataCli(() => undefined, wrongDataDialect, missingInputCapability),
+    (error) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "missingSchemaCapability",
+          command: "greet",
+          location: "input",
+          capability: "jsonSchema",
+        },
+        {
+          code: "schemaDialectMismatch",
+          command: "greet",
+          location: "data",
+          variant: "greeting",
+          projection: "output",
+          received: "http://json-schema.org/draft-07/schema#",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("定义期拒绝没有声明 object 根类型的输入投影", () => {
+  const scalarRootSchema: ContractSchema<RawGreetingInput, GreetingInput> = {
+    "~standard": {
+      ...greetingInputSchema["~standard"],
+      jsonSchema: {
+        ...greetingInputSchema["~standard"].jsonSchema,
+        input: () => ({
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          properties: { name: { type: "string" } },
+          required: ["name"],
+          type: "string",
+        }),
+      },
+    },
+  };
+
+  assert.throws(
+    () => createDataCli(() => undefined, greetingDataSchema, scalarRootSchema),
+    (error) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidInputSchemaShape",
+          command: "greet",
+          location: "input",
+          aspect: "type",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("执行期拒绝非法 Standard Result 且不调用 handler", async () => {
+  let runCount = 0;
+  const invalidResultSchema = {
+    "~standard": {
+      ...greetingInputSchema["~standard"],
+      validate: () => ({}),
+    },
+  } as unknown as ContractSchema<RawGreetingInput, GreetingInput>;
+  const cli = createDataCli(
+    () => {
+      runCount += 1;
+    },
+    greetingDataSchema,
+    invalidResultSchema,
+  );
+
+  await assert.rejects(
+    executeCli(cli, {
+      invocation: parseCliInvocation(cli, ["--name", "Ada"]),
+      dependencies: undefined,
+      write: () => undefined,
+    }),
+    /非法 Standard Result/,
+  );
+  assert.equal(runCount, 0);
 });

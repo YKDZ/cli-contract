@@ -233,7 +233,56 @@ function validateSynchronously(
   if (isPromise(result)) {
     throw new TypeError(asyncErrorMessage);
   }
+  if (!isStandardResult(result)) {
+    throw new TypeError("契约模式返回了非法 Standard Result");
+  }
   return result;
+}
+
+function isStandardResult(
+  value: unknown,
+): value is StandardSchemaV1.Result<unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const result = value as Readonly<Record<string, unknown>>;
+  if (result.issues === undefined) {
+    return "value" in result;
+  }
+  return (
+    !("value" in result) &&
+    Array.isArray(result.issues) &&
+    result.issues.length > 0 &&
+    result.issues.every(isStandardIssue)
+  );
+}
+
+function isStandardIssue(value: unknown): value is StandardSchemaV1.Issue {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("message" in value) ||
+    typeof value.message !== "string"
+  ) {
+    return false;
+  }
+  if (!("path" in value) || value.path === undefined) {
+    return true;
+  }
+  return (
+    Array.isArray(value.path) &&
+    value.path.every((segment) => {
+      const key =
+        typeof segment === "object" && segment !== null && "key" in segment
+          ? segment.key
+          : segment;
+      return (
+        typeof key === "string" ||
+        typeof key === "number" ||
+        typeof key === "symbol"
+      );
+    })
+  );
 }
 
 function normalizeSchemaIssueEvidence(
