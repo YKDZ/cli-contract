@@ -4,6 +4,11 @@ export type SchemaDefinitionTarget =
       readonly command: string;
       readonly location: "data";
       readonly variant: string;
+    }>
+  | Readonly<{
+      readonly command: string;
+      readonly location: "failure";
+      readonly variant: string;
     }>;
 
 export type ContractDefinitionIssue =
@@ -50,6 +55,27 @@ export type ContractDefinitionIssue =
       readonly command: string;
       readonly location: "input";
       readonly aspect: "properties" | "required" | "type";
+    }>
+  | Readonly<{
+      readonly code: "invalidVariantName";
+      readonly command: string;
+      readonly location: "data" | "failure";
+      readonly variant: string;
+    }>
+  | Readonly<{
+      readonly code: "missingVariantDescription";
+      readonly command: string;
+      readonly location: "data" | "failure";
+      readonly variant: string;
+    }>
+  | Readonly<{
+      readonly code: "invalidVariantExitCode";
+      readonly command: string;
+      readonly location: "data" | "failure";
+      readonly variant: string;
+      readonly received: number | null;
+      readonly minimum: 0 | 1;
+      readonly maximum: 255;
     }>;
 
 export class ContractDefinitionError extends Error {
@@ -61,7 +87,7 @@ export class ContractDefinitionError extends Error {
   constructor(
     issues: readonly [ContractDefinitionIssue, ...ContractDefinitionIssue[]],
   ) {
-    super("CLI 契约定义包含无效的契约模式");
+    super("CLI 契约定义无效");
     this.name = "ContractDefinitionError";
     this.issues = Object.freeze(
       issues.map((issue) => Object.freeze(issue)),

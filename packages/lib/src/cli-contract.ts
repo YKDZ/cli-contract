@@ -1,3 +1,7 @@
+import {
+  compileAtomicVariants,
+  type RuntimeAtomicVariant,
+} from "#/atomic-variant-compiler";
 import type { CommandUsage } from "#/cli-invocation";
 import {
   ContractDefinitionError,
@@ -21,15 +25,20 @@ import type {
   DataFactUnion,
   DataOutcome,
   DataVariantDefinitions,
+  FailureFactUnion,
+  FailureOutcome,
+  FailureVariantDefinitions,
   OutcomeFact,
 } from "#/outcome-fact";
 import {
   createCompletionWireSchema,
   createDataWireSchema,
+  createFailureWireSchema,
 } from "#/outcome-wire";
 export {
   createCompletionFact,
   createDataFact,
+  createFailureFact,
   isIssuedOutcomeFact,
 } from "#/outcome-fact";
 export type {
@@ -40,6 +49,11 @@ export type {
   DataOutcome,
   DataVariantDefinition,
   DataVariantDefinitions,
+  FailureFact,
+  FailureFactUnion,
+  FailureOutcome,
+  FailureVariantDefinition,
+  FailureVariantDefinitions,
   OutcomeFact,
 } from "#/outcome-fact";
 
@@ -206,13 +220,31 @@ type DataVariantNameContract<Variants extends DataVariantDefinitions> =
         }>
       >;
 
+type InvalidFailureVariantNames<Failures extends FailureVariantDefinitions> = {
+  [Variant in keyof Failures & string]: IsLowerCamelCase<Variant> extends true
+    ? never
+    : Variant;
+}[keyof Failures & string];
+
+type FailureVariantNameContract<Failures extends FailureVariantDefinitions> =
+  InvalidFailureVariantNames<Failures> extends never
+    ? unknown
+    : ContractTypeError<
+        "failureVariantMustBeLowerCamelCase",
+        Readonly<{
+          readonly variants: InvalidFailureVariantNames<Failures>;
+        }>
+      >;
+
 export interface CompletionHandlerContext<
   Command extends string,
   Dependencies,
+  Failures extends FailureVariantDefinitions,
 > {
   readonly input: EmptyCliInput;
   readonly dependencies: Dependencies;
-  readonly outcome: CompletionOutcome<Command>;
+  readonly outcome: CompletionOutcome<Command> &
+    FailureOutcome<Command, Failures>;
 }
 
 export interface DataHandlerContext<
@@ -220,25 +252,31 @@ export interface DataHandlerContext<
   Dependencies,
   Input,
   Variants extends DataVariantDefinitions,
+  Failures extends FailureVariantDefinitions,
 > {
   readonly input: Input;
   readonly dependencies: Dependencies;
-  readonly outcome: DataOutcome<Command, Variants>;
+  readonly outcome: DataOutcome<Command, Variants> &
+    FailureOutcome<Command, Failures>;
 }
 
 export interface CompletionRootCommandDefinition<
   Command extends string,
   Dependencies,
+  Failures extends FailureVariantDefinitions = Readonly<Record<never, never>>,
 > {
   readonly kind: "rootCommand";
   readonly name: string;
   readonly description: string;
   readonly input: ContractSchema<EmptyCliInput>;
   readonly success: Readonly<{ readonly kind: "completion" }>;
-  readonly failures: Readonly<Record<string, never>>;
+  readonly failures: Failures & FailureVariantNameContract<Failures>;
   readonly handler: (
-    context: CompletionHandlerContext<Command, Dependencies>,
-  ) => CompletionFact<Command> | Promise<CompletionFact<Command>>;
+    context: CompletionHandlerContext<Command, Dependencies, Failures>,
+  ) =>
+    | CompletionFact<Command>
+    | FailureFactUnion<Command, Failures>
+    | Promise<CompletionFact<Command> | FailureFactUnion<Command, Failures>>;
 }
 
 export interface DataRootCommandDefinition<
@@ -247,6 +285,7 @@ export interface DataRootCommandDefinition<
   Fields extends ValueOptionDefinitions,
   InputSchema extends ContractSchema,
   Variants extends DataVariantDefinitions,
+  Failures extends FailureVariantDefinitions,
 > {
   readonly kind: "rootCommand";
   readonly name: string;
@@ -259,27 +298,36 @@ export interface DataRootCommandDefinition<
     readonly kind: "data";
     readonly variants: Variants & DataVariantNameContract<Variants>;
   }>;
-  readonly failures: Readonly<Record<string, never>>;
+  readonly failures: Failures & FailureVariantNameContract<Failures>;
   readonly handler: (
     context: DataHandlerContext<
       Command,
       Dependencies,
       ContractSchemaOutput<InputSchema>,
-      Variants
+      Variants,
+      Failures
     >,
   ) =>
     | DataFactUnion<Command, Variants>
-    | Promise<DataFactUnion<Command, Variants>>;
+    | FailureFactUnion<Command, Failures>
+    | Promise<
+        DataFactUnion<Command, Variants> | FailureFactUnion<Command, Failures>
+      >;
 }
 
 export type RootCommandDefinition<Command extends string, Dependencies> =
-  | CompletionRootCommandDefinition<Command, Dependencies>
+  | CompletionRootCommandDefinition<
+      Command,
+      Dependencies,
+      FailureVariantDefinitions
+    >
   | DataRootCommandDefinition<
       Command,
       Dependencies,
       ValueOptionDefinitions,
       ContractSchema,
-      DataVariantDefinitions
+      DataVariantDefinitions,
+      FailureVariantDefinitions
     >;
 
 interface RootCliDefinitionBase<Root extends string> {
@@ -292,12 +340,14 @@ interface RootCliDefinitionBase<Root extends string> {
 export type CompletionRootCliDefinition<
   Root extends string,
   Dependencies,
+  Failures extends FailureVariantDefinitions = Readonly<Record<never, never>>,
 > = RootCliDefinitionBase<Root> &
   Readonly<{
     readonly commands: Readonly<{
       readonly [Command in Root]: CompletionRootCommandDefinition<
         Command,
-        Dependencies
+        Dependencies,
+        Failures
       >;
     }>;
   }>;
@@ -308,6 +358,7 @@ export type DataRootCliDefinition<
   Fields extends ValueOptionDefinitions,
   InputSchema extends ContractSchema,
   Variants extends DataVariantDefinitions,
+  Failures extends FailureVariantDefinitions,
 > = RootCliDefinitionBase<Root> &
   Readonly<{
     readonly commands: Readonly<{
@@ -316,19 +367,21 @@ export type DataRootCliDefinition<
         Dependencies,
         Fields,
         InputSchema,
-        Variants
+        Variants,
+        Failures
       >;
     }>;
   }>;
 
 export type RootCliDefinition<Root extends string, Dependencies> =
-  | CompletionRootCliDefinition<Root, Dependencies>
+  | CompletionRootCliDefinition<Root, Dependencies, FailureVariantDefinitions>
   | DataRootCliDefinition<
       Root,
       Dependencies,
       ValueOptionDefinitions,
       ContractSchema,
-      DataVariantDefinitions
+      DataVariantDefinitions,
+      FailureVariantDefinitions
     >;
 
 export interface ValueOptionGrammar<Field extends string = string> {
@@ -370,6 +423,8 @@ export interface DataVariantManifest extends SchemaManifest {
   readonly exitCode: number;
 }
 
+export type FailureVariantManifest = DataVariantManifest;
+
 export type CommandSuccessManifest =
   | Readonly<{ readonly kind: "completion" }>
   | Readonly<{
@@ -384,7 +439,7 @@ export interface RootCommandManifest {
   readonly fields: readonly ValueOptionGrammar[];
   readonly input: SchemaManifest;
   readonly success: CommandSuccessManifest;
-  readonly failures: Readonly<Record<string, never>>;
+  readonly failures: Readonly<Record<string, FailureVariantManifest>>;
 }
 
 export interface CliManifest<Root extends string> {
@@ -396,6 +451,7 @@ export interface CliManifest<Root extends string> {
   readonly wire: Readonly<{
     readonly completion?: JsonObject;
     readonly data?: Readonly<Record<string, JsonObject>>;
+    readonly failure?: Readonly<Record<string, JsonObject>>;
   }>;
 }
 
@@ -436,35 +492,36 @@ export type CliContractRoot<Contract> =
     : never;
 
 export interface DefineCli<Dependencies> {
-  <const Root extends string>(
-    definition: CompletionRootCliDefinition<Root, Dependencies>,
-  ): CliContract<Root, Dependencies, EmptyCliInput, CompletionFact<Root>>;
+  <const Root extends string, const Failures extends FailureVariantDefinitions>(
+    definition: CompletionRootCliDefinition<Root, Dependencies, Failures>,
+  ): CliContract<
+    Root,
+    Dependencies,
+    EmptyCliInput,
+    CompletionFact<Root> | FailureFactUnion<Root, Failures>
+  >;
 
   <
     const Root extends string,
     const Fields extends ValueOptionDefinitions,
     InputSchema extends ContractSchema,
     const Variants extends DataVariantDefinitions,
+    const Failures extends FailureVariantDefinitions,
   >(
     definition: DataRootCliDefinition<
       Root,
       Dependencies,
       Fields,
       InputSchema,
-      Variants
+      Variants,
+      Failures
     >,
   ): CliContract<
     Root,
     Dependencies,
     RawValueOptionInput<Fields>,
-    DataFactUnion<Root, Variants>
+    DataFactUnion<Root, Variants> | FailureFactUnion<Root, Failures>
   >;
-}
-
-interface RuntimeDataVariant {
-  readonly description: string;
-  readonly schema: ContractSchema;
-  readonly exitCode: number;
 }
 
 interface RuntimeCompiledCli {
@@ -479,8 +536,9 @@ interface RuntimeCompiledCli {
     | Readonly<{ readonly kind: "completion" }>
     | Readonly<{
         readonly kind: "data";
-        readonly variants: Readonly<Record<string, RuntimeDataVariant>>;
+        readonly variants: Readonly<Record<string, RuntimeAtomicVariant>>;
       }>;
+  readonly failures: Readonly<Record<string, RuntimeAtomicVariant>>;
   readonly handler: unknown;
 }
 
@@ -496,7 +554,7 @@ type RuntimeCommandDefinition = Readonly<{
         readonly kind: "data";
         readonly variants: DataVariantDefinitions;
       }>;
-  readonly failures: Readonly<Record<string, never>>;
+  readonly failures: FailureVariantDefinitions;
   readonly handler: unknown;
 }>;
 
@@ -547,6 +605,11 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
   const compiledSuccess = compileSuccess(
     definition.root,
     command.success,
+    definitionIssues,
+  );
+  const compiledFailures = compileFailures(
+    definition.root,
+    command.failures,
     definitionIssues,
   );
   const fields =
@@ -603,12 +666,17 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
         fields,
         input,
         success: compiledSuccess.manifest,
-        failures: {},
+        failures: compiledFailures.manifest,
       },
     },
     controls,
     usageFailure: { exitCode: definition.usageFailureExitCode },
-    wire: compiledSuccess.wire,
+    wire: deepFreeze({
+      ...compiledSuccess.wire,
+      ...(Object.keys(compiledFailures.wire).length === 0
+        ? {}
+        : { failure: compiledFailures.wire }),
+    }),
   });
   const contract = Object.freeze({ grammar, manifest }) as CliContract;
 
@@ -621,6 +689,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
     usageFailureExitCode: definition.usageFailureExitCode,
     input: command.input,
     success: compiledSuccess.runtime,
+    failures: compiledFailures.runtime,
     handler: command.handler,
   });
 
@@ -663,9 +732,30 @@ function assertRootDefinition(definition: RuntimeCliDefinition): void {
   if (command.name.length === 0 || command.description.length === 0) {
     throw new TypeError("根命令名称和描述不能为空");
   }
-  if (Object.keys(command.failures).length !== 0) {
-    throw new TypeError("当前切片不支持应用失败");
-  }
+}
+
+function compileFailures(
+  command: string,
+  failures: FailureVariantDefinitions,
+  issues: ContractDefinitionIssue[],
+): Readonly<{
+  readonly runtime: Readonly<Record<string, RuntimeAtomicVariant>>;
+  readonly manifest: Readonly<Record<string, FailureVariantManifest>>;
+  readonly wire: Readonly<Record<string, JsonObject>>;
+}> {
+  const compiled = compileAtomicVariants(
+    command,
+    "failure",
+    failures,
+    1,
+    createFailureWireSchema,
+    issues,
+  );
+  return {
+    runtime: compiled.runtime,
+    manifest: compiled.manifest,
+    wire: compiled.wire,
+  };
 }
 
 function compileSuccess(
@@ -687,58 +777,25 @@ function compileSuccess(
     };
   }
 
-  const variants: Record<string, RuntimeDataVariant> = {};
-  const manifestVariants: Record<string, DataVariantManifest> = {};
-  const wireVariants: Record<string, JsonObject> = {};
-  for (const [variant, definition] of Object.entries(success.variants)) {
-    if (!/^[a-z][A-Za-z0-9]*$/.test(variant)) {
-      throw new TypeError(`data 变体 ${variant} 必须是 lower camel case`);
-    }
-    if (
-      !Number.isInteger(definition.exitCode) ||
-      definition.exitCode < 0 ||
-      definition.exitCode > 255
-    ) {
-      throw new TypeError(
-        `data 变体 ${variant} 的退出码必须是 0 到 255 之间的整数`,
-      );
-    }
-    if (definition.description.length === 0) {
-      throw new TypeError(`data 变体 ${variant} 的描述不能为空`);
-    }
-    const schema = compileContractSchema(
-      definition.schema,
-      {
-        command,
-        location: "data",
-        variant,
-      },
-      issues,
-    );
-    variants[variant] = deepFreeze({
-      description: definition.description,
-      schema: definition.schema,
-      exitCode: definition.exitCode,
-    });
-    if (schema !== undefined) {
-      manifestVariants[variant] = deepFreeze({
-        description: definition.description,
-        exitCode: definition.exitCode,
-        ...schema,
-      });
-      wireVariants[variant] = deepFreeze(
-        createDataWireSchema(command, variant, schema.outputSchema),
-      );
-    }
-  }
-  if (Object.keys(variants).length === 0) {
+  const variants = compileAtomicVariants(
+    command,
+    "data",
+    success.variants,
+    0,
+    createDataWireSchema,
+    issues,
+  );
+  if (Object.keys(variants.runtime).length === 0) {
     throw new TypeError("data 命令必须声明至少一个具名变体");
   }
 
   return deepFreeze({
-    runtime: { kind: "data" as const, variants },
-    manifest: { kind: "data" as const, variants: manifestVariants },
-    wire: { data: wireVariants },
+    runtime: { kind: "data" as const, variants: variants.runtime },
+    manifest: {
+      kind: "data" as const,
+      variants: variants.manifest,
+    },
+    wire: { data: variants.wire },
   });
 }
 

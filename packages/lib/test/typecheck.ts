@@ -3,6 +3,7 @@ import {
   helpCapability,
   outputCapability,
   type CliContract,
+  type CliContractResult,
   type CliInvocation,
   type CanonicalLongOption,
   type CompletionRootCliDefinition,
@@ -96,7 +97,13 @@ const dataCli = defineCli()({
           },
         },
       },
-      failures: {},
+      failures: {
+        unavailable: {
+          description: "服务不可用",
+          schema: greetingData,
+          exitCode: 9,
+        },
+      },
       handler({ input, outcome }) {
         input satisfies Readonly<{ readonly normalizedName: string }>;
         // @ts-expect-error data handler 不拥有 completion 构造器。
@@ -105,6 +112,15 @@ const dataCli = defineCli()({
         outcome.data.other({ message: "nope" });
         // @ts-expect-error data payload 必须符合对应变体模式。
         outcome.data.greeting({ message: 1 });
+        // @ts-expect-error 未声明的失败变体不可构造。
+        outcome.failure.other({ message: "nope" });
+        // @ts-expect-error 失败 payload 必须符合对应变体模式。
+        outcome.failure.unavailable({ message: 1 });
+        // @ts-expect-error 不存在万能 default 失败分支。
+        outcome.failure.default({ message: "nope" });
+        if (input.normalizedName === "unavailable") {
+          return outcome.failure.unavailable({ message: "稍后重试" });
+        }
         return outcome.data.greeting({ message: input.normalizedName });
       },
     },
@@ -112,6 +128,15 @@ const dataCli = defineCli()({
 });
 
 function verifyTypeErrors() {
+  // @ts-expect-error 应用结果只能由作用域 outcome 构造器签发。
+  const rawFailure: CliContractResult<typeof dataCli> = {
+    kind: "failure",
+    command: "greet",
+    variant: "unavailable",
+    data: { message: "nope" },
+  };
+  void rawFailure;
+
   const invalidZodOutput: ContractSchemaOutput<typeof realZodSchema> = {
     // @ts-expect-error Zod 变换后的 Output 不再是 raw Input 形状。
     name: "Ada",
@@ -186,7 +211,14 @@ function verifyTypeErrors() {
             },
           },
         },
-        failures: {},
+        // @ts-expect-error failure 变体身份必须是 lower camel case。
+        failures: {
+          "1failure": {
+            description: "错误失败",
+            schema: greetingData,
+            exitCode: 9,
+          },
+        },
         handler: ({ outcome }) =>
           outcome.data["1greeting"]({ message: "nope" }),
       },

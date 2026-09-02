@@ -22,13 +22,7 @@ export function createDataEnvelope<
   Variant extends string,
   Data,
 >(command: Command, variant: Variant, data: Data) {
-  return Object.freeze({
-    schemaVersion,
-    command,
-    kind: "data" as const,
-    variant,
-    data,
-  });
+  return createAtomicEnvelope(command, "data", variant, data);
 }
 
 export function createDataWireSchema(
@@ -37,6 +31,38 @@ export function createDataWireSchema(
   dataSchema: JsonObject,
 ): JsonObject {
   const envelope = createDataEnvelope(command, variant, null);
+  return createEnvelopeSchema(envelope, { data: dataSchema });
+}
+
+export function createFailureEnvelope<
+  Command extends string,
+  Variant extends string,
+  Data,
+>(command: Command, variant: Variant, data: Data) {
+  return createAtomicEnvelope(command, "failure", variant, data);
+}
+
+function createAtomicEnvelope<
+  Command extends string,
+  Kind extends "data" | "failure",
+  Variant extends string,
+  Data,
+>(command: Command, kind: Kind, variant: Variant, data: Data) {
+  return Object.freeze({
+    schemaVersion,
+    command,
+    kind,
+    variant,
+    data,
+  });
+}
+
+export function createFailureWireSchema(
+  command: string,
+  variant: string,
+  dataSchema: JsonObject,
+): JsonObject {
+  const envelope = createFailureEnvelope(command, variant, null);
   return createEnvelopeSchema(envelope, { data: dataSchema });
 }
 
