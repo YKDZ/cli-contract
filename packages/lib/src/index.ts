@@ -54,6 +54,7 @@ export {
   type ExecuteCliOptions,
   type WriteCliOutput,
 } from "#/cli-execution";
+export { CliWriteError } from "#/cli-write-error";
 export {
   parseCliInvocation,
   type CliInvocation,
@@ -67,6 +68,10 @@ export {
   type UsageIssue,
   type UsageFailure,
 } from "#/cli-invocation";
+export {
+  ContractExecutionError,
+  type ContractExecutionIssue,
+} from "#/contract-execution-error";
 export {
   ContractDefinitionError,
   type ContractDefinitionIssue,

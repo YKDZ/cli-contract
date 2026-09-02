@@ -136,25 +136,47 @@ export function compileInputFields(
     return [];
   }
 
-  return deepFreeze(
-    Object.entries(definitions).map(([key, field]) => {
-      if (!/^--[a-z0-9]+(?:-[a-z0-9]+)*$/.test(field.longOption)) {
-        throw new TypeError(
-          `字段 ${key} 的 longOption 必须是 canonical kebab-case`,
-        );
-      }
-      if (field.description.length === 0) {
-        throw new TypeError(`字段 ${key} 的描述不能为空`);
-      }
-      return {
-        kind: "valueOption" as const,
-        key,
-        longOption: field.longOption,
-        description: field.description,
-        required: required.has(key),
-      };
-    }),
-  );
+  const fields = Object.entries(definitions).map(([key, field]) => {
+    if (!/^--[a-z0-9]+(?:-[a-z0-9]+)*$/.test(field.longOption)) {
+      issues.push({
+        code: "invalidFieldLongOption",
+        command,
+        field: key,
+        received: field.longOption,
+      });
+    }
+    if (field.description.length === 0) {
+      issues.push({
+        code: "missingFieldDescription",
+        command,
+        field: key,
+      });
+    }
+    return {
+      kind: "valueOption" as const,
+      key,
+      longOption: field.longOption,
+      description: field.description,
+      required: required.has(key),
+    };
+  });
+  const fieldsByLongOption = new Map<string, ValueOptionGrammar[]>();
+  for (const field of fields) {
+    const matchingFields = fieldsByLongOption.get(field.longOption) ?? [];
+    matchingFields.push(field);
+    fieldsByLongOption.set(field.longOption, matchingFields);
+  }
+  for (const [longOption, matchingFields] of fieldsByLongOption) {
+    if (matchingFields.length > 1) {
+      issues.push({
+        code: "duplicateFieldLongOption",
+        command,
+        longOption,
+        fields: matchingFields.map((field) => field.key).sort(),
+      });
+    }
+  }
+  return deepFreeze(fields);
 }
 
 function copySchemaProjection(

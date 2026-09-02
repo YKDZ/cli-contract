@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   ContractDefinitionError,
+  ContractExecutionError,
   defineCli,
   executeCli,
   helpCapability,
@@ -145,7 +146,20 @@ void test("非法失败 payload 在任何写出前被拒绝", async () => {
         writes.push(chunk);
       },
     }),
-    /failure payload 没有通过声明模式/,
+    (error) => {
+      assert.ok(error instanceof ContractExecutionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "outputSchemaRejected",
+          command: "check",
+          location: "failure",
+          variant: "unavailable",
+          expected: "schemaAccepted",
+          received: "schemaRejected",
+        },
+      ]);
+      return true;
+    },
   );
   assert.deepEqual(writes, []);
 });

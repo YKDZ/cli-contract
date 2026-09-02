@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   ContractDefinitionError,
+  ContractExecutionError,
   defineCli,
   executeCli,
   helpCapability,
@@ -219,7 +220,20 @@ void test("输出模式产生非 JSON 值时拒绝且不写出字节", async () 
         writes.push(chunk);
       },
     }),
-    /JSON object 必须是普通对象/,
+    (error) => {
+      assert.ok(error instanceof ContractExecutionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidJsonValue",
+          command: "greet",
+          location: "data",
+          variant: "greeting",
+          expected: "jsonValue",
+          received: "nonJsonValue",
+        },
+      ]);
+      return true;
+    },
   );
   assert.deepEqual(writes, []);
 });
@@ -328,7 +342,19 @@ void test("执行期拒绝 Standard Schema 返回的异步 validation", async ()
       dependencies: undefined,
       write: () => undefined,
     }),
-    /契约模式验证必须同步完成/,
+    (error) => {
+      assert.ok(error instanceof ContractExecutionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "asynchronousSchemaValidation",
+          command: "greet",
+          location: "input",
+          expected: "synchronousStandardResult",
+          received: "promise",
+        },
+      ]);
+      return true;
+    },
   );
 });
 
@@ -536,7 +562,19 @@ void test("执行期拒绝非法 Standard Result 且不调用 handler", async ()
       dependencies: undefined,
       write: () => undefined,
     }),
-    /非法 Standard Result/,
+    (error) => {
+      assert.ok(error instanceof ContractExecutionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidStandardResult",
+          command: "greet",
+          location: "input",
+          expected: "standardResult",
+          received: "object",
+        },
+      ]);
+      return true;
+    },
   );
   assert.equal(runCount, 0);
 });

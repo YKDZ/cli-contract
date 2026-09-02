@@ -7,6 +7,7 @@ import {
   ContractDefinitionError,
   type ContractDefinitionIssue,
 } from "#/contract-definition-error";
+import { ContractExecutionError } from "#/contract-execution-error";
 import type {
   ContractSchema,
   ContractSchemaInput,
@@ -589,11 +590,16 @@ export function defineCli<Dependencies = undefined>(): DefineCli<Dependencies> {
 }
 
 function compileCli(definition: RuntimeCliDefinition): CliContract {
-  assertRootDefinition(definition);
   const definitionIssues: ContractDefinitionIssue[] = [];
-  const command = definition.commands[
-    definition.root
-  ] as RuntimeCommandDefinition;
+  const command = collectRootDefinitionIssues(definition, definitionIssues);
+  if (command === undefined) {
+    throw new ContractDefinitionError(
+      definitionIssues as [
+        ContractDefinitionIssue,
+        ...ContractDefinitionIssue[],
+      ],
+    );
+  }
   const input = compileContractSchema(
     command.input,
     {
@@ -629,9 +635,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
       ],
     );
   }
-  if (input === undefined) {
-    throw new TypeError("契约模式投影缺失");
-  }
+  const validInput = input as SchemaManifest;
   const usage = deepFreeze({
     command: definition.root,
     synopsis: createUsageSynopsis(command.name, fields),
@@ -664,7 +668,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
         name: command.name,
         description: command.description,
         fields,
-        input,
+        input: validInput,
         success: compiledSuccess.manifest,
         failures: compiledFailures.manifest,
       },
@@ -699,39 +703,79 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
 export function getCompiledCli(contract: CliContract): RuntimeCompiledCli {
   const compiled = compiledCliContracts.get(contract);
   if (compiled === undefined) {
-    throw new TypeError("CLI 契约必须由 defineCli 创建");
+    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
   }
   return compiled;
 }
 
-function assertRootDefinition(definition: RuntimeCliDefinition): void {
+function collectRootDefinitionIssues(
+  definition: RuntimeCliDefinition,
+  issues: ContractDefinitionIssue[],
+): RuntimeCommandDefinition | undefined {
   if (!helpCapabilities.has(definition.help)) {
-    throw new TypeError("help 必须由 helpCapability 创建");
+    issues.push({ code: "invalidCapability", capability: "help" });
   }
   if (!outputCapabilities.has(definition.output)) {
-    throw new TypeError("output 必须由 outputCapability 创建");
+    issues.push({ code: "invalidCapability", capability: "output" });
+  } else if (definition.output.defaultFormat !== "structured") {
+    issues.push({
+      code: "invalidOutputFormat",
+      expected: "structured",
+      received:
+        typeof definition.output.defaultFormat === "string"
+          ? definition.output.defaultFormat
+          : null,
+    });
   }
   if (
     !Number.isInteger(definition.usageFailureExitCode) ||
     definition.usageFailureExitCode < 1 ||
     definition.usageFailureExitCode > 255
   ) {
-    throw new TypeError("用法失败退出码必须是 1 到 255 之间的整数");
+    issues.push({
+      code: "invalidUsageFailureExitCode",
+      received:
+        typeof definition.usageFailureExitCode === "number"
+          ? definition.usageFailureExitCode
+          : null,
+      minimum: 1,
+      maximum: 255,
+    });
   }
 
+  const commandKeys = Object.keys(definition.commands);
   const command = definition.commands[definition.root];
-  if (command === undefined) {
-    throw new TypeError("根命令必须存在");
+  if (command === undefined || commandKeys.length !== 1) {
+    issues.push({
+      code: "invalidRootCommandSet",
+      root: definition.root,
+      receivedCommands: commandKeys.sort(),
+    });
   }
-  if (Object.keys(definition.commands).length !== 1) {
-    throw new TypeError("RootCommand CLI 必须且只能包含一个命令");
-  }
+  if (command === undefined) return undefined;
   if (command.kind !== "rootCommand") {
-    throw new TypeError("根命令 kind 必须是 rootCommand");
+    issues.push({
+      code: "invalidRootCommandKind",
+      command: definition.root,
+      received: typeof command.kind === "string" ? command.kind : null,
+    });
+    return undefined;
   }
-  if (command.name.length === 0 || command.description.length === 0) {
-    throw new TypeError("根命令名称和描述不能为空");
+  if (command.name.length === 0) {
+    issues.push({
+      code: "missingCommandText",
+      command: definition.root,
+      field: "name",
+    });
   }
+  if (command.description.length === 0) {
+    issues.push({
+      code: "missingCommandText",
+      command: definition.root,
+      field: "description",
+    });
+  }
+  return command;
 }
 
 function compileFailures(
@@ -786,7 +830,7 @@ function compileSuccess(
     issues,
   );
   if (Object.keys(variants.runtime).length === 0) {
-    throw new TypeError("data 命令必须声明至少一个具名变体");
+    issues.push({ code: "missingDataVariant", command });
   }
 
   return deepFreeze({

@@ -19,6 +19,12 @@ import {
   type NonEmptyUsageIssues,
   type SchemaIssueEvidence,
 } from "#/cli-invocation";
+import { CliWriteError } from "#/cli-write-error";
+import {
+  ContractExecutionError,
+  type ContractExecutionIssue,
+  type ExecutionSchemaTarget,
+} from "#/contract-execution-error";
 import type { ContractSchema } from "#/contract-schema";
 import type { JsonValue } from "#/contract-schema";
 import { copyJsonValue } from "#/json-value";
@@ -72,17 +78,23 @@ export async function executeCli<const Contract extends CliContract>(
   cliContract: Contract,
   options: ExecuteCliOptions<Contract>,
 ): Promise<CliTermination<Contract>> {
+  const compiled = getCompiledCli(cliContract);
   if (!invocationBelongsTo(options.invocation, cliContract)) {
-    throw new TypeError("CLI 调用来自另一个契约");
+    throw new ContractExecutionError([
+      {
+        code: "invocationContractMismatch",
+        expectedCommand: compiled.root,
+        receivedCommand: options.invocation.command,
+      },
+    ]);
   }
 
-  const compiled = getCompiledCli(cliContract);
   switch (options.invocation.kind) {
     case "help": {
       const fieldHelp = compiled.fields
         .map((field) => `${field.longOption} <value>\t${field.description}\n`)
         .join("");
-      await options.write({
+      await writeCliOutput(options.write, {
         destination: "stdout",
         chunk: `${compiled.usage.synopsis}\n${compiled.description}\n${fieldHelp}${compiled.contract.grammar.controls.help.longOption}\n`,
       });
@@ -93,7 +105,7 @@ export async function executeCli<const Contract extends CliContract>(
       });
     }
     case "usageFailure": {
-      await options.write({
+      await writeCliOutput(options.write, {
         destination: "stderr",
         chunk: `${options.invocation.usage.synopsis}\n`,
       });
@@ -108,7 +120,7 @@ export async function executeCli<const Contract extends CliContract>(
       const validation = validateSynchronously(
         compiled.input,
         options.invocation.input,
-        "契约模式验证必须同步完成",
+        { command: compiled.root, location: "input" },
       );
       if (validation.issues !== undefined) {
         const issues = Object.freeze([
@@ -119,7 +131,7 @@ export async function executeCli<const Contract extends CliContract>(
             ),
           }),
         ]) as readonly [InputRejectedIssue];
-        await options.write({
+        await writeCliOutput(options.write, {
           destination: "stderr",
           chunk: `${compiled.usage.synopsis}\n`,
         });
@@ -187,11 +199,14 @@ async function executeApplicationResult<Contract extends CliContract>(
     outcome,
   });
   if (!isIssuedOutcomeFact(result, issuedOutcomeFacts)) {
-    throw new TypeError("handler 返回了无效的结果事实");
+    throwExecutionIssue({
+      code: "invalidOutcomeFact",
+      command: compiled.root,
+    });
   }
 
   const projected = await projectOutcome(compiled, result);
-  await options.write({
+  await writeCliOutput(options.write, {
     destination: projected.destination,
     chunk: projected.chunk,
   });
@@ -201,6 +216,17 @@ async function executeApplicationResult<Contract extends CliContract>(
     result: projected.result as CliContractResult<Contract>,
     exitCode: projected.exitCode,
   });
+}
+
+async function writeCliOutput(
+  write: WriteCliOutput,
+  output: CliOutput,
+): Promise<void> {
+  try {
+    await write(output);
+  } catch (cause) {
+    throw new CliWriteError(output.destination, cause);
+  }
 }
 
 async function projectOutcome(
@@ -217,14 +243,18 @@ async function projectOutcome(
   if (result.kind === "failure") {
     const failure = compiled.failures[result.variant];
     if (failure === undefined) {
-      throw new TypeError("handler 返回了未声明的 failure 变体");
+      throwExecutionIssue({
+        code: "undeclaredOutcomeVariant",
+        command: compiled.root,
+        location: "failure",
+        variant: result.variant,
+      });
     }
-    const data = projectAtomicData(
-      failure.schema,
-      result.data,
-      "failure payload 模式验证必须同步完成",
-      "failure payload 没有通过声明模式",
-    );
+    const data = projectAtomicData(failure.schema, result.data, {
+      command: compiled.root,
+      location: "failure",
+      variant: result.variant,
+    });
     const normalized = Object.freeze({
       kind: "failure" as const,
       command: compiled.root,
@@ -242,7 +272,12 @@ async function projectOutcome(
   }
   if (compiled.success.kind === "completion") {
     if (result.kind !== "completion") {
-      throw new TypeError("completion 命令只能返回 completion fact");
+      throwExecutionIssue({
+        code: "outcomeKindMismatch",
+        command: compiled.root,
+        expected: "completion",
+        received: result.kind,
+      });
     }
     return {
       result,
@@ -252,19 +287,28 @@ async function projectOutcome(
     };
   }
   if (result.kind !== "data") {
-    throw new TypeError("data 命令只能返回 data fact");
+    throwExecutionIssue({
+      code: "outcomeKindMismatch",
+      command: compiled.root,
+      expected: "data",
+      received: result.kind,
+    });
   }
 
   const variant = compiled.success.variants[result.variant];
   if (variant === undefined) {
-    throw new TypeError("handler 返回了未声明的 data 变体");
+    throwExecutionIssue({
+      code: "undeclaredOutcomeVariant",
+      command: compiled.root,
+      location: "data",
+      variant: result.variant,
+    });
   }
-  const data = projectAtomicData(
-    variant.schema,
-    result.data,
-    "data payload 模式验证必须同步完成",
-    "data payload 没有通过声明模式",
-  );
+  const data = projectAtomicData(variant.schema, result.data, {
+    command: compiled.root,
+    location: "data",
+    variant: result.variant,
+  });
   const normalized = Object.freeze({
     kind: "data" as const,
     command: compiled.root,
@@ -284,29 +328,67 @@ async function projectOutcome(
 function projectAtomicData(
   schema: ContractSchema,
   value: unknown,
-  asyncErrorMessage: string,
-  rejectedErrorMessage: string,
+  target: Exclude<ExecutionSchemaTarget, { readonly location: "input" }>,
 ): JsonValue {
-  const validation = validateSynchronously(schema, value, asyncErrorMessage);
+  const validation = validateSynchronously(schema, value, target);
   if (validation.issues !== undefined) {
-    throw new TypeError(rejectedErrorMessage);
+    throwExecutionIssue({
+      code: "outputSchemaRejected",
+      ...target,
+      expected: "schemaAccepted",
+      received: "schemaRejected",
+    });
   }
-  return copyJsonValue(validation.value);
+  try {
+    return copyJsonValue(validation.value);
+  } catch {
+    throwExecutionIssue({
+      code: "invalidJsonValue",
+      ...target,
+      expected: "jsonValue",
+      received: "nonJsonValue",
+    });
+  }
 }
 
 function validateSynchronously(
   schema: ContractSchema,
   value: unknown,
-  asyncErrorMessage: string,
+  target: ExecutionSchemaTarget,
 ): StandardSchemaV1.Result<unknown> {
   const result = schema["~standard"].validate(value);
   if (isPromise(result)) {
-    throw new TypeError(asyncErrorMessage);
+    throwExecutionIssue({
+      code: "asynchronousSchemaValidation",
+      ...target,
+      expected: "synchronousStandardResult",
+      received: "promise",
+    });
   }
   if (!isStandardResult(result)) {
-    throw new TypeError("契约模式返回了非法 Standard Result");
+    throwExecutionIssue({
+      code: "invalidStandardResult",
+      ...target,
+      expected: "standardResult",
+      received: describeValueKind(result),
+    });
   }
   return result;
+}
+
+function describeValueKind(
+  value: unknown,
+): Extract<
+  ContractExecutionIssue,
+  { readonly code: "invalidStandardResult" }
+>["received"] {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  return typeof value;
+}
+
+function throwExecutionIssue(issue: ContractExecutionIssue): never {
+  throw new ContractExecutionError([issue]);
 }
 
 function isStandardResult(
