@@ -120,7 +120,7 @@ type IsCanonicalKebabBody<
     : Value extends `-${infer Rest}`
       ? NeedsCharacter extends true
         ? false
-        : IsCanonicalKebabBody<Rest, true>
+        : IsCanonicalKebabBody<Rest>
       : false;
 
 type IsLowerCamelCase<Value extends string> =
@@ -140,11 +140,13 @@ type IsAlphaNumericTail<Value extends string> = Value extends ""
 
 export type CanonicalLongOption<Value extends string> = string extends Value
   ? `--${string}`
-  : Value extends `--${infer Body}`
-    ? IsCanonicalKebabBody<Body> extends true
-      ? Value
-      : never
-    : never;
+  : `--${string}` extends Value
+    ? Value
+    : Value extends `--${infer Body}`
+      ? IsCanonicalKebabBody<Body> extends true
+        ? Value
+        : never
+      : never;
 
 export type ShortOptionAlias<Value extends string> = string extends Value
   ? `-${string}`
@@ -159,11 +161,30 @@ export interface PositionalDefinition {
   readonly description: string;
 }
 
+export interface VariadicPositionalDefinition {
+  readonly kind: "variadicPositional";
+  readonly description: string;
+}
+
 export interface FlagDefinition<
   LongOption extends `--${string}` = `--${string}`,
   ShortAlias extends `-${string}` | undefined = `-${string}` | undefined,
+  NegatedLongOption extends `--${string}` | undefined =
+    | `--${string}`
+    | undefined,
 > {
   readonly kind: "flag";
+  readonly longOption: LongOption;
+  readonly shortAlias?: ShortAlias;
+  readonly negatedLongOption?: NegatedLongOption;
+  readonly description: string;
+}
+
+export interface RepeatableOptionDefinition<
+  LongOption extends `--${string}` = `--${string}`,
+  ShortAlias extends `-${string}` | undefined = `-${string}` | undefined,
+> {
+  readonly kind: "repeatableOption";
   readonly longOption: LongOption;
   readonly shortAlias?: ShortAlias;
   readonly description: string;
@@ -182,6 +203,8 @@ export interface ValueOptionDefinition<
 export type FieldDefinition =
   | FlagDefinition
   | PositionalDefinition
+  | RepeatableOptionDefinition
+  | VariadicPositionalDefinition
   | ValueOptionDefinition;
 
 export type FieldDefinitions = Readonly<Record<string, FieldDefinition>>;
@@ -190,9 +213,21 @@ export type ValueOptionDefinitions = Readonly<
   Record<string, ValueOptionDefinition>
 >;
 
-type RawFieldValue<Field extends FieldDefinition> = Field extends FlagDefinition
-  ? true
-  : string;
+type RawFieldValue<Field extends FieldDefinition> = Field extends {
+  readonly kind: "flag";
+}
+  ? Field extends { readonly negatedLongOption: unknown }
+    ? boolean
+    : true
+  : Field extends RepeatableOptionDefinition | VariadicPositionalDefinition
+    ? readonly [string, ...string[]]
+    : string;
+
+type RawSchemaInputValue<Field extends FieldDefinition> = Field extends
+  | RepeatableOptionDefinition
+  | VariadicPositionalDefinition
+  ? [string, ...string[]]
+  : RawFieldValue<Field>;
 
 export type RawFieldInput<Fields extends FieldDefinitions> = Readonly<{
   [Field in keyof Fields]?: RawFieldValue<Fields[Field]>;
@@ -214,11 +249,44 @@ type CheckedFieldDefinition<
   Key,
 > = Field extends PositionalDefinition
   ? Field
-  : Field extends FlagDefinition<infer LongOption, infer ShortAlias>
-    ? CheckedOptionDefinition<Field, Key, LongOption, ShortAlias>
-    : Field extends ValueOptionDefinition<infer LongOption, infer ShortAlias>
-      ? CheckedOptionDefinition<Field, Key, LongOption, ShortAlias>
-      : never;
+  : Field extends VariadicPositionalDefinition
+    ? Field
+    : Field extends FlagDefinition<infer LongOption, infer ShortAlias>
+      ? CheckedNegatedFlagDefinition<Field, Key, LongOption, ShortAlias>
+      : Field extends RepeatableOptionDefinition<
+            infer LongOption,
+            infer ShortAlias
+          >
+        ? CheckedOptionDefinition<Field, Key, LongOption, ShortAlias>
+        : Field extends ValueOptionDefinition<
+              infer LongOption,
+              infer ShortAlias
+            >
+          ? CheckedOptionDefinition<Field, Key, LongOption, ShortAlias>
+          : never;
+
+type CheckedNegatedFlagDefinition<
+  Field,
+  Key,
+  LongOption extends `--${string}`,
+  ShortAlias extends `-${string}` | undefined,
+> =
+  CheckedOptionDefinition<Field, Key, LongOption, ShortAlias> extends Field
+    ? Field extends {
+        readonly negatedLongOption: infer NegatedLongOption extends
+          `--${string}`;
+      }
+      ? NegatedLongOption extends CanonicalLongOption<NegatedLongOption>
+        ? Field
+        : ContractTypeError<
+            "invalidNegatedLongOption",
+            Readonly<{
+              readonly field: Key;
+              readonly received: NegatedLongOption;
+            }>
+          >
+      : Field
+    : CheckedOptionDefinition<Field, Key, LongOption, ShortAlias>;
 
 type CheckedOptionDefinition<
   Field,
@@ -275,7 +343,7 @@ export interface ContractTypeError<Code extends string, Evidence> {
 type InputStringKeys<Input> = Extract<keyof Input, string>;
 
 type IncompatibleRawInputKeys<Fields extends FieldDefinitions, Input> = {
-  [Field in keyof Fields & InputStringKeys<Input>]: RawFieldValue<
+  [Field in keyof Fields & InputStringKeys<Input>]: RawSchemaInputValue<
     Fields[Field]
   > extends Input[Field]
     ? never
@@ -368,9 +436,8 @@ export interface CompletionRootCommandDefinition<
   readonly kind: "rootCommand";
   readonly name: string;
   readonly description: string;
-  readonly fields?: Fields &
+  readonly fields?: CheckedFieldDefinitions<Fields> &
     FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
-    CheckedFieldDefinitions<Fields> &
     FieldIdentityContract<Fields>;
   readonly input: InputSchema & RawFieldInputContract<Fields, InputSchema>;
   readonly success: Readonly<{ readonly kind: "completion" }>;
@@ -399,9 +466,8 @@ export interface DataRootCommandDefinition<
   readonly kind: "rootCommand";
   readonly name: string;
   readonly description: string;
-  readonly fields: Fields &
+  readonly fields: CheckedFieldDefinitions<Fields> &
     FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
-    CheckedFieldDefinitions<Fields> &
     FieldIdentityContract<Fields>;
   readonly input: InputSchema & RawFieldInputContract<Fields, InputSchema>;
   readonly success: Readonly<{
@@ -527,10 +593,25 @@ export interface PositionalGrammar<
   readonly kind: "positional";
 }
 
+export interface VariadicPositionalGrammar<
+  Field extends string = string,
+> extends FieldGrammarBase<Field> {
+  readonly kind: "variadicPositional";
+}
+
 export interface FlagGrammar<
   Field extends string = string,
 > extends FieldGrammarBase<Field> {
   readonly kind: "flag";
+  readonly longOption: CanonicalLongOption<string>;
+  readonly shortAlias?: ShortOptionAlias<string>;
+  readonly negatedLongOption?: CanonicalLongOption<string>;
+}
+
+export interface RepeatableOptionGrammar<
+  Field extends string = string,
+> extends FieldGrammarBase<Field> {
+  readonly kind: "repeatableOption";
   readonly longOption: CanonicalLongOption<string>;
   readonly shortAlias?: ShortOptionAlias<string>;
 }
@@ -546,6 +627,8 @@ export interface ValueOptionGrammar<
 export type FieldGrammar<Field extends string = string> =
   | FlagGrammar<Field>
   | PositionalGrammar<Field>
+  | RepeatableOptionGrammar<Field>
+  | VariadicPositionalGrammar<Field>
   | ValueOptionGrammar<Field>;
 
 export interface RootCommandGrammar<Root extends string> {
@@ -628,12 +711,12 @@ export interface CliContract<
 }
 
 export type CliContractDependencies<Contract> =
-  Contract extends CliContract<string, infer Dependencies, unknown, OutcomeFact>
+  Contract extends CliContract<string, infer Dependencies, unknown>
     ? Dependencies
     : never;
 
 export type CliContractRawInput<Contract> =
-  Contract extends CliContract<string, unknown, infer RawInput, OutcomeFact>
+  Contract extends CliContract<string, unknown, infer RawInput>
     ? RawInput
     : never;
 
@@ -643,9 +726,7 @@ export type CliContractResult<Contract> =
     : never;
 
 export type CliContractRoot<Contract> =
-  Contract extends CliContract<infer Root, unknown, unknown, OutcomeFact>
-    ? Root
-    : never;
+  Contract extends CliContract<infer Root, unknown, unknown> ? Root : never;
 
 export interface DefineCli<Dependencies> {
   <const Root extends string, const Failures extends FailureVariantDefinitions>(
@@ -1039,9 +1120,18 @@ function createUsageSynopsis(
       const value =
         field.kind === "positional"
           ? `<${field.key}>`
-          : field.kind === "flag"
-            ? field.longOption
-            : `${field.longOption} <value>`;
+          : field.kind === "variadicPositional"
+            ? `<${field.key}...>`
+            : field.kind === "flag"
+              ? [field.longOption, field.negatedLongOption]
+                  .filter((spelling) => spelling !== undefined)
+                  .join("|")
+              : field.kind === "repeatableOption"
+                ? `${field.longOption} <value>`
+                : `${field.longOption} <value>`;
+      if (field.kind === "repeatableOption") {
+        return field.required ? `(${value})...` : `[${value}]...`;
+      }
       return field.required ? value : `[${value}]`;
     }),
   ].join(" ");

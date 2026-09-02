@@ -124,8 +124,13 @@ export function compileInputFields(
     return [];
   }
   const incompatibleFields = fieldKeys.flatMap((field) => {
-    const expected: "boolean" | "string" =
-      definitions[field]?.kind === "flag" ? "boolean" : "string";
+    const kind = definitions[field]?.kind;
+    const expected: "boolean" | "string" | "stringArray" =
+      kind === "flag"
+        ? "boolean"
+        : kind === "repeatableOption" || kind === "variadicPositional"
+          ? "stringArray"
+          : "string";
     return schemaPropertyAcceptsRawValue(schemaProperties[field], expected)
       ? []
       : [{ field, expected }];
@@ -150,7 +155,13 @@ export function compileInputFields(
         code: "invalidFieldKind",
         command,
         field: key,
-        expected: ["positional", "flag", "valueOption"],
+        expected: [
+          "positional",
+          "variadicPositional",
+          "flag",
+          "valueOption",
+          "repeatableOption",
+        ],
         received: invalidKind,
       });
       return {
@@ -162,6 +173,7 @@ export function compileInputFields(
     }
     if (
       field.kind !== "positional" &&
+      field.kind !== "variadicPositional" &&
       !/^--[a-z0-9]+(?:-[a-z0-9]+)*$/.test(field.longOption)
     ) {
       issues.push({
@@ -174,6 +186,7 @@ export function compileInputFields(
     }
     if (
       field.kind !== "positional" &&
+      field.kind !== "variadicPositional" &&
       field.shortAlias !== undefined &&
       !/^-[A-Za-z0-9]$/.test(field.shortAlias)
     ) {
@@ -183,6 +196,21 @@ export function compileInputFields(
         field: key,
         received:
           typeof field.shortAlias === "string" ? field.shortAlias : null,
+      });
+    }
+    if (
+      field.kind === "flag" &&
+      field.negatedLongOption !== undefined &&
+      !/^--[a-z0-9]+(?:-[a-z0-9]+)*$/.test(field.negatedLongOption)
+    ) {
+      issues.push({
+        code: "invalidFieldLongOption",
+        command,
+        field: key,
+        received:
+          typeof field.negatedLongOption === "string"
+            ? field.negatedLongOption
+            : null,
       });
     }
     if (field.description.length === 0) {
@@ -200,10 +228,18 @@ export function compileInputFields(
   });
   const fieldsByLongOption = new Map<string, FieldGrammar[]>();
   for (const field of fields) {
-    if (field.kind === "positional") continue;
-    const matchingFields = fieldsByLongOption.get(field.longOption) ?? [];
-    matchingFields.push(field);
-    fieldsByLongOption.set(field.longOption, matchingFields);
+    if (field.kind === "positional" || field.kind === "variadicPositional") {
+      continue;
+    }
+    for (const spelling of [
+      field.longOption,
+      field.kind === "flag" ? field.negatedLongOption : undefined,
+    ]) {
+      if (spelling === undefined) continue;
+      const matchingFields = fieldsByLongOption.get(spelling) ?? [];
+      matchingFields.push(field);
+      fieldsByLongOption.set(spelling, matchingFields);
+    }
   }
   for (const [longOption, matchingFields] of fieldsByLongOption) {
     if (matchingFields.length > 1) {
@@ -211,13 +247,19 @@ export function compileInputFields(
         code: "duplicateFieldLongOption",
         command,
         longOption,
-        fields: matchingFields.map((field) => field.key).sort(),
+        fields: [...new Set(matchingFields.map((field) => field.key))].sort(),
       });
     }
   }
   const fieldsByShortAlias = new Map<string, FieldGrammar[]>();
   for (const field of fields) {
-    if (field.kind === "positional" || field.shortAlias === undefined) continue;
+    if (
+      field.kind === "positional" ||
+      field.kind === "variadicPositional" ||
+      field.shortAlias === undefined
+    ) {
+      continue;
+    }
     const matchingFields = fieldsByShortAlias.get(field.shortAlias) ?? [];
     matchingFields.push(field);
     fieldsByShortAlias.set(field.shortAlias, matchingFields);
@@ -233,8 +275,20 @@ export function compileInputFields(
     }
   }
   let precedingOptionalField: string | undefined;
+  let variadicField: string | undefined;
   for (const field of fields) {
-    if (field.kind !== "positional") continue;
+    if (field.kind !== "positional" && field.kind !== "variadicPositional") {
+      continue;
+    }
+    if (variadicField !== undefined) {
+      issues.push({
+        code: "positionalAfterVariadic",
+        command,
+        field: field.key,
+        variadicField,
+      });
+    }
+    if (field.kind === "variadicPositional") variadicField ??= field.key;
     if (!field.required) {
       precedingOptionalField ??= field.key;
     } else if (precedingOptionalField !== undefined) {
@@ -254,7 +308,11 @@ function readInvalidFieldKind(field: unknown): string | null | undefined {
     return null;
   }
   const kind = field.kind;
-  return kind === "positional" || kind === "flag" || kind === "valueOption"
+  return kind === "positional" ||
+    kind === "variadicPositional" ||
+    kind === "flag" ||
+    kind === "valueOption" ||
+    kind === "repeatableOption"
     ? undefined
     : typeof kind === "string"
       ? kind
@@ -347,7 +405,7 @@ function readRequiredSchemaKeys(
 
 function schemaPropertyAcceptsRawValue(
   propertySchema: unknown,
-  rawType: "boolean" | "string",
+  rawType: "boolean" | "string" | "stringArray",
 ): boolean {
   if (propertySchema === true) {
     return true;
@@ -359,6 +417,15 @@ function schemaPropertyAcceptsRawValue(
     !("type" in propertySchema)
   ) {
     return false;
+  }
+  if (rawType === "stringArray") {
+    return (
+      (propertySchema.type === "array" ||
+        (Array.isArray(propertySchema.type) &&
+          propertySchema.type.includes("array"))) &&
+      "items" in propertySchema &&
+      schemaPropertyAcceptsRawValue(propertySchema.items, "string")
+    );
   }
   return (
     propertySchema.type === rawType ||

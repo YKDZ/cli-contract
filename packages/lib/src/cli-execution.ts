@@ -154,13 +154,18 @@ function formatHelpField(
   const value =
     field.kind === "positional"
       ? `<${field.key}>`
-      : field.kind === "flag"
-        ? [field.longOption, field.shortAlias]
-            .filter((spelling) => spelling !== undefined)
-            .join(", ")
-        : `${[field.longOption, field.shortAlias]
-            .filter((spelling) => spelling !== undefined)
-            .join(", ")} <value>`;
+      : field.kind === "variadicPositional"
+        ? `<${field.key}...>`
+        : field.kind === "flag"
+          ? [field.longOption, field.shortAlias, field.negatedLongOption]
+              .filter((spelling) => spelling !== undefined)
+              .join(", ")
+          : `${[field.longOption, field.shortAlias]
+              .filter((spelling) => spelling !== undefined)
+              .join(", ")} <value>`;
+  if (field.kind === "repeatableOption") {
+    return field.required ? `(${value})...` : `[${value}]...`;
+  }
   return field.required ? value : `[${value}]`;
 }
 

@@ -176,7 +176,7 @@ void test("输入模式正常拒绝产生 inputRejected 且不执行 handler", a
   const writes: Array<Readonly<{ destination: string; chunk: string }>> = [];
 
   const termination = await executeCli(cli, {
-    invocation: parseCliInvocation(cli, []),
+    invocation: parseCliInvocation(cli, ["--name="]),
     dependencies: undefined,
     write: (output) => {
       writes.push(output);

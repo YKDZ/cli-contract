@@ -47,6 +47,39 @@ export interface UnexpectedOptionValueIssue {
   readonly value: string;
 }
 
+export interface OptionOccurrenceEvidence {
+  readonly position: number;
+  readonly option: string;
+}
+
+export interface MissingRequiredFieldIssue {
+  readonly code: "missingRequiredField";
+  readonly field: string;
+}
+
+export interface RepeatedOptionIssue {
+  readonly code: "repeatedOption";
+  readonly field: string;
+  readonly occurrences: readonly [
+    OptionOccurrenceEvidence,
+    OptionOccurrenceEvidence,
+    ...OptionOccurrenceEvidence[],
+  ];
+}
+
+export interface ConflictingFlagIssue {
+  readonly code: "conflictingFlag";
+  readonly field: string;
+  readonly positiveOccurrences: readonly [
+    OptionOccurrenceEvidence,
+    ...OptionOccurrenceEvidence[],
+  ];
+  readonly negativeOccurrences: readonly [
+    OptionOccurrenceEvidence,
+    ...OptionOccurrenceEvidence[],
+  ];
+}
+
 export interface SchemaIssueEvidence {
   readonly message: string;
   readonly path?: readonly (number | string)[];
@@ -58,8 +91,11 @@ export interface InputRejectedIssue {
 }
 
 export type UsageIssue =
+  | ConflictingFlagIssue
   | InputRejectedIssue
   | MissingOptionValueIssue
+  | MissingRequiredFieldIssue
+  | RepeatedOptionIssue
   | UnexpectedOptionValueIssue
   | UnexpectedPositionalIssue
   | UnknownOptionIssue;
@@ -95,9 +131,11 @@ export function parseCliInvocation<const Contract extends CliContract>(
   const root = compiled.root as CliContractRoot<Contract>;
   const usage = compiled.usage as CommandUsage<CliContractRoot<Contract>>;
 
-  const input: Record<string, boolean | string> = {};
+  const input: Record<string, boolean | string | string[]> = {};
+  const occurrencesByField = new Map<string, ParsedOptionOccurrence[]>();
   const positionals = compiled.fields.filter(
-    (field) => field.kind === "positional",
+    (field) =>
+      field.kind === "positional" || field.kind === "variadicPositional",
   );
   let positionalIndex = 0;
   let optionsEnabled = true;
@@ -119,10 +157,18 @@ export function parseCliInvocation<const Contract extends CliContract>(
     if (optionsEnabled && token.startsWith("-") && token !== "-") {
       const option = readOptionToken(token);
       const field = compiled.fields.find(
-        (candidate) =>
+        (
+          candidate,
+        ): candidate is Extract<
+          (typeof compiled.fields)[number],
+          { readonly kind: "flag" | "repeatableOption" | "valueOption" }
+        > =>
           candidate.kind !== "positional" &&
+          candidate.kind !== "variadicPositional" &&
           (candidate.longOption === option.spelling ||
-            candidate.shortAlias === option.spelling),
+            candidate.shortAlias === option.spelling ||
+            (candidate.kind === "flag" &&
+              candidate.negatedLongOption === option.spelling)),
       );
       if (field === undefined) {
         return usageFailure(cliContract, root, usage, {
@@ -141,11 +187,27 @@ export function parseCliInvocation<const Contract extends CliContract>(
             value: option.value,
           });
         }
-        input[field.key] = true;
+        const polarity =
+          option.spelling === field.negatedLongOption ? "negative" : "positive";
+        input[field.key] = polarity === "positive";
+        addOptionOccurrence(
+          occurrencesByField,
+          field.key,
+          position,
+          option.spelling,
+          polarity,
+        );
         continue;
       }
       if (option.value !== undefined) {
-        input[field.key] = option.value;
+        addOptionValue(input, field.key, option.value, field.kind);
+        addOptionOccurrence(
+          occurrencesByField,
+          field.key,
+          position,
+          option.spelling,
+          "value",
+        );
         continue;
       }
       const value = argv[position + 1];
@@ -157,7 +219,14 @@ export function parseCliInvocation<const Contract extends CliContract>(
           option: option.spelling,
         });
       }
-      input[field.key] = value;
+      addOptionValue(input, field.key, value, field.kind);
+      addOptionOccurrence(
+        occurrencesByField,
+        field.key,
+        position,
+        option.spelling,
+        "value",
+      );
       position += 1;
       continue;
     }
@@ -166,16 +235,139 @@ export function parseCliInvocation<const Contract extends CliContract>(
     if (positional === undefined) {
       return unexpectedPositional(cliContract, root, usage, position, token);
     }
-    input[positional.key] = token;
-    positionalIndex += 1;
+    if (positional.kind === "variadicPositional") {
+      const values = input[positional.key];
+      input[positional.key] = Array.isArray(values)
+        ? [...values, token]
+        : [token];
+    } else {
+      input[positional.key] = token;
+      positionalIndex += 1;
+    }
+  }
+
+  const structuralIssues = collectStructuralIssues(
+    compiled.fields,
+    input,
+    occurrencesByField,
+  );
+  if (structuralIssues.length > 0) {
+    return usageFailureFromIssues(
+      cliContract,
+      root,
+      usage,
+      structuralIssues as [UsageIssue, ...UsageIssue[]],
+    );
   }
 
   return bindInvocation(cliContract, {
     kind: "parsed",
     command: root,
-    input: Object.freeze(input) as CliContractRawInput<Contract>,
+    input: freezeRawInput(input) as CliContractRawInput<Contract>,
     outputFormat: "structured",
   });
+}
+
+type ParsedOptionOccurrence = OptionOccurrenceEvidence &
+  Readonly<{ readonly polarity: "negative" | "positive" | "value" }>;
+
+function addOptionOccurrence(
+  occurrencesByField: Map<string, ParsedOptionOccurrence[]>,
+  field: string,
+  position: number,
+  option: string,
+  polarity: ParsedOptionOccurrence["polarity"],
+): void {
+  const occurrences = occurrencesByField.get(field) ?? [];
+  occurrences.push({ position, option, polarity });
+  occurrencesByField.set(field, occurrences);
+}
+
+function collectStructuralIssues(
+  fields: ReturnType<typeof getCompiledCli>["fields"],
+  input: Readonly<Record<string, boolean | string | string[]>>,
+  occurrencesByField: ReadonlyMap<string, readonly ParsedOptionOccurrence[]>,
+): UsageIssue[] {
+  return fields.flatMap((field): UsageIssue[] => {
+    const issues: UsageIssue[] = [];
+    if (field.required && !Object.hasOwn(input, field.key)) {
+      issues.push({ code: "missingRequiredField", field: field.key });
+    }
+    if (
+      field.kind === "positional" ||
+      field.kind === "variadicPositional" ||
+      field.kind === "repeatableOption"
+    ) {
+      return issues;
+    }
+    const occurrences = occurrencesByField.get(field.key) ?? [];
+    if (field.kind === "flag") {
+      const positiveOccurrences = occurrences.filter(
+        ({ polarity }) => polarity === "positive",
+      );
+      const negativeOccurrences = occurrences.filter(
+        ({ polarity }) => polarity === "negative",
+      );
+      if (positiveOccurrences.length > 0 && negativeOccurrences.length > 0) {
+        issues.push({
+          code: "conflictingFlag",
+          field: field.key,
+          positiveOccurrences: freezeOccurrenceEvidence(
+            positiveOccurrences,
+          ) as [OptionOccurrenceEvidence, ...OptionOccurrenceEvidence[]],
+          negativeOccurrences: freezeOccurrenceEvidence(
+            negativeOccurrences,
+          ) as [OptionOccurrenceEvidence, ...OptionOccurrenceEvidence[]],
+        });
+        return issues;
+      }
+    }
+    if (occurrences.length > 1) {
+      issues.push({
+        code: "repeatedOption",
+        field: field.key,
+        occurrences: freezeOccurrenceEvidence(occurrences) as [
+          OptionOccurrenceEvidence,
+          OptionOccurrenceEvidence,
+          ...OptionOccurrenceEvidence[],
+        ],
+      });
+    }
+    return issues;
+  });
+}
+
+function freezeOccurrenceEvidence(
+  occurrences: readonly ParsedOptionOccurrence[],
+): readonly OptionOccurrenceEvidence[] {
+  return Object.freeze(
+    occurrences.map(({ position, option }) =>
+      Object.freeze({ position, option }),
+    ),
+  );
+}
+
+function freezeRawInput(
+  input: Record<string, boolean | string | string[]>,
+): Readonly<Record<string, boolean | string | readonly string[]>> {
+  for (const [field, value] of Object.entries(input)) {
+    if (Array.isArray(value)) input[field] = Object.freeze(value) as string[];
+  }
+  return Object.freeze(input);
+}
+
+function addOptionValue(
+  input: Record<string, boolean | string | string[]>,
+  field: string,
+  value: string,
+  kind: "repeatableOption" | "valueOption",
+): void {
+  if (kind === "valueOption") {
+    input[field] = value;
+    return;
+  }
+  const values = input[field];
+  input[field] = Array.isArray(values) ? [...values, value] : [value];
 }
 
 function readOptionToken(token: string): Readonly<{
@@ -209,10 +401,21 @@ function usageFailure<Contract extends CliContract>(
   usage: CommandUsage<CliContractRoot<Contract>>,
   issue: UsageIssue,
 ): CliInvocation<Contract> {
+  return usageFailureFromIssues(contract, command, usage, [issue]);
+}
+
+function usageFailureFromIssues<Contract extends CliContract>(
+  contract: Contract,
+  command: CliContractRoot<Contract>,
+  usage: CommandUsage<CliContractRoot<Contract>>,
+  issues: readonly [UsageIssue, ...UsageIssue[]],
+): CliInvocation<Contract> {
   return bindInvocation(contract, {
     kind: "usageFailure",
     command,
-    issues: Object.freeze([Object.freeze(issue)]) as readonly [UsageIssue],
+    issues: Object.freeze(
+      issues.map((issue) => Object.freeze(issue)),
+    ) as NonEmptyUsageIssues,
     usage,
   });
 }

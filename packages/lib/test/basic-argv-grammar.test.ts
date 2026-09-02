@@ -311,14 +311,26 @@ void test("defineCli 聚合动态字段身份、spelling 与 positional 顺序�
           code: "invalidFieldKind",
           command: "copyFiles",
           field: "invalidKind",
-          expected: ["positional", "flag", "valueOption"],
+          expected: [
+            "positional",
+            "variadicPositional",
+            "flag",
+            "valueOption",
+            "repeatableOption",
+          ],
           received: "other",
         },
         {
           code: "invalidFieldKind",
           command: "copyFiles",
           field: "broken",
-          expected: ["positional", "flag", "valueOption"],
+          expected: [
+            "positional",
+            "variadicPositional",
+            "flag",
+            "valueOption",
+            "repeatableOption",
+          ],
           received: null,
         },
         {

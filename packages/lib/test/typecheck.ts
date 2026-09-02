@@ -11,6 +11,7 @@ import {
   type ContractSchemaInput,
   type ContractSchemaOutput,
   type EmptyCliInput,
+  type FieldDefinition,
   type ShortOptionAlias,
 } from "@cli-contract/lib";
 import { toStandardJsonSchema } from "@valibot/to-json-schema";
@@ -129,6 +130,14 @@ const dataCli = defineCli()({
 });
 
 function verifyTypeErrors() {
+  const variadicValueOption: FieldDefinition = {
+    // @ts-expect-error 核心不提供单次 occurrence 消费多个值的 variadic option。
+    kind: "variadicOption",
+    longOption: "--values",
+    description: "多个值",
+  };
+  void variadicValueOption;
+
   // @ts-expect-error 应用结果只能由作用域 outcome 构造器签发。
   const rawFailure: CliContractResult<typeof dataCli> = {
     kind: "failure",
@@ -299,8 +308,8 @@ function verifyTypeErrors() {
         name: "invalid-fields",
         description: "非法字段声明",
         fields: {
-          // @ts-expect-error short alias 必须是单个 ASCII 字母或数字。
           "bad-field": {
+            // @ts-expect-error short alias 必须是单个 ASCII 字母或数字。
             kind: "valueOption",
             longOption: "--bad-field",
             shortAlias: "-bad",

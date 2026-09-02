@@ -50,7 +50,7 @@ export type ContractDefinitionIssue =
       readonly location: "input";
       readonly fields: readonly Readonly<{
         readonly field: string;
-        readonly expected: "boolean" | "string";
+        readonly expected: "boolean" | "string" | "stringArray";
       }>[];
     }>
   | Readonly<{
@@ -129,7 +129,13 @@ export type ContractDefinitionIssue =
       readonly code: "invalidFieldKind";
       readonly command: string;
       readonly field: string;
-      readonly expected: readonly ["positional", "flag", "valueOption"];
+      readonly expected: readonly [
+        "positional",
+        "variadicPositional",
+        "flag",
+        "valueOption",
+        "repeatableOption",
+      ];
       readonly received: string | null;
     }>
   | Readonly<{
@@ -149,6 +155,12 @@ export type ContractDefinitionIssue =
       readonly command: string;
       readonly field: string;
       readonly precedingOptionalField: string;
+    }>
+  | Readonly<{
+      readonly code: "positionalAfterVariadic";
+      readonly command: string;
+      readonly field: string;
+      readonly variadicField: string;
     }>
   | Readonly<{
       readonly code: "duplicateFieldLongOption";
@@ -234,6 +246,8 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `命令 ${issue.command} 的字段 ${issue.fields.join(", ")} 重复使用 option spelling ${issue.spelling}`;
     case "requiredPositionalAfterOptional":
       return `命令 ${issue.command} 的必填 positional ${issue.field} 位于可选 positional ${issue.precedingOptionalField} 之后`;
+    case "positionalAfterVariadic":
+      return `命令 ${issue.command} 的 positional ${issue.field} 位于 variadic positional ${issue.variadicField} 之后`;
     case "duplicateFieldLongOption":
       return `命令 ${issue.command} 的字段 ${issue.fields.join(", ")} 重复使用 long option ${issue.longOption}`;
     case "missingFieldDescription":
