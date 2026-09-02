@@ -17,4 +17,10 @@ export interface ContractSchema<Input = unknown, Output = Input> {
     StandardJSONSchemaV1.Props<Input, Output>;
 }
 
+export type ContractSchemaInput<Schema> =
+  Schema extends ContractSchema<infer Input, unknown> ? Input : never;
+
+export type ContractSchemaOutput<Schema> =
+  Schema extends ContractSchema<unknown, infer Output> ? Output : never;
+
 export type EmptyCliInput = Readonly<Record<string, never>>;

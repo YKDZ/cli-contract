@@ -1,17 +1,17 @@
 import {
   getCompiledCli,
   type CliContract,
+  type CliContractRawInput,
   type CliContractRoot,
 } from "#/cli-contract";
-import type { EmptyCliInput } from "#/contract-schema";
 
 const cliInvocationType = Symbol("CliInvocation.type");
 const invocationContracts = new WeakMap<object, object>();
 
-export interface ParsedInvocation<Command extends string> {
+export interface ParsedInvocation<Command extends string, Input = unknown> {
   readonly kind: "parsed";
   readonly command: Command;
-  readonly input: EmptyCliInput;
+  readonly input: Input;
   readonly outputFormat: "structured";
 }
 
@@ -26,6 +26,19 @@ export interface UnexpectedPositionalIssue {
   readonly value: string;
 }
 
+export interface SchemaIssueEvidence {
+  readonly message: string;
+  readonly path?: readonly (number | string)[];
+}
+
+export interface InputRejectedIssue {
+  readonly code: "inputRejected";
+  readonly evidence: readonly SchemaIssueEvidence[];
+}
+
+export type UsageIssue = InputRejectedIssue | UnexpectedPositionalIssue;
+export type NonEmptyUsageIssues = readonly [UsageIssue, ...UsageIssue[]];
+
 export interface CommandUsage<Command extends string> {
   readonly command: Command;
   readonly synopsis: string;
@@ -34,7 +47,7 @@ export interface CommandUsage<Command extends string> {
 export interface UsageFailure<Command extends string> {
   readonly kind: "usageFailure";
   readonly command: Command;
-  readonly issues: readonly [UnexpectedPositionalIssue];
+  readonly issues: NonEmptyUsageIssues;
   readonly usage: CommandUsage<Command>;
 }
 
@@ -44,7 +57,7 @@ export type CliInvocation<Contract extends CliContract = CliContract> =
   };
 
 type UnboundCliInvocation<Contract extends CliContract> =
-  | ParsedInvocation<CliContractRoot<Contract>>
+  | ParsedInvocation<CliContractRoot<Contract>, CliContractRawInput<Contract>>
   | HelpRequest<CliContractRoot<Contract>>
   | UsageFailure<CliContractRoot<Contract>>;
 
@@ -53,33 +66,68 @@ export function parseCliInvocation<const Contract extends CliContract>(
   argv: readonly string[],
 ): CliInvocation<Contract> {
   const compiled = getCompiledCli(cliContract);
+  const root = compiled.root as CliContractRoot<Contract>;
+  const usage = compiled.usage as CommandUsage<CliContractRoot<Contract>>;
 
   if (argv[0] === compiled.contract.grammar.controls.help.longOption) {
     return bindInvocation(cliContract, {
       kind: "help",
-      command: compiled.root,
+      command: root,
     });
   }
-  if (argv.length === 0) {
+  const input: Record<string, string> = {};
+  for (let position = 0; position < argv.length; position += 1) {
+    const token = argv[position] as string;
+    const field = compiled.fields.find(
+      ({ longOption }) =>
+        token === longOption || token.startsWith(`${longOption}=`),
+    );
+    if (field === undefined) {
+      return unexpectedPositional(cliContract, root, usage, position, token);
+    }
+
+    if (token === field.longOption) {
+      const value = argv[position + 1];
+      if (value === undefined) {
+        return unexpectedPositional(cliContract, root, usage, position, token);
+      }
+      input[field.key] = value;
+      position += 1;
+    } else {
+      input[field.key] = token.slice(field.longOption.length + 1);
+    }
+  }
+
+  if (argv.length === 0 || Object.keys(input).length > 0) {
     return bindInvocation(cliContract, {
       kind: "parsed",
-      command: compiled.root,
-      input: Object.freeze({}) as EmptyCliInput,
+      command: root,
+      input: Object.freeze(input) as CliContractRawInput<Contract>,
       outputFormat: "structured",
     });
   }
 
-  return bindInvocation(cliContract, {
+  return unexpectedPositional(cliContract, root, usage, 0, argv[0] ?? "");
+}
+
+function unexpectedPositional<Contract extends CliContract>(
+  contract: Contract,
+  command: CliContractRoot<Contract>,
+  usage: CommandUsage<CliContractRoot<Contract>>,
+  position: number,
+  value: string,
+): CliInvocation<Contract> {
+  return bindInvocation(contract, {
     kind: "usageFailure",
-    command: compiled.root,
+    command,
     issues: Object.freeze([
       Object.freeze({
         code: "unexpectedPositional",
-        position: 0,
-        value: argv[0] ?? "",
+        position,
+        value,
       }),
     ]) as readonly [UnexpectedPositionalIssue],
-    usage: compiled.usage,
+    usage,
   });
 }
 
