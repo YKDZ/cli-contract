@@ -9,7 +9,7 @@ import {
   outputCapability,
   parseCliInvocation,
   type CliContractRawInput,
-} from "@cli-contract/lib";
+} from "@ykdz/cli-contract";
 import { z } from "zod";
 
 function createArchiveCli() {

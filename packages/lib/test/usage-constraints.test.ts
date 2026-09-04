@@ -8,7 +8,7 @@ import {
   helpCapability,
   outputCapability,
   parseCliInvocation,
-} from "@cli-contract/lib";
+} from "@ykdz/cli-contract";
 import { z } from "zod";
 
 function createConstrainedCli(handler = () => undefined) {

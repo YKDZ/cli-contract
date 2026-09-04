@@ -1,3 +1,5 @@
+/// <reference types="node" preserve="true" />
+
 import type { Writable } from "node:stream";
 
 import type { CliOutput, WriteCliOutput } from "#/cli-execution";

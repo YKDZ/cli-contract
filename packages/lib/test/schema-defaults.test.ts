@@ -9,7 +9,7 @@ import {
   outputCapability,
   parseCliInvocation,
   type ContractSchema,
-} from "@cli-contract/lib";
+} from "@ykdz/cli-contract";
 import { z } from "zod";
 
 type RawDefaultInput = Readonly<{ readonly name?: string }>;

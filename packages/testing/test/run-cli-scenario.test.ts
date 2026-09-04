@@ -9,13 +9,13 @@ import {
   text,
   type ContractSchema,
   type EmptyCliInput,
-} from "@cli-contract/lib";
+} from "@ykdz/cli-contract";
 import {
   defineCommandScenarios,
   defineFailureScenarios,
   runCliScenario,
   type CliScenario,
-} from "@cli-contract/testing";
+} from "@ykdz/cli-contract-testing";
 
 type ConsumerFixtureDependencies = Readonly<{
   readonly serviceAvailable: boolean;
@@ -31,7 +31,7 @@ function schema<Input, Output>(
   return {
     "~standard": {
       version: 1,
-      vendor: "@cli-contract/testing",
+      vendor: "@ykdz/cli-contract-testing",
       validate: (value) => ({ value: value as Output }),
       jsonSchema: {
         input: () => jsonSchema,

@@ -4,8 +4,11 @@ import {
   outputCapability,
   type ContractSchema,
   type EmptyCliInput,
-} from "@cli-contract/lib";
-import { defineCommandScenarios, runCliScenario } from "@cli-contract/testing";
+} from "@ykdz/cli-contract";
+import {
+  defineCommandScenarios,
+  runCliScenario,
+} from "@ykdz/cli-contract-testing";
 
 declare const emptyInput: ContractSchema<EmptyCliInput>;
 

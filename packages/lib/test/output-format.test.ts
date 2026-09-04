@@ -10,7 +10,7 @@ import {
   outputCapability,
   parseCliInvocation,
   text,
-} from "@cli-contract/lib";
+} from "@ykdz/cli-contract";
 import { z } from "zod";
 
 const message = z.object({ message: z.string() });

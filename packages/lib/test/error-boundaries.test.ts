@@ -11,7 +11,7 @@ import {
   outputCapability,
   parseCliInvocation,
   type CliInvocation,
-} from "@cli-contract/lib";
+} from "@ykdz/cli-contract";
 import { z } from "zod";
 
 function createCompletionCli(onRun: () => Promise<void> | void) {

@@ -1,3 +1,4 @@
+import { toStandardJsonSchema } from "@valibot/to-json-schema";
 import {
   defineCli,
   helpCapability,
@@ -22,8 +23,7 @@ import {
   type ShortOptionAlias,
   type TextLines,
   type UsageConstraint,
-} from "@cli-contract/lib";
-import { toStandardJsonSchema } from "@valibot/to-json-schema";
+} from "@ykdz/cli-contract";
 import * as v from "valibot";
 import { z } from "zod";
 

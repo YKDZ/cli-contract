@@ -1,20 +1,41 @@
 {
-  "name": "@cli-contract/testing",
-  "private": true,
+  "name": "@ykdz/cli-contract-testing",
+  "version": "0.1.0",
+  "description": "Consumer test scenarios for @ykdz/cli-contract.",
+  "keywords": [
+    "cli",
+    "contract",
+    "nodejs",
+    "testing",
+    "typescript"
+  ],
+  "homepage": "https://github.com/YKDZ/cli-contract",
+  "bugs": {
+    "url": "https://github.com/YKDZ/cli-contract/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YKDZ/cli-contract.git"
+  },
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "imports": {
     "#/*": {
-      "source": "./src/*.ts",
-      "types": "./src/*.ts",
+      "types": "./dist/*.d.ts",
       "default": "./dist/*.js"
     }
   },
   "exports": {
     ".": {
-      "source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json --pretty false",
@@ -26,7 +47,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
   },
   "dependencies": {
-    "@cli-contract/lib": "workspace:*"
+    "@ykdz/cli-contract": "workspace:*"
   },
   "devDependencies": {
     "@cli-contract/typescript-config": "workspace:*",
@@ -37,6 +58,6 @@
     "typescript-7": "catalog:"
   },
   "engines": {
-    "node": "24"
+    "node": ">=24"
   }
 }

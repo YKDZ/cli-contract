@@ -9,7 +9,7 @@ import {
   parseCliInvocation,
   type ContractSchema,
   type EmptyCliInput,
-} from "@cli-contract/lib";
+} from "@ykdz/cli-contract";
 
 const emptyJsonSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",

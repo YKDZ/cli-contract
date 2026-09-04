@@ -10,8 +10,8 @@ import {
   helpCapability,
   outputCapability,
   parseCliInvocation,
-} from "@cli-contract/lib";
-import { isNodeBrokenPipe, nodeCliOutput } from "@cli-contract/lib/node";
+} from "@ykdz/cli-contract";
+import { isNodeBrokenPipe, nodeCliOutput } from "@ykdz/cli-contract/node";
 import { z } from "zod";
 
 class ControlledWritable extends EventEmitter {

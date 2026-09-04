@@ -7,7 +7,7 @@ import {
   type CliOutput,
   type CliTermination,
   type OutcomeFact,
-} from "@cli-contract/lib";
+} from "@ykdz/cli-contract";
 
 /** 从契约命令闭集投影出的可执行命令身份。 */
 export type CliScenarioCommand<Contract extends CliContract> =
