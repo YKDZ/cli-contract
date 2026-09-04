@@ -392,3 +392,39 @@ void test("层级 text 输出在定义期拒绝 stream leaf", () => {
     },
   );
 });
+
+void test("root text 输出在定义期拒绝 stream", () => {
+  const definition = {
+    root: "list",
+    help: helpCapability(),
+    output: outputCapability({ defaultFormat: "structured", text: true }),
+    usageFailureExitCode: 64,
+    commands: {
+      list: {
+        kind: "rootCommand",
+        name: "list",
+        description: "列出项目",
+        input: emptyInput,
+        success: {
+          kind: "stream",
+          records: { item: { description: "项目", schema: item } },
+        },
+        failures: {},
+        async *handler() {
+          yield* [] as Iterable<never>;
+          return {};
+        },
+      },
+    },
+  };
+  assert.throws(
+    () => defineCli()(definition as never),
+    (error) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        { code: "streamTextOutputUnsupported", command: "list" },
+      ]);
+      return true;
+    },
+  );
+});

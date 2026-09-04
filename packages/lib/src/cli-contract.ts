@@ -2236,6 +2236,12 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
     command.success,
     definitionIssues,
   );
+  collectStreamTextOutputIssue(
+    definition.root,
+    isTextOutputEnabled(definition.output),
+    command.success,
+    definitionIssues,
+  );
   const compiledFailures = compileFailures(
     definition.root,
     command.failures,
