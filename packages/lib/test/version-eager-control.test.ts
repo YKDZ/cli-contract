@@ -271,3 +271,242 @@ void test("版本值与所有 control spelling 在定义期闭合", () => {
     );
   }
 });
+
+void test("version capability 复制并闭合单行 value 与 description", async () => {
+  assert.throws(
+    () =>
+      versionCapability({
+        value: text.line("2.3.4"),
+        description: "显示版本\n注入内容",
+      }),
+    TypeError,
+  );
+
+  const externalValue = { kind: "line", value: "2.3.4" };
+  const version = versionCapability({
+    value: externalValue as never,
+    description: "显示版本",
+  });
+  assert.equal(Object.isFrozen(version), true);
+  externalValue.value = "2.3.4\n注入内容";
+  const cli = defineCli()({
+    root: "copy",
+    help: helpCapability(),
+    version,
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      copy: {
+        kind: "rootCommand",
+        name: "copy",
+        description: "复制事实",
+        input: z.object({}),
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      },
+    },
+  });
+  assert.deepEqual(cli.grammar.controls.version, {
+    longOption: "--version",
+    value: "2.3.4",
+    description: "显示版本",
+  });
+  const versionWrites: string[] = [];
+  const helpWrites: string[] = [];
+  await executeCli(cli, {
+    invocation: parseCliInvocation(cli, ["--version"]),
+    dependencies: undefined,
+    write: ({ chunk }) => {
+      versionWrites.push(chunk);
+    },
+  });
+  await executeCli(cli, {
+    invocation: parseCliInvocation(cli, ["--help"]),
+    dependencies: undefined,
+    write: ({ chunk }) => {
+      helpWrites.push(chunk);
+    },
+  });
+  assert.deepEqual(versionWrites, ["2.3.4\n"]);
+  assert.match(helpWrites.join(""), /--version\t显示版本\n/);
+  assert.doesNotMatch(helpWrites.join(""), /注入内容/);
+});
+
+void test("层级 group 的本地 shared option 同样检查 version spelling", () => {
+  const define = defineCli();
+  assert.throws(
+    () =>
+      define({
+        root: "rootConflict",
+        help: helpCapability(),
+        version: versionCapability({ value: text.line("2.3.4") }),
+        output: outputCapability({ defaultFormat: "structured" }),
+        usageFailureExitCode: 64,
+        commands: {
+          rootConflict: {
+            kind: "rootGroup",
+            name: "root-conflict",
+            description: "根冲突",
+            sharedOptions: {
+              version: {
+                kind: "flag",
+                longOption: "--version",
+                description: "冲突字段",
+              },
+            },
+          },
+          child: {
+            kind: "commandGroup",
+            parent: "rootConflict",
+            name: "child",
+            description: "子组",
+          },
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "fieldOptionConflictsWithControl",
+          command: "rootConflict",
+          field: "version",
+          spelling: "--version",
+          control: "version",
+        },
+      ]);
+      return true;
+    },
+  );
+
+  assert.throws(
+    () =>
+      define({
+        root: "workspace",
+        help: helpCapability(),
+        version: versionCapability({ value: text.line("2.3.4") }),
+        output: outputCapability({ defaultFormat: "structured" }),
+        usageFailureExitCode: 64,
+        commands: {
+          workspace: {
+            kind: "rootGroup",
+            name: "workspace",
+            description: "工作区",
+          },
+          package: {
+            kind: "commandGroup",
+            parent: "workspace",
+            name: "package",
+            description: "包",
+            sharedOptions: {
+              version: {
+                kind: "flag",
+                longOption: "--version",
+                description: "冲突字段",
+              },
+            },
+          },
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "fieldOptionConflictsWithControl",
+          command: "package",
+          field: "version",
+          spelling: "--version",
+          control: "version",
+        },
+      ]);
+      return true;
+    },
+  );
+
+  assert.doesNotThrow(() =>
+    define({
+      root: "legal",
+      help: helpCapability(),
+      version: versionCapability({ value: text.line("2.3.4") }),
+      output: outputCapability({ defaultFormat: "structured" }),
+      usageFailureExitCode: 64,
+      commands: {
+        legal: {
+          kind: "rootGroup",
+          name: "legal",
+          description: "合法根",
+        },
+        child: {
+          kind: "commandGroup",
+          parent: "legal",
+          name: "child",
+          description: "合法组",
+          sharedOptions: {
+            verbose: {
+              kind: "flag",
+              longOption: "--verbose",
+              description: "详细输出",
+            },
+          },
+        },
+      },
+    }),
+  );
+});
+
+void test("继承到 leaf 的 shared control 冲突只报告其声明 scope", () => {
+  const define = defineCli();
+  assert.throws(
+    () =>
+      define({
+        root: "workspace",
+        help: helpCapability(),
+        version: versionCapability({ value: text.line("2.3.4") }),
+        output: outputCapability({ defaultFormat: "structured" }),
+        usageFailureExitCode: 64,
+        commands: {
+          workspace: {
+            kind: "rootGroup",
+            name: "workspace",
+            description: "工作区",
+          },
+          package: {
+            kind: "commandGroup",
+            parent: "workspace",
+            name: "package",
+            description: "包",
+            sharedOptions: {
+              version: {
+                kind: "flag",
+                longOption: "--version",
+                description: "冲突字段",
+              },
+            },
+          },
+          ...define.command("listPackages")({
+            kind: "command",
+            parent: "package",
+            name: "list",
+            description: "列出包",
+            input: z.object({ version: z.boolean().optional() }),
+            success: { kind: "completion" },
+            failures: {},
+            handler: () => undefined,
+          } as never),
+        },
+      } as never),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "fieldOptionConflictsWithControl",
+          command: "package",
+          field: "version",
+          spelling: "--version",
+          control: "version",
+        },
+      ]);
+      return true;
+    },
+  );
+});

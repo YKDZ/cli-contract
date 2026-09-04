@@ -80,7 +80,7 @@ export interface HelpCapability {
 
 export interface VersionCapability {
   readonly kind: "versionCapability";
-  readonly value: TextLine;
+  readonly value: string;
   readonly description?: string;
   readonly shortAlias?: "-V";
   readonly [cliContractType]: "version";
@@ -1810,18 +1810,18 @@ export function helpCapability(): HelpCapability {
 export function versionCapability(
   definition: VersionCapabilityDefinition,
 ): VersionCapability {
-  if (!isVersionTextLine(definition.value)) {
-    throw new TypeError("版本值必须是合法单行文本");
-  }
+  const value = copyVersionTextLine(definition.value);
+  const description =
+    definition.description === undefined
+      ? undefined
+      : copyVersionLine(definition.description);
   if (definition.shortAlias !== undefined && definition.shortAlias !== "-V") {
     throw new TypeError("版本短别名必须是 -V");
   }
   const capability = Object.freeze({
     kind: "versionCapability" as const,
-    value: definition.value,
-    ...(definition.description === undefined
-      ? {}
-      : { description: definition.description }),
+    value,
+    ...(description === undefined ? {} : { description }),
     ...(definition.shortAlias === undefined
       ? {}
       : { shortAlias: definition.shortAlias }),
@@ -1830,17 +1830,28 @@ export function versionCapability(
   return capability;
 }
 
-function isVersionTextLine(value: unknown): value is TextLine {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    (value as TextLine).kind === "line" &&
-    typeof (value as TextLine).value === "string" &&
-    (value as TextLine).value.length > 0 &&
-    !(value as TextLine).value.includes("\r") &&
-    !(value as TextLine).value.includes("\n") &&
-    !(value as TextLine).value.includes("\0")
-  );
+function copyVersionTextLine(value: unknown): string {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    (value as TextLine).kind !== "line"
+  ) {
+    throw new TypeError("版本值必须是合法单行文本");
+  }
+  return copyVersionLine((value as TextLine).value, "版本值");
+}
+
+function copyVersionLine(value: unknown, label = "版本描述"): string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.includes("\r") ||
+    value.includes("\n") ||
+    value.includes("\0")
+  ) {
+    throw new TypeError(`${label}必须是合法单行文本`);
+  }
+  return value;
 }
 
 function compileControls(definition: RuntimeCliDefinition) {
@@ -1857,7 +1868,7 @@ function compileControls(definition: RuntimeCliDefinition) {
             ...(version.shortAlias === undefined
               ? {}
               : { shortAlias: version.shortAlias }),
-            value: version.value.value,
+            value: version.value,
             ...(version.description === undefined
               ? {}
               : { description: version.description }),
@@ -2102,6 +2113,7 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
         id,
         issues,
       );
+      collectControlFieldConflicts(id, sharedOptions, definition, issues);
       const scopeOptions = deepFreeze([
         ...(node.parent === undefined
           ? []
@@ -2187,11 +2199,11 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
             id,
             issues,
           );
-    collectControlFieldConflicts(id, effectiveFields, definition, issues);
     const localKeys = new Set(Object.keys(executable.fields ?? {}));
     const fields = deepFreeze(
       effectiveFields.filter((field) => localKeys.has(field.key)),
     );
+    collectControlFieldConflicts(id, fields, definition, issues);
     const usageConstraints = compileUsageConstraints(
       executable.usageConstraints === undefined
         ? []
