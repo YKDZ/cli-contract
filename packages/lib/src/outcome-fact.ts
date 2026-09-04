@@ -14,9 +14,18 @@ export interface SilentText {
   readonly [textProjectionType]: true;
 }
 
+export interface TextFragment {
+  readonly kind: "fragment";
+  readonly value: string;
+  readonly [textProjectionType]: true;
+}
+
 export type CompletionTextPresenter = () => TextLine | SilentText;
 export type AtomicTextPresenter<Payload> = {
   bivarianceHack(payload: Payload): TextLine;
+}["bivarianceHack"];
+export type StreamTextPresenter<Payload> = {
+  bivarianceHack(payload: Payload): TextLine | TextFragment;
 }["bivarianceHack"];
 
 function createTextLine(value: string): TextLine {
@@ -33,9 +42,17 @@ function createTextLine(value: string): TextLine {
 
 const silentText = Object.freeze({ kind: "silent" as const }) as SilentText;
 
+function createTextFragment(value: string): TextFragment {
+  if (value.length === 0 || value.includes("\0")) {
+    throw new TypeError("文本片段必须非空且不能包含 NUL");
+  }
+  return Object.freeze({ kind: "fragment" as const, value }) as TextFragment;
+}
+
 /** 受控文本投影构造器；执行内核拥有实际 framing。 */
 export const text = Object.freeze({
   line: createTextLine,
+  fragment: createTextFragment,
   silent: silentText,
 });
 
@@ -55,14 +72,21 @@ export type DataVariantDefinition<
 export type DataVariantDefinitions<TextEnabled extends boolean = boolean> =
   Readonly<Record<string, DataVariantDefinition<unknown, TextEnabled>>>;
 
-export type StreamRecordDefinition<Payload = unknown> = Readonly<{
+export type StreamRecordDefinition<
+  Payload = unknown,
+  TextEnabled extends boolean = boolean,
+> = Readonly<{
   readonly description: string;
   readonly schema: ContractSchema<Payload>;
-}>;
+}> &
+  (TextEnabled extends true
+    ? Readonly<{ readonly text: StreamTextPresenter<Payload> }>
+    : TextEnabled extends false
+      ? Readonly<{ readonly text?: never }>
+      : Readonly<{ readonly text?: StreamTextPresenter<Payload> }>);
 
-export type StreamRecordDefinitions = Readonly<
-  Record<string, StreamRecordDefinition<unknown>>
->;
+export type StreamRecordDefinitions<TextEnabled extends boolean = boolean> =
+  Readonly<Record<string, StreamRecordDefinition<unknown, TextEnabled>>>;
 
 export type FailureVariantDefinition<
   Payload = unknown,

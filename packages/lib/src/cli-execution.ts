@@ -436,18 +436,17 @@ async function executeStreamResult<Contract extends CliContract>(
   options: ExecuteCliOptions<Contract>,
   outputFormat: "structured" | "text",
 ): Promise<CliTermination<Contract>> {
-  if (outputFormat !== "structured") {
-    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
-  }
   if (compiled.success.kind !== "stream") {
     throw new ContractExecutionError([{ code: "invalidCliContract" }]);
   }
   let active = true;
   try {
-    await writeCliOutput(options.write, {
-      destination: "stdout",
-      chunk: `${JSON.stringify(createStreamHeaderEnvelope(compiled.root))}\n`,
-    });
+    if (outputFormat === "structured") {
+      await writeCliOutput(options.write, {
+        destination: "stdout",
+        chunk: `${JSON.stringify(createStreamHeaderEnvelope(compiled.root))}\n`,
+      });
+    }
     for (;;) {
       const step = await generator.next();
       if (!step.done) {
@@ -479,12 +478,13 @@ async function executeStreamResult<Contract extends CliContract>(
           location: "record",
           variant: step.value.variant,
         });
-        await writeCliOutput(options.write, {
-          destination: "stdout",
-          chunk: `${JSON.stringify(
-            createStreamRecordEnvelope(step.value.variant, data),
-          )}\n`,
-        });
+        const chunk =
+          outputFormat === "structured"
+            ? `${JSON.stringify(
+                createStreamRecordEnvelope(step.value.variant, data),
+              )}\n`
+            : formatStreamRecordText(record.text, data);
+        await writeCliOutput(options.write, { destination: "stdout", chunk });
         continue;
       }
       active = false;
@@ -498,12 +498,9 @@ async function executeStreamResult<Contract extends CliContract>(
         const projected = await projectOutcome(
           compiled,
           step.value,
-          "structured",
+          outputFormat,
         );
-        await writeCliOutput(options.write, {
-          destination: projected.destination,
-          chunk: projected.chunk ?? "",
-        });
+        await writeProjectedOutcome(options.write, projected);
         return Object.freeze({
           kind: "applicationResult",
           command: compiled.root as CliContractRoot<Contract>,
@@ -519,10 +516,14 @@ async function executeStreamResult<Contract extends CliContract>(
           received: step.value.kind,
         });
       }
-      await writeCliOutput(options.write, {
-        destination: "stdout",
-        chunk: `${JSON.stringify(createStreamSuccessEnvelope())}\n`,
-      });
+      if (outputFormat === "structured") {
+        await writeCliOutput(options.write, {
+          destination: "stdout",
+          chunk: `${JSON.stringify(createStreamSuccessEnvelope())}\n`,
+        });
+      } else {
+        await writeTextStreamSuccess(options.write, compiled.success.text);
+      }
       return Object.freeze({
         kind: "applicationResult",
         command: compiled.root as CliContractRoot<Contract>,
@@ -539,6 +540,38 @@ async function executeStreamResult<Contract extends CliContract>(
       }
     }
     throw cause;
+  }
+}
+
+async function writeProjectedOutcome(
+  write: WriteCliOutput,
+  projected: Awaited<ReturnType<typeof projectOutcome>>,
+): Promise<void> {
+  if (projected.prefix !== undefined) {
+    await writeCliOutput(write, {
+      destination: projected.destination,
+      chunk: projected.prefix,
+    });
+  }
+  const chunk =
+    projected.present === undefined
+      ? (projected.chunk ?? "")
+      : projected.present();
+  if (chunk !== "") {
+    await writeCliOutput(write, { destination: projected.destination, chunk });
+  }
+}
+
+async function writeTextStreamSuccess(
+  write: WriteCliOutput,
+  presenter: unknown,
+): Promise<void> {
+  if (typeof presenter !== "function") {
+    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+  }
+  const chunk = formatCompletionText(presenter());
+  if (chunk !== "") {
+    await writeCliOutput(write, { destination: "stdout", chunk });
   }
 }
 
@@ -698,6 +731,28 @@ function formatTextLine(value: unknown): string {
     throw new ContractExecutionError([{ code: "invalidCliContract" }]);
   }
   return `${text.value}\n`;
+}
+
+function formatStreamRecordText(presenter: unknown, data: unknown): string {
+  if (typeof presenter !== "function") {
+    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+  }
+  const value = presenter(data) as Readonly<Record<string, unknown>> | null;
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    value.kind === "fragment"
+  ) {
+    if (
+      typeof value.value !== "string" ||
+      value.value.length === 0 ||
+      value.value.includes("\0")
+    ) {
+      throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+    }
+    return value.value;
+  }
+  return formatTextLine(value);
 }
 
 function isSilentText(

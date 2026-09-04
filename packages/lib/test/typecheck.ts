@@ -18,6 +18,7 @@ import {
   type DataVariantDefinition,
   type OutputCapability,
   type StreamRootCommandDefinition,
+  type StreamRecordDefinition,
   type ShortOptionAlias,
   type UsageConstraint,
 } from "@cli-contract/lib";
@@ -194,6 +195,39 @@ const streamCli = defineCli()({
 });
 void streamCli;
 
+const textStreamCli = defineCli()({
+  root: "textStream",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "text" }),
+  usageFailureExitCode: 64,
+  commands: {
+    textStream: {
+      kind: "rootCommand",
+      name: "text-stream",
+      description: "文本流 fixture",
+      input: emptyInput,
+      success: {
+        kind: "stream",
+        text: () => text.silent,
+        records: {
+          greeting: {
+            description: "问候",
+            schema: greetingData,
+            text: (data: Readonly<{ readonly message: string }>) =>
+              text.line(data.message),
+          },
+        },
+      },
+      failures: {},
+      async *handler({ outcome }) {
+        yield outcome.record.greeting({ message: "hello" });
+        return outcome.streamSuccess();
+      },
+    },
+  },
+});
+void textStreamCli;
+
 const hierarchyStreamDefine = defineCli();
 const hierarchyStreamLeaf = hierarchyStreamDefine.command("streamLeaf")({
   kind: "command",
@@ -204,7 +238,15 @@ const hierarchyStreamLeaf = hierarchyStreamDefine.command("streamLeaf")({
   input: emptyInput,
   success: {
     kind: "stream",
-    records: { greeting: { description: "问候", schema: greetingData } },
+    text: () => text.silent,
+    records: {
+      greeting: {
+        description: "问候",
+        schema: greetingData,
+        text: (data: Readonly<{ readonly message: string }>) =>
+          text.line(data.message),
+      },
+    },
   },
   failures: {},
   async *handler({ outcome }) {
@@ -219,7 +261,6 @@ const textStreamHierarchy = hierarchyStreamDefine({
   usageFailureExitCode: 64,
   commands: {
     workspace: {
-      // @ts-expect-error 层级 stream 在 15 号票前不能启用 text 输出。
       kind: "rootGroup",
       name: "workspace",
       description: "工作区",
@@ -228,6 +269,39 @@ const textStreamHierarchy = hierarchyStreamDefine({
   },
 });
 void textStreamHierarchy;
+
+const defineMissingTextStreamHierarchy = defineCli();
+defineMissingTextStreamHierarchy({
+  root: "missingTextStreamTree",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "text" }),
+  usageFailureExitCode: 64,
+  commands: {
+    missingTextStreamTree: {
+      // @ts-expect-error text 层级 stream 的终态与每个 record 都必须声明 presenter。
+      kind: "rootGroup",
+      name: "missing-text-stream-tree",
+      description: "缺少文本流 presenter",
+    },
+    ...defineMissingTextStreamHierarchy.command("list")({
+      kind: "command",
+      parent: "missingTextStreamTree",
+      name: "list",
+      description: "列出项目",
+      fields: {},
+      input: emptyInput,
+      success: {
+        kind: "stream",
+        records: { greeting: { description: "问候", schema: greetingData } },
+      },
+      failures: {},
+      async *handler({ outcome }) {
+        yield* [] as Iterable<never>;
+        return outcome.streamSuccess();
+      },
+    }),
+  },
+});
 
 function verifyTypeErrors() {
   // @ts-expect-error 版本能力必须显式提供受控单行值。
@@ -280,6 +354,48 @@ function verifyTypeErrors() {
     },
   };
   void incompleteStream;
+
+  const missingTextStream: StreamRootCommandDefinition<
+    "textStream",
+    undefined,
+    Readonly<Record<never, never>>,
+    ContractSchema<EmptyCliInput>,
+    Readonly<{
+      readonly greeting: {
+        readonly description: "问候";
+        readonly schema: typeof greetingData;
+      };
+    }>,
+    Readonly<Record<never, never>>,
+    true
+  > = {
+    kind: "rootCommand",
+    name: "text-stream",
+    description: "文本流 fixture",
+    input: emptyInput,
+    success: {
+      kind: "stream",
+      // @ts-expect-error 启用 text 的 stream 成功终态与每个 record 都必须同位声明 presenter。
+      records: { greeting: { description: "问候", schema: greetingData } },
+    },
+    failures: {},
+    async *handler({ outcome }) {
+      yield* [] as Iterable<never>;
+      return outcome.streamSuccess();
+    },
+  };
+  void missingTextStream;
+
+  const silentStreamRecord: StreamRecordDefinition<
+    Readonly<{ readonly message: string }>,
+    true
+  > = {
+    description: "问候",
+    schema: greetingData,
+    // @ts-expect-error stream record presenter 不能伪造 silent。
+    text: () => text.silent,
+  };
+  void silentStreamRecord;
 
   const invalidStreamFacts: StreamRootCommandDefinition<
     "stream",

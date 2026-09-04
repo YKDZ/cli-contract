@@ -103,10 +103,6 @@ export type ContractDefinitionIssue =
       readonly command: string;
     }>
   | Readonly<{
-      readonly code: "streamTextOutputUnsupported";
-      readonly command: string;
-    }>
-  | Readonly<{
       readonly code: "invalidCapability";
       readonly capability: "help" | "output" | "version";
     }>
@@ -127,13 +123,23 @@ export type ContractDefinitionIssue =
   | Readonly<{
       readonly code: "missingTextPresenter";
       readonly command: string;
-      readonly location: "completion" | "data" | "failure";
+      readonly location:
+        | "completion"
+        | "data"
+        | "failure"
+        | "record"
+        | "streamSuccess";
       readonly variant?: string;
     }>
   | Readonly<{
       readonly code: "unexpectedTextPresenter";
       readonly command: string;
-      readonly location: "completion" | "data" | "failure";
+      readonly location:
+        | "completion"
+        | "data"
+        | "failure"
+        | "record"
+        | "streamSuccess";
       readonly variant?: string;
     }>
   | Readonly<{
@@ -371,8 +377,6 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `命令 ${issue.command} 的 ${issue.location} 变体 ${issue.variant} 退出码无效`;
     case "missingStreamRecord":
       return `命令 ${issue.command} 的 stream 必须声明至少一个 record`;
-    case "streamTextOutputUnsupported":
-      return `命令 ${issue.command} 的 stream 暂不支持 text 输出`;
     case "invalidCapability":
       return `CLI 的 ${issue.capability} 能力无效`;
     case "invalidOutputFormat":

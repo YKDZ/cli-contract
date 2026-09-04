@@ -81,8 +81,10 @@ export type {
   StreamRecordFact,
   StreamRecordFactUnion,
   StreamSuccessFact,
+  StreamTextPresenter,
   SilentText,
   TextLine,
+  TextFragment,
 } from "#/outcome-fact";
 
 const cliContractType = Symbol("CliContract.type");
@@ -640,6 +642,7 @@ export interface StreamRootCommandDefinition<
   InputSchema extends ContractSchema,
   Records extends StreamRecordDefinitions,
   Failures extends FailureVariantDefinitions,
+  TextEnabled extends boolean = boolean,
 > {
   readonly kind: "rootCommand";
   readonly name: string;
@@ -652,8 +655,13 @@ export interface StreamRootCommandDefinition<
   readonly input: InputSchema & RawFieldInputContract<Fields, InputSchema>;
   readonly success: Readonly<{
     readonly kind: "stream";
-    readonly records: Records;
-  }>;
+    readonly records: Records & StreamRecordDefinitions<TextEnabled>;
+  }> &
+    (TextEnabled extends true
+      ? Readonly<{ readonly text: CompletionTextPresenter }>
+      : TextEnabled extends false
+        ? Readonly<{ readonly text?: never }>
+        : Readonly<{ readonly text?: CompletionTextPresenter }>);
   readonly failures: Failures & FailureVariantNameContract<Failures>;
   readonly handler: (
     context: StreamHandlerContext<
@@ -771,7 +779,7 @@ export type CommandNodeDefinition =
       Readonly<{
         readonly name: string;
         readonly description: string;
-        readonly fields?: FieldDefinitions;
+        readonly fields?: unknown;
         readonly input: ContractSchema;
         readonly success:
           | Readonly<{ readonly kind: "completion" }>
@@ -782,6 +790,7 @@ export type CommandNodeDefinition =
           | Readonly<{
               readonly kind: "stream";
               readonly records: StreamRecordDefinitions;
+              readonly text?: CompletionTextPresenter;
             }>;
         readonly failures: FailureVariantDefinitions;
         readonly handler: unknown;
@@ -1010,6 +1019,7 @@ export type StreamRootCliDefinition<
   InputSchema extends ContractSchema,
   Records extends StreamRecordDefinitions,
   Failures extends FailureVariantDefinitions,
+  TextEnabled extends boolean = boolean,
 > = RootCliDefinitionBase<Root> &
   Readonly<{
     readonly commands: Readonly<{
@@ -1019,7 +1029,8 @@ export type StreamRootCliDefinition<
         Fields,
         InputSchema,
         Records,
-        Failures
+        Failures,
+        TextEnabled
       >;
     }>;
   }>;
@@ -1205,6 +1216,7 @@ export type CommandSuccessManifest =
   | Readonly<{
       readonly kind: "stream";
       readonly records: Readonly<Record<string, StreamRecordManifest>>;
+      readonly text?: Readonly<{ readonly recordFraming: "fragment" }>;
     }>;
 
 export interface RootCommandManifest {
@@ -1444,7 +1456,18 @@ type MissingHierarchyTextCommands<Commands> = {
             ? never
             : Command
           : Command
-        : Command
+        : Success extends Readonly<{
+              readonly kind: "stream";
+              readonly records: infer Records;
+            }>
+          ? HasTextPresenter<Success> extends true
+            ? AllTextPresenters<Records> extends true
+              ? AllTextPresenters<Failures> extends true
+                ? never
+                : Command
+              : Command
+            : Command
+          : Command
     : never;
 }[keyof Commands];
 
@@ -1453,15 +1476,6 @@ type HasAnyTextPresenter<Definitions> = true extends {
 }[keyof Definitions]
   ? true
   : false;
-
-type HierarchyTextStreamCommands<Commands> = {
-  [Command in keyof Commands]: Commands[Command] extends Readonly<{
-    readonly kind: "command";
-    readonly success: Readonly<{ readonly kind: "stream" }>;
-  }>
-    ? Command
-    : never;
-}[keyof Commands];
 
 type UnexpectedHierarchyTextCommands<Commands> = {
   [Command in keyof Commands]: Commands[Command] extends Readonly<{
@@ -1481,7 +1495,18 @@ type UnexpectedHierarchyTextCommands<Commands> = {
           : HasAnyTextPresenter<Failures> extends true
             ? Command
             : never
-        : never
+        : Success extends Readonly<{
+              readonly kind: "stream";
+              readonly records: infer Records;
+            }>
+          ? HasTextPresenter<Success> extends true
+            ? Command
+            : HasAnyTextPresenter<Records> extends true
+              ? Command
+              : HasAnyTextPresenter<Failures> extends true
+                ? Command
+                : never
+          : never
     : never;
 }[keyof Commands];
 
@@ -1511,22 +1536,13 @@ type HierarchyUsageValidation<Commands> =
 type HierarchyOutputValidation<Commands, Output extends OutputCapability> =
   Output extends OutputCapability<infer Formats>
     ? [Formats] extends [readonly ["structured", "text"]]
-      ? HierarchyTextStreamCommands<Commands> extends never
-        ? MissingHierarchyTextCommands<Commands> extends never
-          ? HierarchyUsageValidation<Commands>
-          : readonly [
-              ContractTypeError<
-                "missingHierarchyTextPresenter",
-                Readonly<{
-                  readonly commands: MissingHierarchyTextCommands<Commands>;
-                }>
-              >,
-            ]
+      ? MissingHierarchyTextCommands<Commands> extends never
+        ? HierarchyUsageValidation<Commands>
         : readonly [
             ContractTypeError<
-              "streamTextOutputUnsupported",
+              "missingHierarchyTextPresenter",
               Readonly<{
-                readonly commands: HierarchyTextStreamCommands<Commands>;
+                readonly commands: MissingHierarchyTextCommands<Commands>;
               }>
             >,
           ]
@@ -1548,6 +1564,32 @@ export interface DefineCli<Dependencies> {
   readonly command: <const Command extends string>(
     command: Command,
   ) => DefineCommand<Command, Dependencies>;
+
+  <
+    const Root extends string,
+    InputSchema extends ContractSchema,
+    const Records extends StreamRecordDefinitions<true>,
+    const Failures extends FailureVariantDefinitions<true>,
+  >(
+    definition: StreamRootCliDefinition<
+      Root,
+      Dependencies,
+      Readonly<Record<never, never>>,
+      InputSchema,
+      Records,
+      Failures,
+      true
+    > &
+      Readonly<{
+        readonly output: OutputCapability<readonly ["structured", "text"]>;
+      }>,
+  ): CliContract<
+    Root,
+    Dependencies,
+    EmptyCliInput,
+    StreamSuccessFact<Root> | FailureFactUnion<Root, Failures>,
+    "rootCommand"
+  >;
 
   <
     const Root extends string,
@@ -1663,6 +1705,33 @@ export interface DefineCli<Dependencies> {
     Dependencies,
     RawFieldInput<Fields>,
     DataFactUnion<Root, Variants> | FailureFactUnion<Root, Failures>,
+    "rootCommand"
+  >;
+
+  <
+    const Root extends string,
+    const Fields extends FieldDefinitions,
+    InputSchema extends ContractSchema,
+    const Records extends StreamRecordDefinitions<true>,
+    const Failures extends FailureVariantDefinitions<true>,
+  >(
+    definition: StreamRootCliDefinition<
+      Root,
+      Dependencies,
+      Fields,
+      InputSchema,
+      Records,
+      Failures,
+      true
+    > &
+      Readonly<{
+        readonly output: OutputCapability<readonly ["structured", "text"]>;
+      }>,
+  ): CliContract<
+    Root,
+    Dependencies,
+    RawFieldInput<Fields>,
+    StreamSuccessFact<Root> | FailureFactUnion<Root, Failures>,
     "rootCommand"
   >;
 
@@ -2017,6 +2086,7 @@ interface RuntimeCompiledCli {
     | Readonly<{
         readonly kind: "stream";
         readonly records: Readonly<Record<string, RuntimeStreamRecord>>;
+        readonly text?: unknown;
       }>;
   readonly failures: Readonly<Record<string, RuntimeAtomicVariant>>;
   readonly handler: unknown;
@@ -2059,6 +2129,7 @@ type RuntimeExecutableDefinition = Readonly<{
     | Readonly<{
         readonly kind: "stream";
         readonly records: StreamRecordDefinitions;
+        readonly text?: CompletionTextPresenter;
       }>;
   readonly failures: FailureVariantDefinitions;
   readonly handler: unknown;
@@ -2234,12 +2305,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
   const compiledSuccess = compileSuccess(
     definition.root,
     command.success,
-    definitionIssues,
-  );
-  collectStreamTextOutputIssue(
-    definition.root,
     isTextOutputEnabled(definition.output),
-    command.success,
     definitionIssues,
   );
   const compiledFailures = compileFailures(
@@ -2467,11 +2533,10 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
       { command: id, location: "input" },
       issues,
     );
-    const compiledSuccess = compileSuccess(id, executable.success, issues);
-    collectStreamTextOutputIssue(
+    const compiledSuccess = compileSuccess(
       id,
-      isTextOutputEnabled(definition.output),
       executable.success,
+      isTextOutputEnabled(definition.output),
       issues,
     );
     const compiledFailures = compileFailures(id, executable.failures, issues);
@@ -3404,6 +3469,24 @@ function collectTextPresenterIssues(
         variant,
       );
     }
+  } else {
+    collectTextPresenterIssue(
+      command,
+      textEnabled,
+      "streamSuccess",
+      success as Readonly<Record<string, unknown>>,
+      issues,
+    );
+    for (const [variant, definition] of Object.entries(success.records)) {
+      collectTextPresenterIssue(
+        command,
+        textEnabled,
+        "record",
+        definition as Readonly<Record<string, unknown>>,
+        issues,
+        variant,
+      );
+    }
   }
   for (const [variant, definition] of Object.entries(failures)) {
     collectTextPresenterIssue(
@@ -3414,17 +3497,6 @@ function collectTextPresenterIssues(
       issues,
       variant,
     );
-  }
-}
-
-function collectStreamTextOutputIssue(
-  command: string,
-  textEnabled: boolean,
-  success: RuntimeExecutableDefinition["success"],
-  issues: ContractDefinitionIssue[],
-): void {
-  if (textEnabled && success.kind === "stream") {
-    issues.push({ code: "streamTextOutputUnsupported", command });
   }
 }
 
@@ -3505,7 +3577,7 @@ function outputCompatibilityFlagsKind(value: unknown): string {
 function collectTextPresenterIssue(
   command: string,
   textEnabled: boolean,
-  location: "completion" | "data" | "failure",
+  location: "completion" | "data" | "failure" | "record" | "streamSuccess",
   definition: Readonly<Record<string, unknown>>,
   issues: ContractDefinitionIssue[],
   variant?: string,
@@ -3523,6 +3595,7 @@ function collectTextPresenterIssue(
 function compileSuccess(
   command: string,
   success: RuntimeExecutableDefinition["success"],
+  textEnabled: boolean,
   issues: ContractDefinitionIssue[],
 ): Readonly<{
   readonly runtime: RuntimeCompiledCli["success"];
@@ -3556,8 +3629,18 @@ function compileSuccess(
       ]),
     ) as Readonly<Record<string, JsonObject>>;
     return deepFreeze({
-      runtime: { kind: "stream" as const, records: records.runtime },
-      manifest: { kind: "stream" as const, records: records.manifest },
+      runtime: {
+        kind: "stream" as const,
+        records: records.runtime,
+        ...("text" in success ? { text: success.text } : {}),
+      },
+      manifest: {
+        kind: "stream" as const,
+        records: records.manifest,
+        ...(textEnabled
+          ? { text: { recordFraming: "fragment" as const } }
+          : {}),
+      },
       wire: {
         stream: {
           header,

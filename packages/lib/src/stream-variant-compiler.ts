@@ -4,9 +4,9 @@ import { compileContractSchema } from "#/contract-schema-compiler";
 import { deepFreeze } from "#/json-value";
 import type { StreamRecordDefinition } from "#/outcome-fact";
 
-export interface RuntimeStreamRecord extends StreamRecordDefinition {
+export type RuntimeStreamRecord = StreamRecordDefinition & {
   readonly schema: ContractSchema;
-}
+};
 
 export interface StreamRecordManifest {
   readonly description: string;
@@ -51,6 +51,7 @@ export function compileStreamRecords(
     runtime[variant] = deepFreeze({
       description: definition.description,
       schema: definition.schema,
+      ...("text" in definition ? { text: definition.text } : {}),
     });
     if (schema !== undefined) {
       manifest[variant] = deepFreeze({
