@@ -3,9 +3,132 @@ import {
   parseCliInvocation,
   type CliContract,
   type CliContractDependencies,
+  type CliContractResult,
   type CliOutput,
   type CliTermination,
+  type OutcomeFact,
 } from "@cli-contract/lib";
+
+/** 从契约命令闭集投影出的可执行命令身份。 */
+export type CliScenarioCommand<Contract extends CliContract> =
+  Contract extends CliContract<
+    infer Root,
+    unknown,
+    unknown,
+    OutcomeFact,
+    "rootCommand" | "rootGroup",
+    infer Commands
+  >
+    ? [Commands] extends [never]
+      ? Root
+      : {
+          [Command in keyof Commands]: Commands[Command] extends Readonly<{
+            readonly kind: "command";
+          }>
+            ? Command
+            : never;
+        }[keyof Commands] &
+          string
+    : never;
+
+/** 某个可执行命令已声明的失败身份。 */
+export type CliFailureScenarioKey<
+  Contract extends CliContract,
+  Command extends CliScenarioCommand<Contract>,
+> = Extract<
+  CliContractResult<Contract>,
+  Readonly<{ readonly kind: "failure"; readonly command: Command }>
+>["variant"];
+
+/** 场景仅描述如何触发一次调用，不参与生产契约。 */
+export interface CliScenario<Contract extends CliContract> {
+  readonly argv: readonly string[];
+  readonly dependencies: CliContractDependencies<NoInfer<Contract>>;
+}
+
+/** 每个可执行命令各有一个触发场景的闭合集合。 */
+export type CliCommandScenarioMap<Contract extends CliContract> = Readonly<{
+  [Command in CliScenarioCommand<Contract>]: CliScenario<Contract>;
+}>;
+
+type CliFailureScenarioCommand<Contract extends CliContract> = {
+  [Command in CliScenarioCommand<Contract>]: [
+    CliFailureScenarioKey<Contract, Command>,
+  ] extends [never]
+    ? never
+    : Command;
+}[CliScenarioCommand<Contract>];
+
+/** 仅包含声明了失败变体的命令；没有失败的命令不需要伪键。 */
+export type CliFailureScenarioMap<Contract extends CliContract> = Readonly<{
+  [Command in CliFailureScenarioCommand<Contract>]: Readonly<{
+    [Failure in CliFailureScenarioKey<
+      Contract,
+      Command
+    >]: CliScenario<Contract>;
+  }>;
+}>;
+
+type NoScenarioIndexSignature<Actual> = string extends keyof Actual
+  ? Readonly<{ readonly scenarioKeysMustBeExplicit: never }>
+  : unknown;
+
+type NoUnexpectedScenarioKeys<Expected, Actual> =
+  Exclude<keyof Actual, keyof Expected> extends never
+    ? unknown
+    : Readonly<{
+        readonly [Key in Exclude<keyof Actual, keyof Expected>]: never;
+      }>;
+
+type ScenarioMapContract<Expected, Actual> = NoScenarioIndexSignature<Actual> &
+  NoUnexpectedScenarioKeys<Expected, Actual>;
+
+type FailureScenarioMapContract<Expected, Actual> = ScenarioMapContract<
+  Expected,
+  Actual
+> &
+  (Actual extends Record<PropertyKey, unknown>
+    ? {
+        readonly [Command in keyof Expected]: Command extends keyof Actual
+          ? ScenarioMapContract<Expected[Command], Actual[Command]>
+          : unknown;
+      }
+    : unknown);
+
+/**
+ * 校验消费者为契约中的每个可执行命令提供一个触发场景。
+ * 该 helper 不执行或保存契约；返回值就是调用方提供的场景表。
+ */
+export function defineCommandScenarios<
+  const Contract extends CliContract,
+  const Scenarios extends CliCommandScenarioMap<NoInfer<Contract>>,
+>(
+  cliContract: Contract,
+  scenarios: Scenarios &
+    ScenarioMapContract<CliCommandScenarioMap<NoInfer<Contract>>, Scenarios>,
+): Scenarios {
+  void cliContract;
+  return scenarios;
+}
+
+/**
+ * 校验消费者为每个已声明失败提供一个触发场景。
+ * 没有失败变体的命令不会出现在该映射中。
+ */
+export function defineFailureScenarios<
+  const Contract extends CliContract,
+  const Scenarios extends CliFailureScenarioMap<NoInfer<Contract>>,
+>(
+  cliContract: Contract,
+  scenarios: Scenarios &
+    FailureScenarioMapContract<
+      CliFailureScenarioMap<NoInfer<Contract>>,
+      Scenarios
+    >,
+): Scenarios {
+  void cliContract;
+  return scenarios;
+}
 
 /** 一次受控 CLI 调用的规范化观测。 */
 export interface CliScenarioCapture<Contract extends CliContract> {

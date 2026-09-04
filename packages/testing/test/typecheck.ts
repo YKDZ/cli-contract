@@ -5,7 +5,7 @@ import {
   type ContractSchema,
   type EmptyCliInput,
 } from "@cli-contract/lib";
-import { runCliScenario } from "@cli-contract/testing";
+import { defineCommandScenarios, runCliScenario } from "@cli-contract/testing";
 
 declare const emptyInput: ContractSchema<EmptyCliInput>;
 
@@ -45,4 +45,11 @@ void runCliScenario({
   argv: [],
   // @ts-expect-error 依赖不能通过宽化为 unknown 绕过契约。
   dependencies: {} as unknown,
+});
+
+void defineCommandScenarios(cli, {
+  typed: {
+    argv: [],
+    dependencies: { service: "billing" },
+  },
 });
