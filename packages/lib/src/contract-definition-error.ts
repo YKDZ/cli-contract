@@ -184,6 +184,30 @@ export type ContractDefinitionIssue =
       readonly fields: readonly string[];
     }>
   | Readonly<{
+      readonly code: "duplicateInheritedFieldIdentity";
+      readonly command: string;
+      readonly field: string;
+    }>
+  | Readonly<{
+      readonly code: "duplicateInheritedOptionSpelling";
+      readonly command: string;
+      readonly spelling: string;
+      readonly fields: readonly string[];
+    }>
+  | Readonly<{
+      readonly code: "fieldOptionConflictsWithControl";
+      readonly command: string;
+      readonly field: string;
+      readonly spelling: string;
+      readonly control: "help";
+    }>
+  | Readonly<{
+      readonly code: "invalidSharedOptionKind";
+      readonly command: string;
+      readonly field: string;
+      readonly received: string | null;
+    }>
+  | Readonly<{
       readonly code: "requiredPositionalAfterOptional";
       readonly command: string;
       readonly field: string;
@@ -291,6 +315,14 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `命令 ${issue.command} 的字段 ${issue.field} short alias 无效`;
     case "duplicateFieldOptionSpelling":
       return `命令 ${issue.command} 的字段 ${issue.fields.join(", ")} 重复使用 option spelling ${issue.spelling}`;
+    case "duplicateInheritedFieldIdentity":
+      return `命令 ${issue.command} 的继承字段身份 ${issue.field} 冲突`;
+    case "duplicateInheritedOptionSpelling":
+      return `命令 ${issue.command} 的字段 ${issue.fields.join(", ")} 重复使用继承 option spelling ${issue.spelling}`;
+    case "fieldOptionConflictsWithControl":
+      return `命令 ${issue.command} 的字段 ${issue.field} 与 ${issue.control} control spelling ${issue.spelling} 冲突`;
+    case "invalidSharedOptionKind":
+      return `命令组 ${issue.command} 的共享字段 ${issue.field} 不是 option`;
     case "requiredPositionalAfterOptional":
       return `命令 ${issue.command} 的必填 positional ${issue.field} 位于可选 positional ${issue.precedingOptionalField} 之后`;
     case "positionalAfterVariadic":

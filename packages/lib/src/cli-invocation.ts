@@ -135,6 +135,8 @@ export function parseCliInvocation<const Contract extends CliContract>(
   argv: readonly string[],
 ): CliInvocation<Contract> {
   const compiled = getCompiledCli(cliContract);
+  const input: Record<string, boolean | string | string[]> = {};
+  const occurrencesByField = new Map<string, ParsedOptionOccurrence[]>();
   let selected = compiled.commands[compiled.root];
   if (selected === undefined)
     throw new Error("compiled root command is missing");
@@ -149,6 +151,25 @@ export function parseCliInvocation<const Contract extends CliContract>(
         kind: "help",
         command: selected.id as CliContractRoot<Contract>,
       });
+    }
+    if (token.startsWith("-") && token !== "-") {
+      const option = consumeOption(
+        selected.fields,
+        argv,
+        position,
+        input,
+        occurrencesByField,
+      );
+      if (option.kind === "issue") {
+        return usageFailure(
+          cliContract,
+          selected.id as CliContractRoot<Contract>,
+          selected.usage as CommandUsage<CliContractRoot<Contract>>,
+          option.issue,
+        );
+      }
+      position = option.nextPosition;
+      continue;
     }
     const child = Object.values(compiled.commands).find(
       (candidate) =>
@@ -174,8 +195,6 @@ export function parseCliInvocation<const Contract extends CliContract>(
   const usage = selected.usage as CommandUsage<CliContractRoot<Contract>>;
   const fields = selected.fields;
 
-  const input: Record<string, boolean | string | string[]> = {};
-  const occurrencesByField = new Map<string, ParsedOptionOccurrence[]>();
   const positionals = fields.filter(
     (field) =>
       field.kind === "positional" || field.kind === "variadicPositional",
@@ -198,79 +217,17 @@ export function parseCliInvocation<const Contract extends CliContract>(
       });
     }
     if (optionsEnabled && token.startsWith("-") && token !== "-") {
-      const option = readOptionToken(token);
-      const field = fields.find(
-        (
-          candidate,
-        ): candidate is Extract<
-          (typeof compiled.fields)[number],
-          { readonly kind: "flag" | "repeatableOption" | "valueOption" }
-        > =>
-          candidate.kind !== "positional" &&
-          candidate.kind !== "variadicPositional" &&
-          (candidate.longOption === option.spelling ||
-            candidate.shortAlias === option.spelling ||
-            (candidate.kind === "flag" &&
-              candidate.negatedLongOption === option.spelling)),
-      );
-      if (field === undefined) {
-        return usageFailure(cliContract, command, usage, {
-          code: "unknownOption",
-          position,
-          option: token,
-        });
-      }
-      if (field.kind === "flag") {
-        if (option.value !== undefined) {
-          return usageFailure(cliContract, command, usage, {
-            code: "unexpectedOptionValue",
-            position,
-            field: field.key,
-            option: option.spelling,
-            value: option.value,
-          });
-        }
-        const polarity =
-          option.spelling === field.negatedLongOption ? "negative" : "positive";
-        input[field.key] = polarity === "positive";
-        addOptionOccurrence(
-          occurrencesByField,
-          field.key,
-          position,
-          option.spelling,
-          polarity,
-        );
-        continue;
-      }
-      if (option.value !== undefined) {
-        addOptionValue(input, field.key, option.value, field.kind);
-        addOptionOccurrence(
-          occurrencesByField,
-          field.key,
-          position,
-          option.spelling,
-          "value",
-        );
-        continue;
-      }
-      const value = argv[position + 1];
-      if (value === undefined || (value.startsWith("-") && value !== "-")) {
-        return usageFailure(cliContract, command, usage, {
-          code: "missingOptionValue",
-          position,
-          field: field.key,
-          option: option.spelling,
-        });
-      }
-      addOptionValue(input, field.key, value, field.kind);
-      addOptionOccurrence(
-        occurrencesByField,
-        field.key,
+      const option = consumeOption(
+        fields,
+        argv,
         position,
-        option.spelling,
-        "value",
+        input,
+        occurrencesByField,
       );
-      position += 1;
+      if (option.kind === "issue") {
+        return usageFailure(cliContract, command, usage, option.issue);
+      }
+      position = option.nextPosition - 1;
       continue;
     }
 
@@ -313,6 +270,96 @@ export function parseCliInvocation<const Contract extends CliContract>(
 
 type ParsedOptionOccurrence = OptionOccurrenceEvidence &
   Readonly<{ readonly polarity: "negative" | "positive" | "value" }>;
+
+function consumeOption(
+  fields: ReturnType<typeof getCompiledCli>["fields"],
+  argv: readonly string[],
+  position: number,
+  input: Record<string, boolean | string | string[]>,
+  occurrencesByField: Map<string, ParsedOptionOccurrence[]>,
+):
+  | Readonly<{ readonly kind: "consumed"; readonly nextPosition: number }>
+  | Readonly<{ readonly kind: "issue"; readonly issue: UsageIssue }> {
+  const token = argv[position] as string;
+  const option = readOptionToken(token);
+  const field = fields.find(
+    (
+      candidate,
+    ): candidate is Extract<
+      (typeof fields)[number],
+      { readonly kind: "flag" | "repeatableOption" | "valueOption" }
+    > =>
+      candidate.kind !== "positional" &&
+      candidate.kind !== "variadicPositional" &&
+      (candidate.longOption === option.spelling ||
+        candidate.shortAlias === option.spelling ||
+        (candidate.kind === "flag" &&
+          candidate.negatedLongOption === option.spelling)),
+  );
+  if (field === undefined) {
+    return {
+      kind: "issue",
+      issue: { code: "unknownOption", position, option: token },
+    };
+  }
+  if (field.kind === "flag") {
+    if (option.value !== undefined) {
+      return {
+        kind: "issue",
+        issue: {
+          code: "unexpectedOptionValue",
+          position,
+          field: field.key,
+          option: option.spelling,
+          value: option.value,
+        },
+      };
+    }
+    const polarity =
+      option.spelling === field.negatedLongOption ? "negative" : "positive";
+    input[field.key] = polarity === "positive";
+    addOptionOccurrence(
+      occurrencesByField,
+      field.key,
+      position,
+      option.spelling,
+      polarity,
+    );
+    return { kind: "consumed", nextPosition: position + 1 };
+  }
+  if (option.value !== undefined) {
+    addOptionValue(input, field.key, option.value, field.kind);
+    addOptionOccurrence(
+      occurrencesByField,
+      field.key,
+      position,
+      option.spelling,
+      "value",
+    );
+    return { kind: "consumed", nextPosition: position + 1 };
+  }
+  const value = argv[position + 1];
+  if (value === undefined || (value.startsWith("-") && value !== "-")) {
+    return {
+      kind: "issue",
+      issue: {
+        code: "missingOptionValue",
+        position,
+        field: field.key,
+        option: option.spelling,
+      },
+    };
+  }
+  addOptionValue(input, field.key, value, field.kind);
+  addOptionOccurrence(
+    occurrencesByField,
+    field.key,
+    position,
+    option.spelling,
+    "value",
+  );
+  return { kind: "consumed", nextPosition: position + 2 };
+}
 
 function addOptionOccurrence(
   occurrencesByField: Map<string, ParsedOptionOccurrence[]>,
