@@ -741,6 +741,48 @@ type InvalidHierarchyInputCommands<Commands> = {
     : never;
 }[keyof Commands];
 
+type HierarchyUsageConstraints<Node> =
+  Node extends Readonly<{
+    readonly usageConstraints?: infer Constraints;
+  }>
+    ? Exclude<Constraints, undefined>
+    : never;
+
+type InvalidUsageConstraintForFields<
+  Constraint,
+  Fields extends FieldDefinitions,
+> =
+  Constraint extends RequiresUsageConstraint<infer Field>
+    ? Exclude<Field | Constraint["requires"], keyof Fields> extends never
+      ? never
+      : Constraint
+    : Constraint extends ExclusiveUsageConstraint<infer Field>
+      ? Exclude<Field, keyof Fields> extends never
+        ? never
+        : Constraint
+      : Constraint extends ForbiddenCombinationUsageConstraint<Fields>
+        ? never
+        : Constraint;
+
+type InvalidHierarchyUsageConstraintCommands<Commands> = {
+  [Command in keyof Commands]: Commands[Command] extends Readonly<{
+    readonly kind: "command";
+  }>
+    ? HierarchyUsageConstraints<Commands[Command]> extends never
+      ? never
+      : HierarchyUsageConstraints<
+            Commands[Command]
+          > extends readonly (infer Constraint)[]
+        ? InvalidUsageConstraintForFields<
+            Constraint,
+            EffectiveHierarchyFields<Command, Commands>
+          > extends never
+          ? never
+          : Command
+        : Command
+    : never;
+}[keyof Commands];
+
 type HasSharedOptions<Commands> = true extends {
   [Command in keyof Commands]: Commands[Command] extends Readonly<{
     readonly sharedOptions: SharedOptionDefinitions;
@@ -1182,18 +1224,27 @@ export interface DefineCli<Dependencies> {
   >(
     definition: HierarchyCliDefinition<Root> &
       Readonly<{ readonly commands: Commands }>,
-    ...validation: HasSharedOptions<Commands> extends false
-      ? readonly []
-      : InvalidHierarchyInputCommands<Commands> extends never
+    ...validation: InvalidHierarchyUsageConstraintCommands<Commands> extends never
+      ? HasSharedOptions<Commands> extends false
         ? readonly []
-        : readonly [
-            ContractTypeError<
-              "invalidEffectiveCommandInput",
-              Readonly<{
-                readonly commands: InvalidHierarchyInputCommands<Commands>;
-              }>
-            >,
-          ]
+        : InvalidHierarchyInputCommands<Commands> extends never
+          ? readonly []
+          : readonly [
+              ContractTypeError<
+                "invalidEffectiveCommandInput",
+                Readonly<{
+                  readonly commands: InvalidHierarchyInputCommands<Commands>;
+                }>
+              >,
+            ]
+      : readonly [
+          ContractTypeError<
+            "invalidEffectiveUsageConstraint",
+            Readonly<{
+              readonly commands: InvalidHierarchyUsageConstraintCommands<Commands>;
+            }>
+          >,
+        ]
   ): CliContract<
     Root,
     Dependencies,
@@ -1280,7 +1331,7 @@ type HierarchyCompletionCommandDefinition<
     Fields,
     InputSchema
   >,
-  "fields" | "input"
+  "fields" | "input" | "usageConstraints"
 > &
   Readonly<{
     readonly fields?: CheckedFieldDefinitions<Fields> &
@@ -1304,7 +1355,7 @@ type HierarchyDataCommandDefinition<
     Variants,
     Failures
   >,
-  "fields" | "input"
+  "fields" | "input" | "usageConstraints"
 > &
   Readonly<{
     readonly fields: CheckedFieldDefinitions<Fields> &
@@ -1312,10 +1363,16 @@ type HierarchyDataCommandDefinition<
     readonly input: InputSchema;
   }>;
 
+type UsageConstraintProperty<Constraints> =
+  Constraints extends readonly unknown[]
+    ? Readonly<{ readonly usageConstraints: Constraints }>
+    : unknown;
+
 export interface DefineCommand<Command extends string, Dependencies> {
   <
     const Parent extends string,
     const Failures extends FailureVariantDefinitions,
+    const Constraints extends readonly unknown[] | undefined = undefined,
   >(
     definition: HierarchyCommandInput<
       HierarchyCompletionCommandDefinition<
@@ -1326,7 +1383,10 @@ export interface DefineCommand<Command extends string, Dependencies> {
         ContractSchema<EmptyCliInput>
       >
     > &
-      Readonly<{ readonly parent: Parent }>,
+      Readonly<{
+        readonly parent: Parent;
+        readonly usageConstraints?: Constraints & readonly UsageConstraint[];
+      }>,
   ): Readonly<
     Record<
       Command,
@@ -1340,6 +1400,7 @@ export interface DefineCommand<Command extends string, Dependencies> {
         >,
         "kind"
       > &
+        UsageConstraintProperty<Constraints> &
         HierarchyCommandFacts<Parent>
     >
   >;
@@ -1349,6 +1410,7 @@ export interface DefineCommand<Command extends string, Dependencies> {
     InputSchema extends ContractSchema,
     const Parent extends string,
     const Failures extends FailureVariantDefinitions,
+    const Constraints extends readonly unknown[] | undefined = undefined,
   >(
     definition: HierarchyCommandInput<
       HierarchyCompletionCommandDefinition<
@@ -1359,7 +1421,11 @@ export interface DefineCommand<Command extends string, Dependencies> {
         InputSchema
       >
     > &
-      Readonly<{ readonly fields: Fields; readonly parent: Parent }>,
+      Readonly<{
+        readonly fields: Fields;
+        readonly parent: Parent;
+        readonly usageConstraints?: Constraints & readonly UsageConstraint[];
+      }>,
   ): Readonly<
     Record<
       Command,
@@ -1373,6 +1439,7 @@ export interface DefineCommand<Command extends string, Dependencies> {
         >,
         "kind"
       > &
+        UsageConstraintProperty<Constraints> &
         HierarchyCommandFacts<Parent>
     >
   >;
@@ -1383,6 +1450,7 @@ export interface DefineCommand<Command extends string, Dependencies> {
     const Parent extends string,
     const Variants extends DataVariantDefinitions,
     const Failures extends FailureVariantDefinitions,
+    const Constraints extends readonly unknown[] | undefined = undefined,
   >(
     definition: HierarchyCommandInput<
       HierarchyDataCommandDefinition<
@@ -1394,7 +1462,10 @@ export interface DefineCommand<Command extends string, Dependencies> {
         Failures
       >
     > &
-      Readonly<{ readonly parent: Parent }>,
+      Readonly<{
+        readonly parent: Parent;
+        readonly usageConstraints?: Constraints & readonly UsageConstraint[];
+      }>,
   ): Readonly<
     Record<
       Command,
@@ -1409,6 +1480,7 @@ export interface DefineCommand<Command extends string, Dependencies> {
         >,
         "kind"
       > &
+        UsageConstraintProperty<Constraints> &
         HierarchyCommandFacts<Parent>
     >
   >;
@@ -2220,38 +2292,78 @@ function compileSharedOptions(
 }
 
 function compileUsageConstraints(
-  definitions: readonly UsageConstraint[],
+  definitions: unknown,
   fields: readonly FieldGrammar[],
   command: string,
   issues: ContractDefinitionIssue[],
 ): readonly UsageConstraintGrammar[] {
   const fieldsByKey = new Map(fields.map((field) => [field.key, field]));
   const compiled: UsageConstraintGrammar[] = [];
-  for (const definition of definitions) {
+  if (!Array.isArray(definitions)) {
+    issues.push({
+      code: "invalidUsageConstraint",
+      command,
+      index: null,
+      aspect: "collection",
+      received: null,
+    });
+    return deepFreeze(compiled);
+  }
+  for (const [index, definition] of definitions.entries()) {
     if (typeof definition !== "object" || definition === null) {
       issues.push({
         code: "invalidUsageConstraint",
         command,
+        index,
+        aspect: "entry",
         received: null,
       });
       continue;
     }
-    if (definition.kind === "requires") {
-      const field = fieldsByKey.get(definition.field);
-      const required = fieldsByKey.get(definition.requires);
+    const candidate = definition as Readonly<Record<string, unknown>>;
+    if (
+      candidate.kind !== "requires" &&
+      candidate.kind !== "exclusive" &&
+      candidate.kind !== "forbiddenCombination"
+    ) {
+      issues.push({
+        code: "invalidUsageConstraint",
+        command,
+        index,
+        aspect: "kind",
+        received: typeof candidate.kind === "string" ? candidate.kind : null,
+      });
+      continue;
+    }
+    if (candidate.kind === "requires") {
+      if (
+        typeof candidate.field !== "string" ||
+        typeof candidate.requires !== "string"
+      ) {
+        issues.push({
+          code: "invalidUsageConstraint",
+          command,
+          index,
+          aspect: "members",
+          received: "requires",
+        });
+        continue;
+      }
+      const field = fieldsByKey.get(candidate.field);
+      const required = fieldsByKey.get(candidate.requires);
       if (field === undefined)
         issues.push({
           code: "unknownUsageConstraintField",
           command,
           constraint: "requires",
-          field: definition.field,
+          field: candidate.field,
         });
       if (required === undefined)
         issues.push({
           code: "unknownUsageConstraintField",
           command,
           constraint: "requires",
-          field: definition.requires,
+          field: candidate.requires,
         });
       if (field !== undefined && required !== undefined) {
         if (!isOptionalOption(field) || !isOptionalOption(required)) {
@@ -2282,15 +2394,29 @@ function compileUsageConstraints(
       }
       continue;
     }
-    if (definition.kind === "exclusive") {
-      const selected = definition.fields.map((key) => fieldsByKey.get(key));
+    if (candidate.kind === "exclusive") {
+      if (
+        !Array.isArray(candidate.fields) ||
+        candidate.fields.length < 2 ||
+        !candidate.fields.every((field) => typeof field === "string")
+      ) {
+        issues.push({
+          code: "invalidUsageConstraint",
+          command,
+          index,
+          aspect: "members",
+          received: "exclusive",
+        });
+        continue;
+      }
+      const selected = candidate.fields.map((key) => fieldsByKey.get(key));
       for (const [index, field] of selected.entries()) {
         if (field === undefined) {
           issues.push({
             code: "unknownUsageConstraintField",
             command,
             constraint: "exclusive",
-            field: definition.fields[index] as string,
+            field: candidate.fields[index] as string,
           });
         } else if (!isOptionalOption(field)) {
           issues.push({
@@ -2302,7 +2428,7 @@ function compileUsageConstraints(
           });
         }
       }
-      const fieldsInConstraint = definition.fields;
+      const fieldsInConstraint = candidate.fields;
       if (new Set(fieldsInConstraint).size !== fieldsInConstraint.length)
         issues.push({
           code: "contradictoryUsageConstraint",
@@ -2323,19 +2449,44 @@ function compileUsageConstraints(
         );
       continue;
     }
-    if (definition.kind === "forbiddenCombination") {
+    if (candidate.kind === "forbiddenCombination") {
+      if (
+        !Array.isArray(candidate.values) ||
+        candidate.values.length < 2 ||
+        !candidate.values.every(
+          (value) =>
+            typeof value === "object" &&
+            value !== null &&
+            typeof value.field === "string" &&
+            (typeof value.value === "string" ||
+              typeof value.value === "boolean"),
+        )
+      ) {
+        issues.push({
+          code: "invalidUsageConstraint",
+          command,
+          index,
+          aspect: "members",
+          received: "forbiddenCombination",
+        });
+        continue;
+      }
       const values: Array<{
         readonly field: string;
         readonly value: boolean | string;
       }> = [];
-      for (const value of definition.values) {
-        const field = fieldsByKey.get(value.field);
+      for (const value of candidate.values) {
+        const discreteValue = value as Readonly<{
+          readonly field: string;
+          readonly value: boolean | string;
+        }>;
+        const field = fieldsByKey.get(discreteValue.field);
         if (field === undefined) {
           issues.push({
             code: "unknownUsageConstraintField",
             command,
             constraint: "forbiddenCombination",
-            field: value.field,
+            field: discreteValue.field,
           });
           continue;
         }
@@ -2350,8 +2501,9 @@ function compileUsageConstraints(
           continue;
         }
         if (
-          (field.kind === "flag" && typeof value.value !== "boolean") ||
-          (field.kind === "valueOption" && typeof value.value !== "string")
+          (field.kind === "flag" && typeof discreteValue.value !== "boolean") ||
+          (field.kind === "valueOption" &&
+            typeof discreteValue.value !== "string")
         ) {
           issues.push({
             code: "invalidUsageConstraintValue",
@@ -2361,7 +2513,7 @@ function compileUsageConstraints(
           });
           continue;
         }
-        values.push({ field: field.key, value: value.value });
+        values.push({ field: field.key, value: discreteValue.value });
       }
       const duplicateValueField = values.some(
         (value, index) =>
@@ -2374,7 +2526,7 @@ function compileUsageConstraints(
           constraint: "forbiddenCombination",
           fields: Object.freeze(values.map(({ field }) => field)),
         });
-      if (values.length === definition.values.length)
+      if (values.length === candidate.values.length)
         compiled.push(
           deepFreeze({
             kind: "forbiddenCombination" as const,
@@ -2390,6 +2542,8 @@ function compileUsageConstraints(
     issues.push({
       code: "invalidUsageConstraint",
       command,
+      index,
+      aspect: "kind",
       received: null,
     });
   }

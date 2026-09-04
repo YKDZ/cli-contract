@@ -242,3 +242,96 @@ void test("defineCli 以局部身份拒绝无效约束引用、字段种类、�
     },
   );
 });
+
+void test("defineCli 聚合拒绝动态空、单成员和非数组约束成员", () => {
+  const definition = {
+    root: "invalidShapes",
+    help: helpCapability(),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      invalidShapes: {
+        kind: "rootCommand",
+        name: "invalid-shapes",
+        description: "无效形状",
+        fields: {
+          force: { kind: "flag", longOption: "--force", description: "强制" },
+          mode: {
+            kind: "valueOption",
+            longOption: "--mode",
+            description: "模式",
+          },
+        },
+        usageConstraints: [
+          { kind: "exclusive", fields: [] },
+          { kind: "exclusive", fields: ["force"] },
+          {
+            kind: "forbiddenCombination",
+            values: [{ field: "force", value: true }],
+          },
+          { kind: "exclusive", fields: "force" },
+          { kind: "forbiddenCombination", values: [] },
+          { kind: "predicate" },
+        ],
+        input: z.object({
+          force: z.boolean().optional(),
+          mode: z.string().optional(),
+        }),
+        success: { kind: "completion" },
+        failures: {},
+        handler: () => undefined,
+      },
+    },
+  };
+  assert.throws(
+    () => defineCli()(definition as never),
+    (error: unknown) => {
+      assert(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidUsageConstraint",
+          command: "invalidShapes",
+          index: 0,
+          aspect: "members",
+          received: "exclusive",
+        },
+        {
+          code: "invalidUsageConstraint",
+          command: "invalidShapes",
+          index: 1,
+          aspect: "members",
+          received: "exclusive",
+        },
+        {
+          code: "invalidUsageConstraint",
+          command: "invalidShapes",
+          index: 2,
+          aspect: "members",
+          received: "forbiddenCombination",
+        },
+        {
+          code: "invalidUsageConstraint",
+          command: "invalidShapes",
+          index: 3,
+          aspect: "members",
+          received: "exclusive",
+        },
+        {
+          code: "invalidUsageConstraint",
+          command: "invalidShapes",
+          index: 4,
+          aspect: "members",
+          received: "forbiddenCombination",
+        },
+        {
+          code: "invalidUsageConstraint",
+          command: "invalidShapes",
+          index: 5,
+          aspect: "kind",
+          received: "predicate",
+        },
+      ]);
+      return true;
+    },
+  );
+});

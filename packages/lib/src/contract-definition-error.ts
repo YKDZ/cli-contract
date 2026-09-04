@@ -237,6 +237,8 @@ export type ContractDefinitionIssue =
   | Readonly<{
       readonly code: "invalidUsageConstraint";
       readonly command: string;
+      readonly index: number | null;
+      readonly aspect: "collection" | "entry" | "kind" | "members";
       readonly received: string | null;
     }>
   | Readonly<{

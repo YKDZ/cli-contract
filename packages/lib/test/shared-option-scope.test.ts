@@ -52,6 +52,9 @@ function createPackageCli() {
         fields: {
           name: { kind: "positional", description: "包名" },
         },
+        usageConstraints: [
+          { kind: "requires", field: "registry", requires: "verbose" },
+        ],
         input: z.object({
           name: z.string(),
           verbose: z.boolean().optional(),
@@ -161,6 +164,31 @@ void test("shared option 在声明 scope 后任意位置生效，leaf option 不
       synopsis: "workspace [--verbose] <command>",
     },
   });
+  assert.deepEqual(
+    parseCliInvocation(cli, [
+      "package",
+      "--registry",
+      "internal",
+      "add",
+      "core",
+    ]),
+    {
+      kind: "usageFailure",
+      command: "addPackage",
+      issues: [
+        {
+          code: "requiredByUsageConstraint",
+          field: "registry",
+          requires: "verbose",
+        },
+      ],
+      usage: {
+        command: "addPackage",
+        synopsis:
+          "workspace package add [--verbose] [--registry <value>] <name> [requires registry verbose]",
+      },
+    },
+  );
 });
 
 void test("grammar、help 与 manifest 同时保留声明 scope 和叶有效字段", async () => {
