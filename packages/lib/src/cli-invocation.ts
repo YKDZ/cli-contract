@@ -206,6 +206,15 @@ export function parseCliInvocation<const Contract extends CliContract>(
         command: selected.id as CliContractRoot<Contract>,
       });
     }
+    if (
+      token === compiled.contract.grammar.controls.output.selector &&
+      argv[position + 1] === compiled.contract.grammar.controls.help.longOption
+    ) {
+      return bindInvocation(cliContract, {
+        kind: "help",
+        command: selected.id as CliContractRoot<Contract>,
+      });
+    }
     const output = consumeOutputControl(
       compiled,
       argv,
@@ -289,6 +298,13 @@ export function parseCliInvocation<const Contract extends CliContract>(
       });
     }
     if (optionsEnabled) {
+      if (
+        token === compiled.contract.grammar.controls.output.selector &&
+        argv[position + 1] ===
+          compiled.contract.grammar.controls.help.longOption
+      ) {
+        return bindInvocation(cliContract, { kind: "help", command });
+      }
       const output = consumeOutputControl(
         compiled,
         argv,

@@ -112,9 +112,18 @@ export async function executeCli<const Contract extends CliContract>(
         command.helpSupplement === undefined
           ? ""
           : `${command.helpSupplement}\n`;
+      const output = compiled.contract.grammar.controls.output;
+      const outputHelp = [
+        ...(output.selector === undefined
+          ? []
+          : [`${output.selector} <structured|text>`]),
+        ...Object.keys(output.compatibilityFlags ?? {}),
+      ]
+        .map((control) => `${control}\n`)
+        .join("");
       await writeCliOutput(options.write, {
         destination: "stdout",
-        chunk: `${command.usage.synopsis}\n${command.description}\n${commandHelp}${fieldHelp}${constraintHelp}${compiled.contract.grammar.controls.help.longOption}\n${supplement}`,
+        chunk: `${command.usage.synopsis}\n${command.description}\n${commandHelp}${fieldHelp}${constraintHelp}${compiled.contract.grammar.controls.help.longOption}\n${outputHelp}${supplement}`,
       });
       return Object.freeze({
         kind: "help",
