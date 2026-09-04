@@ -217,10 +217,17 @@ function formatHelpField(
           : `${[field.longOption, field.shortAlias]
               .filter((spelling) => spelling !== undefined)
               .join(", ")} <value>`;
-  if (field.kind === "repeatableOption") {
-    return field.required ? `(${value})...` : `[${value}]...`;
-  }
-  return field.required ? value : `[${value}]`;
+  const cardinality =
+    field.kind === "repeatableOption"
+      ? field.required
+        ? `(${value})...`
+        : `[${value}]...`
+      : field.required
+        ? value
+        : `[${value}]`;
+  return field.default === undefined
+    ? cardinality
+    : `${cardinality} (default: ${JSON.stringify(field.default)})`;
 }
 
 async function executeApplicationResult<Contract extends CliContract>(

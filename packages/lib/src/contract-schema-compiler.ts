@@ -71,6 +71,7 @@ export function compileContractSchema(
   }
   checkDraft202012(inputSchema, target, "input", issues);
   checkDraft202012(outputSchema, target, "output", issues);
+  checkInputDefaults(inputSchema, outputSchema, target, issues);
   return issues.length === initialIssueCount
     ? { inputSchema, outputSchema }
     : undefined;
@@ -224,6 +225,7 @@ export function compileInputFields(
       ...field,
       key,
       required: required.has(key),
+      ...readSchemaDefault(schemaProperties[key]),
     } as FieldGrammar;
   });
   const fieldsByLongOption = new Map<string, FieldGrammar[]>();
@@ -375,6 +377,40 @@ function checkDraft202012(
   }
 }
 
+function checkInputDefaults(
+  inputSchema: JsonObject,
+  outputSchema: JsonObject,
+  target: SchemaDefinitionTarget,
+  issues: ContractDefinitionIssue[],
+): void {
+  if (target.location !== "input") return;
+  const inputProperties = readSchemaProperties(inputSchema);
+  const outputProperties = readSchemaProperties(outputSchema);
+  const inputRequired = readRequiredSchemaKeys(inputSchema);
+  const outputRequired = readRequiredSchemaKeys(outputSchema);
+  if (
+    inputProperties === undefined ||
+    outputProperties === undefined ||
+    inputRequired === undefined ||
+    outputRequired === undefined
+  ) {
+    return;
+  }
+  for (const field of outputRequired) {
+    if (inputRequired.has(field) || !Object.hasOwn(inputProperties, field)) {
+      continue;
+    }
+    if (readSchemaDefault(inputProperties[field]) === undefined) {
+      issues.push({
+        code: "missingInputDefault",
+        command: target.command,
+        location: "input",
+        field,
+      });
+    }
+  }
+}
+
 function readSchemaProperties(schema: JsonObject): JsonObject | undefined {
   const properties = schema.properties;
   if (
@@ -385,6 +421,24 @@ function readSchemaProperties(schema: JsonObject): JsonObject | undefined {
     return undefined;
   }
   return properties as JsonObject;
+}
+
+function readSchemaDefault(
+  propertySchema: unknown,
+): Readonly<{ readonly default: JsonObject[string] }> | undefined {
+  if (
+    typeof propertySchema !== "object" ||
+    propertySchema === null ||
+    Array.isArray(propertySchema) ||
+    !Object.hasOwn(propertySchema, "default")
+  ) {
+    return undefined;
+  }
+  const defaultValue = (propertySchema as JsonObject).default;
+  if (defaultValue === undefined) return undefined;
+  return {
+    default: defaultValue,
+  };
 }
 
 function readRequiredSchemaKeys(

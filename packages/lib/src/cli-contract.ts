@@ -14,6 +14,7 @@ import type {
   ContractSchemaOutput,
   EmptyCliInput,
   JsonObject,
+  JsonValue,
 } from "#/contract-schema";
 import {
   compileContractSchema,
@@ -870,6 +871,7 @@ interface FieldGrammarBase<Field extends string> {
   readonly key: Field;
   readonly description: string;
   readonly required: boolean;
+  readonly default?: JsonValue;
 }
 
 export interface PositionalGrammar<
