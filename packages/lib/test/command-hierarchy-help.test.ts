@@ -8,6 +8,7 @@ import {
   helpCapability,
   outputCapability,
   parseCliInvocation,
+  text,
 } from "@cli-contract/lib";
 import { z } from "zod";
 
@@ -24,7 +25,7 @@ function createWorkspaceCli() {
         name: "workspace",
         aliases: ["ws"],
         description: "管理工作区",
-        helpSupplement: "命令在当前工作区中运行。",
+        helpSupplement: text.lines(["命令在当前工作区中运行。"]),
       },
       package: {
         kind: "commandGroup",

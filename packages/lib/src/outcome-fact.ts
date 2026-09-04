@@ -62,7 +62,9 @@ function createTextLines(values: readonly [string, ...string[]]): TextLines {
     ) ||
     values.every((value) => value.length === 0)
   ) {
-    throw new TypeError("文本行组必须至少包含一个非空行且成员不能包含 CR、LF 或 NUL");
+    throw new TypeError(
+      "文本行组必须至少包含一个非空行且成员不能包含 CR、LF 或 NUL",
+    );
   }
   const projection = Object.freeze({
     kind: "lines" as const,

@@ -380,7 +380,8 @@ function detectEagerControl(
   compiled: ReturnType<typeof getCompiledCli>,
   token: string,
 ): "help" | "version" | undefined {
-  if (token === compiled.contract.grammar.controls.help.longOption) {
+  const help = compiled.contract.grammar.controls.help;
+  if (token === help.longOption || token === help.shortAlias) {
     return "help";
   }
   const version = compiled.contract.grammar.controls.version;

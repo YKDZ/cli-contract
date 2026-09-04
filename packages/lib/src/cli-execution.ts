@@ -30,6 +30,7 @@ import {
 import type { ContractSchema } from "#/contract-schema";
 import type { JsonValue } from "#/contract-schema";
 import { copyJsonValue } from "#/json-value";
+import { isIssuedTextProjection } from "#/outcome-fact";
 import {
   createCompletionEnvelope,
   createDataEnvelope,
@@ -38,7 +39,6 @@ import {
   createStreamRecordEnvelope,
   createStreamSuccessEnvelope,
 } from "#/outcome-wire";
-import { isIssuedTextProjection } from "#/outcome-fact";
 
 export type CliOutputDestination = "stderr" | "stdout";
 
@@ -125,7 +125,11 @@ export async function executeCli<const Contract extends CliContract>(
       const supplement =
         command.helpSupplement === undefined
           ? ""
-          : `${command.helpSupplement}\n`;
+          : `${command.helpSupplement.join("\n")}\n`;
+      const help = compiled.contract.grammar.controls.help;
+      const helpControl = [help.longOption, help.shortAlias]
+        .filter((spelling) => spelling !== undefined)
+        .join(", ");
       const output = compiled.contract.grammar.controls.output;
       const outputHelp = [
         ...(output.selector === undefined
@@ -146,7 +150,7 @@ export async function executeCli<const Contract extends CliContract>(
               )}${version.description === undefined ? "" : `\t${version.description}`}\n`;
       await writeCliOutput(options.write, {
         destination: "stdout",
-        chunk: `${command.usage.synopsis}\n${command.description}\n${commandHelp}${fieldHelp}${constraintHelp}${compiled.contract.grammar.controls.help.longOption}\n${versionHelp}${outputHelp}${supplement}`,
+        chunk: `${command.usage.synopsis}\n${command.description}\n${commandHelp}${fieldHelp}${constraintHelp}${helpControl}\n${versionHelp}${outputHelp}${supplement}`,
       });
       return Object.freeze({
         kind: "help",

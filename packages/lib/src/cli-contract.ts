@@ -33,11 +33,13 @@ import type {
   FailureVariantDefinitions,
   OutcomeFact,
   TextLine,
+  TextLines,
   StreamOutcome,
   StreamRecordDefinitions,
   StreamRecordFactUnion,
   StreamSuccessFact,
 } from "#/outcome-fact";
+import { isIssuedTextProjection } from "#/outcome-fact";
 import {
   createCompletionWireSchema,
   createDataWireSchema,
@@ -98,7 +100,12 @@ const compiledCliContracts = new WeakMap<object, RuntimeCompiledCli>();
 export interface HelpCapability {
   readonly kind: "helpCapability";
   readonly longOption: "--help";
+  readonly shortAlias?: "-h";
   readonly [cliContractType]: "help";
+}
+
+export interface HelpCapabilityDefinition {
+  readonly shortAlias?: "-h";
 }
 
 export interface VersionCapability {
@@ -572,7 +579,7 @@ export interface CompletionRootCommandDefinition<
   readonly kind: "rootCommand";
   readonly name: string;
   readonly description: string;
-  readonly helpSupplement?: string;
+  readonly helpSupplement?: TextLines;
   readonly usageConstraints?: readonly UsageConstraint<Fields>[];
   readonly fields?: CheckedFieldDefinitions<Fields> &
     FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
@@ -609,7 +616,7 @@ export interface DataRootCommandDefinition<
   readonly kind: "rootCommand";
   readonly name: string;
   readonly description: string;
-  readonly helpSupplement?: string;
+  readonly helpSupplement?: TextLines;
   readonly usageConstraints?: readonly UsageConstraint<Fields>[];
   readonly fields: CheckedFieldDefinitions<Fields> &
     FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
@@ -648,7 +655,7 @@ export interface StreamRootCommandDefinition<
   readonly kind: "rootCommand";
   readonly name: string;
   readonly description: string;
-  readonly helpSupplement?: string;
+  readonly helpSupplement?: TextLines;
   readonly usageConstraints?: readonly UsageConstraint<Fields>[];
   readonly fields?: CheckedFieldDefinitions<Fields> &
     FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
@@ -710,7 +717,7 @@ export interface RootGroupDefinition {
   readonly name: string;
   readonly aliases?: readonly string[];
   readonly description: string;
-  readonly helpSupplement?: string;
+  readonly helpSupplement?: TextLines;
   readonly handler?: never;
   readonly sharedOptions?: SharedOptionDefinitions;
 }
@@ -721,7 +728,7 @@ export interface CommandGroupDefinition<Parent extends string = string> {
   readonly name: string;
   readonly aliases?: readonly string[];
   readonly description: string;
-  readonly helpSupplement?: string;
+  readonly helpSupplement?: TextLines;
   readonly handler?: never;
   readonly sharedOptions?: SharedOptionDefinitions;
 }
@@ -730,7 +737,7 @@ type HierarchyCommandFacts<Parent extends string = string> = Readonly<{
   readonly kind: "command";
   readonly parent: Parent;
   readonly aliases?: readonly string[];
-  readonly helpSupplement?: string;
+  readonly helpSupplement?: TextLines;
   readonly [executableCommandType]: true;
 }>;
 
@@ -1117,7 +1124,7 @@ export interface RootCommandGrammar<Root extends string> {
   readonly id: Root;
   readonly name: string;
   readonly description: string;
-  readonly helpSupplement?: string;
+  readonly helpSupplement?: readonly string[];
   readonly fields: readonly FieldGrammar[];
   readonly usageConstraints?: readonly UsageConstraintGrammar[];
   readonly usage: CommandUsage<Root>;
@@ -1128,7 +1135,7 @@ interface GroupGrammarBase<Command extends string> {
   readonly name: string;
   readonly aliases: readonly string[];
   readonly description: string;
-  readonly helpSupplement?: string;
+  readonly helpSupplement?: readonly string[];
   readonly usage: CommandUsage<Command>;
 }
 
@@ -1180,7 +1187,10 @@ export interface CliGrammar<
     ? readonly CommandGrammar[]
     : readonly [];
   readonly controls: Readonly<{
-    readonly help: Readonly<{ readonly longOption: "--help" }>;
+    readonly help: Readonly<{
+      readonly longOption: "--help";
+      readonly shortAlias?: "-h";
+    }>;
     readonly version?: Readonly<{
       readonly longOption: "--version";
       readonly shortAlias?: "-V";
@@ -1224,7 +1234,7 @@ export interface RootCommandManifest {
   readonly kind: "rootCommand";
   readonly name: string;
   readonly description: string;
-  readonly helpSupplement?: string;
+  readonly helpSupplement?: readonly string[];
   readonly fields: readonly FieldGrammar[];
   readonly usageConstraints?: readonly UsageConstraintGrammar[];
   readonly input: SchemaManifest;
@@ -1238,7 +1248,7 @@ export interface CommandGroupManifest {
   readonly name: string;
   readonly aliases: readonly string[];
   readonly description: string;
-  readonly helpSupplement?: string;
+  readonly helpSupplement?: readonly string[];
   readonly sharedOptions: readonly Exclude<
     FieldGrammar,
     PositionalGrammar | VariadicPositionalGrammar
@@ -1252,7 +1262,7 @@ export interface ExecutableCommandManifest extends Omit<
   readonly kind: "command";
   readonly parent: string;
   readonly aliases: readonly string[];
-  readonly helpSupplement?: string;
+  readonly helpSupplement?: readonly string[];
   readonly effectiveFields: readonly FieldGrammar[];
 }
 
@@ -2101,7 +2111,7 @@ interface RuntimeCompiledCommand {
   readonly name: string;
   readonly aliases: readonly string[];
   readonly description: string;
-  readonly helpSupplement?: string;
+  readonly helpSupplement?: readonly string[];
   readonly fields: readonly FieldGrammar[];
   readonly usageConstraints: readonly UsageConstraintGrammar[];
   readonly usage: CommandUsage<string>;
@@ -2117,7 +2127,7 @@ type RuntimeExecutableDefinition = Readonly<{
   readonly name: string;
   readonly aliases?: readonly string[];
   readonly description: string;
-  readonly helpSupplement?: string;
+  readonly helpSupplement?: TextLines;
   readonly usageConstraints?: readonly UsageConstraint[];
   readonly fields?: FieldDefinitions;
   readonly input: ContractSchema;
@@ -2142,7 +2152,7 @@ type RuntimeGroupDefinition = Readonly<{
   readonly name: string;
   readonly aliases?: readonly string[];
   readonly description: string;
-  readonly helpSupplement?: string;
+  readonly helpSupplement?: TextLines;
   readonly sharedOptions?: SharedOptionDefinitions;
 }>;
 
@@ -2155,10 +2165,18 @@ type RuntimeCliDefinition = RootCliDefinitionBase<string> &
     readonly commands: Readonly<Record<string, RuntimeCommandDefinition>>;
   }>;
 
-export function helpCapability(): HelpCapability {
+export function helpCapability(
+  definition: HelpCapabilityDefinition = {},
+): HelpCapability {
+  if (definition.shortAlias !== undefined && definition.shortAlias !== "-h") {
+    throw new TypeError("帮助短别名必须是 -h");
+  }
   const capability = Object.freeze({
     kind: "helpCapability" as const,
     longOption: "--help" as const,
+    ...(definition.shortAlias === undefined
+      ? {}
+      : { shortAlias: definition.shortAlias }),
   }) as HelpCapability;
   helpCapabilities.add(capability);
   return capability;
@@ -2211,12 +2229,30 @@ function copyVersionLine(value: unknown, label = "版本描述"): string {
   return value;
 }
 
+function compileHelpSupplement(
+  command: string,
+  value: unknown,
+  issues: ContractDefinitionIssue[],
+): readonly string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!isIssuedTextProjection(value) || value.kind !== "lines") {
+    issues.push({ code: "invalidHelpSupplement", command });
+    return undefined;
+  }
+  return deepFreeze([...value.lines]);
+}
+
 function compileControls(definition: RuntimeCliDefinition) {
   const version = versionCapabilities.has(definition.version as object)
     ? (definition.version as VersionCapability)
     : undefined;
   return deepFreeze({
-    help: { longOption: definition.help.longOption },
+    help: {
+      longOption: definition.help.longOption,
+      ...(definition.help.shortAlias === undefined
+        ? {}
+        : { shortAlias: definition.help.shortAlias }),
+    },
     ...(version === undefined
       ? {}
       : {
@@ -2295,6 +2331,11 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
       ],
     );
   }
+  const helpSupplement = compileHelpSupplement(
+    definition.root,
+    command.helpSupplement,
+    definitionIssues,
+  );
   const input = compileContractSchema(
     command.input,
     {
@@ -2365,9 +2406,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
       id: definition.root,
       name: command.name,
       description: command.description,
-      ...(command.helpSupplement === undefined
-        ? {}
-        : { helpSupplement: command.helpSupplement }),
+      ...(helpSupplement === undefined ? {} : { helpSupplement }),
       fields,
       ...(usageConstraints.length === 0 ? {} : { usageConstraints }),
       usage,
@@ -2383,9 +2422,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
         kind: "rootCommand" as const,
         name: command.name,
         description: command.description,
-        ...(command.helpSupplement === undefined
-          ? {}
-          : { helpSupplement: command.helpSupplement }),
+        ...(helpSupplement === undefined ? {} : { helpSupplement }),
         fields,
         ...(usageConstraints.length === 0 ? {} : { usageConstraints }),
         input: validInput,
@@ -2426,9 +2463,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
         name: command.name,
         aliases: Object.freeze([]),
         description: command.description,
-        ...(command.helpSupplement === undefined
-          ? {}
-          : { helpSupplement: command.helpSupplement }),
+        ...(helpSupplement === undefined ? {} : { helpSupplement }),
         fields,
         usageConstraints,
         usage,
@@ -2465,6 +2500,11 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
   for (const id of orderedIds) {
     const node = definition.commands[id] as RuntimeCommandDefinition;
     const aliases = Object.freeze([...(node.aliases ?? [])]);
+    const helpSupplement = compileHelpSupplement(
+      id,
+      node.helpSupplement,
+      issues,
+    );
     if (node.kind === "rootGroup" || node.kind === "commandGroup") {
       const sharedOptions = compileSharedOptions(
         node.sharedOptions ?? {},
@@ -2489,9 +2529,7 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
         name: node.name,
         aliases,
         description: node.description,
-        ...(node.helpSupplement === undefined
-          ? {}
-          : { helpSupplement: node.helpSupplement }),
+        ...(helpSupplement === undefined ? {} : { helpSupplement }),
         fields: scopeOptions,
         usageConstraints: Object.freeze([]),
         usage,
@@ -2506,9 +2544,7 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
             name: node.name,
             aliases,
             description: node.description,
-            ...(node.helpSupplement === undefined
-              ? {}
-              : { helpSupplement: node.helpSupplement }),
+            ...(helpSupplement === undefined ? {} : { helpSupplement }),
             usage,
             sharedOptions,
           }),
@@ -2520,9 +2556,7 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
         name: node.name,
         aliases,
         description: node.description,
-        ...(node.helpSupplement === undefined
-          ? {}
-          : { helpSupplement: node.helpSupplement }),
+        ...(helpSupplement === undefined ? {} : { helpSupplement }),
         sharedOptions,
       });
       continue;
@@ -2590,9 +2624,7 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
       name: executable.name,
       aliases,
       description: executable.description,
-      ...(executable.helpSupplement === undefined
-        ? {}
-        : { helpSupplement: executable.helpSupplement }),
+      ...(helpSupplement === undefined ? {} : { helpSupplement }),
       fields: effectiveFields,
       usageConstraints,
       usage: leafUsage,
@@ -2609,9 +2641,7 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
         name: executable.name,
         aliases,
         description: executable.description,
-        ...(executable.helpSupplement === undefined
-          ? {}
-          : { helpSupplement: executable.helpSupplement }),
+        ...(helpSupplement === undefined ? {} : { helpSupplement }),
         fields,
         effectiveFields,
         ...(usageConstraints.length === 0 ? {} : { usageConstraints }),
@@ -2624,9 +2654,7 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
       name: executable.name,
       aliases,
       description: executable.description,
-      ...(executable.helpSupplement === undefined
-        ? {}
-        : { helpSupplement: executable.helpSupplement }),
+      ...(helpSupplement === undefined ? {} : { helpSupplement }),
       fields,
       effectiveFields,
       ...(usageConstraints.length === 0 ? {} : { usageConstraints }),
@@ -3401,19 +3429,6 @@ function collectEffectiveFieldDefinitions(
         } else {
           spellingOwners.set(spelling, field);
         }
-        if (
-          spelling === "--help" &&
-          node.kind !== "rootGroup" &&
-          node.kind !== "commandGroup"
-        ) {
-          issues.push({
-            code: "fieldOptionConflictsWithControl",
-            command,
-            field,
-            spelling,
-            control: "help",
-          });
-        }
       }
     }
   }
@@ -3517,6 +3532,12 @@ function collectControlFieldConflicts(
   const controls = new Map<string, "help" | "outputFormat" | "version">([
     ["--help", "help"],
   ]);
+  if (
+    helpCapabilities.has(definition.help) &&
+    definition.help.shortAlias !== undefined
+  ) {
+    controls.set(definition.help.shortAlias, "help");
+  }
   if (
     outputCapabilities.has(definition.output) &&
     isPlainRecord(definition.output.compatibilityFlags)

@@ -88,6 +88,12 @@ void validUsageConstraint;
 const explicitTextLines: TextLines = text.lines(["第一行", "", "最后一行"]);
 void explicitTextLines;
 
+const shortHelp = helpCapability({ shortAlias: "-h" });
+void shortHelp;
+
+// @ts-expect-error 帮助短别名只能显式选择 -h。
+helpCapability({ shortAlias: "-x" });
+
 // @ts-expect-error TextLines 只能由受控构造器签发。
 const forgedTextLines: TextLines = { kind: "lines", lines: ["伪造"] };
 void forgedTextLines;
@@ -102,6 +108,7 @@ const cli = defineCli()({
       kind: "rootCommand",
       name: "fixture",
       description: "演示最小 CLI",
+      helpSupplement: explicitTextLines,
       input: emptyInput,
       success: { kind: "completion" },
       failures: {},
@@ -113,6 +120,22 @@ const cli = defineCli()({
     },
   },
 });
+
+const invalidHelpSupplement: CompletionRootCommandDefinition<
+  "invalidSupplement",
+  undefined
+> = {
+  kind: "rootCommand",
+  name: "invalid-supplement",
+  description: "无效帮助补充",
+  // @ts-expect-error 帮助补充只能使用受控 TextLines。
+  helpSupplement: "任意文本",
+  input: emptyInput,
+  success: { kind: "completion" },
+  failures: {},
+  handler: ({ outcome }) => outcome.completion(),
+};
+void invalidHelpSupplement;
 
 const dataCli = defineCli()({
   root: "greet",

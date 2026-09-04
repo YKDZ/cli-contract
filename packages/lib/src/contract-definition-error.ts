@@ -201,6 +201,10 @@ export type ContractDefinitionIssue =
       readonly field: "name" | "description";
     }>
   | Readonly<{
+      readonly code: "invalidHelpSupplement";
+      readonly command: string;
+    }>
+  | Readonly<{
       readonly code: "invalidFieldLongOption";
       readonly command: string;
       readonly field: string;
@@ -413,6 +417,8 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `命令 ${issue.commands.join(", ")} 在 ${issue.parent} 下重复使用 spelling ${issue.spelling}`;
     case "missingCommandText":
       return `命令 ${issue.command} 缺少 ${issue.field}`;
+    case "invalidHelpSupplement":
+      return `命令 ${issue.command} 的帮助补充必须是合法文本行组`;
     case "invalidFieldLongOption":
       return `命令 ${issue.command} 的字段 ${issue.field} long option 无效`;
     case "invalidFieldIdentity":
