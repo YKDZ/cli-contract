@@ -142,3 +142,75 @@ void test("输出保证存在而输入可缺席时，缺少 input default 注解
     },
   );
 });
+
+void test("默认检查拒绝畸形 output 投影和未映射的 output required 字段", () => {
+  const vendorSchema = z.object({ name: z.string().default("Ada") });
+  const standard = vendorSchema["~standard"];
+  const invalidOutputSchemas = [
+    {
+      outputSchema: {
+        $schema: "https://json-schema.org/draft/2020-12/schema",
+        type: "object",
+        properties: [],
+        required: ["name"],
+      },
+      issue: {
+        code: "invalidOutputSchemaShape",
+        command: "greet",
+        location: "input",
+        aspect: "properties",
+      },
+    },
+    {
+      outputSchema: {
+        $schema: "https://json-schema.org/draft/2020-12/schema",
+        type: "object",
+        properties: { name: { default: "Ada", type: "string" } },
+        required: [0],
+      },
+      issue: {
+        code: "invalidOutputSchemaShape",
+        command: "greet",
+        location: "input",
+        aspect: "required",
+      },
+    },
+    {
+      outputSchema: {
+        $schema: "https://json-schema.org/draft/2020-12/schema",
+        type: "object",
+        properties: {
+          name: { default: "Ada", type: "string" },
+          greeting: { type: "string" },
+        },
+        required: ["greeting"],
+      },
+      issue: {
+        code: "outputRequiredFieldMissingFromInput",
+        command: "greet",
+        location: "input",
+        field: "greeting",
+      },
+    },
+  ] as const;
+
+  for (const { outputSchema, issue } of invalidOutputSchemas) {
+    const input = {
+      "~standard": {
+        ...standard,
+        jsonSchema: {
+          ...standard.jsonSchema,
+          output: () => outputSchema,
+        },
+      },
+    } as ContractSchema<RawDefaultInput, DefaultedInput>;
+    assert.throws(
+      () => createDefaultingCli(input, []),
+      (error) => {
+        assert.ok(error instanceof ContractDefinitionError);
+        assert.deepEqual(error.issues, [issue]);
+        return true;
+      },
+    );
+  }
+});

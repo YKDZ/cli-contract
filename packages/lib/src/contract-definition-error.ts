@@ -66,6 +66,18 @@ export type ContractDefinitionIssue =
       readonly field: string;
     }>
   | Readonly<{
+      readonly code: "invalidOutputSchemaShape";
+      readonly command: string;
+      readonly location: "input";
+      readonly aspect: "properties" | "required";
+    }>
+  | Readonly<{
+      readonly code: "outputRequiredFieldMissingFromInput";
+      readonly command: string;
+      readonly location: "input";
+      readonly field: string;
+    }>
+  | Readonly<{
       readonly code: "invalidVariantName";
       readonly command: string;
       readonly location: "data" | "failure";
@@ -318,6 +330,10 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `命令 ${issue.command} 的输入模式 ${issue.aspect} 无效`;
     case "missingInputDefault":
       return `命令 ${issue.command} 的输入字段 ${issue.field} 缺少 default 注解`;
+    case "invalidOutputSchemaShape":
+      return `命令 ${issue.command} 的输出模式 ${issue.aspect} 无效`;
+    case "outputRequiredFieldMissingFromInput":
+      return `命令 ${issue.command} 的输出必填字段 ${issue.field} 不在输入模式属性中`;
     case "invalidVariantName":
       return `命令 ${issue.command} 的 ${issue.location} 变体名 ${issue.variant} 无效`;
     case "missingVariantDescription":

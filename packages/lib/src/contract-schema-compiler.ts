@@ -385,19 +385,36 @@ function checkInputDefaults(
 ): void {
   if (target.location !== "input") return;
   const inputProperties = readSchemaProperties(inputSchema);
-  const outputProperties = readSchemaProperties(outputSchema);
   const inputRequired = readRequiredSchemaKeys(inputSchema);
-  const outputRequired = readRequiredSchemaKeys(outputSchema);
+  const outputPropertiesValid = checkOutputSchemaProperties(
+    outputSchema,
+    target,
+    issues,
+  );
+  const outputRequired = readOutputRequiredSchemaKeys(
+    outputSchema,
+    target,
+    issues,
+  );
   if (
     inputProperties === undefined ||
-    outputProperties === undefined ||
     inputRequired === undefined ||
+    !outputPropertiesValid ||
     outputRequired === undefined
   ) {
     return;
   }
   for (const field of outputRequired) {
-    if (inputRequired.has(field) || !Object.hasOwn(inputProperties, field)) {
+    if (!Object.hasOwn(inputProperties, field)) {
+      issues.push({
+        code: "outputRequiredFieldMissingFromInput",
+        command: target.command,
+        location: "input",
+        field,
+      });
+      continue;
+    }
+    if (inputRequired.has(field)) {
       continue;
     }
     if (readSchemaDefault(inputProperties[field]) === undefined) {
@@ -409,6 +426,51 @@ function checkInputDefaults(
       });
     }
   }
+}
+
+function checkOutputSchemaProperties(
+  schema: JsonObject,
+  target: Extract<SchemaDefinitionTarget, { readonly location: "input" }>,
+  issues: ContractDefinitionIssue[],
+): boolean {
+  const properties = schema.properties;
+  if (properties === undefined) return true;
+  if (
+    typeof properties !== "object" ||
+    properties === null ||
+    Array.isArray(properties)
+  ) {
+    issues.push({
+      code: "invalidOutputSchemaShape",
+      command: target.command,
+      location: "input",
+      aspect: "properties",
+    });
+    return false;
+  }
+  return true;
+}
+
+function readOutputRequiredSchemaKeys(
+  schema: JsonObject,
+  target: Extract<SchemaDefinitionTarget, { readonly location: "input" }>,
+  issues: ContractDefinitionIssue[],
+): ReadonlySet<string> | undefined {
+  const required = schema.required;
+  if (required === undefined) return new Set();
+  if (
+    !Array.isArray(required) ||
+    required.some((key) => typeof key !== "string")
+  ) {
+    issues.push({
+      code: "invalidOutputSchemaShape",
+      command: target.command,
+      location: "input",
+      aspect: "required",
+    });
+    return undefined;
+  }
+  return new Set(required);
 }
 
 function readSchemaProperties(schema: JsonObject): JsonObject | undefined {
