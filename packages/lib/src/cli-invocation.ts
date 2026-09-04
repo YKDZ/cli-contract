@@ -86,6 +86,26 @@ export interface ConflictingFlagIssue {
   ];
 }
 
+export interface RequiredByUsageConstraintIssue {
+  readonly code: "requiredByUsageConstraint";
+  readonly field: string;
+  readonly requires: string;
+}
+
+export interface ExclusiveUsageConstraintIssue {
+  readonly code: "exclusiveUsageConstraint";
+  readonly fields: readonly [string, string, ...string[]];
+}
+
+export interface ForbiddenUsageCombinationIssue {
+  readonly code: "forbiddenUsageCombination";
+  readonly values: readonly [
+    Readonly<{ readonly field: string; readonly value: boolean | string }>,
+    Readonly<{ readonly field: string; readonly value: boolean | string }>,
+    ...Readonly<{ readonly field: string; readonly value: boolean | string }>[],
+  ];
+}
+
 export interface SchemaIssueEvidence {
   readonly message: string;
   readonly path?: readonly (number | string)[];
@@ -98,10 +118,13 @@ export interface InputRejectedIssue {
 
 export type UsageIssue =
   | ConflictingFlagIssue
+  | ExclusiveUsageConstraintIssue
+  | ForbiddenUsageCombinationIssue
   | InputRejectedIssue
   | MissingOptionValueIssue
   | MissingRequiredFieldIssue
   | RepeatedOptionIssue
+  | RequiredByUsageConstraintIssue
   | UnexpectedOptionValueIssue
   | UnexpectedPositionalIssue
   | UnknownCommandIssue
@@ -250,6 +273,7 @@ export function parseCliInvocation<const Contract extends CliContract>(
     fields,
     input,
     occurrencesByField,
+    selected.usageConstraints,
   );
   if (structuralIssues.length > 0) {
     return usageFailureFromIssues(
@@ -377,8 +401,11 @@ function collectStructuralIssues(
   fields: ReturnType<typeof getCompiledCli>["fields"],
   input: Readonly<Record<string, boolean | string | string[]>>,
   occurrencesByField: ReadonlyMap<string, readonly ParsedOptionOccurrence[]>,
+  usageConstraints: ReturnType<
+    typeof getCompiledCli
+  >["commands"][string]["usageConstraints"],
 ): UsageIssue[] {
-  return fields.flatMap((field): UsageIssue[] => {
+  const fieldIssues = fields.flatMap((field): UsageIssue[] => {
     const issues: UsageIssue[] = [];
     if (field.required && !Object.hasOwn(input, field.key)) {
       issues.push({ code: "missingRequiredField", field: field.key });
@@ -425,6 +452,46 @@ function collectStructuralIssues(
     }
     return issues;
   });
+  const constraintIssues = usageConstraints.flatMap(
+    (constraint): UsageIssue[] => {
+      if (constraint.kind === "requires") {
+        return Object.hasOwn(input, constraint.field) &&
+          !Object.hasOwn(input, constraint.requires)
+          ? [
+              {
+                code: "requiredByUsageConstraint",
+                field: constraint.field,
+                requires: constraint.requires,
+              },
+            ]
+          : [];
+      }
+      if (constraint.kind === "exclusive") {
+        const present = constraint.fields.filter((field) =>
+          Object.hasOwn(input, field),
+        );
+        return present.length > 1
+          ? [
+              {
+                code: "exclusiveUsageConstraint",
+                fields: Object.freeze(present) as [string, string, ...string[]],
+              },
+            ]
+          : [];
+      }
+      return constraint.values.every(
+        ({ field, value }) => input[field] === value,
+      )
+        ? [
+            {
+              code: "forbiddenUsageCombination",
+              values: constraint.values,
+            },
+          ]
+        : [];
+    },
+  );
+  return [...fieldIssues, ...constraintIssues];
 }
 
 function freezeOccurrenceEvidence(

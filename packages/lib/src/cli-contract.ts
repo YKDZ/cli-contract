@@ -210,6 +210,56 @@ export type FieldDefinition =
 
 export type FieldDefinitions = Readonly<Record<string, FieldDefinition>>;
 
+/** 由调用语法拥有、可同时投影到 parser 和 Draft 2020-12 的字段关系。 */
+export type UsageConstraint<
+  Fields extends FieldDefinitions = FieldDefinitions,
+> =
+  | RequiresUsageConstraint<Extract<keyof Fields, string>>
+  | ExclusiveUsageConstraint<Extract<keyof Fields, string>>
+  | ForbiddenCombinationUsageConstraint<Fields>;
+
+export interface RequiresUsageConstraint<Field extends string = string> {
+  readonly kind: "requires";
+  readonly field: Field;
+  readonly requires: Field;
+}
+
+export interface ExclusiveUsageConstraint<Field extends string = string> {
+  readonly kind: "exclusive";
+  readonly fields: readonly [Field, Field, ...Field[]];
+}
+
+type DiscreteUsageValue<Field extends FieldDefinition> =
+  Field extends FlagDefinition
+    ? boolean
+    : Field extends ValueOptionDefinition
+      ? string
+      : never;
+
+export type ForbiddenCombinationValue<
+  Fields extends FieldDefinitions = FieldDefinitions,
+> = {
+  [Field in keyof Fields & string]: DiscreteUsageValue<
+    Fields[Field]
+  > extends never
+    ? never
+    : Readonly<{
+        readonly field: Field;
+        readonly value: DiscreteUsageValue<Fields[Field]>;
+      }>;
+}[keyof Fields & string];
+
+export interface ForbiddenCombinationUsageConstraint<
+  Fields extends FieldDefinitions = FieldDefinitions,
+> {
+  readonly kind: "forbiddenCombination";
+  readonly values: readonly [
+    ForbiddenCombinationValue<Fields>,
+    ForbiddenCombinationValue<Fields>,
+    ...ForbiddenCombinationValue<Fields>[],
+  ];
+}
+
 export type SharedOptionDefinition =
   | FlagDefinition
   | RepeatableOptionDefinition
@@ -446,6 +496,7 @@ export interface CompletionRootCommandDefinition<
   readonly name: string;
   readonly description: string;
   readonly helpSupplement?: string;
+  readonly usageConstraints?: readonly UsageConstraint<Fields>[];
   readonly fields?: CheckedFieldDefinitions<Fields> &
     FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
     FieldIdentityContract<Fields>;
@@ -477,6 +528,7 @@ export interface DataRootCommandDefinition<
   readonly name: string;
   readonly description: string;
   readonly helpSupplement?: string;
+  readonly usageConstraints?: readonly UsageConstraint<Fields>[];
   readonly fields: CheckedFieldDefinitions<Fields> &
     FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
     FieldIdentityContract<Fields>;
@@ -829,6 +881,7 @@ export interface RootCommandGrammar<Root extends string> {
   readonly description: string;
   readonly helpSupplement?: string;
   readonly fields: readonly FieldGrammar[];
+  readonly usageConstraints?: readonly UsageConstraintGrammar[];
   readonly usage: CommandUsage<Root>;
 }
 
@@ -869,6 +922,7 @@ export interface ExecutableCommandGrammar<
   readonly parent: string;
   readonly fields: readonly FieldGrammar[];
   readonly effectiveFields: readonly FieldGrammar[];
+  readonly usageConstraints?: readonly UsageConstraintGrammar[];
 }
 
 export type CommandGrammar<Command extends string = string> =
@@ -921,6 +975,7 @@ export interface RootCommandManifest {
   readonly description: string;
   readonly helpSupplement?: string;
   readonly fields: readonly FieldGrammar[];
+  readonly usageConstraints?: readonly UsageConstraintGrammar[];
   readonly input: SchemaManifest;
   readonly success: CommandSuccessManifest;
   readonly failures: Readonly<Record<string, FailureVariantManifest>>;
@@ -949,6 +1004,11 @@ export interface ExecutableCommandManifest extends Omit<
   readonly helpSupplement?: string;
   readonly effectiveFields: readonly FieldGrammar[];
 }
+
+export type UsageConstraintGrammar =
+  | RequiresUsageConstraint
+  | ExclusiveUsageConstraint
+  | ForbiddenCombinationUsageConstraint;
 
 export interface CliManifest<
   Root extends string,
@@ -1359,6 +1419,7 @@ interface RuntimeCompiledCli {
   readonly root: string;
   readonly description: string;
   readonly fields: readonly FieldGrammar[];
+  readonly usageConstraints: readonly UsageConstraintGrammar[];
   readonly usage: CommandUsage<string>;
   readonly usageFailureExitCode: number;
   readonly input: ContractSchema;
@@ -1382,6 +1443,7 @@ interface RuntimeCompiledCommand {
   readonly description: string;
   readonly helpSupplement?: string;
   readonly fields: readonly FieldGrammar[];
+  readonly usageConstraints: readonly UsageConstraintGrammar[];
   readonly usage: CommandUsage<string>;
   readonly input?: ContractSchema;
   readonly success?: RuntimeCompiledCli["success"];
@@ -1396,6 +1458,7 @@ type RuntimeExecutableDefinition = Readonly<{
   readonly aliases?: readonly string[];
   readonly description: string;
   readonly helpSupplement?: string;
+  readonly usageConstraints?: readonly UsageConstraint[];
   readonly fields?: FieldDefinitions;
   readonly input: ContractSchema;
   readonly success:
@@ -1505,6 +1568,12 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
           definition.root,
           definitionIssues,
         );
+  const usageConstraints = compileUsageConstraints(
+    command.usageConstraints ?? [],
+    fields,
+    definition.root,
+    definitionIssues,
+  );
   if (definitionIssues.length > 0) {
     throw new ContractDefinitionError(
       definitionIssues as [
@@ -1513,10 +1582,13 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
       ],
     );
   }
-  const validInput = input as SchemaManifest;
+  const validInput = projectUsageConstraints(
+    input as SchemaManifest,
+    usageConstraints,
+  );
   const usage = deepFreeze({
     command: definition.root,
-    synopsis: createUsageSynopsis(command.name, fields),
+    synopsis: createUsageSynopsis(command.name, fields, usageConstraints),
   });
   const controls = deepFreeze({
     help: { longOption: definition.help.longOption },
@@ -1535,6 +1607,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
         ? {}
         : { helpSupplement: command.helpSupplement }),
       fields,
+      ...(usageConstraints.length === 0 ? {} : { usageConstraints }),
       usage,
     },
     nodes: [] as const,
@@ -1552,6 +1625,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
           ? {}
           : { helpSupplement: command.helpSupplement }),
         fields,
+        ...(usageConstraints.length === 0 ? {} : { usageConstraints }),
         input: validInput,
         success: compiledSuccess.manifest,
         failures: compiledFailures.manifest,
@@ -1576,6 +1650,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
     root: definition.root,
     description: command.description,
     fields,
+    usageConstraints,
     usage,
     usageFailureExitCode: definition.usageFailureExitCode,
     input: command.input,
@@ -1593,6 +1668,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
           ? {}
           : { helpSupplement: command.helpSupplement }),
         fields,
+        usageConstraints,
         usage,
         input: command.input,
         success: compiledSuccess.runtime,
@@ -1660,6 +1736,7 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
           ? {}
           : { helpSupplement: node.helpSupplement }),
         fields: scopeOptions,
+        usageConstraints: Object.freeze([]),
         usage,
       };
       runtimeCommands[id] = compiledNode;
@@ -1720,11 +1797,18 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
     const fields = deepFreeze(
       effectiveFields.filter((field) => localKeys.has(field.key)),
     );
+    const usageConstraints = compileUsageConstraints(
+      executable.usageConstraints ?? [],
+      effectiveFields,
+      id,
+      issues,
+    );
     const leafUsage = deepFreeze({
       command: id,
       synopsis: createUsageSynopsis(
         commandPath(id, definition.commands),
         effectiveFields,
+        usageConstraints,
       ),
     });
     runtimeCommands[id] = {
@@ -1738,6 +1822,7 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
         ? {}
         : { helpSupplement: executable.helpSupplement }),
       fields: effectiveFields,
+      usageConstraints,
       usage: leafUsage,
       input: executable.input,
       success: compiledSuccess.runtime,
@@ -1757,6 +1842,7 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
           : { helpSupplement: executable.helpSupplement }),
         fields,
         effectiveFields,
+        ...(usageConstraints.length === 0 ? {} : { usageConstraints }),
         usage: leafUsage,
       }),
     );
@@ -1771,7 +1857,8 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
         : { helpSupplement: executable.helpSupplement }),
       fields,
       effectiveFields,
-      input: input as SchemaManifest,
+      ...(usageConstraints.length === 0 ? {} : { usageConstraints }),
+      input: projectUsageConstraints(input as SchemaManifest, usageConstraints),
       success: compiledSuccess.manifest,
       failures: compiledFailures.manifest,
     });
@@ -1823,6 +1910,7 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
     root: definition.root,
     description: rootCommand.description,
     fields: rootCommand.fields,
+    usageConstraints: rootCommand.usageConstraints,
     usage: rootCommand.usage,
     usageFailureExitCode: definition.usageFailureExitCode,
     input: undefined as unknown as ContractSchema,
@@ -2131,6 +2219,260 @@ function compileSharedOptions(
   >[];
 }
 
+function compileUsageConstraints(
+  definitions: readonly UsageConstraint[],
+  fields: readonly FieldGrammar[],
+  command: string,
+  issues: ContractDefinitionIssue[],
+): readonly UsageConstraintGrammar[] {
+  const fieldsByKey = new Map(fields.map((field) => [field.key, field]));
+  const compiled: UsageConstraintGrammar[] = [];
+  for (const definition of definitions) {
+    if (typeof definition !== "object" || definition === null) {
+      issues.push({
+        code: "invalidUsageConstraint",
+        command,
+        received: null,
+      });
+      continue;
+    }
+    if (definition.kind === "requires") {
+      const field = fieldsByKey.get(definition.field);
+      const required = fieldsByKey.get(definition.requires);
+      if (field === undefined)
+        issues.push({
+          code: "unknownUsageConstraintField",
+          command,
+          constraint: "requires",
+          field: definition.field,
+        });
+      if (required === undefined)
+        issues.push({
+          code: "unknownUsageConstraintField",
+          command,
+          constraint: "requires",
+          field: definition.requires,
+        });
+      if (field !== undefined && required !== undefined) {
+        if (!isOptionalOption(field) || !isOptionalOption(required)) {
+          for (const candidate of [field, required])
+            if (!isOptionalOption(candidate))
+              issues.push({
+                code: "inapplicableUsageConstraintField",
+                command,
+                constraint: "requires",
+                field: candidate.key,
+                kind: candidate.kind,
+              });
+        }
+        if (field.key === required.key)
+          issues.push({
+            code: "contradictoryUsageConstraint",
+            command,
+            constraint: "requires",
+            fields: Object.freeze([field.key]),
+          });
+        compiled.push(
+          deepFreeze({
+            kind: "requires" as const,
+            field: field.key,
+            requires: required.key,
+          }),
+        );
+      }
+      continue;
+    }
+    if (definition.kind === "exclusive") {
+      const selected = definition.fields.map((key) => fieldsByKey.get(key));
+      for (const [index, field] of selected.entries()) {
+        if (field === undefined) {
+          issues.push({
+            code: "unknownUsageConstraintField",
+            command,
+            constraint: "exclusive",
+            field: definition.fields[index] as string,
+          });
+        } else if (!isOptionalOption(field)) {
+          issues.push({
+            code: "inapplicableUsageConstraintField",
+            command,
+            constraint: "exclusive",
+            field: field.key,
+            kind: field.kind,
+          });
+        }
+      }
+      const fieldsInConstraint = definition.fields;
+      if (new Set(fieldsInConstraint).size !== fieldsInConstraint.length)
+        issues.push({
+          code: "contradictoryUsageConstraint",
+          command,
+          constraint: "exclusive",
+          fields: Object.freeze([...fieldsInConstraint]),
+        });
+      if (selected.every((field) => field !== undefined))
+        compiled.push(
+          deepFreeze({
+            kind: "exclusive" as const,
+            fields: Object.freeze([...fieldsInConstraint]) as [
+              string,
+              string,
+              ...string[],
+            ],
+          }),
+        );
+      continue;
+    }
+    if (definition.kind === "forbiddenCombination") {
+      const values: Array<{
+        readonly field: string;
+        readonly value: boolean | string;
+      }> = [];
+      for (const value of definition.values) {
+        const field = fieldsByKey.get(value.field);
+        if (field === undefined) {
+          issues.push({
+            code: "unknownUsageConstraintField",
+            command,
+            constraint: "forbiddenCombination",
+            field: value.field,
+          });
+          continue;
+        }
+        if (field.kind !== "flag" && field.kind !== "valueOption") {
+          issues.push({
+            code: "inapplicableUsageConstraintField",
+            command,
+            constraint: "forbiddenCombination",
+            field: field.key,
+            kind: field.kind,
+          });
+          continue;
+        }
+        if (
+          (field.kind === "flag" && typeof value.value !== "boolean") ||
+          (field.kind === "valueOption" && typeof value.value !== "string")
+        ) {
+          issues.push({
+            code: "invalidUsageConstraintValue",
+            command,
+            field: field.key,
+            expected: field.kind === "flag" ? "boolean" : "string",
+          });
+          continue;
+        }
+        values.push({ field: field.key, value: value.value });
+      }
+      const duplicateValueField = values.some(
+        (value, index) =>
+          values.findIndex(({ field }) => field === value.field) !== index,
+      );
+      if (duplicateValueField)
+        issues.push({
+          code: "contradictoryUsageConstraint",
+          command,
+          constraint: "forbiddenCombination",
+          fields: Object.freeze(values.map(({ field }) => field)),
+        });
+      if (values.length === definition.values.length)
+        compiled.push(
+          deepFreeze({
+            kind: "forbiddenCombination" as const,
+            values: Object.freeze(values) as [
+              { readonly field: string; readonly value: boolean | string },
+              { readonly field: string; readonly value: boolean | string },
+              ...{ readonly field: string; readonly value: boolean | string }[],
+            ],
+          }),
+        );
+      continue;
+    }
+    issues.push({
+      code: "invalidUsageConstraint",
+      command,
+      received: null,
+    });
+  }
+  for (const constraint of compiled) {
+    if (constraint.kind !== "requires") continue;
+    if (constraint.field === constraint.requires) continue;
+    const exclusive = compiled.find(
+      (candidate): candidate is ExclusiveUsageConstraint =>
+        candidate.kind === "exclusive" &&
+        candidate.fields.includes(constraint.field) &&
+        candidate.fields.includes(constraint.requires),
+    );
+    if (exclusive !== undefined)
+      issues.push({
+        code: "contradictoryUsageConstraint",
+        command,
+        constraint: "requires",
+        fields: Object.freeze([constraint.field, constraint.requires]),
+      });
+  }
+  return deepFreeze(compiled);
+}
+
+function isOptionalOption(field: FieldGrammar): boolean {
+  return (
+    !field.required &&
+    field.kind !== "positional" &&
+    field.kind !== "variadicPositional"
+  );
+}
+
+function projectUsageConstraints(
+  schema: SchemaManifest,
+  constraints: readonly UsageConstraintGrammar[],
+): SchemaManifest {
+  if (constraints.length === 0) return schema;
+  const constraintSchemas: JsonObject[] = [];
+  for (const constraint of constraints) {
+    if (constraint.kind === "requires") {
+      constraintSchemas.push(
+        Object.fromEntries([
+          ["if", { required: [constraint.field] }],
+          // oxlint-disable-next-line unicorn/no-thenable -- Draft 2020-12 固定关键字。
+          ["then", { required: [constraint.requires] }],
+        ]),
+      );
+      continue;
+    }
+    if (constraint.kind === "exclusive") {
+      constraintSchemas.push({
+        not: {
+          anyOf: constraint.fields.flatMap((field, index) =>
+            constraint.fields.slice(index + 1).map((other) => ({
+              required: [field, other],
+            })),
+          ),
+        },
+      });
+      continue;
+    }
+    constraintSchemas.push({
+      not: {
+        allOf: constraint.values.map(({ field, value }) => ({
+          properties: { [field]: { const: value } },
+          required: [field],
+        })),
+      },
+    });
+  }
+  return deepFreeze({
+    inputSchema: {
+      ...schema.inputSchema,
+      allOf: [
+        ...(Array.isArray(schema.inputSchema.allOf)
+          ? schema.inputSchema.allOf
+          : []),
+        ...constraintSchemas,
+      ],
+    },
+    outputSchema: schema.outputSchema,
+  });
+}
+
 function collectEffectiveFieldDefinitions(
   command: string,
   commands: RuntimeCliDefinition["commands"],
@@ -2272,6 +2614,7 @@ function compileSuccess(
 function createUsageSynopsis(
   commandName: string,
   fields: readonly FieldGrammar[],
+  usageConstraints: readonly UsageConstraintGrammar[] = [],
 ): string {
   return [
     commandName,
@@ -2293,5 +2636,18 @@ function createUsageSynopsis(
       }
       return field.required ? value : `[${value}]`;
     }),
+    ...usageConstraints.map(formatUsageConstraintSynopsis),
   ].join(" ");
+}
+
+function formatUsageConstraintSynopsis(
+  constraint: UsageConstraintGrammar,
+): string {
+  if (constraint.kind === "requires")
+    return `[requires ${constraint.field} ${constraint.requires}]`;
+  if (constraint.kind === "exclusive")
+    return `[exclusive ${constraint.fields.join("|")}]`;
+  return `[forbidden ${constraint.values
+    .map(({ field, value }) => `${field}=${String(value)}`)
+    .join(",")}]`;
 }

@@ -105,13 +105,16 @@ export async function executeCli<const Contract extends CliContract>(
             `${[candidate.name, ...candidate.aliases].join(", ")}\t${candidate.description}\n`,
         )
         .join("");
+      const constraintHelp = command.usageConstraints
+        .map((constraint) => `${formatUsageConstraint(constraint)}\n`)
+        .join("");
       const supplement =
         command.helpSupplement === undefined
           ? ""
           : `${command.helpSupplement}\n`;
       await writeCliOutput(options.write, {
         destination: "stdout",
-        chunk: `${command.usage.synopsis}\n${command.description}\n${commandHelp}${fieldHelp}${compiled.contract.grammar.controls.help.longOption}\n${supplement}`,
+        chunk: `${command.usage.synopsis}\n${command.description}\n${commandHelp}${fieldHelp}${constraintHelp}${compiled.contract.grammar.controls.help.longOption}\n${supplement}`,
       });
       return Object.freeze({
         kind: "help",
@@ -183,6 +186,20 @@ export async function executeCli<const Contract extends CliContract>(
       );
     }
   }
+}
+
+function formatUsageConstraint(
+  constraint: ReturnType<
+    typeof getCompiledCli
+  >["commands"][string]["usageConstraints"][number],
+): string {
+  if (constraint.kind === "requires")
+    return `${constraint.field} requires ${constraint.requires}`;
+  if (constraint.kind === "exclusive")
+    return `exclusive ${constraint.fields.join(", ")}`;
+  return `forbidden ${constraint.values
+    .map(({ field, value }) => `${field}=${String(value)}`)
+    .join(", ")}`;
 }
 
 function formatHelpField(

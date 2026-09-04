@@ -233,7 +233,44 @@ export type ContractDefinitionIssue =
   | Readonly<{
       readonly code: "missingDataVariant";
       readonly command: string;
+    }>
+  | Readonly<{
+      readonly code: "invalidUsageConstraint";
+      readonly command: string;
+      readonly received: string | null;
+    }>
+  | Readonly<{
+      readonly code: "unknownUsageConstraintField";
+      readonly command: string;
+      readonly constraint: "requires" | "exclusive" | "forbiddenCombination";
+      readonly field: string;
+    }>
+  | Readonly<{
+      readonly code: "inapplicableUsageConstraintField";
+      readonly command: string;
+      readonly constraint: "requires" | "exclusive" | "forbiddenCombination";
+      readonly field: string;
+      readonly kind: FieldKind;
+    }>
+  | Readonly<{
+      readonly code: "invalidUsageConstraintValue";
+      readonly command: string;
+      readonly field: string;
+      readonly expected: "boolean" | "string";
+    }>
+  | Readonly<{
+      readonly code: "contradictoryUsageConstraint";
+      readonly command: string;
+      readonly constraint: "requires" | "exclusive" | "forbiddenCombination";
+      readonly fields: readonly string[];
     }>;
+
+type FieldKind =
+  | "positional"
+  | "variadicPositional"
+  | "flag"
+  | "valueOption"
+  | "repeatableOption";
 
 export class ContractDefinitionError extends Error {
   readonly issues: readonly [
@@ -333,6 +370,16 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `命令 ${issue.command} 的字段 ${issue.field} 缺少描述`;
     case "missingDataVariant":
       return `命令 ${issue.command} 必须声明至少一个 data 变体`;
+    case "invalidUsageConstraint":
+      return `命令 ${issue.command} 的 usage constraint ${issue.received ?? "非字符串"} 无效`;
+    case "unknownUsageConstraintField":
+      return `命令 ${issue.command} 的 ${issue.constraint} usage constraint 引用了不存在字段 ${issue.field}`;
+    case "inapplicableUsageConstraintField":
+      return `命令 ${issue.command} 的 ${issue.constraint} usage constraint 不适用于字段 ${issue.field}（${issue.kind}）`;
+    case "invalidUsageConstraintValue":
+      return `命令 ${issue.command} 的 usage constraint 字段 ${issue.field} 必须使用 ${issue.expected} 离散值`;
+    case "contradictoryUsageConstraint":
+      return `命令 ${issue.command} 的 ${issue.constraint} usage constraint 内部矛盾：${issue.fields.join(", ")}`;
   }
 }
 

@@ -13,6 +13,7 @@ import {
   type EmptyCliInput,
   type FieldDefinition,
   type ShortOptionAlias,
+  type UsageConstraint,
 } from "@cli-contract/lib";
 import { toStandardJsonSchema } from "@valibot/to-json-schema";
 import * as v from "valibot";
@@ -48,6 +49,33 @@ declare const namedInput: ContractSchema<
 declare const greetingData: ContractSchema<
   Readonly<{ readonly message: string }>
 >;
+
+type UsageFixtureFields = Readonly<{
+  readonly format: {
+    readonly kind: "valueOption";
+    readonly longOption: "--format";
+    readonly description: "格式";
+  };
+  readonly quiet: {
+    readonly kind: "flag";
+    readonly longOption: "--quiet";
+    readonly description: "静默";
+  };
+  readonly tags: {
+    readonly kind: "repeatableOption";
+    readonly longOption: "--tag";
+    readonly description: "标签";
+  };
+}>;
+
+const validUsageConstraint: UsageConstraint<UsageFixtureFields> = {
+  kind: "forbiddenCombination",
+  values: [
+    { field: "format", value: "json" },
+    { field: "quiet", value: true },
+  ],
+};
+void validUsageConstraint;
 
 const cli = defineCli()({
   root: "fixture",
@@ -130,6 +158,16 @@ const dataCli = defineCli()({
 });
 
 function verifyTypeErrors() {
+  const invalidUsageConstraint: UsageConstraint<UsageFixtureFields> = {
+    kind: "forbiddenCombination",
+    values: [
+      // @ts-expect-error repeatable option 不能成为离散组合值。
+      { field: "tags", value: "nightly" },
+      { field: "quiet", value: true },
+    ],
+  };
+  void invalidUsageConstraint;
+
   const variadicValueOption: FieldDefinition = {
     // @ts-expect-error 核心不提供单次 occurrence 消费多个值的 variadic option。
     kind: "variadicOption",
