@@ -1333,27 +1333,31 @@ type HierarchyUsageValidation<Commands> =
       ];
 
 type HierarchyOutputValidation<Commands, Output extends OutputCapability> =
-  Output extends OutputCapability<readonly ["structured", "text"]>
-    ? MissingHierarchyTextCommands<Commands> extends never
-      ? HierarchyUsageValidation<Commands>
-      : readonly [
-          ContractTypeError<
-            "missingHierarchyTextPresenter",
-            Readonly<{
-              readonly commands: MissingHierarchyTextCommands<Commands>;
-            }>
-          >,
-        ]
-    : UnexpectedHierarchyTextCommands<Commands> extends never
-      ? HierarchyUsageValidation<Commands>
-      : readonly [
-          ContractTypeError<
-            "unexpectedHierarchyTextPresenter",
-            Readonly<{
-              readonly commands: UnexpectedHierarchyTextCommands<Commands>;
-            }>
-          >,
-        ];
+  Output extends OutputCapability<infer Formats>
+    ? [Formats] extends [readonly ["structured", "text"]]
+      ? MissingHierarchyTextCommands<Commands> extends never
+        ? HierarchyUsageValidation<Commands>
+        : readonly [
+            ContractTypeError<
+              "missingHierarchyTextPresenter",
+              Readonly<{
+                readonly commands: MissingHierarchyTextCommands<Commands>;
+              }>
+            >,
+          ]
+      : [Formats] extends [readonly ["structured"]]
+        ? UnexpectedHierarchyTextCommands<Commands> extends never
+          ? HierarchyUsageValidation<Commands>
+          : readonly [
+              ContractTypeError<
+                "unexpectedHierarchyTextPresenter",
+                Readonly<{
+                  readonly commands: UnexpectedHierarchyTextCommands<Commands>;
+                }>
+              >,
+            ]
+        : HierarchyUsageValidation<Commands>
+    : HierarchyUsageValidation<Commands>;
 
 export interface DefineCli<Dependencies> {
   readonly command: <const Command extends string>(
@@ -1791,7 +1795,11 @@ export function outputCapability<
     kind: "outputCapability" as const,
     defaultFormat: definition.defaultFormat,
     formats: Object.freeze(formats),
-    compatibilityFlags: Object.freeze(definition.compatibilityFlags ?? {}),
+    compatibilityFlags: Object.freeze(
+      definition.compatibilityFlags === undefined
+        ? {}
+        : definition.compatibilityFlags,
+    ),
   }) as OutputCapability<OutputFormatsFor<Definition>>;
   outputCapabilities.add(capability);
   return capability;
@@ -2321,6 +2329,13 @@ function collectCliBaseIssues(
         typeof definition.output.defaultFormat === "string"
           ? definition.output.defaultFormat
           : null,
+    });
+  } else if (!isPlainRecord(definition.output.compatibilityFlags)) {
+    issues.push({
+      code: "invalidOutputCompatibilityFlags",
+      received: outputCompatibilityFlagsKind(
+        definition.output.compatibilityFlags,
+      ),
     });
   } else {
     for (const [flag, format] of Object.entries(
@@ -3050,6 +3065,7 @@ function collectOutputControlFieldConflicts(
   issues: ContractDefinitionIssue[],
 ): void {
   if (!outputCapabilities.has(output)) return;
+  if (!isPlainRecord(output.compatibilityFlags)) return;
   const spellings = new Set(Object.keys(output.compatibilityFlags));
   if (output.formats.includes("text")) spellings.add("--output-format");
   for (const field of fields) {
@@ -3072,6 +3088,22 @@ function collectOutputControlFieldConflicts(
       }
     }
   }
+}
+
+function isPlainRecord(
+  value: unknown,
+): value is Readonly<Record<string, unknown>> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function outputCompatibilityFlagsKind(value: unknown): string {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  return typeof value;
 }
 
 function collectTextPresenterIssue(

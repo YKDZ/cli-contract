@@ -436,3 +436,45 @@ void test("compatibility flag 复用输出 control 的应用字段冲突检查",
     },
   );
 });
+
+void test("compatibility flags 的动态 collection 形状在定义期闭合", () => {
+  for (const [compatibilityFlags, received] of [
+    [null, "null"],
+    [true, "boolean"],
+    [[], "array"],
+  ] as const) {
+    assert.throws(
+      () =>
+        defineCli()({
+          root: "invalidCompatibilityFlags",
+          help: helpCapability(),
+          output: outputCapability({
+            defaultFormat: "structured",
+            compatibilityFlags: compatibilityFlags as never,
+          }),
+          usageFailureExitCode: 64,
+          commands: {
+            invalidCompatibilityFlags: {
+              kind: "rootCommand",
+              name: "invalid-compatibility-flags",
+              description: "无效兼容 flags",
+              input: z.object({}),
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            },
+          },
+        }),
+      (error) => {
+        assert.ok(error instanceof ContractDefinitionError);
+        assert.deepEqual(error.issues, [
+          {
+            code: "invalidOutputCompatibilityFlags",
+            received,
+          },
+        ]);
+        return true;
+      },
+    );
+  }
+});

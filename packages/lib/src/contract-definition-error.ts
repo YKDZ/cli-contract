@@ -113,6 +113,10 @@ export type ContractDefinitionIssue =
       readonly received: string | null;
     }>
   | Readonly<{
+      readonly code: "invalidOutputCompatibilityFlags";
+      readonly received: string;
+    }>
+  | Readonly<{
       readonly code: "missingTextPresenter";
       readonly command: string;
       readonly location: "completion" | "data" | "failure";
@@ -363,6 +367,8 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `CLI 输出格式应为 ${issue.expected}，实际为 ${issue.received ?? "非字符串"}`;
     case "invalidOutputCompatibilityFlag":
       return `CLI 输出兼容 flag ${issue.flag} 无效`;
+    case "invalidOutputCompatibilityFlags":
+      return `CLI 输出兼容 flags 必须是普通 record，实际为 ${issue.received}`;
     case "missingTextPresenter":
       return `命令 ${issue.command} 的 ${issue.location}${issue.variant === undefined ? "" : ` 变体 ${issue.variant}`} 缺少 text presenter`;
     case "unexpectedTextPresenter":

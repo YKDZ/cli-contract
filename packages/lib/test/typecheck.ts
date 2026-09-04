@@ -15,6 +15,7 @@ import {
   type EmptyCliInput,
   type FieldDefinition,
   type DataVariantDefinition,
+  type OutputCapability,
   type ShortOptionAlias,
   type UsageConstraint,
 } from "@cli-contract/lib";
@@ -542,6 +543,77 @@ const textHierarchy = defineTextHierarchy({
   },
 });
 void textHierarchy;
+
+const widenedTextOutput: OutputCapability = outputCapability({
+  defaultFormat: "text",
+});
+const defineWidenedTextHierarchy = defineCli();
+const widenedTextHierarchy = defineWidenedTextHierarchy({
+  root: "widenedTextTree",
+  help: helpCapability(),
+  output: widenedTextOutput,
+  usageFailureExitCode: 64,
+  commands: {
+    widenedTextTree: {
+      kind: "rootGroup",
+      name: "widened-text-tree",
+      description: "宽化输出能力的文本层级命令",
+    },
+    ...defineWidenedTextHierarchy.command("widenedCompletion")({
+      kind: "command",
+      parent: "widenedTextTree",
+      name: "complete",
+      description: "文本完成",
+      input: emptyInput,
+      success: { kind: "completion", text: () => text.silent },
+      failures: {
+        unavailable: {
+          description: "不可用",
+          schema: greetingData,
+          exitCode: 9,
+          text: () => text.line("不可用"),
+        },
+      },
+      handler: ({ outcome }) => outcome.completion(),
+    }),
+    ...defineWidenedTextHierarchy.command("widenedData")({
+      kind: "command",
+      parent: "widenedTextTree",
+      name: "data",
+      description: "文本数据",
+      fields: {
+        name: {
+          kind: "valueOption",
+          longOption: "--name",
+          description: "问候对象",
+        },
+      },
+      input: namedInput,
+      success: {
+        kind: "data",
+        variants: {
+          greeting: {
+            description: "问候",
+            schema: greetingData,
+            exitCode: 0,
+            text: (data: Readonly<{ readonly message: string }>) =>
+              text.line(data.message),
+          },
+        },
+      },
+      failures: {
+        unavailable: {
+          description: "不可用",
+          schema: greetingData,
+          exitCode: 9,
+          text: () => text.line("不可用"),
+        },
+      },
+      handler: ({ outcome }) => outcome.data.greeting({ message: "你好" }),
+    }),
+  },
+});
+void widenedTextHierarchy;
 
 const defineInvalidTextHierarchy = defineCli();
 defineInvalidTextHierarchy({
