@@ -80,12 +80,16 @@ void test("Zod 默认只由 validation 施加，并同源投影到 grammar、man
     inputSchema: {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       type: "object",
-      properties: { name: { default: "Ada", type: "string" } },
+      properties: {
+        name: { default: "Ada", description: "问候对象", type: "string" },
+      },
     },
     outputSchema: {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       type: "object",
-      properties: { name: { default: "Ada", type: "string" } },
+      properties: {
+        name: { default: "Ada", description: "问候对象", type: "string" },
+      },
       required: ["name"],
       additionalProperties: false,
     },

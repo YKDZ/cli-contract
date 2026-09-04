@@ -297,6 +297,13 @@ void test("defineCli 聚合动态字段身份、spelling 与 positional 顺序�
       assert.ok(error instanceof ContractDefinitionError);
       assert.deepEqual(error.issues, [
         {
+          code: "invalidDescription",
+          command: "copyFiles",
+          location: "field",
+          field: "broken",
+          received: null,
+        },
+        {
           code: "invalidFieldIdentity",
           command: "copyFiles",
           field: "Bad_Field",

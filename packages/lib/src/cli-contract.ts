@@ -19,7 +19,9 @@ import type {
 import {
   compileContractSchema,
   compileInputFields,
+  projectFieldDescriptions,
 } from "#/contract-schema-compiler";
+import { copySingleLineText, isSingleLineText } from "#/description";
 import { deepFreeze } from "#/json-value";
 import type {
   CompletionFact,
@@ -2213,20 +2215,11 @@ function copyVersionTextLine(value: unknown): string {
   ) {
     throw new TypeError("版本值必须是合法单行文本");
   }
-  return copyVersionLine((value as TextLine).value, "版本值");
+  return copySingleLineText((value as TextLine).value, "版本值");
 }
 
 function copyVersionLine(value: unknown, label = "版本描述"): string {
-  if (
-    typeof value !== "string" ||
-    value.length === 0 ||
-    value.includes("\r") ||
-    value.includes("\n") ||
-    value.includes("\0")
-  ) {
-    throw new TypeError(`${label}必须是合法单行文本`);
-  }
-  return value;
+  return copySingleLineText(value, label);
 }
 
 function compileHelpSupplement(
@@ -2371,6 +2364,8 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
           definition.root,
           definitionIssues,
         );
+  const describedInput =
+    input === undefined ? undefined : projectFieldDescriptions(input, fields);
   collectControlFieldConflicts(
     definition.root,
     fields,
@@ -2392,7 +2387,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
     );
   }
   const validInput = projectUsageConstraints(
-    input as SchemaManifest,
+    describedInput as SchemaManifest,
     usageConstraints,
   );
   const usage = deepFreeze({
@@ -2596,6 +2591,10 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
             id,
             issues,
           );
+    const describedInput =
+      input === undefined
+        ? undefined
+        : projectFieldDescriptions(input, effectiveFields);
     const localKeys = new Set(Object.keys(executable.fields ?? {}));
     const fields = deepFreeze(
       effectiveFields.filter((field) => localKeys.has(field.key)),
@@ -2617,7 +2616,7 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
         usageConstraints,
       ),
     });
-    runtimeCommands[id] = {
+    runtimeCommands[id] = Object.freeze({
       id,
       kind: "command",
       parent: executable.parent as string,
@@ -2632,7 +2631,7 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
       success: compiledSuccess.runtime,
       failures: compiledFailures.runtime,
       handler: executable.handler,
-    };
+    });
     grammarNodes.push(
       deepFreeze({
         kind: "command" as const,
@@ -2658,7 +2657,10 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
       fields,
       effectiveFields,
       ...(usageConstraints.length === 0 ? {} : { usageConstraints }),
-      input: projectUsageConstraints(input as SchemaManifest, usageConstraints),
+      input: projectUsageConstraints(
+        describedInput as SchemaManifest,
+        usageConstraints,
+      ),
       success: compiledSuccess.manifest,
       failures: compiledFailures.manifest,
     });
@@ -2760,11 +2762,13 @@ function collectRootDefinitionIssues(
       field: "name",
     });
   }
-  if (command.description.length === 0) {
+  if (!isSingleLineText(command.description)) {
     issues.push({
-      code: "missingCommandText",
+      code: "invalidDescription",
       command: definition.root,
-      field: "description",
+      location: "command",
+      received:
+        typeof command.description === "string" ? command.description : null,
     });
   }
   return command;
@@ -2860,11 +2864,13 @@ function orderHierarchy(
       issues.push({ code: "invalidCommandIdentity", command: id });
     if (node.name.length === 0)
       issues.push({ code: "missingCommandText", command: id, field: "name" });
-    if (node.description.length === 0)
+    if (!isSingleLineText(node.description))
       issues.push({
-        code: "missingCommandText",
+        code: "invalidDescription",
         command: id,
-        field: "description",
+        location: "command",
+        received:
+          typeof node.description === "string" ? node.description : null,
       });
     if (id === definition.root && node.kind !== "rootGroup") {
       issues.push({

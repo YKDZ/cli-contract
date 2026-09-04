@@ -137,12 +137,14 @@ void test("structured stream 按 header、record、终态写出紧凑 NDJSON", a
         description: "一个项目",
         inputSchema: {
           $schema: "https://json-schema.org/draft/2020-12/schema",
+          description: "一个项目",
           type: "object",
           properties: { value: { type: "string" } },
           required: ["value"],
         },
         outputSchema: {
           $schema: "https://json-schema.org/draft/2020-12/schema",
+          description: "一个项目",
           type: "object",
           properties: { value: { type: "string" } },
           required: ["value"],

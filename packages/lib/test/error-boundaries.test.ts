@@ -276,21 +276,24 @@ void test("defineCli 一次报告当前声明中的动态无效值", () => {
           field: "name",
         },
         {
-          code: "missingCommandText",
+          code: "invalidDescription",
           command: "fixture",
-          field: "description",
+          location: "command",
+          received: "",
         },
         { code: "missingDataVariant", command: "fixture" },
+        {
+          code: "invalidDescription",
+          command: "fixture",
+          location: "field",
+          field: "name",
+          received: "",
+        },
         {
           code: "invalidFieldLongOption",
           command: "fixture",
           field: "name",
           received: "--Bad_Name",
-        },
-        {
-          code: "missingFieldDescription",
-          command: "fixture",
-          field: "name",
         },
       ]);
       return true;

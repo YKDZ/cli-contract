@@ -8,12 +8,14 @@ import type {
   SchemaDefinitionTarget,
 } from "#/contract-definition-error";
 import type { ContractSchema, JsonObject } from "#/contract-schema";
+import { isSingleLineText } from "#/description";
 import { copyJsonObject, deepFreeze } from "#/json-value";
 
 export function compileContractSchema(
   schema: ContractSchema,
   target: SchemaDefinitionTarget,
   issues: ContractDefinitionIssue[],
+  description?: string,
 ): SchemaManifest | undefined {
   const initialIssueCount = issues.length;
   const standard = schema?.["~standard"];
@@ -58,14 +60,22 @@ export function compileContractSchema(
     "output",
     issues,
   );
-  const inputSchema =
+  const copiedInputSchema =
     exportedInput === undefined
       ? undefined
       : copySchemaProjection(exportedInput, target, "input", issues);
-  const outputSchema =
+  const copiedOutputSchema =
     exportedOutput === undefined
       ? undefined
       : copySchemaProjection(exportedOutput, target, "output", issues);
+  const inputSchema =
+    copiedInputSchema === undefined || description === undefined
+      ? copiedInputSchema
+      : projectRootDescription(copiedInputSchema, description);
+  const outputSchema =
+    copiedOutputSchema === undefined || description === undefined
+      ? copiedOutputSchema
+      : projectRootDescription(copiedOutputSchema, description);
   if (inputSchema === undefined || outputSchema === undefined) {
     return undefined;
   }
@@ -77,12 +87,23 @@ export function compileContractSchema(
     : undefined;
 }
 
+export function projectFieldDescriptions(
+  schema: SchemaManifest,
+  fields: readonly FieldGrammar[],
+): SchemaManifest {
+  return deepFreeze({
+    inputSchema: projectPropertyDescriptions(schema.inputSchema, fields),
+    outputSchema: projectPropertyDescriptions(schema.outputSchema, fields),
+  });
+}
+
 export function compileInputFields(
   definitions: FieldDefinitions,
   inputSchema: JsonObject,
   command: string,
   issues: ContractDefinitionIssue[],
 ): readonly FieldGrammar[] {
+  collectFieldDescriptionIssues(definitions, command, issues);
   if (inputSchema.type !== "object") {
     issues.push({
       code: "invalidInputSchemaShape",
@@ -214,13 +235,6 @@ export function compileInputFields(
             : null,
       });
     }
-    if (field.description.length === 0) {
-      issues.push({
-        code: "missingFieldDescription",
-        command,
-        field: key,
-      });
-    }
     return {
       ...field,
       key,
@@ -305,6 +319,58 @@ export function compileInputFields(
   return deepFreeze(fields);
 }
 
+function collectFieldDescriptionIssues(
+  definitions: FieldDefinitions,
+  command: string,
+  issues: ContractDefinitionIssue[],
+): void {
+  for (const [field, definition] of Object.entries(definitions)) {
+    const description = readRawFieldDescription(definition);
+    if (isSingleLineText(description)) continue;
+    issues.push({
+      code: "invalidDescription",
+      command,
+      location: "field",
+      field,
+      received: typeof description === "string" ? description : null,
+    });
+  }
+}
+
+function projectRootDescription(
+  schema: JsonObject,
+  description: string,
+): JsonObject {
+  return deepFreeze({ ...schema, description });
+}
+
+function projectPropertyDescriptions(
+  schema: JsonObject,
+  fields: readonly FieldGrammar[],
+): JsonObject {
+  const properties = readSchemaProperties(schema);
+  if (properties === undefined) return schema;
+  const projectedProperties = Object.fromEntries(
+    Object.entries(properties).map(([key, property]) => {
+      const field = fields.find((candidate) => candidate.key === key);
+      if (field === undefined) return [key, property];
+      if (property === true) return [key, { description: field.description }];
+      if (
+        typeof property !== "object" ||
+        property === null ||
+        Array.isArray(property)
+      ) {
+        return [key, property];
+      }
+      return [
+        key,
+        Object.assign({}, property, { description: field.description }),
+      ];
+    }),
+  ) as JsonObject;
+  return deepFreeze({ ...schema, properties: projectedProperties });
+}
+
 function readInvalidFieldKind(field: unknown): string | null | undefined {
   if (typeof field !== "object" || field === null || !("kind" in field)) {
     return null;
@@ -328,6 +394,12 @@ function readFieldDescription(field: unknown): string {
     typeof field.description === "string"
     ? field.description
     : "";
+}
+
+function readRawFieldDescription(field: unknown): unknown {
+  return typeof field === "object" && field !== null && "description" in field
+    ? field.description
+    : undefined;
 }
 
 function copySchemaProjection(

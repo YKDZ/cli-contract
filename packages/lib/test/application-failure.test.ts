@@ -48,12 +48,14 @@ void test("具名应用失败写入 stderr 并返回显式失败状态", async (
       exitCode: 9,
       inputSchema: {
         $schema: "https://json-schema.org/draft/2020-12/schema",
+        description: "服务暂不可用",
         type: "object",
         properties: { service: { type: "string" } },
         required: ["service"],
       },
       outputSchema: {
         $schema: "https://json-schema.org/draft/2020-12/schema",
+        description: "服务暂不可用",
         type: "object",
         properties: { service: { type: "string" } },
         required: ["service"],
@@ -71,6 +73,7 @@ void test("具名应用失败写入 stderr 并返回显式失败状态", async (
       variant: { const: "unavailable" },
       data: {
         $schema: "https://json-schema.org/draft/2020-12/schema",
+        description: "服务暂不可用",
         type: "object",
         properties: { service: { type: "string" } },
         required: ["service"],
@@ -203,10 +206,11 @@ void test("定义期聚合失败变体的无效描述与退出码", () => {
           maximum: 255,
         },
         {
-          code: "missingVariantDescription",
+          code: "invalidDescription",
           command: "check",
           location: "failure",
           variant: "unavailable",
+          received: "",
         },
       ]);
       return true;

@@ -84,10 +84,12 @@ export type ContractDefinitionIssue =
       readonly variant: string;
     }>
   | Readonly<{
-      readonly code: "missingVariantDescription";
+      readonly code: "invalidDescription";
       readonly command: string;
-      readonly location: "data" | "failure" | "record";
-      readonly variant: string;
+      readonly location: "command" | "field" | "data" | "failure" | "record";
+      readonly field?: string;
+      readonly variant?: string;
+      readonly received: string | null;
     }>
   | Readonly<{
       readonly code: "invalidVariantExitCode";
@@ -198,7 +200,7 @@ export type ContractDefinitionIssue =
   | Readonly<{
       readonly code: "missingCommandText";
       readonly command: string;
-      readonly field: "name" | "description";
+      readonly field: "name";
     }>
   | Readonly<{
       readonly code: "invalidHelpSupplement";
@@ -281,11 +283,6 @@ export type ContractDefinitionIssue =
       readonly command: string;
       readonly longOption: string;
       readonly fields: readonly string[];
-    }>
-  | Readonly<{
-      readonly code: "missingFieldDescription";
-      readonly command: string;
-      readonly field: string;
     }>
   | Readonly<{
       readonly code: "missingDataVariant";
@@ -375,8 +372,12 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `命令 ${issue.command} 的输出必填字段 ${issue.field} 不在输入模式属性中`;
     case "invalidVariantName":
       return `命令 ${issue.command} 的 ${issue.location} 变体名 ${issue.variant} 无效`;
-    case "missingVariantDescription":
-      return `命令 ${issue.command} 的 ${issue.location} 变体 ${issue.variant} 缺少描述`;
+    case "invalidDescription":
+      return issue.location === "command"
+        ? `命令 ${issue.command} 的描述必须是合法单行文本`
+        : issue.location === "field"
+          ? `命令 ${issue.command} 的字段 ${issue.field} 描述必须是合法单行文本`
+          : `命令 ${issue.command} 的 ${issue.location} 变体 ${issue.variant} 描述必须是合法单行文本`;
     case "invalidVariantExitCode":
       return `命令 ${issue.command} 的 ${issue.location} 变体 ${issue.variant} 退出码无效`;
     case "missingStreamRecord":
@@ -443,8 +444,6 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `命令 ${issue.command} 的 positional ${issue.field} 位于 variadic positional ${issue.variadicField} 之后`;
     case "duplicateFieldLongOption":
       return `命令 ${issue.command} 的字段 ${issue.fields.join(", ")} 重复使用 long option ${issue.longOption}`;
-    case "missingFieldDescription":
-      return `命令 ${issue.command} 的字段 ${issue.field} 缺少描述`;
     case "missingDataVariant":
       return `命令 ${issue.command} 必须声明至少一个 data 变体`;
     case "invalidUsageConstraint":

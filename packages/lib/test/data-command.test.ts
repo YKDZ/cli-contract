@@ -26,6 +26,7 @@ const greetingInputSchema = z
 
 const greetingDataInputJsonSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
+  description: "生成的问候",
   properties: { message: { type: "string" } },
   required: ["message"],
   type: "object",
@@ -257,7 +258,7 @@ void test("Valibot combined schema 可沿同一接缝定义并执行", async () 
 
   assert.deepEqual(inputs, [{ name: "Grace" }]);
   assert.deepEqual(cli.manifest.commands.greet.input.inputSchema.properties, {
-    name: { type: "string", minLength: 1 },
+    name: { description: "问候对象", type: "string", minLength: 1 },
   });
 });
 

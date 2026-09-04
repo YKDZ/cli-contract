@@ -2,6 +2,7 @@ import type { DataVariantManifest } from "#/cli-contract";
 import type { ContractDefinitionIssue } from "#/contract-definition-error";
 import type { ContractSchema, JsonObject } from "#/contract-schema";
 import { compileContractSchema } from "#/contract-schema-compiler";
+import { isSingleLineText } from "#/description";
 import { deepFreeze } from "#/json-value";
 
 interface AtomicVariantDefinition {
@@ -55,12 +56,16 @@ export function compileAtomicVariants(
         maximum: 255,
       });
     }
-    if (definition.description.length === 0) {
+    if (!isSingleLineText(definition.description)) {
       issues.push({
-        code: "missingVariantDescription",
+        code: "invalidDescription",
         command,
         location,
         variant,
+        received:
+          typeof definition.description === "string"
+            ? definition.description
+            : null,
       });
     }
 
@@ -68,8 +73,11 @@ export function compileAtomicVariants(
       definition.schema,
       { command, location, variant },
       issues,
+      isSingleLineText(definition.description)
+        ? definition.description
+        : undefined,
     );
-    runtime[variant] = deepFreeze({
+    runtime[variant] = Object.freeze({
       description: definition.description,
       schema: definition.schema,
       exitCode: definition.exitCode,
