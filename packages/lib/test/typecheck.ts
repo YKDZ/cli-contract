@@ -20,6 +20,7 @@ import {
   type StreamRootCommandDefinition,
   type StreamRecordDefinition,
   type ShortOptionAlias,
+  type TextLines,
   type UsageConstraint,
 } from "@cli-contract/lib";
 import { toStandardJsonSchema } from "@valibot/to-json-schema";
@@ -83,6 +84,13 @@ const validUsageConstraint: UsageConstraint<UsageFixtureFields> = {
   ],
 };
 void validUsageConstraint;
+
+const explicitTextLines: TextLines = text.lines(["第一行", "", "最后一行"]);
+void explicitTextLines;
+
+// @ts-expect-error TextLines 只能由受控构造器签发。
+const forgedTextLines: TextLines = { kind: "lines", lines: ["伪造"] };
+void forgedTextLines;
 
 const cli = defineCli()({
   root: "fixture",
@@ -208,7 +216,7 @@ const textStreamCli = defineCli()({
       input: emptyInput,
       success: {
         kind: "stream",
-        text: () => text.silent,
+        text: () => text.lines(["流结束", "", "没有更多记录"]),
         records: {
           greeting: {
             description: "问候",
@@ -396,6 +404,20 @@ function verifyTypeErrors() {
     text: () => text.silent,
   };
   void silentStreamRecord;
+
+  const textLinesStreamRecord: StreamRecordDefinition<
+    Readonly<{ readonly message: string }>,
+    true
+  > = {
+    description: "问候",
+    schema: greetingData,
+    // @ts-expect-error stream record presenter 不能返回文本行组。
+    text: () => text.lines(["一行", "二行"]),
+  };
+  void textLinesStreamRecord;
+
+  // @ts-expect-error 文本行组在类型层至少包含一项。
+  text.lines([]);
 
   const invalidStreamFacts: StreamRootCommandDefinition<
     "stream",
@@ -755,13 +777,16 @@ const textHierarchy = defineTextHierarchy({
       name: "complete",
       description: "文本完成",
       input: emptyInput,
-      success: { kind: "completion", text: () => text.silent },
+      success: {
+        kind: "completion",
+        text: () => text.lines(["完成", "", "下一步"]),
+      },
       failures: {
         unavailable: {
           description: "不可用",
           schema: greetingData,
           exitCode: 9,
-          text: () => text.line("不可用"),
+          text: () => text.lines(["不可用", "稍后重试"]),
         },
       },
       handler: ({ outcome }) => outcome.completion(),
@@ -787,7 +812,7 @@ const textHierarchy = defineTextHierarchy({
             schema: greetingData,
             exitCode: 0,
             text: (data: Readonly<{ readonly message: string }>) =>
-              text.line(data.message),
+              text.lines([data.message, "", "完成"]),
           },
         },
       },

@@ -84,6 +84,7 @@ export type {
   StreamTextPresenter,
   SilentText,
   TextLine,
+  TextLines,
   TextFragment,
 } from "#/outcome-fact";
 

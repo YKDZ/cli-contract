@@ -2,10 +2,17 @@ import type { ContractSchema } from "#/contract-schema";
 
 const outcomeFactType = Symbol("OutcomeFact.type");
 const textProjectionType = Symbol("TextProjection.type");
+const issuedTextProjections = new WeakSet<object>();
 
 export interface TextLine {
   readonly kind: "line";
   readonly value: string;
+  readonly [textProjectionType]: true;
+}
+
+export interface TextLines {
+  readonly kind: "lines";
+  readonly lines: readonly string[];
   readonly [textProjectionType]: true;
 }
 
@@ -20,9 +27,9 @@ export interface TextFragment {
   readonly [textProjectionType]: true;
 }
 
-export type CompletionTextPresenter = () => TextLine | SilentText;
+export type CompletionTextPresenter = () => TextLine | TextLines | SilentText;
 export type AtomicTextPresenter<Payload> = {
-  bivarianceHack(payload: Payload): TextLine;
+  bivarianceHack(payload: Payload): TextLine | TextLines;
 }["bivarianceHack"];
 export type StreamTextPresenter<Payload> = {
   bivarianceHack(payload: Payload): TextLine | TextFragment;
@@ -37,24 +44,64 @@ function createTextLine(value: string): TextLine {
   ) {
     throw new TypeError("文本行必须非空且不能包含 CR、LF 或 NUL");
   }
-  return Object.freeze({ kind: "line" as const, value }) as TextLine;
+  const projection = Object.freeze({ kind: "line" as const, value });
+  issuedTextProjections.add(projection);
+  return projection as TextLine;
 }
 
-const silentText = Object.freeze({ kind: "silent" as const }) as SilentText;
+function createTextLines(values: readonly [string, ...string[]]): TextLines {
+  if (
+    !Array.isArray(values) ||
+    values.length === 0 ||
+    values.some(
+      (value) =>
+        typeof value !== "string" ||
+        value.includes("\r") ||
+        value.includes("\n") ||
+        value.includes("\0"),
+    ) ||
+    values.every((value) => value.length === 0)
+  ) {
+    throw new TypeError("文本行组必须至少包含一个非空行且成员不能包含 CR、LF 或 NUL");
+  }
+  const projection = Object.freeze({
+    kind: "lines" as const,
+    lines: Object.freeze([...values]),
+  });
+  issuedTextProjections.add(projection);
+  return projection as TextLines;
+}
+
+const silentProjection = Object.freeze({ kind: "silent" as const });
+issuedTextProjections.add(silentProjection);
+const silentText = silentProjection as SilentText;
 
 function createTextFragment(value: string): TextFragment {
   if (value.length === 0 || value.includes("\0")) {
     throw new TypeError("文本片段必须非空且不能包含 NUL");
   }
-  return Object.freeze({ kind: "fragment" as const, value }) as TextFragment;
+  const projection = Object.freeze({ kind: "fragment" as const, value });
+  issuedTextProjections.add(projection);
+  return projection as TextFragment;
 }
 
 /** 受控文本投影构造器；执行内核拥有实际 framing。 */
 export const text = Object.freeze({
   line: createTextLine,
+  lines: createTextLines,
   fragment: createTextFragment,
   silent: silentText,
 });
+
+export function isIssuedTextProjection(
+  value: unknown,
+): value is TextLine | TextLines | TextFragment | SilentText {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    issuedTextProjections.has(value)
+  );
+}
 
 export type DataVariantDefinition<
   Payload = unknown,

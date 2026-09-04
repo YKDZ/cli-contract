@@ -422,6 +422,49 @@ void test("同一 stream handler 可投影为 structured NDJSON 或 text line、
   assert.throws(() => text.fragment("a\0b"), TypeError);
 });
 
+void test("text stream success 以 text.lines 写出一个确定的终态 chunk", async () => {
+  const cli = defineCli()({
+    root: "list",
+    help: helpCapability(),
+    output: outputCapability({ defaultFormat: "text" }),
+    usageFailureExitCode: 64,
+    commands: {
+      list: {
+        kind: "rootCommand",
+        name: "list",
+        description: "列出项目",
+        input: emptyInput,
+        success: {
+          kind: "stream",
+          text: () => text.lines(["完成", "", "没有更多项目"]),
+          records: {
+            item: {
+              description: "项目",
+              schema: item,
+              text: (data: Readonly<{ readonly value: string }>) =>
+                text.line(data.value),
+            },
+          },
+        },
+        failures: {},
+        async *handler({ outcome }) {
+          yield* [] as Iterable<never>;
+          return outcome.streamSuccess();
+        },
+      },
+    },
+  });
+  const writes: string[] = [];
+  await executeCli(cli, {
+    invocation: parseCliInvocation(cli, []),
+    dependencies: undefined,
+    write: ({ chunk }) => {
+      writes.push(chunk);
+    },
+  });
+  assert.deepEqual(writes, ["完成\n\n没有更多项目\n"]);
+});
+
 void test("text stream failure 保留已写 record、稳定 identity 与 stderr，拒绝写入会停止拉取并清理", async () => {
   let pulled = 0;
   let cleaned = false;
@@ -481,7 +524,6 @@ void test("text stream failure 保留已写 record、稳定 identity 与 stderr�
   assert.equal(failure.exitCode, 8);
   assert.deepEqual(writes, [
     { destination: "stdout", chunk: "first\n" },
-    { destination: "stderr", chunk: "list stopped\n" },
     { destination: "stderr", chunk: "quota\n" },
   ]);
 
@@ -520,7 +562,7 @@ void test("text stream failure 保留已写 record、稳定 identity 与 stderr�
             item: {
               description: "项目",
               schema: item,
-              text: () => text.silent as never,
+              text: () => text.lines(["不应", "作为 record"]) as never,
             },
           },
         },

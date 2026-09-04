@@ -64,6 +64,7 @@ export {
   text,
   type SilentText,
   type TextLine,
+  type TextLines,
   type PositionalDefinition,
   type PositionalGrammar,
   type RepeatableOptionDefinition,

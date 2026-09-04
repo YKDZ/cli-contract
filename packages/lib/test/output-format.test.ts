@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   ContractDefinitionError,
+  ContractExecutionError,
   defineCli,
   executeCli,
   helpCapability,
@@ -45,7 +46,7 @@ function createTextCli() {
               schema: message,
               exitCode: 0,
               text: (data: Readonly<{ readonly message: string }>) =>
-                text.line(`你好，${data.message}`),
+                text.lines([`你好，${data.message}`, "", "欢迎使用"]),
             },
           },
         },
@@ -55,7 +56,7 @@ function createTextCli() {
             schema: message,
             exitCode: 9,
             text: (data: Readonly<{ readonly message: string }>) =>
-              text.line(data.message),
+              text.lines([data.message, "稍后重试"]),
           },
         },
         handler({ input, outcome }) {
@@ -261,7 +262,7 @@ void test("structured wire 保持不变，text data 与 failure 使用固定通�
     },
   });
   assert.deepEqual(textWrites, [
-    { destination: "stdout", chunk: "你好，Ada\n" },
+    { destination: "stdout", chunk: "你好，Ada\n\n欢迎使用\n" },
   ]);
 
   const failureWrites: Array<Readonly<{ destination: string; chunk: string }>> =
@@ -275,15 +276,22 @@ void test("structured wire 保持不变，text data 与 failure 使用固定通�
   });
   assert.equal(termination.exitCode, 9);
   assert.deepEqual(failureWrites, [
-    { destination: "stderr", chunk: "greet unavailable\n" },
-    { destination: "stderr", chunk: "服务不可用\n" },
+    { destination: "stderr", chunk: "服务不可用\n稍后重试\n" },
   ]);
 });
 
-void test("text.line 拒绝非法 framing，completion 可显式 silent", async () => {
+void test("text.line 与 text.lines 拒绝非法 framing，completion 可显式 silent", async () => {
   for (const value of ["", "a\rb", "a\nb", "a\0b"]) {
     assert.throws(() => text.line(value), TypeError);
   }
+  for (const value of [[], [""], ["a\rb"], ["a\nb"], ["a\0b"]]) {
+    assert.throws(() => text.lines(value as never), TypeError);
+  }
+  assert.deepEqual(text.lines(["第一行", "", "最后一行"]).lines, [
+    "第一行",
+    "",
+    "最后一行",
+  ]);
   const cli = defineCli()({
     root: "quiet",
     help: helpCapability(),
@@ -310,6 +318,47 @@ void test("text.line 拒绝非法 framing，completion 可显式 silent", async 
     },
   });
   assert.deepEqual(writes, []);
+});
+
+void test("completion 接受 text.lines，伪造的动态行组在写出前被拒绝", async () => {
+  const createCli = (presenter: () => unknown) =>
+    defineCli()({
+      root: "complete",
+      help: helpCapability(),
+      output: outputCapability({ defaultFormat: "text" }),
+      usageFailureExitCode: 64,
+      commands: {
+        complete: {
+          kind: "rootCommand",
+          name: "complete",
+          description: "完成任务",
+          input: z.object({}),
+          success: { kind: "completion", text: presenter as never },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        },
+      },
+    });
+  const cli = createCli(() => text.lines(["完成", "", "下一步"]));
+  const writes: string[] = [];
+  await executeCli(cli, {
+    invocation: parseCliInvocation(cli, []),
+    dependencies: undefined,
+    write: ({ chunk }) => {
+      writes.push(chunk);
+    },
+  });
+  assert.deepEqual(writes, ["完成\n\n下一步\n"]);
+
+  const forged = createCli(() => ({ kind: "lines", lines: ["伪造"] }));
+  await assert.rejects(
+    executeCli(forged, {
+      invocation: parseCliInvocation(forged, []),
+      dependencies: undefined,
+      write: () => undefined,
+    }),
+    ContractExecutionError,
+  );
 });
 
 void test("text 开关在定义期要求或禁止同位 presenter", () => {

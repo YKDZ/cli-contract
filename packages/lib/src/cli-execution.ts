@@ -38,6 +38,7 @@ import {
   createStreamRecordEnvelope,
   createStreamSuccessEnvelope,
 } from "#/outcome-wire";
+import { isIssuedTextProjection } from "#/outcome-fact";
 
 export type CliOutputDestination = "stderr" | "stdout";
 
@@ -86,6 +87,7 @@ type RuntimeHandler = (context: {
 
 type RuntimeStreamGenerator = AsyncGenerator<unknown, unknown, void>;
 
+// oxlint-disable-next-line typescript/consistent-return
 export async function executeCli<const Contract extends CliContract>(
   cliContract: Contract,
   options: ExecuteCliOptions<Contract>,
@@ -148,6 +150,7 @@ export async function executeCli<const Contract extends CliContract>(
       });
       return Object.freeze({
         kind: "help",
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
         command: command.id as CliContractRoot<Contract>,
         exitCode: 0,
       });
@@ -163,6 +166,7 @@ export async function executeCli<const Contract extends CliContract>(
       });
       return Object.freeze({
         kind: "version",
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
         command: command.id as CliContractRoot<Contract>,
         exitCode: 0,
       });
@@ -194,6 +198,7 @@ export async function executeCli<const Contract extends CliContract>(
         { command: command.id, location: "input" },
       );
       if (validation.issues !== undefined) {
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
         const issues = Object.freeze([
           Object.freeze({
             code: "inputRejected" as const,
@@ -354,7 +359,7 @@ async function executeApplicationResult<Contract extends CliContract>(
       issuedOutcomeFacts,
       options,
       outputFormat,
-    ) as Promise<CliTermination<Contract>>;
+    );
   }
   const result = await handlerResult;
   if (!isIssuedOutcomeFact(result, issuedOutcomeFacts)) {
@@ -617,8 +622,7 @@ async function projectOutcome(
       }
       return {
         result: normalized,
-        prefix: `${compiled.root} ${result.variant}\n`,
-        present: () => formatTextLine(presenter(data)),
+        present: () => formatAtomicText(presenter(data)),
         exitCode: failure.exitCode,
         destination: "stderr",
       };
@@ -696,7 +700,7 @@ async function projectOutcome(
     }
     return {
       result: normalized,
-      present: () => formatTextLine(presenter(data)),
+      present: () => formatAtomicText(presenter(data)),
       exitCode: variant.exitCode,
       destination: "stdout",
     };
@@ -713,12 +717,13 @@ async function projectOutcome(
 
 function formatCompletionText(value: unknown): string {
   if (isSilentText(value)) return "";
-  return formatTextLine(value);
+  return formatAtomicText(value);
 }
 
 function formatTextLine(value: unknown): string {
   const text = value as Readonly<Record<string, unknown>> | null;
   if (
+    !isIssuedTextProjection(value) ||
     text === null ||
     typeof value !== "object" ||
     text.kind !== "line" ||
@@ -733,12 +738,43 @@ function formatTextLine(value: unknown): string {
   return `${text.value}\n`;
 }
 
+function formatAtomicText(value: unknown): string {
+  const text = value as Readonly<Record<string, unknown>> | null;
+  if (
+    isIssuedTextProjection(value) &&
+    text !== null &&
+    typeof value === "object" &&
+    text.kind === "lines"
+  ) {
+    return formatTextLines(text.lines);
+  }
+  return formatTextLine(value);
+}
+
+function formatTextLines(value: unknown): string {
+  if (
+    !Array.isArray(value) ||
+    value.every((line) => typeof line === "string" && line.length === 0) ||
+    value.some(
+      (line) =>
+        typeof line !== "string" ||
+        line.includes("\r") ||
+        line.includes("\n") ||
+        line.includes("\0"),
+    )
+  ) {
+    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+  }
+  return `${value.join("\n")}\n`;
+}
+
 function formatStreamRecordText(presenter: unknown, data: unknown): string {
   if (typeof presenter !== "function") {
     throw new ContractExecutionError([{ code: "invalidCliContract" }]);
   }
   const value = presenter(data) as Readonly<Record<string, unknown>> | null;
   if (
+    isIssuedTextProjection(value) &&
     value !== null &&
     typeof value === "object" &&
     value.kind === "fragment"
@@ -761,7 +797,8 @@ function isSilentText(
   return (
     typeof value === "object" &&
     value !== null &&
-    (value as Readonly<Record<string, unknown>>).kind === "silent"
+    isIssuedTextProjection(value) &&
+    (value as unknown as Readonly<Record<string, unknown>>).kind === "silent"
   );
 }
 
