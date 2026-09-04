@@ -100,7 +100,7 @@ export type ContractDefinitionIssue =
     }>
   | Readonly<{
       readonly code: "invalidCapability";
-      readonly capability: "help" | "output";
+      readonly capability: "help" | "output" | "version";
     }>
   | Readonly<{
       readonly code: "invalidOutputFormat";
@@ -238,7 +238,7 @@ export type ContractDefinitionIssue =
       readonly command: string;
       readonly field: string;
       readonly spelling: string;
-      readonly control: "help" | "outputFormat";
+      readonly control: "help" | "outputFormat" | "version";
     }>
   | Readonly<{
       readonly code: "invalidSharedOptionKind";

@@ -2,6 +2,7 @@ export {
   defineCli,
   helpCapability,
   outputCapability,
+  versionCapability,
   type CliContract,
   type CliContractDependencies,
   type CliContractRawInput,
@@ -79,6 +80,8 @@ export {
   type ValueOptionDefinitions,
   type ValueOptionDefinitionsForInput,
   type ValueOptionGrammar,
+  type VersionCapability,
+  type VersionCapabilityDefinition,
   type VariadicPositionalDefinition,
   type VariadicPositionalGrammar,
   type UsageConstraint,
@@ -119,6 +122,7 @@ export {
   type UnknownCommandIssue,
   type UsageIssue,
   type UsageFailure,
+  type VersionRequest,
 } from "#/cli-invocation";
 export {
   ContractExecutionError,

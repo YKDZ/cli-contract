@@ -32,6 +32,7 @@ import type {
   FailureOutcome,
   FailureVariantDefinitions,
   OutcomeFact,
+  TextLine,
 } from "#/outcome-fact";
 import {
   createCompletionWireSchema,
@@ -68,12 +69,27 @@ const cliContractType = Symbol("CliContract.type");
 const executableCommandType = Symbol("ExecutableCommand.type");
 const helpCapabilities = new WeakSet<object>();
 const outputCapabilities = new WeakSet<object>();
+const versionCapabilities = new WeakSet<object>();
 const compiledCliContracts = new WeakMap<object, RuntimeCompiledCli>();
 
 export interface HelpCapability {
   readonly kind: "helpCapability";
   readonly longOption: "--help";
   readonly [cliContractType]: "help";
+}
+
+export interface VersionCapability {
+  readonly kind: "versionCapability";
+  readonly value: TextLine;
+  readonly description?: string;
+  readonly shortAlias?: "-V";
+  readonly [cliContractType]: "version";
+}
+
+export interface VersionCapabilityDefinition {
+  readonly value: TextLine;
+  readonly description?: string;
+  readonly shortAlias?: "-V";
 }
 
 export type OutputFormat = "structured" | "text";
@@ -835,6 +851,7 @@ type RootIdentityContract<Root extends string> = string extends Root
 type RootCliDefinitionBase<Root extends string> = RootIdentityContract<Root> & {
   readonly root: Root;
   readonly help: HelpCapability;
+  readonly version?: VersionCapability;
   readonly output: OutputCapability;
   readonly usageFailureExitCode: number;
 };
@@ -1018,6 +1035,12 @@ export interface CliGrammar<
     : readonly [];
   readonly controls: Readonly<{
     readonly help: Readonly<{ readonly longOption: "--help" }>;
+    readonly version?: Readonly<{
+      readonly longOption: "--version";
+      readonly shortAlias?: "-V";
+      readonly value: string;
+      readonly description?: string;
+    }>;
     readonly output: Readonly<{
       readonly defaultFormat: OutputFormat;
       readonly formats: readonly OutputFormat[];
@@ -1784,6 +1807,75 @@ export function helpCapability(): HelpCapability {
   return capability;
 }
 
+export function versionCapability(
+  definition: VersionCapabilityDefinition,
+): VersionCapability {
+  if (!isVersionTextLine(definition.value)) {
+    throw new TypeError("版本值必须是合法单行文本");
+  }
+  if (definition.shortAlias !== undefined && definition.shortAlias !== "-V") {
+    throw new TypeError("版本短别名必须是 -V");
+  }
+  const capability = Object.freeze({
+    kind: "versionCapability" as const,
+    value: definition.value,
+    ...(definition.description === undefined
+      ? {}
+      : { description: definition.description }),
+    ...(definition.shortAlias === undefined
+      ? {}
+      : { shortAlias: definition.shortAlias }),
+  }) as VersionCapability;
+  versionCapabilities.add(capability);
+  return capability;
+}
+
+function isVersionTextLine(value: unknown): value is TextLine {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as TextLine).kind === "line" &&
+    typeof (value as TextLine).value === "string" &&
+    (value as TextLine).value.length > 0 &&
+    !(value as TextLine).value.includes("\r") &&
+    !(value as TextLine).value.includes("\n") &&
+    !(value as TextLine).value.includes("\0")
+  );
+}
+
+function compileControls(definition: RuntimeCliDefinition) {
+  const version = versionCapabilities.has(definition.version as object)
+    ? (definition.version as VersionCapability)
+    : undefined;
+  return deepFreeze({
+    help: { longOption: definition.help.longOption },
+    ...(version === undefined
+      ? {}
+      : {
+          version: {
+            longOption: "--version" as const,
+            ...(version.shortAlias === undefined
+              ? {}
+              : { shortAlias: version.shortAlias }),
+            value: version.value.value,
+            ...(version.description === undefined
+              ? {}
+              : { description: version.description }),
+          },
+        }),
+    output: {
+      defaultFormat: definition.output.defaultFormat,
+      formats: definition.output.formats,
+      ...(definition.output.formats.includes("text")
+        ? { selector: "--output-format" as const }
+        : {}),
+      ...(Object.keys(definition.output.compatibilityFlags).length === 0
+        ? {}
+        : { compatibilityFlags: definition.output.compatibilityFlags }),
+    },
+  });
+}
+
 export function outputCapability<
   const Definition extends OutputCapabilityDefinition,
 >(definition: Definition): OutputCapability<OutputFormatsFor<Definition>> {
@@ -1869,10 +1961,10 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
           definition.root,
           definitionIssues,
         );
-  collectOutputControlFieldConflicts(
+  collectControlFieldConflicts(
     definition.root,
     fields,
-    definition.output,
+    definition,
     definitionIssues,
   );
   const usageConstraints = compileUsageConstraints(
@@ -1897,19 +1989,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
     command: definition.root,
     synopsis: createUsageSynopsis(command.name, fields, usageConstraints),
   });
-  const controls = deepFreeze({
-    help: { longOption: definition.help.longOption },
-    output: {
-      defaultFormat: definition.output.defaultFormat,
-      formats: definition.output.formats,
-      ...(definition.output.formats.includes("text")
-        ? { selector: "--output-format" as const }
-        : {}),
-      ...(Object.keys(definition.output.compatibilityFlags).length === 0
-        ? {}
-        : { compatibilityFlags: definition.output.compatibilityFlags }),
-    },
-  });
+  const controls = compileControls(definition);
   const grammar = deepFreeze({
     root: {
       kind: "rootCommand" as const,
@@ -2004,19 +2084,7 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
     );
   }
 
-  const controls = deepFreeze({
-    help: { longOption: definition.help.longOption },
-    output: {
-      defaultFormat: definition.output.defaultFormat,
-      formats: definition.output.formats,
-      ...(definition.output.formats.includes("text")
-        ? { selector: "--output-format" as const }
-        : {}),
-      ...(Object.keys(definition.output.compatibilityFlags).length === 0
-        ? {}
-        : { compatibilityFlags: definition.output.compatibilityFlags }),
-    },
-  });
+  const controls = compileControls(definition);
   const runtimeCommands: Record<string, RuntimeCompiledCommand> = {};
   const grammarNodes: CommandGrammar[] = [];
   const manifestCommands: Record<
@@ -2119,12 +2187,7 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
             id,
             issues,
           );
-    collectOutputControlFieldConflicts(
-      id,
-      effectiveFields,
-      definition.output,
-      issues,
-    );
+    collectControlFieldConflicts(id, effectiveFields, definition, issues);
     const localKeys = new Set(Object.keys(executable.fields ?? {}));
     const fields = deepFreeze(
       effectiveFields.filter((field) => localKeys.has(field.key)),
@@ -2317,6 +2380,12 @@ function collectCliBaseIssues(
   if (!helpCapabilities.has(definition.help)) {
     issues.push({ code: "invalidCapability", capability: "help" });
   }
+  if (
+    definition.version !== undefined &&
+    !versionCapabilities.has(definition.version)
+  ) {
+    issues.push({ code: "invalidCapability", capability: "version" });
+  }
   if (!outputCapabilities.has(definition.output)) {
     issues.push({ code: "invalidCapability", capability: "output" });
   } else if (
@@ -2345,6 +2414,8 @@ function collectCliBaseIssues(
         !/^--[a-z0-9]+(?:-[a-z0-9]+)*$/.test(flag) ||
         flag === "--help" ||
         flag === "--output-format" ||
+        (versionCapabilities.has(definition.version as object) &&
+          flag === "--version") ||
         !definition.output.formats.includes(format)
       ) {
         issues.push({
@@ -2542,20 +2613,6 @@ function compileSharedOptions(
         received: dynamicDefinition.kind,
       });
       continue;
-    }
-    if (
-      dynamicDefinition.longOption === "--help" ||
-      dynamicDefinition.shortAlias === "--help" ||
-      (dynamicDefinition.kind === "flag" &&
-        dynamicDefinition.negatedLongOption === "--help")
-    ) {
-      issues.push({
-        code: "fieldOptionConflictsWithControl",
-        command,
-        field,
-        spelling: "--help",
-        control: "help",
-      });
     }
   }
   const properties = Object.fromEntries(
@@ -3058,16 +3115,33 @@ function isTextOutputEnabled(output: unknown): boolean {
   );
 }
 
-function collectOutputControlFieldConflicts(
+function collectControlFieldConflicts(
   command: string,
   fields: readonly FieldGrammar[],
-  output: OutputCapability,
+  definition: RuntimeCliDefinition,
   issues: ContractDefinitionIssue[],
 ): void {
-  if (!outputCapabilities.has(output)) return;
-  if (!isPlainRecord(output.compatibilityFlags)) return;
-  const spellings = new Set(Object.keys(output.compatibilityFlags));
-  if (output.formats.includes("text")) spellings.add("--output-format");
+  const controls = new Map<string, "help" | "outputFormat" | "version">([
+    ["--help", "help"],
+  ]);
+  if (
+    outputCapabilities.has(definition.output) &&
+    isPlainRecord(definition.output.compatibilityFlags)
+  ) {
+    for (const spelling of Object.keys(definition.output.compatibilityFlags)) {
+      controls.set(spelling, "outputFormat");
+    }
+    if (definition.output.formats.includes("text")) {
+      controls.set("--output-format", "outputFormat");
+    }
+  }
+  if (versionCapabilities.has(definition.version as object)) {
+    const version = definition.version as VersionCapability;
+    controls.set("--version", "version");
+    if (version.shortAlias !== undefined) {
+      controls.set(version.shortAlias, "version");
+    }
+  }
   for (const field of fields) {
     if (field.kind === "positional" || field.kind === "variadicPositional") {
       continue;
@@ -3077,13 +3151,15 @@ function collectOutputControlFieldConflicts(
       field.shortAlias,
       ...(field.kind === "flag" ? [field.negatedLongOption] : []),
     ]) {
-      if (spelling !== undefined && spellings.has(spelling)) {
+      const control =
+        spelling === undefined ? undefined : controls.get(spelling);
+      if (spelling !== undefined && control !== undefined) {
         issues.push({
           code: "fieldOptionConflictsWithControl",
           command,
           field: field.key,
           spelling,
-          control: "outputFormat",
+          control,
         });
       }
     }

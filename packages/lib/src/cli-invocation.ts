@@ -20,6 +20,11 @@ export interface HelpRequest<Command extends string> {
   readonly command: Command;
 }
 
+export interface VersionRequest<Command extends string> {
+  readonly kind: "version";
+  readonly command: Command;
+}
+
 export interface UnexpectedPositionalIssue {
   readonly code: "unexpectedPositional";
   readonly position: number;
@@ -181,6 +186,7 @@ export type CliInvocation<Contract extends CliContract = CliContract> =
 type UnboundCliInvocation<Contract extends CliContract> =
   | ParsedInvocation<CliContractRoot<Contract>, CliContractRawInput<Contract>>
   | HelpRequest<CliContractRoot<Contract>>
+  | VersionRequest<CliContractRoot<Contract>>
   | UsageFailure<CliContractRoot<Contract>>;
 
 export function parseCliInvocation<const Contract extends CliContract>(
@@ -197,21 +203,16 @@ export function parseCliInvocation<const Contract extends CliContract>(
   let position = 0;
   while (selected.kind === "rootGroup" || selected.kind === "commandGroup") {
     const token = argv[position];
-    if (
-      token === undefined ||
-      token === compiled.contract.grammar.controls.help.longOption
-    ) {
+    if (token === undefined) {
       return bindInvocation(cliContract, {
         kind: "help",
         command: selected.id as CliContractRoot<Contract>,
       });
     }
-    if (
-      token === compiled.contract.grammar.controls.output.selector &&
-      argv[position + 1] === compiled.contract.grammar.controls.help.longOption
-    ) {
+    const eager = detectEagerControl(compiled, token);
+    if (eager !== undefined) {
       return bindInvocation(cliContract, {
-        kind: "help",
+        kind: eager,
         command: selected.id as CliContractRoot<Contract>,
       });
     }
@@ -235,6 +236,7 @@ export function parseCliInvocation<const Contract extends CliContract>(
     }
     if (token.startsWith("-") && token !== "-") {
       const option = consumeOption(
+        compiled,
         selected.fields,
         argv,
         position,
@@ -288,23 +290,16 @@ export function parseCliInvocation<const Contract extends CliContract>(
       optionsEnabled = false;
       continue;
     }
-    if (
-      optionsEnabled &&
-      token === compiled.contract.grammar.controls.help.longOption
-    ) {
+    const eager = optionsEnabled
+      ? detectEagerControl(compiled, token)
+      : undefined;
+    if (eager !== undefined) {
       return bindInvocation(cliContract, {
-        kind: "help",
+        kind: eager,
         command,
       });
     }
     if (optionsEnabled) {
-      if (
-        token === compiled.contract.grammar.controls.output.selector &&
-        argv[position + 1] ===
-          compiled.contract.grammar.controls.help.longOption
-      ) {
-        return bindInvocation(cliContract, { kind: "help", command });
-      }
       const output = consumeOutputControl(
         compiled,
         argv,
@@ -321,6 +316,7 @@ export function parseCliInvocation<const Contract extends CliContract>(
     }
     if (optionsEnabled && token.startsWith("-") && token !== "-") {
       const option = consumeOption(
+        compiled,
         fields,
         argv,
         position,
@@ -380,6 +376,20 @@ type OutputFormatOccurrence = Readonly<{
   readonly format: "structured" | "text";
 }>;
 
+function detectEagerControl(
+  compiled: ReturnType<typeof getCompiledCli>,
+  token: string,
+): "help" | "version" | undefined {
+  if (token === compiled.contract.grammar.controls.help.longOption) {
+    return "help";
+  }
+  const version = compiled.contract.grammar.controls.version;
+  return version !== undefined &&
+    (token === version.longOption || token === version.shortAlias)
+    ? "version"
+    : undefined;
+}
+
 function consumeOutputControl(
   compiled: ReturnType<typeof getCompiledCli>,
   argv: readonly string[],
@@ -393,6 +403,13 @@ function consumeOutputControl(
   const option = readOptionToken(token);
   const output = compiled.contract.grammar.controls.output;
   if (output.selector === option.spelling) {
+    if (
+      option.value === undefined &&
+      argv[position + 1] !== undefined &&
+      detectEagerControl(compiled, argv[position + 1] as string) !== undefined
+    ) {
+      return { kind: "consumed", nextPosition: position + 1 };
+    }
     const value = option.value ?? argv[position + 1];
     if (
       value === undefined ||
@@ -467,6 +484,7 @@ type ParsedOptionOccurrence = OptionOccurrenceEvidence &
   Readonly<{ readonly polarity: "negative" | "positive" | "value" }>;
 
 function consumeOption(
+  compiled: ReturnType<typeof getCompiledCli>,
   fields: ReturnType<typeof getCompiledCli>["fields"],
   argv: readonly string[],
   position: number,
@@ -534,6 +552,12 @@ function consumeOption(
     return { kind: "consumed", nextPosition: position + 1 };
   }
   const value = argv[position + 1];
+  if (
+    value !== undefined &&
+    detectEagerControl(compiled, value) !== undefined
+  ) {
+    return { kind: "consumed", nextPosition: position + 1 };
+  }
   if (value === undefined || (value.startsWith("-") && value !== "-")) {
     return {
       kind: "issue",

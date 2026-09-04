@@ -3,6 +3,7 @@ import {
   helpCapability,
   outputCapability,
   text,
+  versionCapability,
   type CliContract,
   type CliContractResult,
   type CliInvocation,
@@ -162,6 +163,9 @@ const dataCli = defineCli()({
 });
 
 function verifyTypeErrors() {
+  // @ts-expect-error 版本能力必须显式提供受控单行值。
+  versionCapability({ value: "1.2.3" });
+
   const missingCompletionText: CompletionRootCommandDefinition<
     "fixture",
     undefined,

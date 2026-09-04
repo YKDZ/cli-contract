@@ -56,6 +56,11 @@ export type CliTermination<Contract extends CliContract = CliContract> =
       readonly exitCode: 0;
     }>
   | Readonly<{
+      readonly kind: "version";
+      readonly command: CliContractRoot<Contract>;
+      readonly exitCode: 0;
+    }>
+  | Readonly<{
       readonly kind: "usageFailure";
       readonly command: CliContractRoot<Contract>;
       readonly issues: NonEmptyUsageIssues;
@@ -121,12 +126,36 @@ export async function executeCli<const Contract extends CliContract>(
       ]
         .map((control) => `${control}\n`)
         .join("");
+      const version = compiled.contract.grammar.controls.version;
+      const versionHelp =
+        version === undefined
+          ? ""
+          : `${[version.longOption, version.shortAlias]
+              .filter((spelling) => spelling !== undefined)
+              .join(
+                ", ",
+              )}${version.description === undefined ? "" : `\t${version.description}`}\n`;
       await writeCliOutput(options.write, {
         destination: "stdout",
-        chunk: `${command.usage.synopsis}\n${command.description}\n${commandHelp}${fieldHelp}${constraintHelp}${compiled.contract.grammar.controls.help.longOption}\n${outputHelp}${supplement}`,
+        chunk: `${command.usage.synopsis}\n${command.description}\n${commandHelp}${fieldHelp}${constraintHelp}${compiled.contract.grammar.controls.help.longOption}\n${versionHelp}${outputHelp}${supplement}`,
       });
       return Object.freeze({
         kind: "help",
+        command: command.id as CliContractRoot<Contract>,
+        exitCode: 0,
+      });
+    }
+    case "version": {
+      const version = compiled.contract.grammar.controls.version;
+      if (version === undefined) {
+        throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+      }
+      await writeCliOutput(options.write, {
+        destination: "stdout",
+        chunk: `${version.value}\n`,
+      });
+      return Object.freeze({
+        kind: "version",
         command: command.id as CliContractRoot<Contract>,
         exitCode: 0,
       });
