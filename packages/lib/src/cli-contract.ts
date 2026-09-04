@@ -1075,6 +1075,7 @@ interface FieldGrammarBase<Field extends string> {
   readonly description: string;
   readonly required: boolean;
   readonly default?: JsonValue;
+  readonly choices?: readonly string[];
 }
 
 export interface PositionalGrammar<
@@ -3712,26 +3713,42 @@ function createUsageSynopsis(
 ): string {
   return [
     commandName,
-    ...fields.map((field) => {
-      const value =
-        field.kind === "positional"
-          ? `<${field.key}>`
-          : field.kind === "variadicPositional"
-            ? `<${field.key}...>`
-            : field.kind === "flag"
-              ? [field.longOption, field.negatedLongOption]
-                  .filter((spelling) => spelling !== undefined)
-                  .join("|")
-              : field.kind === "repeatableOption"
-                ? `${field.longOption} <value>`
-                : `${field.longOption} <value>`;
-      if (field.kind === "repeatableOption") {
-        return field.required ? `(${value})...` : `[${value}]...`;
-      }
-      return field.required ? value : `[${value}]`;
-    }),
+    ...fields.map((field) => formatFieldUsage(field)),
     ...usageConstraints.map(formatUsageConstraintSynopsis),
   ].join(" ");
+}
+
+export function formatFieldUsage(
+  field: FieldGrammar,
+  includeShortAlias = false,
+): string {
+  const choices =
+    field.choices?.map((choice) => JSON.stringify(choice)).join("|") ?? "value";
+  const value =
+    field.kind === "positional"
+      ? `<${field.key}${field.choices === undefined ? "" : `:${choices}`}>`
+      : field.kind === "variadicPositional"
+        ? `<${field.key}${field.choices === undefined ? "" : `:${choices}`}...>`
+        : field.kind === "flag"
+          ? [
+              field.longOption,
+              ...(includeShortAlias && field.shortAlias !== undefined
+                ? [field.shortAlias]
+                : []),
+              field.negatedLongOption,
+            ]
+              .filter((spelling) => spelling !== undefined)
+              .join(includeShortAlias ? ", " : "|")
+          : `${[
+              field.longOption,
+              ...(includeShortAlias && field.shortAlias !== undefined
+                ? [field.shortAlias]
+                : []),
+            ].join(", ")} <${choices}>`;
+  if (field.kind === "repeatableOption") {
+    return field.required ? `(${value})...` : `[${value}]...`;
+  }
+  return field.required ? value : `[${value}]`;
 }
 
 function formatUsageConstraintSynopsis(

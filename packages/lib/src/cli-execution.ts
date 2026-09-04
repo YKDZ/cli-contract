@@ -6,6 +6,7 @@ import {
   createFailureFact,
   createStreamRecordFact,
   createStreamSuccessFact,
+  formatFieldUsage,
   getCompiledCli,
   isIssuedOutcomeFact,
   type CliContract,
@@ -260,26 +261,7 @@ function formatUsageConstraint(
 function formatHelpField(
   field: ReturnType<typeof getCompiledCli>["fields"][number],
 ): string {
-  const value =
-    field.kind === "positional"
-      ? `<${field.key}>`
-      : field.kind === "variadicPositional"
-        ? `<${field.key}...>`
-        : field.kind === "flag"
-          ? [field.longOption, field.shortAlias, field.negatedLongOption]
-              .filter((spelling) => spelling !== undefined)
-              .join(", ")
-          : `${[field.longOption, field.shortAlias]
-              .filter((spelling) => spelling !== undefined)
-              .join(", ")} <value>`;
-  const cardinality =
-    field.kind === "repeatableOption"
-      ? field.required
-        ? `(${value})...`
-        : `[${value}]...`
-      : field.required
-        ? value
-        : `[${value}]`;
+  const cardinality = formatFieldUsage(field, true);
   return field.default === undefined
     ? cardinality
     : `${cardinality} (default: ${JSON.stringify(field.default)})`;

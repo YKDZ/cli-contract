@@ -240,6 +240,7 @@ export function compileInputFields(
       key,
       required: required.has(key),
       ...readSchemaDefault(schemaProperties[key]),
+      ...readFieldChoices(schemaProperties[key], field.kind),
     } as FieldGrammar;
   });
   const fieldsByLongOption = new Map<string, FieldGrammar[]>();
@@ -573,6 +574,56 @@ function readSchemaDefault(
   return {
     default: defaultValue,
   };
+}
+
+function readFieldChoices(
+  propertySchema: unknown,
+  kind: FieldGrammar["kind"],
+): Readonly<{ readonly choices: readonly string[] }> | undefined {
+  const candidate =
+    kind === "repeatableOption" || kind === "variadicPositional"
+      ? readDirectSchemaItems(propertySchema)
+      : propertySchema;
+  const values = readDirectStringEnum(candidate);
+  if (values === undefined) {
+    return undefined;
+  }
+  return { choices: values };
+}
+
+function readDirectSchemaItems(propertySchema: unknown): unknown {
+  if (
+    typeof propertySchema !== "object" ||
+    propertySchema === null ||
+    Array.isArray(propertySchema) ||
+    !Object.hasOwn(propertySchema, "items")
+  ) {
+    return undefined;
+  }
+  return (propertySchema as Readonly<Record<string, unknown>>).items;
+}
+
+function readDirectStringEnum(schema: unknown): readonly string[] | undefined {
+  if (typeof schema !== "object" || schema === null || Array.isArray(schema)) {
+    return undefined;
+  }
+  const node = schema as Readonly<Record<string, unknown>>;
+  if (
+    ["anyOf", "oneOf", "$ref", "if", "then", "else"].some((keyword) =>
+      Object.hasOwn(node, keyword),
+    )
+  ) {
+    return undefined;
+  }
+  const values = node.enum;
+  if (
+    !Array.isArray(values) ||
+    values.length === 0 ||
+    values.some((value) => typeof value !== "string")
+  ) {
+    return undefined;
+  }
+  return Object.freeze([...values]);
 }
 
 function readRequiredSchemaKeys(
