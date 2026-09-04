@@ -2225,6 +2225,23 @@ function collectCliBaseIssues(
           ? definition.output.defaultFormat
           : null,
     });
+  } else {
+    for (const [flag, format] of Object.entries(
+      definition.output.compatibilityFlags,
+    )) {
+      if (
+        !/^--[a-z0-9]+(?:-[a-z0-9]+)*$/.test(flag) ||
+        flag === "--help" ||
+        flag === "--output-format" ||
+        !definition.output.formats.includes(format)
+      ) {
+        issues.push({
+          code: "invalidOutputCompatibilityFlag",
+          flag,
+          received: typeof format === "string" ? format : null,
+        });
+      }
+    }
   }
   if (
     !Number.isInteger(definition.usageFailureExitCode) ||
