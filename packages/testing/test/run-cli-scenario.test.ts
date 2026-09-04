@@ -352,7 +352,7 @@ void test("唯一 consumer fixture 贯通 argv、输入、success、failure 与 
     dependencies: { serviceAvailable: true },
   });
   assert.equal(textFailure.stdout, "");
-  assert.equal(textFailure.stderr, "inspect denied\n拒绝检查 private\n");
+  assert.equal(textFailure.stderr, "拒绝检查 private\n");
 });
 
 void test("capture 保留 structured 与 text stream 的生产事件顺序和终止事实", async () => {
