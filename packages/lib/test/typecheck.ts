@@ -481,4 +481,149 @@ defineScopedCli({
     }),
   },
 });
+
+const defineTextHierarchy = defineCli();
+const textHierarchy = defineTextHierarchy({
+  root: "textTree",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "text" }),
+  usageFailureExitCode: 64,
+  commands: {
+    textTree: {
+      kind: "rootGroup",
+      name: "text-tree",
+      description: "文本层级命令",
+    },
+    ...defineTextHierarchy.command("completeText")({
+      kind: "command",
+      parent: "textTree",
+      name: "complete",
+      description: "文本完成",
+      input: emptyInput,
+      success: { kind: "completion", text: () => text.silent },
+      failures: {
+        unavailable: {
+          description: "不可用",
+          schema: greetingData,
+          exitCode: 9,
+          text: () => text.line("不可用"),
+        },
+      },
+      handler: ({ outcome }) => outcome.completion(),
+    }),
+    ...defineTextHierarchy.command("dataText")({
+      kind: "command",
+      parent: "textTree",
+      name: "data",
+      description: "文本数据",
+      fields: {
+        name: {
+          kind: "valueOption",
+          longOption: "--name",
+          description: "问候对象",
+        },
+      },
+      input: namedInput,
+      success: {
+        kind: "data",
+        variants: {
+          greeting: {
+            description: "问候",
+            schema: greetingData,
+            exitCode: 0,
+            text: (data: Readonly<{ readonly message: string }>) =>
+              text.line(data.message),
+          },
+        },
+      },
+      failures: {},
+      handler: ({ outcome }) => outcome.data.greeting({ message: "你好" }),
+    }),
+  },
+});
+void textHierarchy;
+
+const defineInvalidTextHierarchy = defineCli();
+defineInvalidTextHierarchy({
+  root: "missingCompletionTree",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "text" }),
+  usageFailureExitCode: 64,
+  commands: {
+    missingCompletionTree: {
+      // @ts-expect-error text hierarchy 的 completion 必须声明 presenter。
+      kind: "rootGroup",
+      name: "missing-completion-tree",
+      description: "缺少完成 presenter",
+    },
+    ...defineInvalidTextHierarchy.command("missingCompletion")({
+      kind: "command",
+      parent: "missingCompletionTree",
+      name: "run",
+      description: "运行",
+      input: emptyInput,
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    }),
+  },
+});
+
+const defineInvalidFailureHierarchy = defineCli();
+defineInvalidFailureHierarchy({
+  root: "missingFailureTree",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "text" }),
+  usageFailureExitCode: 64,
+  commands: {
+    missingFailureTree: {
+      // @ts-expect-error text hierarchy 的 failure 必须声明 presenter。
+      kind: "rootGroup",
+      name: "missing-failure-tree",
+      description: "缺少失败 presenter",
+    },
+    ...defineInvalidFailureHierarchy.command("missingFailure")({
+      kind: "command",
+      parent: "missingFailureTree",
+      name: "run",
+      description: "运行",
+      input: emptyInput,
+      success: { kind: "completion", text: () => text.silent },
+      failures: {
+        unavailable: {
+          description: "不可用",
+          schema: greetingData,
+          exitCode: 9,
+        },
+      },
+      handler: ({ outcome }) => outcome.completion(),
+    }),
+  },
+});
+
+const defineStructuredHierarchy = defineCli();
+defineStructuredHierarchy({
+  root: "structuredTree",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    structuredTree: {
+      // @ts-expect-error structured-only hierarchy 禁止声明 presenter。
+      kind: "rootGroup",
+      name: "structured-tree",
+      description: "结构化层级命令",
+    },
+    ...defineStructuredHierarchy.command("unexpectedText")({
+      kind: "command",
+      parent: "structuredTree",
+      name: "run",
+      description: "运行",
+      input: emptyInput,
+      success: { kind: "completion", text: () => text.silent },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    }),
+  },
+});
 void verifyTypeErrors;

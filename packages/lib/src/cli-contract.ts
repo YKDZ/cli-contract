@@ -1248,6 +1248,113 @@ export type CliContractRoot<Contract> =
       : Extract<keyof Commands, string>
     : never;
 
+type HasTextPresenter<Value> =
+  Value extends Readonly<{ readonly text: unknown }> ? true : false;
+type AllTextPresenters<Definitions> =
+  Exclude<
+    {
+      [Key in keyof Definitions]: HasTextPresenter<Definitions[Key]>;
+    }[keyof Definitions],
+    true
+  > extends never
+    ? true
+    : false;
+type MissingHierarchyTextCommands<Commands> = {
+  [Command in keyof Commands]: Commands[Command] extends Readonly<{
+    readonly kind: "command";
+    readonly success: infer Success;
+    readonly failures: infer Failures;
+  }>
+    ? Success extends Readonly<{ readonly kind: "completion" }>
+      ? HasTextPresenter<Success> extends true
+        ? AllTextPresenters<Failures> extends true
+          ? never
+          : Command
+        : Command
+      : Success extends Readonly<{ readonly variants: infer Variants }>
+        ? AllTextPresenters<Variants> extends true
+          ? AllTextPresenters<Failures> extends true
+            ? never
+            : Command
+          : Command
+        : Command
+    : never;
+}[keyof Commands];
+
+type HasAnyTextPresenter<Definitions> = true extends {
+  [Key in keyof Definitions]: HasTextPresenter<Definitions[Key]>;
+}[keyof Definitions]
+  ? true
+  : false;
+
+type UnexpectedHierarchyTextCommands<Commands> = {
+  [Command in keyof Commands]: Commands[Command] extends Readonly<{
+    readonly kind: "command";
+    readonly success: infer Success;
+    readonly failures: infer Failures;
+  }>
+    ? Success extends Readonly<{ readonly kind: "completion" }>
+      ? HasTextPresenter<Success> extends true
+        ? Command
+        : HasAnyTextPresenter<Failures> extends true
+          ? Command
+          : never
+      : Success extends Readonly<{ readonly variants: infer Variants }>
+        ? HasAnyTextPresenter<Variants> extends true
+          ? Command
+          : HasAnyTextPresenter<Failures> extends true
+            ? Command
+            : never
+        : never
+    : never;
+}[keyof Commands];
+
+type HierarchyUsageValidation<Commands> =
+  InvalidHierarchyUsageConstraintCommands<Commands> extends never
+    ? HasSharedOptions<Commands> extends false
+      ? readonly []
+      : InvalidHierarchyInputCommands<Commands> extends never
+        ? readonly []
+        : readonly [
+            ContractTypeError<
+              "invalidEffectiveCommandInput",
+              Readonly<{
+                readonly commands: InvalidHierarchyInputCommands<Commands>;
+              }>
+            >,
+          ]
+    : readonly [
+        ContractTypeError<
+          "invalidEffectiveUsageConstraint",
+          Readonly<{
+            readonly commands: InvalidHierarchyUsageConstraintCommands<Commands>;
+          }>
+        >,
+      ];
+
+type HierarchyOutputValidation<Commands, Output extends OutputCapability> =
+  Output extends OutputCapability<readonly ["structured", "text"]>
+    ? MissingHierarchyTextCommands<Commands> extends never
+      ? HierarchyUsageValidation<Commands>
+      : readonly [
+          ContractTypeError<
+            "missingHierarchyTextPresenter",
+            Readonly<{
+              readonly commands: MissingHierarchyTextCommands<Commands>;
+            }>
+          >,
+        ]
+    : UnexpectedHierarchyTextCommands<Commands> extends never
+      ? HierarchyUsageValidation<Commands>
+      : readonly [
+          ContractTypeError<
+            "unexpectedHierarchyTextPresenter",
+            Readonly<{
+              readonly commands: UnexpectedHierarchyTextCommands<Commands>;
+            }>
+          >,
+        ];
+
 export interface DefineCli<Dependencies> {
   readonly command: <const Command extends string>(
     command: Command,
@@ -1256,30 +1363,11 @@ export interface DefineCli<Dependencies> {
   <
     const Root extends string,
     const Commands extends Readonly<Record<string, CommandNodeDefinition>>,
+    const Output extends OutputCapability,
   >(
     definition: HierarchyCliDefinition<Root> &
-      Readonly<{ readonly commands: Commands }>,
-    ...validation: InvalidHierarchyUsageConstraintCommands<Commands> extends never
-      ? HasSharedOptions<Commands> extends false
-        ? readonly []
-        : InvalidHierarchyInputCommands<Commands> extends never
-          ? readonly []
-          : readonly [
-              ContractTypeError<
-                "invalidEffectiveCommandInput",
-                Readonly<{
-                  readonly commands: InvalidHierarchyInputCommands<Commands>;
-                }>
-              >,
-            ]
-      : readonly [
-          ContractTypeError<
-            "invalidEffectiveUsageConstraint",
-            Readonly<{
-              readonly commands: InvalidHierarchyUsageConstraintCommands<Commands>;
-            }>
-          >,
-        ]
+      Readonly<{ readonly commands: Commands; readonly output: Output }>,
+    ...validation: HierarchyOutputValidation<Commands, Output>
   ): CliContract<
     Root,
     Dependencies,
@@ -1482,19 +1570,21 @@ type UsageConstraintProperty<Constraints> =
 
 export interface DefineCommand<Command extends string, Dependencies> {
   <
+    const Definition extends object,
     const Parent extends string,
     const Failures extends FailureVariantDefinitions,
     const Constraints extends readonly unknown[] | undefined = undefined,
   >(
-    definition: HierarchyCommandInput<
-      HierarchyCompletionCommandDefinition<
-        Command,
-        Dependencies,
-        Failures,
-        Readonly<Record<never, never>>,
-        ContractSchema<EmptyCliInput>
-      >
-    > &
+    definition: Definition &
+      HierarchyCommandInput<
+        HierarchyCompletionCommandDefinition<
+          Command,
+          Dependencies,
+          Failures,
+          Readonly<Record<never, never>>,
+          ContractSchema<EmptyCliInput>
+        >
+      > &
       Readonly<{
         readonly parent: Parent;
         readonly usageConstraints?: Constraints & readonly UsageConstraint[];
@@ -1502,37 +1592,40 @@ export interface DefineCommand<Command extends string, Dependencies> {
   ): Readonly<
     Record<
       Command,
-      Omit<
-        HierarchyCompletionCommandDefinition<
-          Command,
-          Dependencies,
-          Failures,
-          Readonly<Record<never, never>>,
-          ContractSchema<EmptyCliInput>
-        >,
-        "kind"
-      > &
+      Definition &
+        Omit<
+          HierarchyCompletionCommandDefinition<
+            Command,
+            Dependencies,
+            Failures,
+            Readonly<Record<never, never>>,
+            ContractSchema<EmptyCliInput>
+          >,
+          "kind" | "success" | "failures"
+        > &
         UsageConstraintProperty<Constraints> &
         HierarchyCommandFacts<Parent>
     >
   >;
 
   <
+    const Definition extends object,
     const Fields extends FieldDefinitions,
     InputSchema extends ContractSchema,
     const Parent extends string,
     const Failures extends FailureVariantDefinitions,
     const Constraints extends readonly unknown[] | undefined = undefined,
   >(
-    definition: HierarchyCommandInput<
-      HierarchyCompletionCommandDefinition<
-        Command,
-        Dependencies,
-        Failures,
-        Fields,
-        InputSchema
-      >
-    > &
+    definition: Definition &
+      HierarchyCommandInput<
+        HierarchyCompletionCommandDefinition<
+          Command,
+          Dependencies,
+          Failures,
+          Fields,
+          InputSchema
+        >
+      > &
       Readonly<{
         readonly fields: Fields;
         readonly parent: Parent;
@@ -1541,22 +1634,24 @@ export interface DefineCommand<Command extends string, Dependencies> {
   ): Readonly<
     Record<
       Command,
-      Omit<
-        HierarchyCompletionCommandDefinition<
-          Command,
-          Dependencies,
-          Failures,
-          Fields,
-          InputSchema
-        >,
-        "kind"
-      > &
+      Definition &
+        Omit<
+          HierarchyCompletionCommandDefinition<
+            Command,
+            Dependencies,
+            Failures,
+            Fields,
+            InputSchema
+          >,
+          "kind" | "success" | "failures"
+        > &
         UsageConstraintProperty<Constraints> &
         HierarchyCommandFacts<Parent>
     >
   >;
 
   <
+    const Definition extends object,
     const Fields extends FieldDefinitions,
     InputSchema extends ContractSchema,
     const Parent extends string,
@@ -1564,24 +1659,8 @@ export interface DefineCommand<Command extends string, Dependencies> {
     const Failures extends FailureVariantDefinitions,
     const Constraints extends readonly unknown[] | undefined = undefined,
   >(
-    definition: HierarchyCommandInput<
-      HierarchyDataCommandDefinition<
-        Command,
-        Dependencies,
-        Fields,
-        InputSchema,
-        Variants,
-        Failures
-      >
-    > &
-      Readonly<{
-        readonly parent: Parent;
-        readonly usageConstraints?: Constraints & readonly UsageConstraint[];
-      }>,
-  ): Readonly<
-    Record<
-      Command,
-      Omit<
+    definition: Definition &
+      HierarchyCommandInput<
         HierarchyDataCommandDefinition<
           Command,
           Dependencies,
@@ -1589,9 +1668,27 @@ export interface DefineCommand<Command extends string, Dependencies> {
           InputSchema,
           Variants,
           Failures
-        >,
-        "kind"
+        >
       > &
+      Readonly<{
+        readonly parent: Parent;
+        readonly usageConstraints?: Constraints & readonly UsageConstraint[];
+      }>,
+  ): Readonly<
+    Record<
+      Command,
+      Definition &
+        Omit<
+          HierarchyDataCommandDefinition<
+            Command,
+            Dependencies,
+            Fields,
+            InputSchema,
+            Variants,
+            Failures
+          >,
+          "kind" | "success" | "failures"
+        > &
         UsageConstraintProperty<Constraints> &
         HierarchyCommandFacts<Parent>
     >
