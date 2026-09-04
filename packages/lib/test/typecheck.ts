@@ -17,6 +17,7 @@ import {
   type FieldDefinition,
   type DataVariantDefinition,
   type OutputCapability,
+  type StreamRootCommandDefinition,
   type ShortOptionAlias,
   type UsageConstraint,
 } from "@cli-contract/lib";
@@ -162,6 +163,37 @@ const dataCli = defineCli()({
   },
 });
 
+const streamCli = defineCli()({
+  root: "stream",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    stream: {
+      kind: "rootCommand",
+      name: "stream",
+      description: "流 fixture",
+      input: emptyInput,
+      success: {
+        kind: "stream",
+        records: { greeting: { description: "问候", schema: greetingData } },
+      },
+      failures: {
+        unavailable: {
+          description: "服务不可用",
+          schema: greetingData,
+          exitCode: 9,
+        },
+      },
+      async *handler({ outcome }) {
+        yield outcome.record.greeting({ message: "hello" });
+        return outcome.streamSuccess();
+      },
+    },
+  },
+});
+void streamCli;
+
 function verifyTypeErrors() {
   // @ts-expect-error 版本能力必须显式提供受控单行值。
   versionCapability({ value: "1.2.3" });
@@ -184,6 +216,73 @@ function verifyTypeErrors() {
     handler: ({ outcome }) => outcome.completion(),
   };
   void missingCompletionText;
+
+  const incompleteStream: StreamRootCommandDefinition<
+    "stream",
+    undefined,
+    Readonly<Record<never, never>>,
+    ContractSchema<EmptyCliInput>,
+    Readonly<{
+      readonly greeting: {
+        readonly description: "问候";
+        readonly schema: typeof greetingData;
+      };
+    }>,
+    Readonly<Record<never, never>>
+  > = {
+    kind: "rootCommand",
+    name: "stream",
+    description: "流 fixture",
+    input: emptyInput,
+    success: {
+      kind: "stream",
+      records: { greeting: { description: "问候", schema: greetingData } },
+    },
+    failures: {},
+    // @ts-expect-error 普通 EOF 不是 stream 成功终态。
+    async *handler({ outcome }) {
+      yield outcome.record.greeting({ message: "hello" });
+    },
+  };
+  void incompleteStream;
+
+  const invalidStreamFacts: StreamRootCommandDefinition<
+    "stream",
+    undefined,
+    Readonly<Record<never, never>>,
+    ContractSchema<EmptyCliInput>,
+    Readonly<{
+      readonly greeting: {
+        readonly description: "问候";
+        readonly schema: typeof greetingData;
+      };
+    }>,
+    Readonly<{
+      readonly unavailable: {
+        readonly description: "不可用";
+        readonly schema: typeof greetingData;
+        readonly exitCode: 9;
+      };
+    }>
+  > = {
+    kind: "rootCommand",
+    name: "stream",
+    description: "流 fixture",
+    input: emptyInput,
+    success: {
+      kind: "stream",
+      records: { greeting: { description: "问候", schema: greetingData } },
+    },
+    failures: {
+      unavailable: { description: "不可用", schema: greetingData, exitCode: 9 },
+    },
+    // @ts-expect-error stream 的 yield/return 位置分别只接受 record 与终态或 failure。
+    async *handler({ outcome }) {
+      yield outcome.failure.unavailable({ message: "nope" });
+      return outcome.record.greeting({ message: "nope" });
+    },
+  };
+  void invalidStreamFacts;
 
   // @ts-expect-error text data 变体必须同位声明 presenter。
   const missingDataText: DataVariantDefinition<

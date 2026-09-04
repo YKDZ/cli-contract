@@ -66,6 +66,40 @@ export function createFailureWireSchema(
   return createEnvelopeSchema(envelope, { data: dataSchema });
 }
 
+export function createStreamHeaderEnvelope<Command extends string>(
+  command: Command,
+) {
+  return Object.freeze({ schemaVersion, command, kind: "stream" as const });
+}
+
+export function createStreamRecordEnvelope<Variant extends string, Data>(
+  variant: Variant,
+  data: Data,
+) {
+  return Object.freeze({ kind: "record" as const, variant, data });
+}
+
+export function createStreamSuccessEnvelope() {
+  return Object.freeze({ kind: "streamSuccess" as const });
+}
+
+export function createStreamHeaderWireSchema(command: string): JsonObject {
+  return createEnvelopeSchema(createStreamHeaderEnvelope(command), {});
+}
+
+export function createStreamRecordWireSchema(
+  variant: string,
+  dataSchema: JsonObject,
+): JsonObject {
+  return createEnvelopeSchema(createStreamRecordEnvelope(variant, null), {
+    data: dataSchema,
+  });
+}
+
+export function createStreamSuccessWireSchema(): JsonObject {
+  return createEnvelopeSchema(createStreamSuccessEnvelope(), {});
+}
+
 function createEnvelopeSchema(
   envelope: Readonly<Record<string, unknown>>,
   propertySchemas: Readonly<Record<string, JsonObject>>,

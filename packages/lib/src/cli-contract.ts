@@ -33,16 +33,30 @@ import type {
   FailureVariantDefinitions,
   OutcomeFact,
   TextLine,
+  StreamOutcome,
+  StreamRecordDefinitions,
+  StreamRecordFactUnion,
+  StreamSuccessFact,
 } from "#/outcome-fact";
 import {
   createCompletionWireSchema,
   createDataWireSchema,
   createFailureWireSchema,
+  createStreamHeaderWireSchema,
+  createStreamRecordWireSchema,
+  createStreamSuccessWireSchema,
 } from "#/outcome-wire";
+import {
+  compileStreamRecords,
+  type RuntimeStreamRecord,
+  type StreamRecordManifest,
+} from "#/stream-variant-compiler";
 export {
   createCompletionFact,
   createDataFact,
   createFailureFact,
+  createStreamRecordFact,
+  createStreamSuccessFact,
   isIssuedOutcomeFact,
   text,
 } from "#/outcome-fact";
@@ -61,6 +75,12 @@ export type {
   FailureVariantDefinition,
   FailureVariantDefinitions,
   OutcomeFact,
+  StreamOutcome,
+  StreamRecordDefinition,
+  StreamRecordDefinitions,
+  StreamRecordFact,
+  StreamRecordFactUnion,
+  StreamSuccessFact,
   SilentText,
   TextLine,
 } from "#/outcome-fact";
@@ -525,6 +545,19 @@ export interface DataHandlerContext<
     FailureOutcome<Command, Failures>;
 }
 
+export interface StreamHandlerContext<
+  Command extends string,
+  Dependencies,
+  Input,
+  Records extends StreamRecordDefinitions,
+  Failures extends FailureVariantDefinitions,
+> {
+  readonly input: Input;
+  readonly dependencies: Dependencies;
+  readonly outcome: StreamOutcome<Command, Records> &
+    FailureOutcome<Command, Failures>;
+}
+
 export interface CompletionRootCommandDefinition<
   Command extends string,
   Dependencies,
@@ -600,6 +633,43 @@ export interface DataRootCommandDefinition<
       >;
 }
 
+export interface StreamRootCommandDefinition<
+  Command extends string,
+  Dependencies,
+  Fields extends FieldDefinitions,
+  InputSchema extends ContractSchema,
+  Records extends StreamRecordDefinitions,
+  Failures extends FailureVariantDefinitions,
+> {
+  readonly kind: "rootCommand";
+  readonly name: string;
+  readonly description: string;
+  readonly helpSupplement?: string;
+  readonly usageConstraints?: readonly UsageConstraint<Fields>[];
+  readonly fields?: CheckedFieldDefinitions<Fields> &
+    FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
+    FieldIdentityContract<Fields>;
+  readonly input: InputSchema & RawFieldInputContract<Fields, InputSchema>;
+  readonly success: Readonly<{
+    readonly kind: "stream";
+    readonly records: Records;
+  }>;
+  readonly failures: Failures & FailureVariantNameContract<Failures>;
+  readonly handler: (
+    context: StreamHandlerContext<
+      Command,
+      Dependencies,
+      ContractSchemaOutput<InputSchema>,
+      Records,
+      Failures
+    >,
+  ) => AsyncGenerator<
+    StreamRecordFactUnion<Command, Records>,
+    StreamSuccessFact<Command> | FailureFactUnion<Command, Failures>,
+    void
+  >;
+}
+
 export type RootCommandDefinition<Command extends string, Dependencies> =
   | CompletionRootCommandDefinition<
       Command,
@@ -614,6 +684,14 @@ export type RootCommandDefinition<Command extends string, Dependencies> =
       FieldDefinitions,
       ContractSchema,
       DataVariantDefinitions,
+      FailureVariantDefinitions
+    >
+  | StreamRootCommandDefinition<
+      Command,
+      Dependencies,
+      FieldDefinitions,
+      ContractSchema,
+      StreamRecordDefinitions,
       FailureVariantDefinitions
     >;
 
@@ -673,6 +751,18 @@ export type ExecutableCommandDefinition<
       >,
       "kind"
     > &
+      HierarchyCommandFacts)
+  | (Omit<
+      StreamRootCommandDefinition<
+        Command,
+        Dependencies,
+        FieldDefinitions,
+        ContractSchema,
+        StreamRecordDefinitions,
+        FailureVariantDefinitions
+      >,
+      "kind"
+    > &
       HierarchyCommandFacts);
 
 export type CommandNodeDefinition =
@@ -688,6 +778,10 @@ export type CommandNodeDefinition =
           | Readonly<{
               readonly kind: "data";
               readonly variants: DataVariantDefinitions;
+            }>
+          | Readonly<{
+              readonly kind: "stream";
+              readonly records: StreamRecordDefinitions;
             }>;
         readonly failures: FailureVariantDefinitions;
         readonly handler: unknown;
@@ -729,7 +823,18 @@ type HierarchyResult<Commands> = {
       ?
           | CompletionFact<Extract<Command, string>>
           | FailureFactUnion<Extract<Command, string>, Failures>
-      : never;
+      : Commands[Command] extends Readonly<{
+            readonly kind: "command";
+            readonly success: Readonly<{
+              readonly kind: "stream";
+              readonly records: StreamRecordDefinitions;
+            }>;
+            readonly failures: infer Failures extends FailureVariantDefinitions;
+          }>
+        ?
+            | StreamSuccessFact<Extract<Command, string>>
+            | FailureFactUnion<Extract<Command, string>, Failures>
+        : never;
 }[keyof Commands];
 
 type OwnHierarchyFields<Node> =
@@ -898,6 +1003,27 @@ export type DataRootCliDefinition<
     }>;
   }>;
 
+export type StreamRootCliDefinition<
+  Root extends string,
+  Dependencies,
+  Fields extends FieldDefinitions,
+  InputSchema extends ContractSchema,
+  Records extends StreamRecordDefinitions,
+  Failures extends FailureVariantDefinitions,
+> = RootCliDefinitionBase<Root> &
+  Readonly<{
+    readonly commands: Readonly<{
+      readonly [Command in Root]: StreamRootCommandDefinition<
+        Command,
+        Dependencies,
+        Fields,
+        InputSchema,
+        Records,
+        Failures
+      >;
+    }>;
+  }>;
+
 export type RootCliDefinition<Root extends string, Dependencies> =
   | CompletionRootCliDefinition<
       Root,
@@ -912,6 +1038,14 @@ export type RootCliDefinition<Root extends string, Dependencies> =
       FieldDefinitions,
       ContractSchema,
       DataVariantDefinitions,
+      FailureVariantDefinitions
+    >
+  | StreamRootCliDefinition<
+      Root,
+      Dependencies,
+      FieldDefinitions,
+      ContractSchema,
+      StreamRecordDefinitions,
       FailureVariantDefinitions
     >;
 
@@ -1067,6 +1201,10 @@ export type CommandSuccessManifest =
   | Readonly<{
       readonly kind: "data";
       readonly variants: Readonly<Record<string, DataVariantManifest>>;
+    }>
+  | Readonly<{
+      readonly kind: "stream";
+      readonly records: Readonly<Record<string, StreamRecordManifest>>;
     }>;
 
 export interface RootCommandManifest {
@@ -1130,6 +1268,12 @@ export interface CommandWireManifest {
   readonly completion?: JsonObject;
   readonly data?: Readonly<Record<string, JsonObject>>;
   readonly failure?: Readonly<Record<string, JsonObject>>;
+  readonly stream?: Readonly<{
+    readonly header: JsonObject;
+    readonly records: Readonly<Record<string, JsonObject>>;
+    readonly terminal: JsonObject;
+    readonly line: JsonObject;
+  }>;
 }
 
 type HierarchyGrammarNode<Command extends string, Node> =
@@ -1389,6 +1533,29 @@ export interface DefineCli<Dependencies> {
 
   <
     const Root extends string,
+    InputSchema extends ContractSchema,
+    const Records extends StreamRecordDefinitions,
+    const Failures extends FailureVariantDefinitions,
+  >(
+    definition: StreamRootCliDefinition<
+      Root,
+      Dependencies,
+      Readonly<Record<never, never>>,
+      InputSchema,
+      Records,
+      Failures
+    > &
+      Readonly<{ readonly output: OutputCapability<readonly ["structured"]> }>,
+  ): CliContract<
+    Root,
+    Dependencies,
+    EmptyCliInput,
+    StreamSuccessFact<Root> | FailureFactUnion<Root, Failures>,
+    "rootCommand"
+  >;
+
+  <
+    const Root extends string,
     const Commands extends Readonly<Record<string, CommandNodeDefinition>>,
     const Output extends OutputCapability,
   >(
@@ -1478,6 +1645,30 @@ export interface DefineCli<Dependencies> {
     Dependencies,
     RawFieldInput<Fields>,
     DataFactUnion<Root, Variants> | FailureFactUnion<Root, Failures>,
+    "rootCommand"
+  >;
+
+  <
+    const Root extends string,
+    const Fields extends FieldDefinitions,
+    InputSchema extends ContractSchema,
+    const Records extends StreamRecordDefinitions,
+    const Failures extends FailureVariantDefinitions,
+  >(
+    definition: StreamRootCliDefinition<
+      Root,
+      Dependencies,
+      Fields,
+      InputSchema,
+      Records,
+      Failures
+    > &
+      Readonly<{ readonly output: OutputCapability<readonly ["structured"]> }>,
+  ): CliContract<
+    Root,
+    Dependencies,
+    RawFieldInput<Fields>,
+    StreamSuccessFact<Root> | FailureFactUnion<Root, Failures>,
     "rootCommand"
   >;
 
@@ -1580,6 +1771,30 @@ type HierarchyDataCommandDefinition<
     Fields,
     InputSchema,
     Variants,
+    Failures
+  >,
+  "fields" | "input" | "usageConstraints"
+> &
+  Readonly<{
+    readonly fields: CheckedFieldDefinitions<Fields> &
+      FieldIdentityContract<Fields>;
+    readonly input: InputSchema;
+  }>;
+
+type HierarchyStreamCommandDefinition<
+  Command extends string,
+  Dependencies,
+  Fields extends FieldDefinitions,
+  InputSchema extends ContractSchema,
+  Records extends StreamRecordDefinitions,
+  Failures extends FailureVariantDefinitions,
+> = Omit<
+  StreamRootCommandDefinition<
+    Command,
+    Dependencies,
+    Fields,
+    InputSchema,
+    Records,
     Failures
   >,
   "fields" | "input" | "usageConstraints"
@@ -1720,6 +1935,50 @@ export interface DefineCommand<Command extends string, Dependencies> {
         HierarchyCommandFacts<Parent>
     >
   >;
+
+  <
+    const Definition extends object,
+    const Fields extends FieldDefinitions,
+    InputSchema extends ContractSchema,
+    const Parent extends string,
+    const Records extends StreamRecordDefinitions,
+    const Failures extends FailureVariantDefinitions,
+    const Constraints extends readonly unknown[] | undefined = undefined,
+  >(
+    definition: Definition &
+      HierarchyCommandInput<
+        HierarchyStreamCommandDefinition<
+          Command,
+          Dependencies,
+          Fields,
+          InputSchema,
+          Records,
+          Failures
+        >
+      > &
+      Readonly<{
+        readonly parent: Parent;
+        readonly usageConstraints?: Constraints & readonly UsageConstraint[];
+      }>,
+  ): Readonly<
+    Record<
+      Command,
+      Definition &
+        Omit<
+          HierarchyStreamCommandDefinition<
+            Command,
+            Dependencies,
+            Fields,
+            InputSchema,
+            Records,
+            Failures
+          >,
+          "kind" | "success" | "failures"
+        > &
+        UsageConstraintProperty<Constraints> &
+        HierarchyCommandFacts<Parent>
+    >
+  >;
 }
 
 interface RuntimeCompiledCli {
@@ -1736,6 +1995,10 @@ interface RuntimeCompiledCli {
     | Readonly<{
         readonly kind: "data";
         readonly variants: Readonly<Record<string, RuntimeAtomicVariant>>;
+      }>
+    | Readonly<{
+        readonly kind: "stream";
+        readonly records: Readonly<Record<string, RuntimeStreamRecord>>;
       }>;
   readonly failures: Readonly<Record<string, RuntimeAtomicVariant>>;
   readonly handler: unknown;
@@ -1774,6 +2037,10 @@ type RuntimeExecutableDefinition = Readonly<{
     | Readonly<{
         readonly kind: "data";
         readonly variants: DataVariantDefinitions;
+      }>
+    | Readonly<{
+        readonly kind: "stream";
+        readonly records: StreamRecordDefinitions;
       }>;
   readonly failures: FailureVariantDefinitions;
   readonly handler: unknown;
@@ -3096,7 +3363,7 @@ function collectTextPresenterIssues(
       success as Readonly<Record<string, unknown>>,
       issues,
     );
-  } else {
+  } else if (success.kind === "data") {
     for (const [variant, definition] of Object.entries(success.variants)) {
       collectTextPresenterIssue(
         command,
@@ -3232,6 +3499,36 @@ function compileSuccess(
         completion: deepFreeze(createCompletionWireSchema(command)),
       }),
     };
+  }
+
+  if (success.kind === "stream") {
+    const records = compileStreamRecords(command, success.records, issues);
+    if (Object.keys(records.runtime).length === 0) {
+      issues.push({ code: "missingStreamRecord", command });
+    }
+    const header = deepFreeze(createStreamHeaderWireSchema(command));
+    const terminal = deepFreeze(createStreamSuccessWireSchema());
+    const recordWire = Object.fromEntries(
+      Object.entries(records.wire).map(([variant, schema]) => [
+        variant,
+        deepFreeze(createStreamRecordWireSchema(variant, schema)),
+      ]),
+    ) as Readonly<Record<string, JsonObject>>;
+    return deepFreeze({
+      runtime: { kind: "stream" as const, records: records.runtime },
+      manifest: { kind: "stream" as const, records: records.manifest },
+      wire: {
+        stream: {
+          header,
+          records: recordWire,
+          terminal,
+          line: deepFreeze({
+            $schema: "https://json-schema.org/draft/2020-12/schema",
+            oneOf: [header, ...Object.values(recordWire), terminal],
+          }),
+        },
+      },
+    });
   }
 
   const variants = compileAtomicVariants(

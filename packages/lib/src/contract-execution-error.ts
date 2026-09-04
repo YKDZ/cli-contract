@@ -2,7 +2,7 @@ export type ExecutionSchemaTarget =
   | Readonly<{ readonly command: string; readonly location: "input" }>
   | Readonly<{
       readonly command: string;
-      readonly location: "data" | "failure";
+      readonly location: "data" | "failure" | "record";
       readonly variant: string;
     }>;
 
@@ -22,13 +22,13 @@ export type ContractExecutionIssue =
   | Readonly<{
       readonly code: "outcomeKindMismatch";
       readonly command: string;
-      readonly expected: "completion" | "data";
+      readonly expected: "completion" | "data" | "stream";
       readonly received: string;
     }>
   | Readonly<{
       readonly code: "undeclaredOutcomeVariant";
       readonly command: string;
-      readonly location: "data" | "failure";
+      readonly location: "data" | "failure" | "record";
       readonly variant: string;
     }>
   | Readonly<

@@ -55,6 +55,15 @@ export type DataVariantDefinition<
 export type DataVariantDefinitions<TextEnabled extends boolean = boolean> =
   Readonly<Record<string, DataVariantDefinition<unknown, TextEnabled>>>;
 
+export type StreamRecordDefinition<Payload = unknown> = Readonly<{
+  readonly description: string;
+  readonly schema: ContractSchema<Payload>;
+}>;
+
+export type StreamRecordDefinitions = Readonly<
+  Record<string, StreamRecordDefinition<unknown>>
+>;
+
 export type FailureVariantDefinition<
   Payload = unknown,
   TextEnabled extends boolean = boolean,
@@ -101,7 +110,30 @@ export interface FailureFact<
   readonly [outcomeFactType]: true;
 }
 
-export type OutcomeFact = CompletionFact | DataFact | FailureFact;
+export interface StreamRecordFact<
+  Command extends string = string,
+  Variant extends string = string,
+  Data = unknown,
+> {
+  readonly kind: "record";
+  readonly command: Command;
+  readonly variant: Variant;
+  readonly data: Data;
+  readonly [outcomeFactType]: true;
+}
+
+export interface StreamSuccessFact<Command extends string = string> {
+  readonly kind: "streamSuccess";
+  readonly command: Command;
+  readonly [outcomeFactType]: true;
+}
+
+export type OutcomeFact =
+  | CompletionFact
+  | DataFact
+  | FailureFact
+  | StreamRecordFact
+  | StreamSuccessFact;
 
 export interface CompletionOutcome<Command extends string> {
   completion(): CompletionFact<Command>;
@@ -165,6 +197,36 @@ export type FailureOutcome<
   }>;
 }>;
 
+type StreamRecordPayload<Variant> =
+  Variant extends StreamRecordDefinition<infer Payload> ? Payload : never;
+
+export type StreamRecordFactUnion<
+  Command extends string,
+  Records extends StreamRecordDefinitions,
+> = {
+  readonly [Variant in keyof Records & string]: StreamRecordFact<
+    Command,
+    Variant,
+    StreamRecordPayload<Records[Variant]>
+  >;
+}[keyof Records & string];
+
+export type StreamOutcome<
+  Command extends string,
+  Records extends StreamRecordDefinitions,
+> = Readonly<{
+  readonly record: Readonly<{
+    [Variant in keyof Records]: (
+      payload: StreamRecordPayload<Records[Variant]>,
+    ) => StreamRecordFact<
+      Command,
+      Variant & string,
+      StreamRecordPayload<Records[Variant]>
+    >;
+  }>;
+  streamSuccess(): StreamSuccessFact<Command>;
+}>;
+
 export function createCompletionFact<Command extends string>(
   command: Command,
   issuedOutcomeFacts: WeakSet<object>,
@@ -207,6 +269,35 @@ export function createFailureFact<
   });
   issuedOutcomeFacts.add(fact);
   return fact as FailureFact<Command, Variant, Data>;
+}
+
+export function createStreamRecordFact<
+  Command extends string,
+  Variant extends string,
+  Data,
+>(
+  command: Command,
+  variant: Variant,
+  data: Data,
+  issuedOutcomeFacts: WeakSet<object>,
+): StreamRecordFact<Command, Variant, Data> {
+  const fact = Object.freeze({
+    kind: "record" as const,
+    command,
+    variant,
+    data,
+  });
+  issuedOutcomeFacts.add(fact);
+  return fact as StreamRecordFact<Command, Variant, Data>;
+}
+
+export function createStreamSuccessFact<Command extends string>(
+  command: Command,
+  issuedOutcomeFacts: WeakSet<object>,
+): StreamSuccessFact<Command> {
+  const fact = Object.freeze({ kind: "streamSuccess" as const, command });
+  issuedOutcomeFacts.add(fact);
+  return fact as StreamSuccessFact<Command>;
 }
 
 export function isIssuedOutcomeFact(

@@ -2,7 +2,7 @@ export type SchemaDefinitionTarget =
   | Readonly<{ readonly command: string; readonly location: "input" }>
   | Readonly<{
       readonly command: string;
-      readonly location: "data";
+      readonly location: "data" | "record";
       readonly variant: string;
     }>
   | Readonly<{
@@ -80,13 +80,13 @@ export type ContractDefinitionIssue =
   | Readonly<{
       readonly code: "invalidVariantName";
       readonly command: string;
-      readonly location: "data" | "failure";
+      readonly location: "data" | "failure" | "record";
       readonly variant: string;
     }>
   | Readonly<{
       readonly code: "missingVariantDescription";
       readonly command: string;
-      readonly location: "data" | "failure";
+      readonly location: "data" | "failure" | "record";
       readonly variant: string;
     }>
   | Readonly<{
@@ -97,6 +97,10 @@ export type ContractDefinitionIssue =
       readonly received: number | null;
       readonly minimum: 0 | 1;
       readonly maximum: 255;
+    }>
+  | Readonly<{
+      readonly code: "missingStreamRecord";
+      readonly command: string;
     }>
   | Readonly<{
       readonly code: "invalidCapability";
@@ -361,6 +365,8 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `命令 ${issue.command} 的 ${issue.location} 变体 ${issue.variant} 缺少描述`;
     case "invalidVariantExitCode":
       return `命令 ${issue.command} 的 ${issue.location} 变体 ${issue.variant} 退出码无效`;
+    case "missingStreamRecord":
+      return `命令 ${issue.command} 的 stream 必须声明至少一个 record`;
     case "invalidCapability":
       return `CLI 的 ${issue.capability} 能力无效`;
     case "invalidOutputFormat":

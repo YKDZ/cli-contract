@@ -4,6 +4,8 @@ import {
   createCompletionFact,
   createDataFact,
   createFailureFact,
+  createStreamRecordFact,
+  createStreamSuccessFact,
   getCompiledCli,
   isIssuedOutcomeFact,
   type CliContract,
@@ -32,6 +34,9 @@ import {
   createCompletionEnvelope,
   createDataEnvelope,
   createFailureEnvelope,
+  createStreamHeaderEnvelope,
+  createStreamRecordEnvelope,
+  createStreamSuccessEnvelope,
 } from "#/outcome-wire";
 
 export type CliOutputDestination = "stderr" | "stdout";
@@ -78,6 +83,8 @@ type RuntimeHandler = (context: {
   readonly dependencies: unknown;
   readonly outcome: unknown;
 }) => unknown;
+
+type RuntimeStreamGenerator = AsyncGenerator<unknown, unknown, void>;
 
 export async function executeCli<const Contract extends CliContract>(
   cliContract: Contract,
@@ -282,22 +289,41 @@ async function executeApplicationResult<Contract extends CliContract>(
           completion: () =>
             createCompletionFact(compiled.root, issuedOutcomeFacts),
         }
-      : {
-          data: Object.freeze(
-            Object.fromEntries(
-              Object.keys(compiled.success.variants).map((variant) => [
-                variant,
-                (payload: unknown) =>
-                  createDataFact(
-                    compiled.root,
-                    variant,
-                    payload,
-                    issuedOutcomeFacts,
-                  ),
-              ]),
+      : compiled.success.kind === "data"
+        ? {
+            data: Object.freeze(
+              Object.fromEntries(
+                Object.keys(compiled.success.variants).map((variant) => [
+                  variant,
+                  (payload: unknown) =>
+                    createDataFact(
+                      compiled.root,
+                      variant,
+                      payload,
+                      issuedOutcomeFacts,
+                    ),
+                ]),
+              ),
             ),
-          ),
-        };
+          }
+        : {
+            record: Object.freeze(
+              Object.fromEntries(
+                Object.keys(compiled.success.records).map((variant) => [
+                  variant,
+                  (payload: unknown) =>
+                    createStreamRecordFact(
+                      compiled.root,
+                      variant,
+                      payload,
+                      issuedOutcomeFacts,
+                    ),
+                ]),
+              ),
+            ),
+            streamSuccess: () =>
+              createStreamSuccessFact(compiled.root, issuedOutcomeFacts),
+          };
   const outcome = Object.freeze({
     ...successOutcome,
     failure: Object.freeze(
@@ -315,11 +341,21 @@ async function executeApplicationResult<Contract extends CliContract>(
       ),
     ),
   });
-  const result = await (compiled.handler as RuntimeHandler)({
+  const handlerResult = (compiled.handler as RuntimeHandler)({
     input,
     dependencies: options.dependencies,
     outcome,
   });
+  if (compiled.success.kind === "stream") {
+    return executeStreamResult(
+      compiled,
+      handlerResult as RuntimeStreamGenerator,
+      issuedOutcomeFacts,
+      options,
+      outputFormat,
+    ) as Promise<CliTermination<Contract>>;
+  }
+  const result = await handlerResult;
   if (!isIssuedOutcomeFact(result, issuedOutcomeFacts)) {
     throwExecutionIssue({
       code: "invalidOutcomeFact",
@@ -360,6 +396,119 @@ async function writeCliOutput(
     await write(output);
   } catch (cause) {
     throw new CliWriteError(output.destination, cause);
+  }
+}
+
+async function executeStreamResult<Contract extends CliContract>(
+  compiled: ReturnType<typeof getCompiledCli>,
+  generator: RuntimeStreamGenerator,
+  issuedOutcomeFacts: WeakSet<object>,
+  options: ExecuteCliOptions<Contract>,
+  outputFormat: "structured" | "text",
+): Promise<CliTermination<Contract>> {
+  if (outputFormat !== "structured") {
+    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+  }
+  if (compiled.success.kind !== "stream") {
+    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+  }
+  let active = true;
+  try {
+    await writeCliOutput(options.write, {
+      destination: "stdout",
+      chunk: `${JSON.stringify(createStreamHeaderEnvelope(compiled.root))}\n`,
+    });
+    for (;;) {
+      const step = await generator.next();
+      if (!step.done) {
+        if (!isIssuedOutcomeFact(step.value, issuedOutcomeFacts)) {
+          throwExecutionIssue({
+            code: "invalidOutcomeFact",
+            command: compiled.root,
+          });
+        }
+        if (step.value.kind !== "record") {
+          throwExecutionIssue({
+            code: "outcomeKindMismatch",
+            command: compiled.root,
+            expected: "stream",
+            received: step.value.kind,
+          });
+        }
+        const record = compiled.success.records[step.value.variant];
+        if (record === undefined) {
+          throwExecutionIssue({
+            code: "undeclaredOutcomeVariant",
+            command: compiled.root,
+            location: "record",
+            variant: step.value.variant,
+          });
+        }
+        const data = projectAtomicData(record.schema, step.value.data, {
+          command: compiled.root,
+          location: "record",
+          variant: step.value.variant,
+        });
+        await writeCliOutput(options.write, {
+          destination: "stdout",
+          chunk: `${JSON.stringify(
+            createStreamRecordEnvelope(step.value.variant, data),
+          )}\n`,
+        });
+        continue;
+      }
+      active = false;
+      if (!isIssuedOutcomeFact(step.value, issuedOutcomeFacts)) {
+        throwExecutionIssue({
+          code: "invalidOutcomeFact",
+          command: compiled.root,
+        });
+      }
+      if (step.value.kind === "failure") {
+        const projected = await projectOutcome(
+          compiled,
+          step.value,
+          "structured",
+        );
+        await writeCliOutput(options.write, {
+          destination: projected.destination,
+          chunk: projected.chunk ?? "",
+        });
+        return Object.freeze({
+          kind: "applicationResult",
+          command: compiled.root as CliContractRoot<Contract>,
+          result: projected.result as CliContractResult<Contract>,
+          exitCode: projected.exitCode,
+        });
+      }
+      if (step.value.kind !== "streamSuccess") {
+        throwExecutionIssue({
+          code: "outcomeKindMismatch",
+          command: compiled.root,
+          expected: "stream",
+          received: step.value.kind,
+        });
+      }
+      await writeCliOutput(options.write, {
+        destination: "stdout",
+        chunk: `${JSON.stringify(createStreamSuccessEnvelope())}\n`,
+      });
+      return Object.freeze({
+        kind: "applicationResult",
+        command: compiled.root as CliContractRoot<Contract>,
+        result: step.value as CliContractResult<Contract>,
+        exitCode: 0,
+      });
+    }
+  } catch (cause) {
+    if (active && typeof generator.return === "function") {
+      try {
+        await generator.return(undefined);
+      } catch {
+        // 清理异常不能掩盖触发中断的写入或程序缺陷。
+      }
+    }
+    throw cause;
   }
 }
 
@@ -448,7 +597,7 @@ async function projectOutcome(
       destination: "stdout",
     };
   }
-  if (result.kind !== "data") {
+  if (compiled.success.kind !== "data" || result.kind !== "data") {
     throwExecutionIssue({
       code: "outcomeKindMismatch",
       command: compiled.root,
