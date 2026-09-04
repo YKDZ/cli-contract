@@ -23,6 +23,7 @@ import {
 import { deepFreeze } from "#/json-value";
 import type {
   CompletionFact,
+  CompletionTextPresenter,
   CompletionOutcome,
   DataFactUnion,
   DataOutcome,
@@ -42,9 +43,11 @@ export {
   createDataFact,
   createFailureFact,
   isIssuedOutcomeFact,
+  text,
 } from "#/outcome-fact";
 export type {
   CompletionFact,
+  CompletionTextPresenter,
   CompletionOutcome,
   DataFact,
   DataFactUnion,
@@ -57,6 +60,8 @@ export type {
   FailureVariantDefinition,
   FailureVariantDefinitions,
   OutcomeFact,
+  SilentText,
+  TextLine,
 } from "#/outcome-fact";
 
 const cliContractType = Symbol("CliContract.type");
@@ -71,12 +76,30 @@ export interface HelpCapability {
   readonly [cliContractType]: "help";
 }
 
-export interface OutputCapability {
+export type OutputFormat = "structured" | "text";
+
+export interface OutputCapability<
+  Formats extends readonly OutputFormat[] = readonly OutputFormat[],
+> {
   readonly kind: "outputCapability";
-  readonly defaultFormat: "structured";
-  readonly formats: readonly ["structured"];
+  readonly defaultFormat: Formats[number];
+  readonly formats: Formats;
+  readonly compatibilityFlags: Readonly<Record<string, OutputFormat>>;
   readonly [cliContractType]: "output";
 }
+
+type OutputCapabilityDefinition = Readonly<{
+  readonly defaultFormat: OutputFormat;
+  readonly text?: boolean;
+  readonly compatibilityFlags?: Readonly<Record<`--${string}`, OutputFormat>>;
+}>;
+
+type OutputFormatsFor<Definition extends OutputCapabilityDefinition> =
+  Definition["defaultFormat"] extends "text"
+    ? readonly ["structured", "text"]
+    : Definition["text"] extends true
+      ? readonly ["structured", "text"]
+      : readonly ["structured"];
 
 type LowercaseLetter =
   | "a"
@@ -492,6 +515,7 @@ export interface CompletionRootCommandDefinition<
   Failures extends FailureVariantDefinitions = Readonly<Record<never, never>>,
   Fields extends FieldDefinitions = Readonly<Record<never, never>>,
   InputSchema extends ContractSchema = ContractSchema<EmptyCliInput>,
+  TextEnabled extends boolean = boolean,
 > {
   readonly kind: "rootCommand";
   readonly name: string;
@@ -502,7 +526,12 @@ export interface CompletionRootCommandDefinition<
     FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
     FieldIdentityContract<Fields>;
   readonly input: InputSchema & RawFieldInputContract<Fields, InputSchema>;
-  readonly success: Readonly<{ readonly kind: "completion" }>;
+  readonly success: Readonly<{ readonly kind: "completion" }> &
+    (TextEnabled extends true
+      ? Readonly<{ readonly text: CompletionTextPresenter }>
+      : TextEnabled extends false
+        ? Readonly<{ readonly text?: never }>
+        : Readonly<{ readonly text?: CompletionTextPresenter }>);
   readonly failures: Failures & FailureVariantNameContract<Failures>;
   readonly handler: (
     context: CompletionHandlerContext<
@@ -816,6 +845,7 @@ export type CompletionRootCliDefinition<
   Failures extends FailureVariantDefinitions = Readonly<Record<never, never>>,
   Fields extends FieldDefinitions = Readonly<Record<never, never>>,
   InputSchema extends ContractSchema = ContractSchema<EmptyCliInput>,
+  TextEnabled extends boolean = boolean,
 > = RootCliDefinitionBase<Root> &
   Readonly<{
     readonly commands: Readonly<{
@@ -824,7 +854,8 @@ export type CompletionRootCliDefinition<
         Dependencies,
         Failures,
         Fields,
-        InputSchema
+        InputSchema,
+        TextEnabled
       >;
     }>;
   }>;
@@ -988,8 +1019,10 @@ export interface CliGrammar<
   readonly controls: Readonly<{
     readonly help: Readonly<{ readonly longOption: "--help" }>;
     readonly output: Readonly<{
-      readonly defaultFormat: "structured";
-      readonly formats: readonly ["structured"];
+      readonly defaultFormat: OutputFormat;
+      readonly formats: readonly OutputFormat[];
+      readonly selector?: "--output-format";
+      readonly compatibilityFlags?: Readonly<Record<string, OutputFormat>>;
     }>;
   }>;
 }
@@ -1256,6 +1289,83 @@ export interface DefineCli<Dependencies> {
     Commands
   >;
 
+  <
+    const Root extends string,
+    const Failures extends FailureVariantDefinitions<true>,
+  >(
+    definition: CompletionRootCliDefinition<
+      Root,
+      Dependencies,
+      Failures,
+      Readonly<Record<never, never>>,
+      ContractSchema<EmptyCliInput>,
+      true
+    > &
+      Readonly<{
+        readonly output: OutputCapability<readonly ["structured", "text"]>;
+      }>,
+  ): CliContract<
+    Root,
+    Dependencies,
+    EmptyCliInput,
+    CompletionFact<Root> | FailureFactUnion<Root, Failures>,
+    "rootCommand"
+  >;
+
+  <
+    const Root extends string,
+    const Fields extends FieldDefinitions,
+    InputSchema extends ContractSchema,
+    const Failures extends FailureVariantDefinitions<true>,
+  >(
+    definition: CompletionRootCliDefinition<
+      Root,
+      Dependencies,
+      Failures,
+      Fields,
+      InputSchema,
+      true
+    > &
+      Readonly<{
+        readonly output: OutputCapability<readonly ["structured", "text"]>;
+        readonly commands: Readonly<{
+          readonly [Command in Root]: Readonly<{ readonly fields: Fields }>;
+        }>;
+      }>,
+  ): CliContract<
+    Root,
+    Dependencies,
+    RawFieldInput<Fields>,
+    CompletionFact<Root> | FailureFactUnion<Root, Failures>,
+    "rootCommand"
+  >;
+
+  <
+    const Root extends string,
+    const Fields extends FieldDefinitions,
+    InputSchema extends ContractSchema,
+    const Variants extends DataVariantDefinitions<true>,
+    const Failures extends FailureVariantDefinitions<true>,
+  >(
+    definition: DataRootCliDefinition<
+      Root,
+      Dependencies,
+      Fields,
+      InputSchema,
+      Variants,
+      Failures
+    > &
+      Readonly<{
+        readonly output: OutputCapability<readonly ["structured", "text"]>;
+      }>,
+  ): CliContract<
+    Root,
+    Dependencies,
+    RawFieldInput<Fields>,
+    DataFactUnion<Root, Variants> | FailureFactUnion<Root, Failures>,
+    "rootCommand"
+  >;
+
   <const Root extends string, const Failures extends FailureVariantDefinitions>(
     definition: CompletionRootCliDefinition<Root, Dependencies, Failures>,
   ): CliContract<
@@ -1498,7 +1608,7 @@ interface RuntimeCompiledCli {
   readonly usageFailureExitCode: number;
   readonly input: ContractSchema;
   readonly success:
-    | Readonly<{ readonly kind: "completion" }>
+    | Readonly<{ readonly kind: "completion"; readonly text?: unknown }>
     | Readonly<{
         readonly kind: "data";
         readonly variants: Readonly<Record<string, RuntimeAtomicVariant>>;
@@ -1573,21 +1683,26 @@ export function helpCapability(): HelpCapability {
   return capability;
 }
 
-export function outputCapability(
-  definition: Readonly<{ readonly defaultFormat: "structured" }>,
-): OutputCapability {
+export function outputCapability<
+  const Definition extends OutputCapabilityDefinition,
+>(definition: Definition): OutputCapability<OutputFormatsFor<Definition>> {
+  const formats =
+    definition.defaultFormat === "text" || definition.text === true
+      ? (["structured", "text"] as const)
+      : (["structured"] as const);
   const capability = Object.freeze({
     kind: "outputCapability" as const,
     defaultFormat: definition.defaultFormat,
-    formats: Object.freeze(["structured"] as const),
-  }) as OutputCapability;
+    formats: Object.freeze(formats),
+    compatibilityFlags: Object.freeze(definition.compatibilityFlags ?? {}),
+  }) as OutputCapability<OutputFormatsFor<Definition>>;
   outputCapabilities.add(capability);
   return capability;
 }
 
 export function defineCli<Dependencies = undefined>(): DefineCli<Dependencies> {
   const define = ((definition: RuntimeCliDefinition) =>
-    compileCli(definition)) as DefineCli<Dependencies>;
+    compileCli(definition)) as unknown as DefineCli<Dependencies>;
   Object.defineProperty(define, "command", {
     configurable: true,
     value: (command: string) => (definition: object) =>
@@ -1633,6 +1748,13 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
     command.failures,
     definitionIssues,
   );
+  collectTextPresenterIssues(
+    definition.root,
+    isTextOutputEnabled(definition.output),
+    command.success,
+    command.failures,
+    definitionIssues,
+  );
   const fields =
     input === undefined
       ? []
@@ -1642,6 +1764,12 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
           definition.root,
           definitionIssues,
         );
+  collectOutputControlFieldConflicts(
+    definition.root,
+    fields,
+    definition.output,
+    definitionIssues,
+  );
   const usageConstraints = compileUsageConstraints(
     command.usageConstraints === undefined ? [] : command.usageConstraints,
     fields,
@@ -1669,6 +1797,12 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
     output: {
       defaultFormat: definition.output.defaultFormat,
       formats: definition.output.formats,
+      ...(definition.output.formats.includes("text")
+        ? { selector: "--output-format" as const }
+        : {}),
+      ...(Object.keys(definition.output.compatibilityFlags).length === 0
+        ? {}
+        : { compatibilityFlags: definition.output.compatibilityFlags }),
     },
   });
   const grammar = deepFreeze({
@@ -1770,6 +1904,12 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
     output: {
       defaultFormat: definition.output.defaultFormat,
       formats: definition.output.formats,
+      ...(definition.output.formats.includes("text")
+        ? { selector: "--output-format" as const }
+        : {}),
+      ...(Object.keys(definition.output.compatibilityFlags).length === 0
+        ? {}
+        : { compatibilityFlags: definition.output.compatibilityFlags }),
     },
   });
   const runtimeCommands: Record<string, RuntimeCompiledCommand> = {};
@@ -1853,6 +1993,13 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
     );
     const compiledSuccess = compileSuccess(id, executable.success, issues);
     const compiledFailures = compileFailures(id, executable.failures, issues);
+    collectTextPresenterIssues(
+      id,
+      isTextOutputEnabled(definition.output),
+      executable.success,
+      executable.failures,
+      issues,
+    );
     const effectiveDefinitions = collectEffectiveFieldDefinitions(
       id,
       definition.commands,
@@ -1867,6 +2014,12 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
             id,
             issues,
           );
+    collectOutputControlFieldConflicts(
+      id,
+      effectiveFields,
+      definition.output,
+      issues,
+    );
     const localKeys = new Set(Object.keys(executable.fields ?? {}));
     const fields = deepFreeze(
       effectiveFields.filter((field) => localKeys.has(field.key)),
@@ -2061,10 +2214,12 @@ function collectCliBaseIssues(
   }
   if (!outputCapabilities.has(definition.output)) {
     issues.push({ code: "invalidCapability", capability: "output" });
-  } else if (definition.output.defaultFormat !== "structured") {
+  } else if (
+    !definition.output.formats.includes(definition.output.defaultFormat)
+  ) {
     issues.push({
       code: "invalidOutputFormat",
-      expected: "structured",
+      expected: "structured|text",
       received:
         typeof definition.output.defaultFormat === "string"
           ? definition.output.defaultFormat
@@ -2728,6 +2883,101 @@ function compileFailures(
   };
 }
 
+function collectTextPresenterIssues(
+  command: string,
+  textEnabled: boolean,
+  success: RuntimeExecutableDefinition["success"],
+  failures: FailureVariantDefinitions,
+  issues: ContractDefinitionIssue[],
+): void {
+  if (success.kind === "completion") {
+    collectTextPresenterIssue(
+      command,
+      textEnabled,
+      "completion",
+      success as Readonly<Record<string, unknown>>,
+      issues,
+    );
+  } else {
+    for (const [variant, definition] of Object.entries(success.variants)) {
+      collectTextPresenterIssue(
+        command,
+        textEnabled,
+        "data",
+        definition as Readonly<Record<string, unknown>>,
+        issues,
+        variant,
+      );
+    }
+  }
+  for (const [variant, definition] of Object.entries(failures)) {
+    collectTextPresenterIssue(
+      command,
+      textEnabled,
+      "failure",
+      definition as Readonly<Record<string, unknown>>,
+      issues,
+      variant,
+    );
+  }
+}
+
+function isTextOutputEnabled(output: unknown): boolean {
+  return (
+    outputCapabilities.has(output as object) &&
+    (output as OutputCapability).formats.includes("text")
+  );
+}
+
+function collectOutputControlFieldConflicts(
+  command: string,
+  fields: readonly FieldGrammar[],
+  output: OutputCapability,
+  issues: ContractDefinitionIssue[],
+): void {
+  if (!outputCapabilities.has(output)) return;
+  const spellings = new Set(Object.keys(output.compatibilityFlags));
+  if (output.formats.includes("text")) spellings.add("--output-format");
+  for (const field of fields) {
+    if (field.kind === "positional" || field.kind === "variadicPositional") {
+      continue;
+    }
+    for (const spelling of [
+      field.longOption,
+      field.shortAlias,
+      ...(field.kind === "flag" ? [field.negatedLongOption] : []),
+    ]) {
+      if (spelling !== undefined && spellings.has(spelling)) {
+        issues.push({
+          code: "fieldOptionConflictsWithControl",
+          command,
+          field: field.key,
+          spelling,
+          control: "outputFormat",
+        });
+      }
+    }
+  }
+}
+
+function collectTextPresenterIssue(
+  command: string,
+  textEnabled: boolean,
+  location: "completion" | "data" | "failure",
+  definition: Readonly<Record<string, unknown>>,
+  issues: ContractDefinitionIssue[],
+  variant?: string,
+): void {
+  const hasPresenter = typeof definition.text === "function";
+  if (textEnabled === hasPresenter) return;
+  issues.push({
+    code: textEnabled ? "missingTextPresenter" : "unexpectedTextPresenter",
+    command,
+    location,
+    ...(variant === undefined ? {} : { variant }),
+  });
+}
+
 function compileSuccess(
   command: string,
   success: RuntimeExecutableDefinition["success"],
@@ -2739,7 +2989,10 @@ function compileSuccess(
 }> {
   if (success.kind === "completion") {
     return {
-      runtime: Object.freeze({ kind: "completion" }),
+      runtime: Object.freeze({
+        kind: "completion",
+        ...("text" in success ? { text: success.text } : {}),
+      }),
       manifest: Object.freeze({ kind: "completion" }),
       wire: Object.freeze({
         completion: deepFreeze(createCompletionWireSchema(command)),

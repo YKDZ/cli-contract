@@ -183,6 +183,7 @@ export async function executeCli<const Contract extends CliContract>(
         },
         validation.value,
         options,
+        options.invocation.outputFormat,
       );
     }
   }
@@ -234,6 +235,7 @@ async function executeApplicationResult<Contract extends CliContract>(
   compiled: ReturnType<typeof getCompiledCli>,
   input: unknown,
   options: ExecuteCliOptions<Contract>,
+  outputFormat: "structured" | "text",
 ): Promise<CliTermination<Contract>> {
   const issuedOutcomeFacts = new WeakSet<object>();
   const successOutcome =
@@ -287,11 +289,23 @@ async function executeApplicationResult<Contract extends CliContract>(
     });
   }
 
-  const projected = await projectOutcome(compiled, result);
-  await writeCliOutput(options.write, {
-    destination: projected.destination,
-    chunk: projected.chunk,
-  });
+  const projected = await projectOutcome(compiled, result, outputFormat);
+  if (projected.prefix !== undefined) {
+    await writeCliOutput(options.write, {
+      destination: projected.destination,
+      chunk: projected.prefix,
+    });
+  }
+  const chunk =
+    projected.present === undefined
+      ? (projected.chunk ?? "")
+      : projected.present();
+  if (chunk !== "") {
+    await writeCliOutput(options.write, {
+      destination: projected.destination,
+      chunk,
+    });
+  }
   return Object.freeze({
     kind: "applicationResult",
     command: compiled.root as CliContractRoot<Contract>,
@@ -314,10 +328,13 @@ async function writeCliOutput(
 async function projectOutcome(
   compiled: ReturnType<typeof getCompiledCli>,
   result: OutcomeFact,
+  outputFormat: "structured" | "text",
 ): Promise<
   Readonly<{
     result: OutcomeFact;
-    chunk: string;
+    chunk?: string;
+    prefix?: string;
+    present?: () => string;
     exitCode: number;
     destination: CliOutputDestination;
   }>
@@ -343,6 +360,19 @@ async function projectOutcome(
       variant: result.variant,
       data,
     }) as OutcomeFact;
+    if (outputFormat === "text") {
+      const presenter = failure.text;
+      if (typeof presenter !== "function") {
+        throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+      }
+      return {
+        result: normalized,
+        prefix: `${compiled.root} ${result.variant}\n`,
+        present: () => formatTextLine(presenter(data)),
+        exitCode: failure.exitCode,
+        destination: "stderr",
+      };
+    }
     return {
       result: normalized,
       chunk: `${JSON.stringify(
@@ -360,6 +390,18 @@ async function projectOutcome(
         expected: "completion",
         received: result.kind,
       });
+    }
+    if (outputFormat === "text") {
+      const presenter = compiled.success.text;
+      if (typeof presenter !== "function") {
+        throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+      }
+      return {
+        result,
+        present: () => formatCompletionText(presenter()),
+        exitCode: 0,
+        destination: "stdout",
+      };
     }
     return {
       result,
@@ -397,6 +439,18 @@ async function projectOutcome(
     variant: result.variant,
     data,
   }) as OutcomeFact;
+  if (outputFormat === "text") {
+    const presenter = variant.text;
+    if (typeof presenter !== "function") {
+      throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+    }
+    return {
+      result: normalized,
+      present: () => formatTextLine(presenter(data)),
+      exitCode: variant.exitCode,
+      destination: "stdout",
+    };
+  }
   return {
     result: normalized,
     chunk: `${JSON.stringify(
@@ -405,6 +459,38 @@ async function projectOutcome(
     exitCode: variant.exitCode,
     destination: "stdout",
   };
+}
+
+function formatCompletionText(value: unknown): string {
+  if (isSilentText(value)) return "";
+  return formatTextLine(value);
+}
+
+function formatTextLine(value: unknown): string {
+  const text = value as Readonly<Record<string, unknown>> | null;
+  if (
+    text === null ||
+    typeof value !== "object" ||
+    text.kind !== "line" ||
+    typeof text.value !== "string" ||
+    text.value.length === 0 ||
+    text.value.includes("\r") ||
+    text.value.includes("\n") ||
+    text.value.includes("\0")
+  ) {
+    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+  }
+  return `${text.value}\n`;
+}
+
+function isSilentText(
+  value: unknown,
+): value is Readonly<{ readonly kind: "silent" }> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as Readonly<Record<string, unknown>>).kind === "silent"
+  );
 }
 
 function projectAtomicData(

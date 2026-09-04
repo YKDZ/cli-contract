@@ -8,6 +8,7 @@ interface AtomicVariantDefinition {
   readonly description: string;
   readonly schema: ContractSchema;
   readonly exitCode: number;
+  readonly text?: unknown;
 }
 
 export type RuntimeAtomicVariant = AtomicVariantDefinition;
@@ -72,6 +73,7 @@ export function compileAtomicVariants(
       description: definition.description,
       schema: definition.schema,
       exitCode: definition.exitCode,
+      ...(definition.text === undefined ? {} : { text: definition.text }),
     });
     if (schema !== undefined) {
       manifest[variant] = deepFreeze({

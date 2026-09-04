@@ -298,7 +298,7 @@ void test("defineCli 一次报告当前声明中的动态无效值", () => {
   );
 });
 
-void test("defineCli 拒绝已签发 capability 中的动态无效格式", () => {
+void test("defineCli 在动态启用 text 时仍要求 completion presenter", () => {
   assert.throws(
     () =>
       defineCli()({
@@ -322,9 +322,9 @@ void test("defineCli 拒绝已签发 capability 中的动态无效格式", () =>
       assert.ok(error instanceof ContractDefinitionError);
       assert.deepEqual(error.issues, [
         {
-          code: "invalidOutputFormat",
-          expected: "structured",
-          received: "text",
+          code: "missingTextPresenter",
+          command: "fixture",
+          location: "completion",
         },
       ]);
       return true;

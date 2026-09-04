@@ -2,16 +2,19 @@ import {
   defineCli,
   helpCapability,
   outputCapability,
+  text,
   type CliContract,
   type CliContractResult,
   type CliInvocation,
   type CanonicalLongOption,
   type CompletionRootCliDefinition,
+  type CompletionRootCommandDefinition,
   type ContractSchema,
   type ContractSchemaInput,
   type ContractSchemaOutput,
   type EmptyCliInput,
   type FieldDefinition,
+  type DataVariantDefinition,
   type ShortOptionAlias,
   type UsageConstraint,
 } from "@cli-contract/lib";
@@ -158,6 +161,43 @@ const dataCli = defineCli()({
 });
 
 function verifyTypeErrors() {
+  const missingCompletionText: CompletionRootCommandDefinition<
+    "fixture",
+    undefined,
+    Readonly<Record<never, never>>,
+    Readonly<Record<never, never>>,
+    ContractSchema<EmptyCliInput>,
+    true
+  > = {
+    kind: "rootCommand",
+    name: "fixture",
+    description: "fixture",
+    input: emptyInput,
+    // @ts-expect-error 启用 text 的 completion 必须同位声明 presenter。
+    success: { kind: "completion" },
+    failures: {},
+    handler: ({ outcome }) => outcome.completion(),
+  };
+  void missingCompletionText;
+
+  // @ts-expect-error text data 变体必须同位声明 presenter。
+  const missingDataText: DataVariantDefinition<
+    Readonly<{ readonly message: string }>,
+    true
+  > = { description: "问候", schema: greetingData, exitCode: 0 };
+  void missingDataText;
+
+  const structuredData: DataVariantDefinition<
+    Readonly<{ readonly message: string }>,
+    false
+  > = {
+    description: "问候",
+    schema: greetingData,
+    exitCode: 0,
+    // @ts-expect-error structured-only 变体不能声明 presenter。
+    text: () => text.line("问候"),
+  };
+  void structuredData;
   const invalidUsageConstraint: UsageConstraint<UsageFixtureFields> = {
     kind: "forbiddenCombination",
     values: [

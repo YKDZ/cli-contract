@@ -104,8 +104,20 @@ export type ContractDefinitionIssue =
     }>
   | Readonly<{
       readonly code: "invalidOutputFormat";
-      readonly expected: "structured";
+      readonly expected: "structured|text";
       readonly received: string | null;
+    }>
+  | Readonly<{
+      readonly code: "missingTextPresenter";
+      readonly command: string;
+      readonly location: "completion" | "data" | "failure";
+      readonly variant?: string;
+    }>
+  | Readonly<{
+      readonly code: "unexpectedTextPresenter";
+      readonly command: string;
+      readonly location: "completion" | "data" | "failure";
+      readonly variant?: string;
     }>
   | Readonly<{
       readonly code: "invalidUsageFailureExitCode";
@@ -217,7 +229,7 @@ export type ContractDefinitionIssue =
       readonly command: string;
       readonly field: string;
       readonly spelling: string;
-      readonly control: "help";
+      readonly control: "help" | "outputFormat";
     }>
   | Readonly<{
       readonly code: "invalidSharedOptionKind";
@@ -344,6 +356,10 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `CLI 的 ${issue.capability} 能力无效`;
     case "invalidOutputFormat":
       return `CLI 输出格式应为 ${issue.expected}，实际为 ${issue.received ?? "非字符串"}`;
+    case "missingTextPresenter":
+      return `命令 ${issue.command} 的 ${issue.location}${issue.variant === undefined ? "" : ` 变体 ${issue.variant}`} 缺少 text presenter`;
+    case "unexpectedTextPresenter":
+      return `命令 ${issue.command} 的 ${issue.location}${issue.variant === undefined ? "" : ` 变体 ${issue.variant}`} 不应声明 text presenter`;
     case "invalidUsageFailureExitCode":
       return "CLI 的用法失败退出码无效";
     case "invalidRootCommandSet":

@@ -12,7 +12,7 @@ export interface ParsedInvocation<Command extends string, Input = unknown> {
   readonly kind: "parsed";
   readonly command: Command;
   readonly input: Input;
-  readonly outputFormat: "structured";
+  readonly outputFormat: "structured" | "text";
 }
 
 export interface HelpRequest<Command extends string> {
@@ -116,11 +116,41 @@ export interface InputRejectedIssue {
   readonly evidence: readonly SchemaIssueEvidence[];
 }
 
+export interface InvalidOutputFormatIssue {
+  readonly code: "invalidOutputFormat";
+  readonly position: number;
+  readonly option: string;
+  readonly received: string | null;
+}
+
+export interface ConflictingOutputFormatIssue {
+  readonly code: "conflictingOutputFormat";
+  readonly occurrences: readonly [
+    Readonly<{
+      readonly position: number;
+      readonly option: string;
+      readonly format: "structured" | "text";
+    }>,
+    Readonly<{
+      readonly position: number;
+      readonly option: string;
+      readonly format: "structured" | "text";
+    }>,
+    ...Readonly<{
+      readonly position: number;
+      readonly option: string;
+      readonly format: "structured" | "text";
+    }>[],
+  ];
+}
+
 export type UsageIssue =
   | ConflictingFlagIssue
+  | ConflictingOutputFormatIssue
   | ExclusiveUsageConstraintIssue
   | ForbiddenUsageCombinationIssue
   | InputRejectedIssue
+  | InvalidOutputFormatIssue
   | MissingOptionValueIssue
   | MissingRequiredFieldIssue
   | RepeatedOptionIssue
@@ -160,6 +190,7 @@ export function parseCliInvocation<const Contract extends CliContract>(
   const compiled = getCompiledCli(cliContract);
   const input: Record<string, boolean | string | string[]> = {};
   const occurrencesByField = new Map<string, ParsedOptionOccurrence[]>();
+  const outputOccurrences: OutputFormatOccurrence[] = [];
   let selected = compiled.commands[compiled.root];
   if (selected === undefined)
     throw new Error("compiled root command is missing");
@@ -174,6 +205,24 @@ export function parseCliInvocation<const Contract extends CliContract>(
         kind: "help",
         command: selected.id as CliContractRoot<Contract>,
       });
+    }
+    const output = consumeOutputControl(
+      compiled,
+      argv,
+      position,
+      outputOccurrences,
+    );
+    if (output.kind === "issue") {
+      return usageFailure(
+        cliContract,
+        selected.id as CliContractRoot<Contract>,
+        selected.usage as CommandUsage<CliContractRoot<Contract>>,
+        output.issue,
+      );
+    }
+    if (output.kind === "consumed") {
+      position = output.nextPosition;
+      continue;
     }
     if (token.startsWith("-") && token !== "-") {
       const option = consumeOption(
@@ -239,6 +288,21 @@ export function parseCliInvocation<const Contract extends CliContract>(
         command,
       });
     }
+    if (optionsEnabled) {
+      const output = consumeOutputControl(
+        compiled,
+        argv,
+        position,
+        outputOccurrences,
+      );
+      if (output.kind === "issue") {
+        return usageFailure(cliContract, command, usage, output.issue);
+      }
+      if (output.kind === "consumed") {
+        position = output.nextPosition - 1;
+        continue;
+      }
+    }
     if (optionsEnabled && token.startsWith("-") && token !== "-") {
       const option = consumeOption(
         fields,
@@ -288,8 +352,99 @@ export function parseCliInvocation<const Contract extends CliContract>(
     kind: "parsed",
     command,
     input: freezeRawInput(input) as CliContractRawInput<Contract>,
-    outputFormat: "structured",
+    outputFormat:
+      outputOccurrences[0]?.format ??
+      compiled.contract.grammar.controls.output.defaultFormat,
   });
+}
+
+type OutputFormatOccurrence = Readonly<{
+  readonly position: number;
+  readonly option: string;
+  readonly format: "structured" | "text";
+}>;
+
+function consumeOutputControl(
+  compiled: ReturnType<typeof getCompiledCli>,
+  argv: readonly string[],
+  position: number,
+  occurrences: OutputFormatOccurrence[],
+):
+  | Readonly<{ readonly kind: "notControl" }>
+  | Readonly<{ readonly kind: "consumed"; readonly nextPosition: number }>
+  | Readonly<{ readonly kind: "issue"; readonly issue: UsageIssue }> {
+  const token = argv[position] as string;
+  const option = readOptionToken(token);
+  const output = compiled.contract.grammar.controls.output;
+  if (output.selector === option.spelling) {
+    const value = option.value ?? argv[position + 1];
+    if (
+      value === undefined ||
+      !output.formats.includes(value as "structured" | "text")
+    ) {
+      return {
+        kind: "issue",
+        issue: {
+          code: "invalidOutputFormat",
+          position,
+          option: option.spelling,
+          received: value ?? null,
+        },
+      };
+    }
+    const nextPosition =
+      option.value === undefined ? position + 2 : position + 1;
+    return selectOutputFormat(
+      occurrences,
+      {
+        position,
+        option: option.spelling,
+        format: value as "structured" | "text",
+      },
+      nextPosition,
+    );
+  }
+  const format = output.compatibilityFlags?.[option.spelling];
+  if (format === undefined) return { kind: "notControl" };
+  if (option.value !== undefined) {
+    return {
+      kind: "issue",
+      issue: {
+        code: "invalidOutputFormat",
+        position,
+        option: option.spelling,
+        received: option.value,
+      },
+    };
+  }
+  return selectOutputFormat(
+    occurrences,
+    { position, option: option.spelling, format },
+    position + 1,
+  );
+}
+
+function selectOutputFormat(
+  occurrences: OutputFormatOccurrence[],
+  occurrence: OutputFormatOccurrence,
+  nextPosition: number,
+):
+  | Readonly<{ readonly kind: "consumed"; readonly nextPosition: number }>
+  | Readonly<{
+      readonly kind: "issue";
+      readonly issue: ConflictingOutputFormatIssue;
+    }> {
+  occurrences.push(occurrence);
+  if (occurrences.length === 1) return { kind: "consumed", nextPosition };
+  return {
+    kind: "issue",
+    issue: {
+      code: "conflictingOutputFormat",
+      occurrences: Object.freeze([
+        ...occurrences,
+      ]) as ConflictingOutputFormatIssue["occurrences"],
+    },
+  };
 }
 
 type ParsedOptionOccurrence = OptionOccurrenceEvidence &

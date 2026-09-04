@@ -1,26 +1,75 @@
 import type { ContractSchema } from "#/contract-schema";
 
 const outcomeFactType = Symbol("OutcomeFact.type");
+const textProjectionType = Symbol("TextProjection.type");
 
-export interface DataVariantDefinition<Payload = unknown> {
+export interface TextLine {
+  readonly kind: "line";
+  readonly value: string;
+  readonly [textProjectionType]: true;
+}
+
+export interface SilentText {
+  readonly kind: "silent";
+  readonly [textProjectionType]: true;
+}
+
+export type CompletionTextPresenter = () => TextLine | SilentText;
+export type AtomicTextPresenter<Payload> = {
+  bivarianceHack(payload: Payload): TextLine;
+}["bivarianceHack"];
+
+function createTextLine(value: string): TextLine {
+  if (
+    value.length === 0 ||
+    value.includes("\r") ||
+    value.includes("\n") ||
+    value.includes("\0")
+  ) {
+    throw new TypeError("文本行必须非空且不能包含 CR、LF 或 NUL");
+  }
+  return Object.freeze({ kind: "line" as const, value }) as TextLine;
+}
+
+const silentText = Object.freeze({ kind: "silent" as const }) as SilentText;
+
+/** 受控文本投影构造器；执行内核拥有实际 framing。 */
+export const text = Object.freeze({
+  line: createTextLine,
+  silent: silentText,
+});
+
+export type DataVariantDefinition<
+  Payload = unknown,
+  TextEnabled extends boolean = boolean,
+> = {
   readonly description: string;
   readonly schema: ContractSchema<Payload>;
   readonly exitCode: number;
-}
+} & (TextEnabled extends true
+  ? Readonly<{ readonly text: AtomicTextPresenter<Payload> }>
+  : TextEnabled extends false
+    ? Readonly<{ readonly text?: never }>
+    : Readonly<{ readonly text?: AtomicTextPresenter<Payload> }>);
 
-export type DataVariantDefinitions = Readonly<
-  Record<string, DataVariantDefinition>
->;
+export type DataVariantDefinitions<TextEnabled extends boolean = boolean> =
+  Readonly<Record<string, DataVariantDefinition<unknown, TextEnabled>>>;
 
-export interface FailureVariantDefinition<Payload = unknown> {
+export type FailureVariantDefinition<
+  Payload = unknown,
+  TextEnabled extends boolean = boolean,
+> = {
   readonly description: string;
   readonly schema: ContractSchema<Payload>;
   readonly exitCode: number;
-}
+} & (TextEnabled extends true
+  ? Readonly<{ readonly text: AtomicTextPresenter<Payload> }>
+  : TextEnabled extends false
+    ? Readonly<{ readonly text?: never }>
+    : Readonly<{ readonly text?: AtomicTextPresenter<Payload> }>);
 
-export type FailureVariantDefinitions = Readonly<
-  Record<string, FailureVariantDefinition>
->;
+export type FailureVariantDefinitions<TextEnabled extends boolean = boolean> =
+  Readonly<Record<string, FailureVariantDefinition<unknown, TextEnabled>>>;
 
 export interface CompletionFact<Command extends string = string> {
   readonly kind: "completion";
