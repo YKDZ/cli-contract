@@ -335,3 +335,41 @@ void test("defineCli 聚合拒绝动态空、单成员和非数组约束成员",
     },
   );
 });
+
+void test("defineCli 将显式 null 交给 usage constraint collection 守卫", () => {
+  const definition = {
+    root: "nullConstraints",
+    help: helpCapability(),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      nullConstraints: {
+        kind: "rootCommand",
+        name: "null-constraints",
+        description: "空约束",
+        fields: {},
+        usageConstraints: null,
+        input: z.object({}),
+        success: { kind: "completion" },
+        failures: {},
+        handler: () => undefined,
+      },
+    },
+  };
+  assert.throws(
+    () => defineCli()(definition as never),
+    (error: unknown) => {
+      assert(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidUsageConstraint",
+          command: "nullConstraints",
+          index: null,
+          aspect: "collection",
+          received: null,
+        },
+      ]);
+      return true;
+    },
+  );
+});

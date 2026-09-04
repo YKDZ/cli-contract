@@ -1641,7 +1641,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
           definitionIssues,
         );
   const usageConstraints = compileUsageConstraints(
-    command.usageConstraints ?? [],
+    command.usageConstraints === undefined ? [] : command.usageConstraints,
     fields,
     definition.root,
     definitionIssues,
@@ -1870,7 +1870,9 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
       effectiveFields.filter((field) => localKeys.has(field.key)),
     );
     const usageConstraints = compileUsageConstraints(
-      executable.usageConstraints ?? [],
+      executable.usageConstraints === undefined
+        ? []
+        : executable.usageConstraints,
       effectiveFields,
       id,
       issues,
