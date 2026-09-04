@@ -35,12 +35,14 @@ export interface UnknownOptionIssue {
   readonly code: "unknownOption";
   readonly position: number;
   readonly option: string;
+  readonly suggestedOption?: string;
 }
 
 export interface UnknownCommandIssue {
   readonly code: "unknownCommand";
   readonly position: number;
   readonly command: string;
+  readonly suggestedCommand?: string;
 }
 
 export interface MissingOptionValueIssue {
@@ -260,10 +262,21 @@ export function parseCliInvocation<const Contract extends CliContract>(
         (candidate.name === token || candidate.aliases.includes(token)),
     );
     if (child === undefined) {
-      const issue: UnknownCommandIssue | UnknownOptionIssue =
-        token.startsWith("-") && token !== "-"
-          ? { code: "unknownOption", position, option: token }
-          : { code: "unknownCommand", position, command: token };
+      const selectedId = selected.id;
+      const issue: UnknownCommandIssue = {
+        code: "unknownCommand",
+        position,
+        command: token,
+        ...suggestionProperty(
+          "suggestedCommand",
+          selectUniqueNeighbor(
+            token,
+            Object.values(compiled.commands)
+              .filter((candidate) => candidate.parent === selectedId)
+              .flatMap((candidate) => [candidate.name, ...candidate.aliases]),
+          ),
+        ),
+      };
       return usageFailure(
         cliContract,
         selected.id as CliContractRoot<Contract>,
@@ -513,7 +526,20 @@ function consumeOption(
   if (field === undefined) {
     return {
       kind: "issue",
-      issue: { code: "unknownOption", position, option: token },
+      issue: {
+        code: "unknownOption",
+        position,
+        option: token,
+        ...suggestionProperty(
+          "suggestedOption",
+          token.startsWith("--")
+            ? selectUniqueNeighbor(
+                option.spelling,
+                longOptionsInScope(compiled, fields),
+              )
+            : undefined,
+        ),
+      },
     };
   }
   if (field.kind === "flag") {
@@ -732,6 +758,108 @@ function readOptionToken(token: string): Readonly<{
   return equals === -1
     ? { spelling: token }
     : { spelling: token.slice(0, equals), value: token.slice(equals + 1) };
+}
+
+function longOptionsInScope(
+  compiled: ReturnType<typeof getCompiledCli>,
+  fields: ReturnType<typeof getCompiledCli>["fields"],
+): readonly string[] {
+  return [
+    ...fields.flatMap((field) =>
+      field.kind === "positional" || field.kind === "variadicPositional"
+        ? []
+        : [
+            field.longOption,
+            ...(field.kind === "flag" && field.negatedLongOption !== undefined
+              ? [field.negatedLongOption]
+              : []),
+          ],
+    ),
+    compiled.contract.grammar.controls.help.longOption,
+    ...(compiled.contract.grammar.controls.version === undefined
+      ? []
+      : [compiled.contract.grammar.controls.version.longOption]),
+    ...(compiled.contract.grammar.controls.output.selector === undefined
+      ? []
+      : [compiled.contract.grammar.controls.output.selector]),
+    ...Object.keys(
+      compiled.contract.grammar.controls.output.compatibilityFlags ?? {},
+    ),
+  ];
+}
+
+function suggestionProperty(
+  key: "suggestedCommand" | "suggestedOption",
+  value: string | undefined,
+): Readonly<Record<string, string>> {
+  return value === undefined ? {} : { [key]: value };
+}
+
+function selectUniqueNeighbor(
+  received: string,
+  candidates: readonly string[],
+): string | undefined {
+  const receivedBody = visibleBody(received);
+  const scored = candidates.map((candidate) => ({
+    candidate,
+    distance: damerauLevenshteinDistance(receivedBody, visibleBody(candidate)),
+  }));
+  const nearestDistance = Math.min(...scored.map(({ distance }) => distance));
+  const nearest = scored.filter(({ distance }) => distance === nearestDistance);
+  if (
+    nearest.length !== 1 ||
+    nearestDistance >
+      (Math.max(
+        receivedBody.length,
+        visibleBody(nearest[0]!.candidate).length,
+      ) <= 4
+        ? 1
+        : 2)
+  ) {
+    return undefined;
+  }
+  return nearest[0]!.candidate;
+}
+
+function visibleBody(spelling: string): string {
+  return spelling.startsWith("--") ? spelling.slice(2) : spelling;
+}
+
+function damerauLevenshteinDistance(left: string, right: string): number {
+  const maximumDistance = left.length + right.length;
+  const matrix = Array.from({ length: left.length + 2 }, () =>
+    Array<number>(right.length + 2).fill(0),
+  );
+  matrix[0]![0] = maximumDistance;
+  for (let index = 0; index <= left.length; index += 1) {
+    matrix[index + 1]![0] = maximumDistance;
+    matrix[index + 1]![1] = index;
+  }
+  for (let index = 0; index <= right.length; index += 1) {
+    matrix[0]![index + 1] = maximumDistance;
+    matrix[1]![index + 1] = index;
+  }
+
+  const lastRowByCharacter = new Map<string, number>();
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    let lastMatchingColumn = 0;
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const matchingRow = lastRowByCharacter.get(right[rightIndex - 1]!) ?? 0;
+      const cost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+      if (cost === 0) lastMatchingColumn = rightIndex;
+      matrix[leftIndex + 1]![rightIndex + 1] = Math.min(
+        matrix[leftIndex]![rightIndex]! + cost,
+        matrix[leftIndex + 1]![rightIndex]! + 1,
+        matrix[leftIndex]![rightIndex + 1]! + 1,
+        matrix[matchingRow]![lastMatchingColumn]! +
+          (leftIndex - matchingRow - 1) +
+          1 +
+          (rightIndex - lastMatchingColumn - 1),
+      );
+    }
+    lastRowByCharacter.set(left[leftIndex - 1]!, leftIndex);
+  }
+  return matrix[left.length + 1]![right.length + 1]!;
 }
 
 function unexpectedPositional<Contract extends CliContract>(
