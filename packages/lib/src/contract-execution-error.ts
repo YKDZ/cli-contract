@@ -17,6 +17,10 @@ export type ContractExecutionIssue =
       readonly command: string;
     }>
   | Readonly<{
+      readonly code: "streamHandlerMustReturnAsyncGenerator";
+      readonly command: string;
+    }>
+  | Readonly<{
       readonly code: "invalidCliContract";
     }>
   | Readonly<{
@@ -98,6 +102,8 @@ function formatContractExecutionIssue(issue: ContractExecutionIssue): string {
       return "CLI 契约不是由 defineCli 创建";
     case "invalidOutcomeFact":
       return `命令 ${issue.command} 的 handler 返回了未签发结果`;
+    case "streamHandlerMustReturnAsyncGenerator":
+      return `命令 ${issue.command} 的 stream handler 必须返回 AsyncGenerator`;
     case "outcomeKindMismatch":
       return `命令 ${issue.command} 需要 ${issue.expected} 结果，却收到 ${issue.received}`;
     case "undeclaredOutcomeVariant":

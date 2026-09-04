@@ -194,6 +194,41 @@ const streamCli = defineCli()({
 });
 void streamCli;
 
+const hierarchyStreamDefine = defineCli();
+const hierarchyStreamLeaf = hierarchyStreamDefine.command("streamLeaf")({
+  kind: "command",
+  parent: "workspace",
+  name: "stream",
+  description: "流 fixture",
+  fields: {},
+  input: emptyInput,
+  success: {
+    kind: "stream",
+    records: { greeting: { description: "问候", schema: greetingData } },
+  },
+  failures: {},
+  async *handler({ outcome }) {
+    yield* [] as Iterable<never>;
+    return outcome.streamSuccess();
+  },
+});
+const textStreamHierarchy = hierarchyStreamDefine({
+  root: "workspace",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured", text: true }),
+  usageFailureExitCode: 64,
+  commands: {
+    workspace: {
+      // @ts-expect-error 层级 stream 在 15 号票前不能启用 text 输出。
+      kind: "rootGroup",
+      name: "workspace",
+      description: "工作区",
+    },
+    ...hierarchyStreamLeaf,
+  },
+});
+void textStreamHierarchy;
+
 function verifyTypeErrors() {
   // @ts-expect-error 版本能力必须显式提供受控单行值。
   versionCapability({ value: "1.2.3" });

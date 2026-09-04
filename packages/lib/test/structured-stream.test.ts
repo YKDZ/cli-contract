@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  ContractDefinitionError,
   ContractExecutionError,
   defineCli,
   executeCli,
@@ -13,6 +14,66 @@ import { z } from "zod";
 
 const emptyInput = z.object({});
 const item = z.object({ value: z.string() });
+
+function createUncheckedStreamCli(handler: unknown) {
+  return defineCli()({
+    root: "list",
+    help: helpCapability(),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      list: {
+        kind: "rootCommand",
+        name: "list",
+        description: "列出项目",
+        input: emptyInput,
+        success: {
+          kind: "stream",
+          records: { item: { description: "项目", schema: item } },
+        },
+        failures: {},
+        handler: handler as never,
+      },
+    },
+  });
+}
+
+void test("stream handler 在 header 前闭合验证 async iterator 协议", async () => {
+  let synchronousGeneratorRan = false;
+  function* synchronousGenerator() {
+    synchronousGeneratorRan = true;
+    yield undefined;
+  }
+  const invalidHandlers: readonly [string, unknown][] = [
+    ["Promise", () => Promise.resolve(undefined)],
+    ["同步 generator", synchronousGenerator],
+    ["缺少 asyncIterator", () => ({ next() {}, return() {} })],
+    ["缺少 next", () => ({ [Symbol.asyncIterator]() {}, return() {} })],
+    ["缺少 return", () => ({ [Symbol.asyncIterator]() {}, next() {} })],
+  ];
+  for (const [label, handler] of invalidHandlers) {
+    const cli = createUncheckedStreamCli(handler);
+    const writes: string[] = [];
+    await assert.rejects(
+      executeCli(cli, {
+        invocation: parseCliInvocation(cli, []),
+        dependencies: undefined,
+        write: ({ chunk }) => {
+          writes.push(chunk);
+        },
+      }),
+      (error) => {
+        assert.ok(error instanceof ContractExecutionError, label);
+        assert.deepEqual(error.issues, [
+          { code: "streamHandlerMustReturnAsyncGenerator", command: "list" },
+        ]);
+        return true;
+      },
+    );
+    assert.deepEqual(writes, [], label);
+  }
+  assert.equal(synchronousGeneratorRan, false);
+});
 
 void test("structured stream 按 header、record、终态写出紧凑 NDJSON", async () => {
   const cli = defineCli()({
@@ -286,4 +347,48 @@ void test("record 验证拒绝与写入拒绝均停止拉取并清理 generator"
   );
   assert.equal(pulled, 1);
   assert.equal(cleanup, true);
+});
+
+void test("层级 text 输出在定义期拒绝 stream leaf", () => {
+  const define = defineCli();
+  const definition = {
+    root: "workspace",
+    help: helpCapability(),
+    output: outputCapability({ defaultFormat: "structured", text: true }),
+    usageFailureExitCode: 64,
+    commands: {
+      workspace: {
+        kind: "rootGroup",
+        name: "workspace",
+        description: "工作区",
+      },
+      ...define.command("listItems")({
+        kind: "command",
+        parent: "workspace",
+        name: "list",
+        description: "列出项目",
+        fields: {},
+        input: emptyInput,
+        success: {
+          kind: "stream",
+          records: { item: { description: "项目", schema: item } },
+        },
+        failures: {},
+        async *handler({ outcome }) {
+          yield* [] as Iterable<never>;
+          return outcome.streamSuccess();
+        },
+      }),
+    },
+  };
+  assert.throws(
+    () => define(definition as never),
+    (error) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        { code: "streamTextOutputUnsupported", command: "listItems" },
+      ]);
+      return true;
+    },
+  );
 });

@@ -347,9 +347,10 @@ async function executeApplicationResult<Contract extends CliContract>(
     outcome,
   });
   if (compiled.success.kind === "stream") {
+    const generator = requireAsyncGenerator(handlerResult, compiled.root);
     return executeStreamResult(
       compiled,
-      handlerResult as RuntimeStreamGenerator,
+      generator,
       issuedOutcomeFacts,
       options,
       outputFormat,
@@ -386,6 +387,35 @@ async function executeApplicationResult<Contract extends CliContract>(
     result: projected.result as CliContractResult<Contract>,
     exitCode: projected.exitCode,
   });
+}
+
+function requireAsyncGenerator(
+  value: unknown,
+  command: string,
+): RuntimeStreamGenerator {
+  const candidate = value as Readonly<{
+    readonly [Symbol.asyncIterator]?: unknown;
+    readonly next?: unknown;
+    readonly return?: unknown;
+  }>;
+  let valid = false;
+  try {
+    valid =
+      typeof value === "object" &&
+      value !== null &&
+      typeof candidate[Symbol.asyncIterator] === "function" &&
+      typeof candidate.next === "function" &&
+      typeof candidate.return === "function";
+  } catch {
+    valid = false;
+  }
+  if (!valid) {
+    throwExecutionIssue({
+      code: "streamHandlerMustReturnAsyncGenerator",
+      command,
+    });
+  }
+  return value as RuntimeStreamGenerator;
 }
 
 async function writeCliOutput(

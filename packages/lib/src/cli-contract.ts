@@ -1454,6 +1454,15 @@ type HasAnyTextPresenter<Definitions> = true extends {
   ? true
   : false;
 
+type HierarchyTextStreamCommands<Commands> = {
+  [Command in keyof Commands]: Commands[Command] extends Readonly<{
+    readonly kind: "command";
+    readonly success: Readonly<{ readonly kind: "stream" }>;
+  }>
+    ? Command
+    : never;
+}[keyof Commands];
+
 type UnexpectedHierarchyTextCommands<Commands> = {
   [Command in keyof Commands]: Commands[Command] extends Readonly<{
     readonly kind: "command";
@@ -1502,13 +1511,22 @@ type HierarchyUsageValidation<Commands> =
 type HierarchyOutputValidation<Commands, Output extends OutputCapability> =
   Output extends OutputCapability<infer Formats>
     ? [Formats] extends [readonly ["structured", "text"]]
-      ? MissingHierarchyTextCommands<Commands> extends never
-        ? HierarchyUsageValidation<Commands>
+      ? HierarchyTextStreamCommands<Commands> extends never
+        ? MissingHierarchyTextCommands<Commands> extends never
+          ? HierarchyUsageValidation<Commands>
+          : readonly [
+              ContractTypeError<
+                "missingHierarchyTextPresenter",
+                Readonly<{
+                  readonly commands: MissingHierarchyTextCommands<Commands>;
+                }>
+              >,
+            ]
         : readonly [
             ContractTypeError<
-              "missingHierarchyTextPresenter",
+              "streamTextOutputUnsupported",
               Readonly<{
-                readonly commands: MissingHierarchyTextCommands<Commands>;
+                readonly commands: HierarchyTextStreamCommands<Commands>;
               }>
             >,
           ]
@@ -2444,6 +2462,12 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
       issues,
     );
     const compiledSuccess = compileSuccess(id, executable.success, issues);
+    collectStreamTextOutputIssue(
+      id,
+      isTextOutputEnabled(definition.output),
+      executable.success,
+      issues,
+    );
     const compiledFailures = compileFailures(id, executable.failures, issues);
     collectTextPresenterIssues(
       id,
@@ -3384,6 +3408,17 @@ function collectTextPresenterIssues(
       issues,
       variant,
     );
+  }
+}
+
+function collectStreamTextOutputIssue(
+  command: string,
+  textEnabled: boolean,
+  success: RuntimeExecutableDefinition["success"],
+  issues: ContractDefinitionIssue[],
+): void {
+  if (textEnabled && success.kind === "stream") {
+    issues.push({ code: "streamTextOutputUnsupported", command });
   }
 }
 
