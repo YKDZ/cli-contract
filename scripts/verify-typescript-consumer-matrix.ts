@@ -24,9 +24,10 @@ async function main(): Promise<void> {
 }
 
 async function readFixtures(): Promise<Readonly<Record<string, string>>> {
+  const hierarchyFixture = "hierarchy-text-coverage.typecheck.ts";
   return Object.fromEntries(
-    await Promise.all(
-      [
+    await Promise.all([
+      ...[
         "consumer.ts",
         "completion-missing.ts",
         "core-node.ts",
@@ -46,7 +47,11 @@ async function readFixtures(): Promise<Readonly<Record<string, string>>> {
           "utf8",
         ),
       ]),
-    ),
+      readFile(
+        resolve(repositoryRoot, "packages/lib/test", hierarchyFixture),
+        "utf8",
+      ).then((source) => [hierarchyFixture, source]),
+    ]),
   );
 }
 
@@ -130,6 +135,7 @@ async function verifyCoreOnly(
       "schema-input.ts",
       "stream-record-name.ts",
       "stream-text-coverage.ts",
+      "hierarchy-text-coverage.typecheck.ts",
     ]);
     runCommand(
       "npm",
@@ -158,6 +164,16 @@ async function verifyCoreOnly(
       await verifyMissingNamedVariantDiagnostic(project, resolution);
       await compileFixture(project, resolution, "stream-text-coverage.ts");
       await compileFixture(project, resolution, "stream-record-name.ts");
+      await compileFixture(
+        project,
+        resolution,
+        "hierarchy-text-coverage.typecheck.ts",
+      );
+      await verifyHierarchyTextCoverageDiagnostic(
+        project,
+        resolution,
+        fixtures,
+      );
       await verifyMissingStreamDiagnostic(project, resolution, fixtures);
       await verifyInvalidStreamRecordNameDiagnostic(
         project,
@@ -170,6 +186,69 @@ async function verifyCoreOnly(
       rm(project, { recursive: true, force: true }),
       rm(npmCache, { recursive: true, force: true }),
     ]);
+  }
+}
+
+async function verifyHierarchyTextCoverageDiagnostic(
+  project: string,
+  resolution: (typeof resolutions)[number],
+  fixtures: Readonly<Record<string, string>>,
+): Promise<void> {
+  const source = fixtures["hierarchy-text-coverage.typecheck.ts"];
+  if (source === undefined)
+    throw new Error("Missing hierarchy coverage fixture");
+  const fixture = "hierarchy-text-coverage-unchecked.ts";
+  await writeFile(
+    resolve(project, fixture),
+    source.replaceAll(/\s*\/\/ @ts-expect-error[^\n]*/g, ""),
+  );
+  const tsconfig = `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`;
+  await writeFile(
+    resolve(project, tsconfig),
+    `${JSON.stringify(tsconfigFor(resolution, fixture))}\n`,
+  );
+  const result = spawnSync(
+    resolve(project, "node_modules/.bin/tsc"),
+    ["--project", tsconfig, "--pretty", "false"],
+    { cwd: project, encoding: "utf8" },
+  );
+  if (result.error !== undefined) throw result.error;
+  const diagnostics = `${result.stderr}\n${result.stdout}`;
+  const required = [
+    "missingCompletionTextPresenter",
+    "missingDataVariantTextPresenter",
+    "missingFailureVariantTextPresenter",
+    "missingStreamRecordTextPresenter",
+    "missingStreamSuccessTextPresenter",
+    'command: "leaf"',
+    'location: "completion"',
+    'location: "data"',
+    'location: "failure"',
+    'location: "record"',
+    'location: "streamSuccess"',
+    'variant: "found"',
+    'variant: "unavailable"',
+    'variant: "update"',
+  ];
+  const headers = diagnostics.match(
+    /^hierarchy-text-coverage-unchecked\.ts\(\d+,\d+\): error TS\d+:/gm,
+  );
+  const allHeaders = diagnostics.match(/^.+\(\d+,\d+\): error TS\d+:/gm);
+  const unrelated = [
+    "TS7006",
+    "TS7031",
+    `Type '"rootGroup"' is not assignable to type '"rootCommand"'`,
+  ];
+  if (
+    result.status === 0 ||
+    required.some((fragment) => !diagnostics.includes(fragment)) ||
+    unrelated.some((fragment) => diagnostics.includes(fragment)) ||
+    headers?.length !== 5 ||
+    allHeaders?.length !== headers.length
+  ) {
+    throw new Error(
+      `Hierarchy text diagnostic did not expose only local contract evidence\n${diagnostics}`,
+    );
   }
 }
 
