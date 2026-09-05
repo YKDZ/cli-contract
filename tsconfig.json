@@ -5,6 +5,7 @@
     "oxlint.config.ts",
     "scripts/check-boundaries.ts",
     "scripts/create-pack-candidate.ts",
+    "scripts/validate-release-tag.ts",
     "scripts/verify-release-candidate.ts",
     "scripts/verify-reins-consumer.ts",
     "scripts/verify-template-consumer.ts",
