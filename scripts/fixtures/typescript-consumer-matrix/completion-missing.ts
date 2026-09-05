@@ -2,38 +2,11 @@ import {
   defineCli,
   helpCapability,
   outputCapability,
-  type ContractSchema,
-  type EmptyCliInput,
 } from "@ykdz/cli-contract";
+import { z } from "zod";
 
-const emptyInput: ContractSchema<EmptyCliInput, EmptyCliInput> = {
-  "~standard": {
-    version: 1,
-    vendor: "typescript-consumer-matrix",
-    validate: (value) => ({ value: value as EmptyCliInput }),
-    jsonSchema: {
-      input: () => ({ type: "object" }),
-      output: () => ({ type: "object" }),
-    },
-  },
-};
-
-const textInput: ContractSchema<
-  Readonly<{ readonly name?: string }>,
-  Readonly<{ readonly name?: string }>
-> = {
-  "~standard": {
-    version: 1,
-    vendor: "typescript-consumer-matrix",
-    validate: (value) => ({
-      value: value as Readonly<{ readonly name?: string }>,
-    }),
-    jsonSchema: {
-      input: () => ({ type: "object" }),
-      output: () => ({ type: "object" }),
-    },
-  },
-};
+const emptyInput = z.object({});
+const textInput = z.object({ name: z.string().optional() });
 
 defineCli()({
   root: "missingCompletion",
@@ -48,7 +21,7 @@ defineCli()({
       input: emptyInput,
       success: { kind: "completion" },
       failures: {},
-      handler: () => undefined as never,
+      handler: ({ outcome }) => outcome.completion(),
     },
   },
 });
@@ -73,7 +46,10 @@ defineCli()({
       input: textInput,
       success: { kind: "completion" },
       failures: {},
-      handler: () => undefined as never,
+      handler: ({ input, outcome }) => {
+        input.name satisfies string | undefined;
+        return outcome.completion();
+      },
     },
   },
 });

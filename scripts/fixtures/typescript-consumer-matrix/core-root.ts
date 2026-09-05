@@ -4,38 +4,11 @@ import {
   outputCapability,
   text,
   type CliContract,
-  type ContractSchema,
-  type EmptyCliInput,
 } from "@ykdz/cli-contract";
+import { z } from "zod";
 
-const emptyInput: ContractSchema<EmptyCliInput, EmptyCliInput> = {
-  "~standard": {
-    version: 1,
-    vendor: "typescript-consumer-matrix",
-    validate: (value) => ({ value: value as EmptyCliInput }),
-    jsonSchema: {
-      input: () => ({ type: "object" }),
-      output: () => ({ type: "object" }),
-    },
-  },
-};
-
-const textInput: ContractSchema<
-  Readonly<{ readonly name?: string }>,
-  Readonly<{ readonly name?: string }>
-> = {
-  "~standard": {
-    version: 1,
-    vendor: "typescript-consumer-matrix",
-    validate: (value) => ({
-      value: value as Readonly<{ readonly name?: string }>,
-    }),
-    jsonSchema: {
-      input: () => ({ type: "object" }),
-      output: () => ({ type: "object" }),
-    },
-  },
-};
+const emptyInput = z.object({});
+const textInput = z.object({ name: z.string().optional() });
 
 const define = defineCli<Readonly<{}>>();
 const contract = define({
@@ -74,7 +47,7 @@ defineCli()({
       // @ts-expect-error completion 缺少 text presenter 必须在真实 defineCli 入口被拒绝。
       success: { kind: "completion" },
       failures: {},
-      handler: () => undefined as never,
+      handler: ({ outcome }) => outcome.completion(),
     },
   },
 });
@@ -109,6 +82,27 @@ const textCompletionWithField = defineCli()({
 void textCompletionWithField;
 
 defineCli()({
+  root: "completionCannotReturnData",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "text" }),
+  usageFailureExitCode: 64,
+  commands: {
+    completionCannotReturnData: {
+      kind: "rootCommand",
+      name: "completion-cannot-return-data",
+      description: "completion 结果闭合",
+      input: emptyInput,
+      success: { kind: "completion", text: () => text.silent },
+      failures: {},
+      handler: ({ outcome }) => {
+        // @ts-expect-error completion handler 不接受 data 结果类别。
+        return outcome.data.value({ value: "nope" });
+      },
+    },
+  },
+});
+
+defineCli()({
   root: "missingCompletionWithField",
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
@@ -129,7 +123,10 @@ defineCli()({
       // @ts-expect-error 带字段的 completion 缺少 text presenter 必须在真实 defineCli 入口被拒绝。
       success: { kind: "completion" },
       failures: {},
-      handler: () => undefined as never,
+      handler: ({ input, outcome }) => {
+        input.name satisfies string | undefined;
+        return outcome.completion();
+      },
     },
   },
 });

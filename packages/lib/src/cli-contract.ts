@@ -1680,6 +1680,49 @@ type RootFallbackRawFieldInputContract<
   ? unknown
   : RawFieldInputContract<Fields, InputSchema>;
 
+type RootFallbackKind = "completion" | "data";
+
+type RootFallbackHandlerContext<
+  Command extends string,
+  Dependencies,
+  InputSchema extends ContractSchema,
+  Variants extends DataVariantDefinitions,
+  Failures extends FailureVariantDefinitions,
+  Kind extends RootFallbackKind,
+> = {
+  readonly completion: CompletionHandlerContext<
+    Command,
+    Dependencies,
+    Failures,
+    ContractSchemaOutput<InputSchema>
+  >;
+  readonly data: DataHandlerContext<
+    Command,
+    Dependencies,
+    ContractSchemaOutput<InputSchema>,
+    Variants,
+    Failures
+  >;
+}[Kind];
+
+type RootFallbackHandlerResult<
+  Command extends string,
+  Variants extends DataVariantDefinitions,
+  Failures extends FailureVariantDefinitions,
+  Kind extends RootFallbackKind,
+> = {
+  readonly completion:
+    | CompletionFact<Command>
+    | FailureFactUnion<Command, Failures>
+    | Promise<CompletionFact<Command> | FailureFactUnion<Command, Failures>>;
+  readonly data:
+    | DataFactUnion<Command, Variants>
+    | FailureFactUnion<Command, Failures>
+    | Promise<
+        DataFactUnion<Command, Variants> | FailureFactUnion<Command, Failures>
+      >;
+}[Kind];
+
 type DataOrCompletionRootCliDefinition<
   Root extends string,
   Dependencies,
@@ -1700,7 +1743,7 @@ type DataOrCompletionRootCliDefinition<
           Variants,
           Failures
         >,
-        "fields" | "input" | "success"
+        "fields" | "input" | "success" | "handler"
       > &
         Readonly<{
           readonly input: InputSchema &
@@ -1725,6 +1768,36 @@ type DataOrCompletionRootCliDefinition<
         );
     }>;
   }>;
+
+type RootFallbackHandlerDefinition<
+  Root extends string,
+  Dependencies,
+  InputSchema extends ContractSchema,
+  Variants extends DataVariantDefinitions,
+  Failures extends FailureVariantDefinitions,
+  Kind extends RootFallbackKind,
+> = Readonly<{
+  readonly commands: Readonly<{
+    readonly [Command in Root]: Readonly<{
+      readonly success: Readonly<{ readonly kind: Kind }>;
+      readonly handler: (
+        context: RootFallbackHandlerContext<
+          Command,
+          Dependencies,
+          InputSchema,
+          Variants,
+          Failures,
+          NoInfer<Kind>
+        >,
+      ) => RootFallbackHandlerResult<
+        Command,
+        Variants,
+        Failures,
+        NoInfer<Kind>
+      >;
+    }>;
+  }>;
+}>;
 
 export interface DefineCli<Dependencies> {
   readonly command: <const Command extends string>(
@@ -1983,6 +2056,7 @@ export interface DefineCli<Dependencies> {
     const Variants extends DataVariantDefinitions,
     const Failures extends FailureVariantDefinitions,
     const Output extends OutputCapability,
+    const Kind extends RootFallbackKind,
   >(
     definition: DataOrCompletionRootCliDefinition<
       Root,
@@ -1993,6 +2067,14 @@ export interface DefineCli<Dependencies> {
       Failures,
       TextEnabledForOutput<Output>
     > &
+      RootFallbackHandlerDefinition<
+        Root,
+        Dependencies,
+        InputSchema,
+        Variants,
+        Failures,
+        Kind
+      > &
       Readonly<{ readonly output: Output }>,
   ): CliContract<
     Root,
