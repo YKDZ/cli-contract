@@ -26,17 +26,19 @@ async function main(): Promise<void> {
 async function readFixtures(): Promise<Readonly<Record<string, string>>> {
   return Object.fromEntries(
     await Promise.all(
-      ["consumer.ts", "core-node.ts", "core-root.ts"].map(async (name) => [
-        name,
-        await readFile(
-          resolve(
-            repositoryRoot,
-            "scripts/fixtures/typescript-consumer-matrix",
-            name,
+      ["consumer.ts", "core-node.ts", "core-root.ts", "schema-input.ts"].map(
+        async (name) => [
+          name,
+          await readFile(
+            resolve(
+              repositoryRoot,
+              "scripts/fixtures/typescript-consumer-matrix",
+              name,
+            ),
+            "utf8",
           ),
-          "utf8",
-        ),
-      ]),
+        ],
+      ),
     ),
   );
 }
@@ -105,10 +107,19 @@ async function verifyCoreOnly(
         private: true,
         type: "module",
         dependencies: { [corePackage]: `file:${candidate.core}` },
-        devDependencies: { typescript: compilerVersion },
+        devDependencies: {
+          "@valibot/to-json-schema": "1.7.1",
+          typescript: compilerVersion,
+          valibot: "1.4.2",
+          zod: "4.5.4",
+        },
       })}\n`,
     );
-    await writeFixtures(project, fixtures, ["core-node.ts", "core-root.ts"]);
+    await writeFixtures(project, fixtures, [
+      "core-node.ts",
+      "core-root.ts",
+      "schema-input.ts",
+    ]);
     runCommand(
       "npm",
       [
@@ -125,7 +136,11 @@ async function verifyCoreOnly(
     );
 
     for (const resolution of resolutions) {
-      for (const fixture of ["core-root.ts", "core-node.ts"]) {
+      for (const fixture of [
+        "core-root.ts",
+        "core-node.ts",
+        "schema-input.ts",
+      ]) {
         await compileFixture(project, resolution, fixture);
       }
     }

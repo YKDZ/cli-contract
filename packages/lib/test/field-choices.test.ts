@@ -17,19 +17,6 @@ import { z } from "zod";
 
 const draft202012 = { target: "draft-2020-12" as const };
 
-type ChoiceRawInput = Readonly<{
-  readonly mode: string;
-  readonly files?: readonly string[];
-  readonly option?: string;
-  readonly tag?: readonly string[];
-  readonly refined?: string;
-}>;
-
-type ValibotChoiceRawInput = Readonly<{
-  readonly mode?: string;
-  readonly tag?: readonly string[];
-}>;
-
 type CombinationRawInput = Readonly<{ readonly mode: string }>;
 
 function fieldChoices(
@@ -84,7 +71,6 @@ void test("Zod 的直接 enum 同源投影到 grammar、manifest、synopsis 与�
   });
   const exported = input["~standard"].jsonSchema.input(draft202012);
   const before = structuredClone(exported);
-  const contractSchema = input as unknown as ContractSchema<ChoiceRawInput>;
   const sourceChoices = (
     exported.properties as Readonly<
       Record<string, Readonly<{ enum: readonly string[] }>>
@@ -119,7 +105,7 @@ void test("Zod 的直接 enum 同源投影到 grammar、manifest、synopsis 与�
             description: "精炼",
           },
         },
-        input: contractSchema,
+        input,
         success: { kind: "completion" },
         failures: {},
         handler: ({ outcome }) => outcome.completion(),
@@ -189,8 +175,6 @@ void test("Valibot 的直接 enum 同样覆盖单值与 repeatable option", () =
       tag: v.optional(v.array(v.picklist(["red", "green"]))),
     }),
   );
-  const contractSchema =
-    input as unknown as ContractSchema<ValibotChoiceRawInput>;
   const cli = defineCli()({
     root: "valibotChoices",
     help: helpCapability(),
@@ -213,7 +197,7 @@ void test("Valibot 的直接 enum 同样覆盖单值与 repeatable option", () =
             description: "标签",
           },
         },
-        input: contractSchema,
+        input,
         success: { kind: "completion" },
         failures: {},
         handler: ({ outcome }) => outcome.completion(),
@@ -245,15 +229,7 @@ void test("每个显式字段候选值在 parser 聚合并在 validation 与 han
         return source["~standard"].validate(value);
       },
     },
-  } as unknown as ContractSchema<
-    Readonly<{
-      readonly mode: string;
-      readonly files?: readonly string[];
-      readonly option?: string;
-      readonly tag?: readonly string[];
-      readonly requires?: string;
-    }>
-  >;
+  };
   const cli = defineCli()({
     root: "choices",
     help: helpCapability(),
@@ -417,12 +393,7 @@ void test("缺席 default、没有候选值和其余 schema 约束保持原有�
             description: "约束字段",
           },
         },
-        input: source as unknown as ContractSchema<
-          Readonly<{
-            readonly defaultMode?: string;
-            readonly constrained?: string;
-          }>
-        >,
+        input: source,
         success: { kind: "completion" },
         failures: {},
         handler: ({ input, outcome }) => {

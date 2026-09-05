@@ -474,10 +474,51 @@ export interface ContractTypeError<Code extends string, Evidence> {
 
 type InputStringKeys<Input> = Extract<keyof Input, string>;
 
+type IsAny<Value> = 0 extends 1 & Value ? true : false;
+
+type IsUnion<Value, Whole = Value> =
+  IsAny<Value> extends true
+    ? false
+    : Value extends unknown
+      ? [Whole] extends [Value]
+        ? false
+        : true
+      : never;
+
+type NormalizeNarrowStringLeaf<Value> =
+  IsAny<Value> extends true
+    ? Value
+    : [Value] extends [never]
+      ? Value
+      : [Exclude<Value, undefined>] extends [never]
+        ? Value
+        : [Exclude<Value, undefined>] extends [string]
+          ? string | (undefined extends Value ? undefined : never)
+          : Value;
+
+type NormalizeNarrowStringArray<Value extends readonly unknown[]> = {
+  [Index in keyof Value]: NormalizeNarrowStringLeaf<Value[Index]>;
+};
+
+type NormalizeNarrowStrings<Value> =
+  IsAny<Value> extends true
+    ? Value
+    : [Value] extends [never]
+      ? Value
+      : [Exclude<Value, undefined>] extends [readonly unknown[]]
+        ? IsUnion<Exclude<Value, undefined>> extends true
+          ? Value
+          :
+              | NormalizeNarrowStringArray<
+                  Extract<Exclude<Value, undefined>, readonly unknown[]>
+                >
+              | (undefined extends Value ? undefined : never)
+        : NormalizeNarrowStringLeaf<Value>;
+
 type IncompatibleRawInputKeys<Fields extends FieldDefinitions, Input> = {
   [Field in keyof Fields & InputStringKeys<Input>]: RawSchemaInputValue<
     Fields[Field]
-  > extends Input[Field]
+  > extends NormalizeNarrowStrings<Input[Field]>
     ? never
     : Field;
 }[keyof Fields & InputStringKeys<Input>];

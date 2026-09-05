@@ -51,6 +51,319 @@ void zodOutput;
 void valibotInput;
 void valibotOutput;
 
+type ScalarRawFields = Readonly<{
+  readonly value: Readonly<{
+    readonly kind: "valueOption";
+    readonly longOption: "--value";
+    readonly description: "值";
+  }>;
+}>;
+
+type CollectionRawFields = Readonly<{
+  readonly value: Readonly<{
+    readonly kind: "repeatableOption";
+    readonly longOption: "--value";
+    readonly description: "值";
+  }>;
+}>;
+
+type PositiveFlagRawFields = Readonly<{
+  readonly enabled: Readonly<{
+    readonly kind: "flag";
+    readonly longOption: "--enabled";
+    readonly description: "启用";
+  }>;
+}>;
+
+type NegatedFlagRawFields = Readonly<{
+  readonly enabled: Readonly<{
+    readonly kind: "flag";
+    readonly longOption: "--enabled";
+    readonly negatedLongOption: "--no-enabled";
+    readonly description: "启用";
+  }>;
+}>;
+
+type ScalarRawDefinition<InputSchema extends ContractSchema> =
+  CompletionRootCommandDefinition<
+    "rawScalar",
+    undefined,
+    Readonly<Record<never, never>>,
+    ScalarRawFields,
+    InputSchema
+  >;
+
+type CollectionRawDefinition<InputSchema extends ContractSchema> =
+  CompletionRootCommandDefinition<
+    "rawCollection",
+    undefined,
+    Readonly<Record<never, never>>,
+    CollectionRawFields,
+    InputSchema
+  >;
+
+type PositiveFlagRawDefinition<InputSchema extends ContractSchema> =
+  CompletionRootCommandDefinition<
+    "rawPositiveFlag",
+    undefined,
+    Readonly<Record<never, never>>,
+    PositiveFlagRawFields,
+    InputSchema
+  >;
+
+type NegatedFlagRawDefinition<InputSchema extends ContractSchema> =
+  CompletionRootCommandDefinition<
+    "rawNegatedFlag",
+    undefined,
+    Readonly<Record<never, never>>,
+    NegatedFlagRawFields,
+    InputSchema
+  >;
+
+function acceptScalarRawDefinition<InputSchema extends ContractSchema>(
+  definition: ScalarRawDefinition<InputSchema>,
+): void {
+  void definition;
+}
+
+function acceptCollectionRawDefinition<InputSchema extends ContractSchema>(
+  definition: CollectionRawDefinition<InputSchema>,
+): void {
+  void definition;
+}
+
+function acceptPositiveFlagRawDefinition<InputSchema extends ContractSchema>(
+  definition: PositiveFlagRawDefinition<InputSchema>,
+): void {
+  void definition;
+}
+
+function acceptNegatedFlagRawDefinition<InputSchema extends ContractSchema>(
+  definition: NegatedFlagRawDefinition<InputSchema>,
+): void {
+  void definition;
+}
+
+const scalarRawDefinitionBase = {
+  kind: "rootCommand",
+  name: "raw-scalar",
+  description: "原始单值",
+  fields: {
+    value: {
+      kind: "valueOption",
+      longOption: "--value",
+      description: "值",
+    },
+  },
+  success: { kind: "completion" },
+  failures: {},
+  handler: () => {
+    throw new Error("类型夹具不会执行");
+  },
+} as const;
+
+const collectionRawDefinitionBase = {
+  kind: "rootCommand",
+  name: "raw-collection",
+  description: "原始集合",
+  fields: {
+    value: {
+      kind: "repeatableOption",
+      longOption: "--value",
+      description: "值",
+    },
+  },
+  success: { kind: "completion" },
+  failures: {},
+  handler: () => {
+    throw new Error("类型夹具不会执行");
+  },
+} as const;
+
+const positiveFlagRawDefinitionBase = {
+  kind: "rootCommand",
+  name: "raw-positive-flag",
+  description: "原始正 flag",
+  fields: {
+    enabled: {
+      kind: "flag",
+      longOption: "--enabled",
+      description: "启用",
+    },
+  },
+  success: { kind: "completion" },
+  failures: {},
+  handler: () => {
+    throw new Error("类型夹具不会执行");
+  },
+} as const;
+
+const negatedFlagRawDefinitionBase = {
+  kind: "rootCommand",
+  name: "raw-negated-flag",
+  description: "原始否定 flag",
+  fields: {
+    enabled: {
+      kind: "flag",
+      longOption: "--enabled",
+      negatedLongOption: "--no-enabled",
+      description: "启用",
+    },
+  },
+  success: { kind: "completion" },
+  failures: {},
+  handler: () => {
+    throw new Error("类型夹具不会执行");
+  },
+} as const;
+
+declare const literalScalarInput: ContractSchema<
+  Readonly<{ readonly value: "a" | "b" }>
+>;
+declare const literalArrayInput: ContractSchema<
+  Readonly<{ readonly value: ("a" | "b")[] }>
+>;
+declare const readonlyLiteralArrayInput: ContractSchema<
+  Readonly<{ readonly value: readonly ("a" | "b")[] }>
+>;
+declare const wideNullableInput: ContractSchema<
+  Readonly<{ readonly value: string | null }>
+>;
+declare const wideNumberUnionInput: ContractSchema<
+  Readonly<{ readonly value: string | number }>
+>;
+declare const unknownInput: ContractSchema<
+  Readonly<{ readonly value: unknown }>
+>;
+declare const anyInput: ContractSchema<Readonly<{ readonly value: any }>>;
+declare const neverInput: ContractSchema<Readonly<{ readonly value: never }>>;
+declare const numberInput: ContractSchema<Readonly<{ readonly value: number }>>;
+declare const numberArrayInput: ContractSchema<
+  Readonly<{ readonly value: number[] }>
+>;
+declare const fixedTupleInput: ContractSchema<
+  Readonly<{ readonly value: ["a", "b"] }>
+>;
+declare const readonlyFixedTupleInput: ContractSchema<
+  Readonly<{ readonly value: readonly ["a", "b"] }>
+>;
+declare const mixedTupleInput: ContractSchema<
+  Readonly<{ readonly value: ["a", number] }>
+>;
+declare const emptyTupleInput: ContractSchema<Readonly<{ readonly value: [] }>>;
+declare const narrowNullableInput: ContractSchema<
+  Readonly<{ readonly value: "a" | null }>
+>;
+declare const narrowNumberUnionInput: ContractSchema<
+  Readonly<{ readonly value: "a" | number }>
+>;
+declare const trueFlagInput: ContractSchema<
+  Readonly<{ readonly enabled: true }>
+>;
+declare const falseFlagInput: ContractSchema<
+  Readonly<{ readonly enabled: false }>
+>;
+declare const booleanFlagInput: ContractSchema<
+  Readonly<{ readonly enabled: boolean }>
+>;
+
+acceptScalarRawDefinition<typeof literalScalarInput>({
+  ...scalarRawDefinitionBase,
+  input: literalScalarInput,
+});
+acceptCollectionRawDefinition<typeof literalArrayInput>({
+  ...collectionRawDefinitionBase,
+  input: literalArrayInput,
+});
+acceptCollectionRawDefinition<typeof readonlyLiteralArrayInput>({
+  ...collectionRawDefinitionBase,
+  input: readonlyLiteralArrayInput,
+});
+acceptScalarRawDefinition<typeof wideNullableInput>({
+  ...scalarRawDefinitionBase,
+  input: wideNullableInput,
+});
+acceptScalarRawDefinition<typeof wideNumberUnionInput>({
+  ...scalarRawDefinitionBase,
+  input: wideNumberUnionInput,
+});
+acceptScalarRawDefinition<typeof unknownInput>({
+  ...scalarRawDefinitionBase,
+  input: unknownInput,
+});
+acceptScalarRawDefinition<typeof anyInput>({
+  ...scalarRawDefinitionBase,
+  input: anyInput,
+});
+acceptScalarRawDefinition<typeof numberInput>({
+  ...scalarRawDefinitionBase,
+  // @ts-expect-error number 不能接受 parser 的 raw string。
+  input: numberInput,
+});
+acceptScalarRawDefinition<typeof neverInput>({
+  ...scalarRawDefinitionBase,
+  // @ts-expect-error never 不能因条件类型而扩宽为 string。
+  input: neverInput,
+});
+acceptCollectionRawDefinition<typeof numberArrayInput>({
+  ...collectionRawDefinitionBase,
+  // @ts-expect-error number[] 不能接受 parser 的 raw string collection。
+  input: numberArrayInput,
+});
+acceptCollectionRawDefinition<typeof fixedTupleInput>({
+  ...collectionRawDefinitionBase,
+  // @ts-expect-error 固定 tuple 不能接受非空可变 raw tuple。
+  input: fixedTupleInput,
+});
+acceptCollectionRawDefinition<typeof readonlyFixedTupleInput>({
+  ...collectionRawDefinitionBase,
+  // @ts-expect-error readonly 固定 tuple 不能接受非空可变 raw tuple。
+  input: readonlyFixedTupleInput,
+});
+acceptCollectionRawDefinition<typeof mixedTupleInput>({
+  ...collectionRawDefinitionBase,
+  // @ts-expect-error 非字符串 tuple 槽不能被归一化。
+  input: mixedTupleInput,
+});
+acceptCollectionRawDefinition<typeof emptyTupleInput>({
+  ...collectionRawDefinitionBase,
+  // @ts-expect-error 空 tuple 不能接受非空 raw tuple。
+  input: emptyTupleInput,
+});
+acceptScalarRawDefinition<typeof literalArrayInput>({
+  ...scalarRawDefinitionBase,
+  // @ts-expect-error scalar 字段不能接受 array Input。
+  input: literalArrayInput,
+});
+acceptCollectionRawDefinition<typeof literalScalarInput>({
+  ...collectionRawDefinitionBase,
+  // @ts-expect-error collection 字段不能接受 scalar Input。
+  input: literalScalarInput,
+});
+acceptScalarRawDefinition<typeof narrowNullableInput>({
+  ...scalarRawDefinitionBase,
+  // @ts-expect-error 窄字符串与 null 的混合联合不得放宽。
+  input: narrowNullableInput,
+});
+acceptScalarRawDefinition<typeof narrowNumberUnionInput>({
+  ...scalarRawDefinitionBase,
+  // @ts-expect-error 窄字符串与 number 的混合联合不得放宽。
+  input: narrowNumberUnionInput,
+});
+acceptPositiveFlagRawDefinition<typeof trueFlagInput>({
+  ...positiveFlagRawDefinitionBase,
+  input: trueFlagInput,
+});
+acceptPositiveFlagRawDefinition<typeof falseFlagInput>({
+  ...positiveFlagRawDefinitionBase,
+  // @ts-expect-error 无否定 spelling 的 flag 只产生 true。
+  input: falseFlagInput,
+});
+acceptNegatedFlagRawDefinition<typeof booleanFlagInput>({
+  ...negatedFlagRawDefinitionBase,
+  input: booleanFlagInput,
+});
+
 function exhaustivelyRecognizeUsageIssue(issue: UsageIssue): string {
   switch (issue.code) {
     case "conflictingFlag":
