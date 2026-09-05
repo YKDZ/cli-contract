@@ -33,6 +33,7 @@ async function readFixtures(): Promise<Readonly<Record<string, string>>> {
         "core-root.ts",
         "named-variant-missing.ts",
         "schema-input.ts",
+        "stream-record-name.ts",
         "stream-text-coverage.ts",
       ].map(async (name) => [
         name,
@@ -127,6 +128,7 @@ async function verifyCoreOnly(
       "completion-missing.ts",
       "named-variant-missing.ts",
       "schema-input.ts",
+      "stream-record-name.ts",
       "stream-text-coverage.ts",
     ]);
     runCommand(
@@ -155,7 +157,13 @@ async function verifyCoreOnly(
       await verifyMissingCompletionDiagnostic(project, resolution);
       await verifyMissingNamedVariantDiagnostic(project, resolution);
       await compileFixture(project, resolution, "stream-text-coverage.ts");
+      await compileFixture(project, resolution, "stream-record-name.ts");
       await verifyMissingStreamDiagnostic(project, resolution, fixtures);
+      await verifyInvalidStreamRecordNameDiagnostic(
+        project,
+        resolution,
+        fixtures,
+      );
     }
   } finally {
     await Promise.all([
@@ -211,6 +219,48 @@ async function verifyMissingStreamDiagnostic(
   ) {
     throw new Error(
       `Missing-stream diagnostic did not expose only local contract evidence\n${diagnostics}`,
+    );
+  }
+}
+
+async function verifyInvalidStreamRecordNameDiagnostic(
+  project: string,
+  resolution: (typeof resolutions)[number],
+  fixtures: Readonly<Record<string, string>>,
+): Promise<void> {
+  const fixture = "stream-record-name-unchecked.ts";
+  const source = fixtures["stream-record-name.ts"];
+  if (source === undefined)
+    throw new Error("Missing stream record name fixture");
+  await writeFile(
+    resolve(project, fixture),
+    source.replaceAll(/\s*\/\/ @ts-expect-error[^\n]*/g, ""),
+  );
+  const tsconfig = `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`;
+  await writeFile(
+    resolve(project, tsconfig),
+    `${JSON.stringify(tsconfigFor(resolution, fixture))}\n`,
+  );
+  const result = spawnSync(
+    resolve(project, "node_modules/.bin/tsc"),
+    ["--project", tsconfig, "--pretty", "false"],
+    { cwd: project, encoding: "utf8" },
+  );
+  if (result.error !== undefined) throw result.error;
+  const diagnostics = `${result.stderr}\n${result.stdout}`;
+  const required = ["streamRecordMustBeLowerCamelCase", 'records: "bad_name"'];
+  const headers = diagnostics.match(
+    /^stream-record-name-unchecked\.ts\(\d+,\d+\): error TS\d+:/gm,
+  );
+  const allHeaders = diagnostics.match(/^.+\(\d+,\d+\): error TS\d+:/gm);
+  if (
+    result.status === 0 ||
+    required.some((fragment) => !diagnostics.includes(fragment)) ||
+    headers?.length !== 1 ||
+    allHeaders?.length !== headers.length
+  ) {
+    throw new Error(
+      `Invalid-stream-record-name diagnostic did not expose only local contract evidence\n${diagnostics}`,
     );
   }
 }

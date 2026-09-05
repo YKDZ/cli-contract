@@ -563,11 +563,13 @@ type RawFieldInputContract<
         }>
       >;
 
-type InvalidDataVariantNames<Variants> = {
+type InvalidVariantNames<Variants> = {
   [Variant in keyof Variants & string]: IsLowerCamelCase<Variant> extends true
     ? never
     : Variant;
 }[keyof Variants & string];
+
+type InvalidDataVariantNames<Variants> = InvalidVariantNames<Variants>;
 
 type DataVariantNameContract<Variants> =
   InvalidDataVariantNames<Variants> extends never
@@ -579,11 +581,7 @@ type DataVariantNameContract<Variants> =
         }>
       >;
 
-type InvalidFailureVariantNames<Failures> = {
-  [Variant in keyof Failures & string]: IsLowerCamelCase<Variant> extends true
-    ? never
-    : Variant;
-}[keyof Failures & string];
+type InvalidFailureVariantNames<Failures> = InvalidVariantNames<Failures>;
 
 type FailureVariantNameContract<Failures> =
   InvalidFailureVariantNames<Failures> extends never
@@ -768,6 +766,16 @@ type StreamRecordTextContract<
   StreamRecordDefinitions<false>
 >;
 
+type StreamRecordNameContract<Records> =
+  InvalidVariantNames<Records> extends never
+    ? unknown
+    : ContractTypeError<
+        "streamRecordMustBeLowerCamelCase",
+        Readonly<{
+          readonly records: InvalidVariantNames<Records>;
+        }>
+      >;
+
 type StreamRecordDefinitionForSchema<
   Schema extends ContractSchema,
   TextEnabled extends boolean,
@@ -883,7 +891,9 @@ export interface StreamRootCommandDefinition<
   readonly input: InputSchema & RawFieldInputContract<Fields, InputSchema>;
   readonly success: Readonly<{
     readonly kind: "stream";
-    readonly records: Records & StreamRecordDefinitions<TextEnabled>;
+    readonly records: Records &
+      StreamRecordDefinitions<TextEnabled> &
+      StreamRecordNameContract<Records>;
   }> &
     (TextEnabled extends true
       ? Readonly<{ readonly text: CompletionTextPresenter }>
@@ -1966,14 +1976,22 @@ type RootFallbackCliDefinition<
                 | (Readonly<{
                     readonly kind: "stream";
                     readonly records: Records &
-                      StreamRecordDefinitionsForSchemas<RecordSchemas, boolean>;
+                      StreamRecordDefinitionsForSchemas<
+                        RecordSchemas,
+                        boolean
+                      > &
+                      StreamRecordNameContract<Records>;
                     readonly text: CompletionTextPresenter;
                   }> &
                     StreamRecordTextContract<Command, Records, TextEnabled>)
                 | (Readonly<{
                     readonly kind: "stream";
                     readonly records: Records &
-                      StreamRecordDefinitionsForSchemas<RecordSchemas, boolean>;
+                      StreamRecordDefinitionsForSchemas<
+                        RecordSchemas,
+                        boolean
+                      > &
+                      StreamRecordNameContract<Records>;
                     readonly text?: never;
                   }> &
                     ContractTypeError<
