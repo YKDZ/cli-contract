@@ -133,48 +133,9 @@ export async function executeCli<const Contract extends CliContract>(
 
   switch (options.invocation.kind) {
     case "help": {
-      const fieldHelp = command.fields
-        .map((field) => `${formatHelpField(field)}\t${field.description}\n`)
-        .join("");
-      const commandHelp = Object.values(compiled.commands)
-        .filter((candidate) => candidate.parent === command.id)
-        .map(
-          (candidate) =>
-            `${[candidate.name, ...candidate.aliases].join(", ")}\t${candidate.description}\n`,
-        )
-        .join("");
-      const constraintHelp = command.usageConstraints
-        .map((constraint) => `${formatUsageConstraint(constraint)}\n`)
-        .join("");
-      const supplement =
-        command.helpSupplement === undefined
-          ? ""
-          : `${command.helpSupplement.join("\n")}\n`;
-      const help = compiled.contract.grammar.controls.help;
-      const helpControl = [help.longOption, help.shortAlias]
-        .filter((spelling) => spelling !== undefined)
-        .join(", ");
-      const output = compiled.contract.grammar.controls.output;
-      const outputHelp = [
-        ...(output.selector === undefined
-          ? []
-          : [`${output.selector} <structured|text>`]),
-        ...Object.keys(output.compatibilityFlags ?? {}),
-      ]
-        .map((control) => `${control}\n`)
-        .join("");
-      const version = compiled.contract.grammar.controls.version;
-      const versionHelp =
-        version === undefined
-          ? ""
-          : `${[version.longOption, version.shortAlias]
-              .filter((spelling) => spelling !== undefined)
-              .join(
-                ", ",
-              )}${version.description === undefined ? "" : `\t${version.description}`}\n`;
       await writeCliOutput(options.write, {
         destination: "stdout",
-        chunk: `${command.usage.synopsis}\n${command.description}\n${commandHelp}${fieldHelp}${constraintHelp}${helpControl}\n${versionHelp}${outputHelp}${supplement}`,
+        chunk: createHelpText(compiled, command),
       });
       return Object.freeze({
         kind: "help",
@@ -269,6 +230,141 @@ export async function executeCli<const Contract extends CliContract>(
   }
 }
 
+function createHelpText(
+  compiled: ReturnType<typeof getCompiledCli>,
+  command: ReturnType<typeof getCompiledCli>["commands"][string],
+): string {
+  const headings = compiled.contract.grammar.controls.help.headings;
+  const segments = [command.description];
+  const commands = Object.values(compiled.commands).filter(
+    (candidate) => candidate.parent === command.id,
+  );
+  const positionalFields = command.fields.filter(
+    (field) =>
+      field.kind === "positional" || field.kind === "variadicPositional",
+  );
+  const optionFields = command.fields.filter(
+    (field) =>
+      field.kind !== "positional" && field.kind !== "variadicPositional",
+  );
+  const options = [
+    ...optionFields.map(formatHelpField),
+    ...formatCoreControls(compiled),
+  ];
+
+  appendHelpSegment(segments, headings?.usage, [
+    helpLine(command.usage.synopsis),
+  ]);
+  appendHelpSegment(
+    segments,
+    headings?.commands,
+    commands.map((candidate) =>
+      helpDetail(
+        `${[candidate.name, ...candidate.aliases].join(", ")}${isCommandGroup(candidate) ? " <command>" : ""}`,
+        candidate.description,
+      ),
+    ),
+  );
+  appendHelpSegment(
+    segments,
+    headings?.arguments,
+    positionalFields.map(formatHelpField),
+  );
+  appendHelpSegment(segments, headings?.options, options);
+  appendHelpSegment(
+    segments,
+    headings?.constraints,
+    command.usageConstraints.map((constraint) =>
+      helpLine(formatUsageConstraint(constraint)),
+    ),
+  );
+  appendHelpSegment(
+    segments,
+    headings?.supplement,
+    command.helpSupplement === undefined
+      ? []
+      : [{ kind: "lines" as const, lines: command.helpSupplement }],
+  );
+  return `${segments.join("\n\n")}\n`;
+}
+
+function isCommandGroup(
+  command: ReturnType<typeof getCompiledCli>["commands"][string],
+): boolean {
+  return command.kind === "rootGroup" || command.kind === "commandGroup";
+}
+
+type HelpEntry =
+  | Readonly<{
+      readonly kind: "detail";
+      readonly summary: string;
+      readonly detail: string;
+    }>
+  | Readonly<{ readonly kind: "line"; readonly value: string }>
+  | Readonly<{ readonly kind: "lines"; readonly lines: readonly string[] }>;
+
+function helpLine(value: string): HelpEntry {
+  return { kind: "line", value };
+}
+
+function helpDetail(summary: string, detail: string): HelpEntry {
+  return { kind: "detail", summary, detail };
+}
+
+function appendHelpSegment(
+  segments: string[],
+  heading: string | undefined,
+  entries: readonly HelpEntry[],
+): void {
+  if (entries.length === 0) return;
+  const lines = heading === undefined ? [] : [heading];
+  for (const entry of entries) {
+    if (entry.kind === "line") lines.push(`  ${entry.value}`);
+    else if (entry.kind === "detail")
+      lines.push(`  ${entry.summary}`, `    ${entry.detail}`);
+    else
+      lines.push(
+        ...entry.lines.map((line) => (line === "" ? "" : `  ${line}`)),
+      );
+  }
+  segments.push(lines.join("\n"));
+}
+
+function formatCoreControls(
+  compiled: ReturnType<typeof getCompiledCli>,
+): readonly HelpEntry[] {
+  const help = compiled.contract.grammar.controls.help;
+  const version = compiled.contract.grammar.controls.version;
+  const output = compiled.contract.grammar.controls.output;
+  const versionEntry: HelpEntry | undefined =
+    version === undefined
+      ? undefined
+      : version.description === undefined
+        ? helpLine(
+            [version.longOption, version.shortAlias]
+              .filter((spelling) => spelling !== undefined)
+              .join(", "),
+          )
+        : helpDetail(
+            [version.longOption, version.shortAlias]
+              .filter((spelling) => spelling !== undefined)
+              .join(", "),
+            version.description,
+          );
+  return [
+    helpLine(
+      [help.longOption, help.shortAlias]
+        .filter((spelling) => spelling !== undefined)
+        .join(", "),
+    ),
+    ...(versionEntry === undefined ? [] : [versionEntry]),
+    ...(output.selector === undefined
+      ? []
+      : [helpLine(`${output.selector} <structured|text>`)]),
+    ...Object.keys(output.compatibilityFlags ?? {}).map(helpLine),
+  ];
+}
+
 async function writeUsageFailure(
   compiled: ReturnType<typeof getCompiledCli>,
   write: WriteCliOutput,
@@ -307,7 +403,7 @@ function formatUsageConstraint(
 
 function formatHelpField(
   field: ReturnType<typeof getCompiledCli>["fields"][number],
-): string {
+): HelpEntry {
   const cardinality = formatFieldUsage(field, true);
   const choices =
     field.choices === undefined
@@ -317,7 +413,10 @@ function formatHelpField(
     field.default === undefined
       ? ""
       : ` (default: ${JSON.stringify(field.default)})`;
-  return `${cardinality}${choices}${defaultValue}`;
+  return helpDetail(
+    `${cardinality}${choices}${defaultValue}`,
+    field.description,
+  );
 }
 
 async function executeApplicationResult<Contract extends CliContract>(

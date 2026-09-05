@@ -326,7 +326,7 @@ void test("cardinality 事实同源投影到 grammar、usage、help 与 manifest
     },
   });
   assert.deepEqual(writes, [
-    "archive-files <source> [<files...>] [--tag <tag>]... [--color|--no-color]\n归档文件\n<source>\t源文件\n[<files...>]\t附加文件\n[--tag, -t <tag>]...\t归档标签\n[--color, --no-color]\t彩色输出\n--help\n",
+    "归档文件\n\n  archive-files <source> [<files...>] [--tag <tag>]... [--color|--no-color]\n\n  <source>\n    源文件\n  [<files...>]\n    附加文件\n\n  [--tag, -t <tag>]...\n    归档标签\n  [--color, --no-color]\n    彩色输出\n  --help\n",
   ]);
 });
 

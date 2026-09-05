@@ -104,11 +104,30 @@ export interface HelpCapability {
   readonly kind: "helpCapability";
   readonly longOption: "--help";
   readonly shortAlias?: "-h";
+  readonly headings?: HelpHeadings;
   readonly [cliContractType]: "help";
 }
 
+/**
+ * 根级帮助中既定段落的可选标题。未声明标题时仍保留对应机械内容和缩进，
+ * 不会由核心补写默认文案。
+ */
+export interface HelpHeadings {
+  readonly usage?: string;
+  readonly commands?: string;
+  readonly arguments?: string;
+  readonly options?: string;
+  readonly constraints?: string;
+  readonly supplement?: string;
+}
+
+/**
+ * 根契约一次装配并自动投影到整棵命令树的帮助能力配置。标题只属于固定段落，
+ * 不能由单个命令覆盖或用作自定义帮助模板。
+ */
 export interface HelpCapabilityDefinition {
   readonly shortAlias?: "-h";
+  readonly headings?: HelpHeadings;
 }
 
 export interface VersionCapability {
@@ -1235,6 +1254,7 @@ export interface CliGrammar<
     readonly help: Readonly<{
       readonly longOption: "--help";
       readonly shortAlias?: "-h";
+      readonly headings?: HelpHeadings;
     }>;
     readonly version?: Readonly<{
       readonly longOption: "--version";
@@ -2216,6 +2236,10 @@ type RuntimeCliDefinition = RootCliDefinitionBase<string> &
     readonly commands: Readonly<Record<string, RuntimeCommandDefinition>>;
   }>;
 
+/**
+ * 显式装配根级帮助，并机械覆盖根、命令组和可执行命令。`headings` 只为固定
+ * 段落提供可选标签；未提供时仍输出同一段落内容，不生成默认文案或逐命令模板。
+ */
 export function helpCapability(
   definition: HelpCapabilityDefinition = {},
 ): HelpCapability {
@@ -2228,9 +2252,32 @@ export function helpCapability(
     ...(definition.shortAlias === undefined
       ? {}
       : { shortAlias: definition.shortAlias }),
+    ...(definition.headings === undefined
+      ? {}
+      : { headings: copyHelpHeadings(definition.headings) }),
   }) as HelpCapability;
   helpCapabilities.add(capability);
   return capability;
+}
+
+function copyHelpHeadings(value: unknown): HelpHeadings {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new TypeError("帮助标题必须是对象");
+  }
+  const allowed = new Set([
+    "usage",
+    "commands",
+    "arguments",
+    "options",
+    "constraints",
+    "supplement",
+  ]);
+  const headings: Record<string, string> = {};
+  for (const [key, heading] of Object.entries(value)) {
+    if (!allowed.has(key)) throw new TypeError("帮助标题包含未知段落");
+    headings[key] = copySingleLineText(heading, `帮助标题 ${key}`);
+  }
+  return Object.freeze(headings) as HelpHeadings;
 }
 
 export function versionCapability(
@@ -2294,6 +2341,9 @@ function compileControls(definition: RuntimeCliDefinition) {
       ...(definition.help.shortAlias === undefined
         ? {}
         : { shortAlias: definition.help.shortAlias }),
+      ...(definition.help.headings === undefined
+        ? {}
+        : { headings: definition.help.headings }),
     },
     ...(version === undefined
       ? {}

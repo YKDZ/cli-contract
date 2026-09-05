@@ -105,7 +105,7 @@ void test("Zod 默认只由 validation 施加，并同源投影到 grammar、man
   });
   assert.equal(validationCalls, 0);
   assert.deepEqual(helpWrites, [
-    'greet [--name <name>]\n生成问候\n[--name <name>] (default: "Ada")\t问候对象\n--help\n',
+    '生成问候\n\n  greet [--name <name>]\n\n  [--name <name>] (default: "Ada")\n    问候对象\n  --help\n',
   ]);
 
   await executeCli(cli, {
@@ -178,7 +178,7 @@ void test("显式 false 和空数组默认值保留在同源帮助详情", async
     },
   });
   assert.deepEqual(writes, [
-    "defaults [--enabled] [--tag <tags>]...\n默认值\n[--enabled] (default: false)\t启用\n[--tag <tags>]... (default: [])\t标签\n--help\n",
+    "默认值\n\n  defaults [--enabled] [--tag <tags>]...\n\n  [--enabled] (default: false)\n    启用\n  [--tag <tags>]... (default: [])\n    标签\n  --help\n",
   ]);
 });
 

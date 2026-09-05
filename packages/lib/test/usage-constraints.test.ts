@@ -177,7 +177,7 @@ void test("同一约束事实投影到 grammar、manifest、Draft 2020-12 与 he
   });
   assert.match(
     writes.join(""),
-    /auth requires token\nexclusive output, quiet\nforbidden format=json, quiet=true\n--help\n$/,
+    /--help\n\n  auth requires token\n  exclusive output, quiet\n  forbidden format=json, quiet=true\n$/,
   );
 });
 

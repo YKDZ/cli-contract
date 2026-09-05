@@ -178,7 +178,7 @@ void test("grammar、manifest 与完整帮助投影同一父前子后层级", as
     },
   });
   assert.deepEqual(writes, [
-    "workspace <command>\n管理工作区\npackage, pkg\t管理包\n--help\n命令在当前工作区中运行。\n",
+    "管理工作区\n\n  workspace <command>\n\n  package, pkg <command>\n    管理包\n\n  --help\n\n  命令在当前工作区中运行。\n",
   ]);
 });
 

@@ -228,7 +228,7 @@ void test("grammar、help 与 manifest 同时保留声明 scope 和叶有效字�
   });
   assert.match(
     writes.join(""),
-    /^workspace package add \[--verbose\] \[--registry <registry>\] <name>/,
+    /添加包\n\n  workspace package add \[--verbose\] \[--registry <registry>\] <name>/,
   );
 });
 

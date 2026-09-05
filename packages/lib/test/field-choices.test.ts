@@ -141,7 +141,7 @@ void test("Zod 的直接 enum 同源投影到 grammar、manifest、synopsis 与�
     },
   });
   assert.deepEqual(writes, [
-    'choose <mode> [<files...>] [--mode <option>] [--tag <tag>]... [--refined <refined>]\n选择模式\n<mode> (choices: "interactive", "allow-all")\t位置模式\n[<files...>] (choices: "a\\"b", "line\\nbreak")\t文件\n[--mode <option>] (choices: "interactive", "allow-all") (default: "interactive")\t选项模式\n[--tag <tag>]... (choices: "red", "green")\t标签\n[--refined <refined>]\t精炼\n--help\n',
+    '选择模式\n\n  choose <mode> [<files...>] [--mode <option>] [--tag <tag>]... [--refined <refined>]\n\n  <mode> (choices: "interactive", "allow-all")\n    位置模式\n  [<files...>] (choices: "a\\"b", "line\\nbreak")\n    文件\n\n  [--mode <option>] (choices: "interactive", "allow-all") (default: "interactive")\n    选项模式\n  [--tag <tag>]... (choices: "red", "green")\n    标签\n  [--refined <refined>]\n    精炼\n  --help\n',
   ]);
   const invalidChoices = parseCliInvocation(cli, [
     "unexpected",
@@ -567,7 +567,7 @@ void test("组合、引用、条件和非字符串 enum 不推断候选值", asy
     },
   });
   assert.deepEqual(writes, [
-    "counterexample [--any-of <anyOf>] [--one-of <oneOf>] [--reference <reference>] [--conditional <conditional>] [--mixed <mixed>] [--empty <empty>] [--tag <tag>]... [<values...>]\n反例\n[--any-of <anyOf>]\tanyOf\n[--one-of <oneOf>]\toneOf\n[--reference <reference>]\t引用\n[--conditional <conditional>]\t条件\n[--mixed <mixed>]\t混合\n[--empty <empty>]\t空\n[--tag <tag>]...\t标签\n[<values...>]\t值\n--help\n",
+    "反例\n\n  counterexample [--any-of <anyOf>] [--one-of <oneOf>] [--reference <reference>] [--conditional <conditional>] [--mixed <mixed>] [--empty <empty>] [--tag <tag>]... [<values...>]\n\n  [<values...>]\n    值\n\n  [--any-of <anyOf>]\n    anyOf\n  [--one-of <oneOf>]\n    oneOf\n  [--reference <reference>]\n    引用\n  [--conditional <conditional>]\n    条件\n  [--mixed <mixed>]\n    混合\n  [--empty <empty>]\n    空\n  [--tag <tag>]...\n    标签\n  --help\n",
   ]);
 });
 

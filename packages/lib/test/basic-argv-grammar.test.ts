@@ -230,7 +230,7 @@ void test("字段事实从同一 grammar 投影到 usage、help 与 manifest", a
     },
   });
   assert.deepEqual(writes, [
-    "copy-files <source> [<destination>] [--force] [--label <label>]\n复制文件\n<source>\t源文件\n[<destination>]\t目标文件\n[--force, -f]\t覆盖目标文件\n[--label, -l <label>]\t复制标签\n--help\n",
+    "复制文件\n\n  copy-files <source> [<destination>] [--force] [--label <label>]\n\n  <source>\n    源文件\n  [<destination>]\n    目标文件\n\n  [--force, -f]\n    覆盖目标文件\n  [--label, -l <label>]\n    复制标签\n  --help\n",
   ]);
 });
 
