@@ -195,7 +195,7 @@ async function verifyMissingStreamDiagnostic(
     'command: "missingRecord"',
     'command: "missingSuccess"',
     'location: "record"',
-    'location: "success"',
+    'location: "streamSuccess"',
     'variant: "item"',
     'missing: "text"',
   ];

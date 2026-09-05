@@ -791,25 +791,6 @@ type StreamRecordDefinitionsForSchemas<
   >;
 }>;
 
-type StreamSuccessTextContract<
-  Command extends string,
-  Success,
-  TextEnabled extends boolean,
-> = [TextEnabled] extends [true]
-  ? Success extends Readonly<{ readonly text: unknown }>
-    ? unknown
-    : ContractTypeError<
-        "missingStreamSuccessTextPresenter",
-        Readonly<{
-          readonly command: Command;
-          readonly location: "success";
-          readonly missing: "text";
-        }>
-      >
-  : [TextEnabled] extends [false]
-    ? Readonly<{ readonly text?: never }>
-    : unknown;
-
 export interface CompletionRootCommandDefinition<
   Command extends string,
   Dependencies,
@@ -1281,74 +1262,6 @@ export type StreamRootCliDefinition<
       >;
     }>;
   }>;
-
-type StreamRootCliDefinitionForSchemas<
-  Root extends string,
-  Dependencies,
-  Fields extends FieldDefinitions,
-  InputSchema extends ContractSchema,
-  RecordSchemas extends VariantSchemaMap,
-  Records,
-  Success,
-  FailureSchemas extends VariantSchemaMap,
-  Failures,
-  TextEnabled extends boolean,
-> = RootCliDefinitionBase<Root> &
-  Readonly<{
-    readonly commands: Readonly<{
-      readonly [Command in Root]: Readonly<{
-        readonly kind: "rootCommand";
-        readonly name: string;
-        readonly description: string;
-        readonly helpSupplement?: TextLines;
-        readonly usageConstraints?: readonly UsageConstraint<Fields>[];
-        readonly fields?: CheckedFieldDefinitions<Fields> &
-          FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
-          FieldIdentityContract<Fields>;
-        readonly input: InputSchema & RawFieldInputContract<Fields, InputSchema>;
-        readonly success: Success &
-          Readonly<{
-            readonly kind: "stream";
-            readonly records: Records &
-              StreamRecordDefinitionsForSchemas<RecordSchemas, boolean> &
-              StreamRecordTextContract<Command, Records, TextEnabled>;
-            readonly text?: CompletionTextPresenter;
-          }> &
-          StreamSuccessTextContract<Command, Success, TextEnabled>;
-        readonly failures: Failures &
-          FailureVariantDefinitionsForSchemas<FailureSchemas, boolean> &
-          FailureVariantNameContract<Failures> &
-          FailureVariantTextContract<Command, Failures, TextEnabled>;
-        readonly handler: (
-          context: StreamHandlerContext<
-            Command,
-            Dependencies,
-            ContractSchemaOutput<InputSchema>,
-            StreamRecordDefinitionsForSchemas<RecordSchemas, boolean>,
-            FailureVariantDefinitionsForSchemas<FailureSchemas, boolean>
-          >,
-        ) => AsyncGenerator<
-          StreamRecordFactUnion<
-            Command,
-            StreamRecordDefinitionsForSchemas<RecordSchemas, boolean>
-          >,
-          | StreamSuccessFact<Command>
-          | FailureFactUnion<
-              Command,
-              FailureVariantDefinitionsForSchemas<FailureSchemas, boolean>
-            >,
-          void
-        >;
-      }>;
-    }>;
-  }>;
-
-type StreamSuccessOfDefinition<Definition, Root extends string> =
-  Definition extends Readonly<{
-    readonly commands: Readonly<Record<Root, Readonly<{ readonly success: infer Success }>>>;
-  }>
-    ? Success
-    : never;
 
 export type RootCliDefinition<Root extends string, Dependencies> =
   | CompletionRootCliDefinition<
@@ -1971,7 +1884,7 @@ type RootFallbackHandlerResult<
     | FailureFactUnion<Command, Failures>
     | Promise<
         DataFactUnion<Command, Variants> | FailureFactUnion<Command, Failures>
-    >;
+      >;
   readonly stream: AsyncGenerator<
     StreamRecordFactUnion<Command, Records>,
     StreamSuccessFact<Command> | FailureFactUnion<Command, Failures>,
@@ -1982,7 +1895,6 @@ type RootFallbackHandlerResult<
 type RootFallbackContractResult<
   Command extends string,
   Variants extends DataVariantDefinitions,
-  Records extends StreamRecordDefinitions,
   Failures extends FailureVariantDefinitions,
   Kind extends RootFallbackKind,
 > = {
@@ -1997,7 +1909,7 @@ type RootFallbackContractResult<
     | FailureFactUnion<Command, Failures>;
 }[Kind];
 
-type DataOrCompletionRootCliDefinition<
+type RootFallbackCliDefinition<
   Root extends string,
   _Dependencies,
   Fields extends FieldDefinitions,
@@ -2054,27 +1966,21 @@ type DataOrCompletionRootCliDefinition<
                 | (Readonly<{
                     readonly kind: "stream";
                     readonly records: Records &
-                      StreamRecordDefinitionsForSchemas<
-                        RecordSchemas,
-                        boolean
-                      >;
+                      StreamRecordDefinitionsForSchemas<RecordSchemas, boolean>;
                     readonly text: CompletionTextPresenter;
                   }> &
                     StreamRecordTextContract<Command, Records, TextEnabled>)
                 | (Readonly<{
                     readonly kind: "stream";
                     readonly records: Records &
-                      StreamRecordDefinitionsForSchemas<
-                        RecordSchemas,
-                        boolean
-                      >;
+                      StreamRecordDefinitionsForSchemas<RecordSchemas, boolean>;
                     readonly text?: never;
                   }> &
                     ContractTypeError<
                       "missingStreamSuccessTextPresenter",
                       Readonly<{
                         readonly command: Command;
-                        readonly location: "success";
+                        readonly location: "streamSuccess";
                         readonly missing: "text";
                       }>
                     >);
@@ -2107,9 +2013,9 @@ type RootFallbackHandlerDefinition<
         >,
       ) => RootFallbackHandlerResult<
         Command,
-          Variants,
-          Records,
-          Failures,
+        Variants,
+        Records,
+        Failures,
         NoInfer<Kind>
       >;
     }>;
@@ -2395,7 +2301,7 @@ export interface DefineCli<Dependencies> {
     const Output extends OutputCapability,
     const Kind extends RootFallbackKind,
   >(
-    definition: DataOrCompletionRootCliDefinition<
+    definition: RootFallbackCliDefinition<
       Root,
       Dependencies,
       Fields,
@@ -2425,13 +2331,11 @@ export interface DefineCli<Dependencies> {
     RootFallbackContractResult<
       Root,
       DataVariantDefinitionsForSchemas<VariantSchemas, boolean>,
-      StreamRecordDefinitionsForSchemas<RecordSchemas, boolean>,
       FailureVariantDefinitionsForSchemas<FailureSchemas, boolean>,
       Kind
     >,
     "rootCommand"
   >;
-
 }
 
 type HierarchyCommandInput<Definition> = Omit<Definition, "kind"> &
