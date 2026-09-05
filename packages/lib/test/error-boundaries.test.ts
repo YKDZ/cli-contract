@@ -11,6 +11,7 @@ import {
   outputCapability,
   parseCliInvocation,
   type CliInvocation,
+  type OutputCapability,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
@@ -307,7 +308,9 @@ void test("defineCli 在动态启用 text 时仍要求 completion presenter", ()
       defineCli()({
         root: "fixture",
         help: helpCapability(),
-        output: outputCapability({ defaultFormat: "text" } as never),
+        output: outputCapability({
+          defaultFormat: "text",
+        } as never) as OutputCapability,
         usageFailureExitCode: 64,
         commands: {
           fixture: {

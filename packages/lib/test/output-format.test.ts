@@ -10,6 +10,7 @@ import {
   outputCapability,
   parseCliInvocation,
   text,
+  type OutputCapability,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
@@ -478,7 +479,7 @@ void test("text 开关在定义期要求或禁止同位 presenter", () => {
       defineCli()({
         root: "missing",
         help: helpCapability(),
-        output: outputCapability({ defaultFormat: "text" }),
+        output: outputCapability({ defaultFormat: "text" }) as OutputCapability,
         usageFailureExitCode: 64,
         commands: {
           missing: {

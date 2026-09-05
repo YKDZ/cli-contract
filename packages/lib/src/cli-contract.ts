@@ -631,6 +631,31 @@ export interface StreamHandlerContext<
     FailureOutcome<Command, Failures>;
 }
 
+type CompletionSuccessDefinition<
+  Command extends string,
+  TextEnabled extends boolean,
+> = TextEnabled extends true
+  ?
+      | Readonly<{
+          readonly kind: "completion";
+          readonly text: CompletionTextPresenter;
+        }>
+      | (Readonly<{ readonly kind: "completion" }> &
+          ContractTypeError<
+            "missingCompletionTextPresenter",
+            Readonly<{
+              readonly command: Command;
+              readonly location: "completion";
+              readonly missing: "text";
+            }>
+          >)
+  : TextEnabled extends false
+    ? Readonly<{ readonly kind: "completion"; readonly text?: never }>
+    : Readonly<{
+        readonly kind: "completion";
+        readonly text?: CompletionTextPresenter;
+      }>;
+
 export interface CompletionRootCommandDefinition<
   Command extends string,
   Dependencies,
@@ -648,12 +673,7 @@ export interface CompletionRootCommandDefinition<
     FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
     FieldIdentityContract<Fields>;
   readonly input: InputSchema & RawFieldInputContract<Fields, InputSchema>;
-  readonly success: Readonly<{ readonly kind: "completion" }> &
-    (TextEnabled extends true
-      ? Readonly<{ readonly text: CompletionTextPresenter }>
-      : TextEnabled extends false
-        ? Readonly<{ readonly text?: never }>
-        : Readonly<{ readonly text?: CompletionTextPresenter }>);
+  readonly success: CompletionSuccessDefinition<Command, TextEnabled>;
   readonly failures: Failures & FailureVariantNameContract<Failures>;
   readonly handler: (
     context: CompletionHandlerContext<
@@ -1642,6 +1662,17 @@ type HierarchyOutputValidation<Commands, Output extends OutputCapability> =
         : HierarchyUsageValidation<Commands>
     : HierarchyUsageValidation<Commands>;
 
+type TextEnabledForOutput<Output extends OutputCapability> =
+  Output extends OutputCapability<infer Formats>
+    ? [Formats] extends [never]
+      ? boolean
+      : [Formats] extends [readonly ["structured", "text"]]
+        ? true
+        : [Formats] extends [readonly ["structured"]]
+          ? false
+          : boolean
+    : boolean;
+
 export interface DefineCli<Dependencies> {
   readonly command: <const Command extends string>(
     command: Command,
@@ -1841,8 +1872,20 @@ export interface DefineCli<Dependencies> {
     "rootCommand"
   >;
 
-  <const Root extends string, const Failures extends FailureVariantDefinitions>(
-    definition: CompletionRootCliDefinition<Root, Dependencies, Failures>,
+  <
+    const Root extends string,
+    const Failures extends FailureVariantDefinitions,
+    const Output extends OutputCapability,
+  >(
+    definition: CompletionRootCliDefinition<
+      Root,
+      Dependencies,
+      Failures,
+      Readonly<Record<never, never>>,
+      ContractSchema<EmptyCliInput>,
+      TextEnabledForOutput<Output>
+    > &
+      Readonly<{ readonly output: Output }>,
   ): CliContract<
     Root,
     Dependencies,
@@ -1856,15 +1899,18 @@ export interface DefineCli<Dependencies> {
     const Fields extends FieldDefinitions,
     InputSchema extends ContractSchema,
     const Failures extends FailureVariantDefinitions,
+    const Output extends OutputCapability,
   >(
     definition: CompletionRootCliDefinition<
       Root,
       Dependencies,
       Failures,
       Fields,
-      InputSchema
+      InputSchema,
+      TextEnabledForOutput<Output>
     > &
       Readonly<{
+        readonly output: Output;
         readonly commands: Readonly<{
           readonly [Command in Root]: Readonly<{ readonly fields: Fields }>;
         }>;
@@ -2404,6 +2450,10 @@ export function outputCapability<
   return capability;
 }
 
+/**
+ * 定义一个闭合 CLI 契约。根级 help 与 output 能力在此处一次装配，并据此约束根命令的结果投影；
+ * 动态声明仍会在定义期报告 `ContractDefinitionError`，不能以它替代静态可判定声明的类型检查。
+ */
 export function defineCli<Dependencies = undefined>(): DefineCli<Dependencies> {
   const define = ((definition: RuntimeCliDefinition) =>
     compileCli(definition)) as unknown as DefineCli<Dependencies>;
