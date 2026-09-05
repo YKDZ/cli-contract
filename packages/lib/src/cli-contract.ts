@@ -1673,6 +1673,59 @@ type TextEnabledForOutput<Output extends OutputCapability> =
           : boolean
     : boolean;
 
+type RootFallbackRawFieldInputContract<
+  Fields extends FieldDefinitions,
+  InputSchema extends ContractSchema,
+> = FieldDefinitions extends Fields
+  ? unknown
+  : RawFieldInputContract<Fields, InputSchema>;
+
+type DataOrCompletionRootCliDefinition<
+  Root extends string,
+  Dependencies,
+  Fields extends FieldDefinitions,
+  InputSchema extends ContractSchema,
+  Variants extends DataVariantDefinitions,
+  Failures extends FailureVariantDefinitions,
+  TextEnabled extends boolean,
+> = RootCliDefinitionBase<Root> &
+  Readonly<{
+    readonly commands: Readonly<{
+      readonly [Command in Root]: Omit<
+        DataRootCommandDefinition<
+          Command,
+          Dependencies,
+          Fields,
+          InputSchema,
+          Variants,
+          Failures
+        >,
+        "fields" | "input" | "success"
+      > &
+        Readonly<{
+          readonly input: InputSchema &
+            RootFallbackRawFieldInputContract<Fields, InputSchema>;
+        }> &
+        (
+          | Readonly<{
+              readonly fields: CheckedFieldDefinitions<Fields> &
+                FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
+                FieldIdentityContract<Fields>;
+              readonly success: Readonly<{
+                readonly kind: "data";
+                readonly variants: Variants & DataVariantNameContract<Variants>;
+              }>;
+            }>
+          | Readonly<{
+              readonly fields?: CheckedFieldDefinitions<Fields> &
+                FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
+                FieldIdentityContract<Fields>;
+              readonly success: CompletionSuccessDefinition<Root, TextEnabled>;
+            }>
+        );
+    }>;
+  }>;
+
 export interface DefineCli<Dependencies> {
   readonly command: <const Command extends string>(
     command: Command,
@@ -1929,15 +1982,18 @@ export interface DefineCli<Dependencies> {
     InputSchema extends ContractSchema,
     const Variants extends DataVariantDefinitions,
     const Failures extends FailureVariantDefinitions,
+    const Output extends OutputCapability,
   >(
-    definition: DataRootCliDefinition<
+    definition: DataOrCompletionRootCliDefinition<
       Root,
       Dependencies,
       Fields,
       InputSchema,
       Variants,
-      Failures
-    >,
+      Failures,
+      TextEnabledForOutput<Output>
+    > &
+      Readonly<{ readonly output: Output }>,
   ): CliContract<
     Root,
     Dependencies,

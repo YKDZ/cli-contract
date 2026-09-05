@@ -26,19 +26,23 @@ async function main(): Promise<void> {
 async function readFixtures(): Promise<Readonly<Record<string, string>>> {
   return Object.fromEntries(
     await Promise.all(
-      ["consumer.ts", "core-node.ts", "core-root.ts", "schema-input.ts"].map(
-        async (name) => [
-          name,
-          await readFile(
-            resolve(
-              repositoryRoot,
-              "scripts/fixtures/typescript-consumer-matrix",
-              name,
-            ),
-            "utf8",
+      [
+        "consumer.ts",
+        "completion-missing.ts",
+        "core-node.ts",
+        "core-root.ts",
+        "schema-input.ts",
+      ].map(async (name) => [
+        name,
+        await readFile(
+          resolve(
+            repositoryRoot,
+            "scripts/fixtures/typescript-consumer-matrix",
+            name,
           ),
-        ],
-      ),
+          "utf8",
+        ),
+      ]),
     ),
   );
 }
@@ -118,6 +122,7 @@ async function verifyCoreOnly(
     await writeFixtures(project, fixtures, [
       "core-node.ts",
       "core-root.ts",
+      "completion-missing.ts",
       "schema-input.ts",
     ]);
     runCommand(
@@ -143,6 +148,7 @@ async function verifyCoreOnly(
       ]) {
         await compileFixture(project, resolution, fixture);
       }
+      await verifyMissingCompletionDiagnostic(project, resolution);
     }
   } finally {
     await Promise.all([
@@ -230,6 +236,51 @@ async function compileFixture(
     ["--project", tsconfig, "--pretty", "false"],
     project,
   );
+}
+
+async function verifyMissingCompletionDiagnostic(
+  project: string,
+  resolution: (typeof resolutions)[number],
+): Promise<void> {
+  const fixture = "completion-missing.ts";
+  const tsconfig = `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`;
+  await writeFile(
+    resolve(project, tsconfig),
+    `${JSON.stringify(tsconfigFor(resolution, fixture))}\n`,
+  );
+  const result = spawnSync(
+    resolve(project, "node_modules/.bin/tsc"),
+    ["--project", tsconfig, "--pretty", "false"],
+    { cwd: project, encoding: "utf8" },
+  );
+  if (result.error !== undefined) throw result.error;
+  const diagnostics = `${result.stderr}\n${result.stdout}`;
+  const requiredFragments = [
+    "completion-missing.ts",
+    "missingCompletionTextPresenter",
+    'command: "missingCompletion"',
+    'command: "missingCompletionWithField"',
+    'location: "completion"',
+    'missing: "text"',
+  ];
+  if (
+    result.status === 0 ||
+    requiredFragments.some((fragment) => !diagnostics.includes(fragment))
+  ) {
+    throw new Error(
+      `Missing-completion diagnostic did not expose its local contract evidence\n${diagnostics}`,
+    );
+  }
+  const unrelatedFragments = [
+    "fieldInputMustAcceptRawValue",
+    "Property 'completion' does not exist",
+    "implicitly has an 'any'",
+  ];
+  if (unrelatedFragments.some((fragment) => diagnostics.includes(fragment))) {
+    throw new Error(
+      `Missing-completion diagnostic included unrelated fallback errors\n${diagnostics}`,
+    );
+  }
 }
 
 function tsconfigFor(

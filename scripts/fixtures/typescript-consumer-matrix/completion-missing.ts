@@ -2,8 +2,6 @@ import {
   defineCli,
   helpCapability,
   outputCapability,
-  text,
-  type CliContract,
   type ContractSchema,
   type EmptyCliInput,
 } from "@ykdz/cli-contract";
@@ -37,29 +35,6 @@ const textInput: ContractSchema<
   },
 };
 
-const define = defineCli<Readonly<{}>>();
-const contract = define({
-  root: "consumer",
-  help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
-  usageFailureExitCode: 64,
-  commands: {
-    consumer: {
-      kind: "rootCommand",
-      name: "consumer",
-      description: "根入口",
-      fields: {},
-      input: emptyInput,
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
-    },
-  },
-});
-
-const publicContract: CliContract = contract;
-void publicContract;
-
 defineCli()({
   root: "missingCompletion",
   help: helpCapability(),
@@ -71,42 +46,12 @@ defineCli()({
       name: "missing-completion",
       description: "缺少 completion presenter",
       input: emptyInput,
-      // @ts-expect-error completion 缺少 text presenter 必须在真实 defineCli 入口被拒绝。
       success: { kind: "completion" },
       failures: {},
       handler: () => undefined as never,
     },
   },
 });
-
-const textCompletionWithField = defineCli()({
-  root: "textCompletion",
-  help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
-  usageFailureExitCode: 64,
-  commands: {
-    textCompletion: {
-      kind: "rootCommand",
-      name: "text-completion",
-      description: "带字段的 completion",
-      fields: {
-        name: {
-          kind: "valueOption",
-          longOption: "--name",
-          description: "名称",
-        },
-      },
-      input: textInput,
-      success: { kind: "completion", text: () => text.silent },
-      failures: {},
-      handler: ({ input, outcome }) => {
-        input.name satisfies string | undefined;
-        return outcome.completion();
-      },
-    },
-  },
-});
-void textCompletionWithField;
 
 defineCli()({
   root: "missingCompletionWithField",
@@ -126,7 +71,6 @@ defineCli()({
         },
       },
       input: textInput,
-      // @ts-expect-error 带字段的 completion 缺少 text presenter 必须在真实 defineCli 入口被拒绝。
       success: { kind: "completion" },
       failures: {},
       handler: () => undefined as never,
