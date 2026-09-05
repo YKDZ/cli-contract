@@ -1673,17 +1673,29 @@ type TextEnabledForOutput<Output extends OutputCapability> =
           : boolean
     : boolean;
 
-type RequiredSchemaInputKeys<Input> = {
-  [Key in keyof Input & string]-?: {} extends Pick<Input, Key> ? never : Key;
-}[keyof Input & string];
+type EmptyRawObject = Readonly<Record<never, never>>;
+
+type DistributedInputStringKeys<Input> = Input extends unknown
+  ? Extract<keyof Input, string>
+  : never;
+
+type MissingRootFallbackFieldsContract<InputSchema extends ContractSchema> =
+  ContractTypeError<
+    "fieldInputMustAcceptRawValue",
+    Readonly<{
+      readonly fields: DistributedInputStringKeys<
+        ContractSchemaInput<InputSchema>
+      >;
+    }>
+  >;
 
 type RootFallbackRawFieldInputContract<
   Fields extends FieldDefinitions,
   InputSchema extends ContractSchema,
 > = FieldDefinitions extends Fields
-  ? RequiredSchemaInputKeys<ContractSchemaInput<InputSchema>> extends never
+  ? EmptyRawObject extends ContractSchemaInput<InputSchema>
     ? unknown
-    : RawFieldInputContract<Fields, InputSchema>
+    : MissingRootFallbackFieldsContract<InputSchema>
   : RawFieldInputContract<Fields, InputSchema>;
 
 type RootFallbackKind = "completion" | "data";

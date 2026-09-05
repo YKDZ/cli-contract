@@ -12,6 +12,15 @@ import { z } from "zod";
 const emptyInput = z.object({});
 const textInput = z.object({ name: z.string().optional() });
 const countInput = z.object({ count: z.number() });
+const optionalCountInput = z.object({ count: z.number().optional() });
+const eitherAcceptsEmptyInput = z.union([
+  z.object({ count: z.number().optional() }),
+  z.object({ name: z.string() }),
+]);
+const requiredEitherInput = z.union([
+  z.object({ count: z.number() }),
+  z.object({ name: z.string() }),
+]);
 
 const define = defineCli<Readonly<{}>>();
 const contract = define({
@@ -60,6 +69,44 @@ const textCompletionResult: CompletionFact<"emptyTextCompletion"> =
   textCompletionWithoutFieldResult;
 void textCompletionResult;
 
+const optionalCompletionWithoutField = defineCli()({
+  root: "optionalTextCompletion",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "text" }),
+  usageFailureExitCode: 64,
+  commands: {
+    optionalTextCompletion: {
+      kind: "rootCommand",
+      name: "optional-text-completion",
+      description: "可选字段的文本 completion",
+      input: optionalCountInput,
+      success: { kind: "completion", text: () => text.silent },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+void optionalCompletionWithoutField;
+
+const unionCompletionAcceptingEmpty = defineCli()({
+  root: "unionTextCompletion",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "text" }),
+  usageFailureExitCode: 64,
+  commands: {
+    unionTextCompletion: {
+      kind: "rootCommand",
+      name: "union-text-completion",
+      description: "可接受空对象的联合 completion",
+      input: eitherAcceptsEmptyInput,
+      success: { kind: "completion", text: () => text.silent },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+void unionCompletionAcceptingEmpty;
+
 defineCli()({
   root: "missingRawField",
   help: helpCapability(),
@@ -92,6 +139,25 @@ defineCli()({
       input: emptyInput,
       // @ts-expect-error completion 缺少 text presenter 必须在真实 defineCli 入口被拒绝。
       success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+defineCli()({
+  root: "missingUnionRawField",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "text" }),
+  usageFailureExitCode: 64,
+  commands: {
+    missingUnionRawField: {
+      kind: "rootCommand",
+      name: "missing-union-raw-field",
+      description: "互异必需字段的联合输入",
+      // @ts-expect-error 未声明字段时联合输入不能要求 count 或 name。
+      input: requiredEitherInput,
+      success: { kind: "completion", text: () => text.silent },
       failures: {},
       handler: ({ outcome }) => outcome.completion(),
     },
