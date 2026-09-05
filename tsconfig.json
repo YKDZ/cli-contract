@@ -5,6 +5,7 @@
     "oxlint.config.ts",
     "scripts/check-boundaries.ts",
     "scripts/create-pack-candidate.ts",
+    "scripts/verify-typescript-consumer-matrix.ts",
     "scripts/run-root-owned-task.ts"
   ]
 }
