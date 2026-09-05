@@ -1740,103 +1740,61 @@ type HierarchyUsageValidation<Commands> =
         >,
       ];
 
-type HierarchyFailureTextErrors<Command extends string, Failures> =
-  MissingVariantTextPresenters<Failures> extends never
-    ? never
-    : ContractTypeError<
-        "missingFailureVariantTextPresenter",
-        Readonly<{
-          readonly command: Command;
-          readonly location: "failure";
-          readonly variant: MissingVariantTextPresenters<Failures>;
-          readonly missing: "text";
-        }>
-      >;
-
-type HierarchyDataTextErrors<Command extends string, Variants> =
-  MissingVariantTextPresenters<Variants> extends never
-    ? never
-    : ContractTypeError<
-        "missingDataVariantTextPresenter",
-        Readonly<{
-          readonly command: Command;
-          readonly location: "data";
-          readonly variant: MissingVariantTextPresenters<Variants>;
-          readonly missing: "text";
-        }>
-      >;
-
-type HierarchyStreamRecordTextErrors<Command extends string, Records> =
-  MissingVariantTextPresenters<Records> extends never
-    ? never
-    : ContractTypeError<
-        "missingStreamRecordTextPresenter",
-        Readonly<{
-          readonly command: Command;
-          readonly location: "record";
-          readonly variant: MissingVariantTextPresenters<Records>;
-          readonly missing: "text";
-        }>
-      >;
-
-type HierarchyCommandTextErrors<Command extends string, Definition> =
+type HierarchyCommandTextContract<Command extends string, Definition> =
   Definition extends Readonly<{
     readonly success: infer Success;
     readonly failures: infer Failures;
   }>
     ? Success extends Readonly<{ readonly kind: "completion" }>
-      ?
-          | (HasTextPresenter<Success> extends true
-              ? never
-              : ContractTypeError<
-                  "missingCompletionTextPresenter",
-                  Readonly<{
-                    readonly command: Command;
-                    readonly location: "completion";
-                    readonly missing: "text";
-                  }>
-                >)
-          | HierarchyFailureTextErrors<Command, Failures>
+      ? FailureVariantTextContract<Command, Failures, true> &
+          (HasTextPresenter<Success> extends true
+            ? unknown
+            : ContractTypeError<
+                "missingCompletionTextPresenter",
+                Readonly<{
+                  readonly command: Command;
+                  readonly location: "completion";
+                  readonly missing: "text";
+                }>
+              >)
       : Success extends Readonly<{
             readonly kind: "data";
             readonly variants: infer Variants;
           }>
-        ?
-            | HierarchyDataTextErrors<Command, Variants>
-            | HierarchyFailureTextErrors<Command, Failures>
+        ? DataVariantTextContract<Command, Variants, true> &
+            FailureVariantTextContract<Command, Failures, true>
         : Success extends Readonly<{
               readonly kind: "stream";
               readonly records: infer Records;
             }>
-          ?
-              | (HasTextPresenter<Success> extends true
-                  ? never
-                  : ContractTypeError<
-                      "missingStreamSuccessTextPresenter",
-                      Readonly<{
-                        readonly command: Command;
-                        readonly location: "streamSuccess";
-                        readonly missing: "text";
-                      }>
-                    >)
-              | HierarchyStreamRecordTextErrors<Command, Records>
-              | HierarchyFailureTextErrors<Command, Failures>
-          : never
-    : never;
+          ? StreamRecordTextContract<Command, Records, true> &
+              FailureVariantTextContract<Command, Failures, true> &
+              (HasTextPresenter<Success> extends true
+                ? unknown
+                : ContractTypeError<
+                    "missingStreamSuccessTextPresenter",
+                    Readonly<{
+                      readonly command: Command;
+                      readonly location: "streamSuccess";
+                      readonly missing: "text";
+                    }>
+                  >)
+          : unknown
+    : unknown;
 
-type HierarchyTextErrors<Commands> = {
-  [Command in keyof Commands & string]: HierarchyCommandTextErrors<
+type HierarchyTextContracts<Commands> = Readonly<{
+  [Command in keyof Commands & string]: HierarchyCommandTextContract<
     Command,
     Commands[Command]
   >;
-}[keyof Commands & string];
+}>;
 
 type HierarchyOutputValidation<Commands, Output extends OutputCapability> =
   Output extends OutputCapability<infer Formats>
     ? [Formats] extends [readonly ["structured", "text"]]
-      ? [HierarchyTextErrors<Commands>] extends [never]
+      ? Commands extends HierarchyTextContracts<Commands>
         ? HierarchyUsageValidation<Commands>
-        : readonly [HierarchyTextErrors<Commands>]
+        : readonly [never]
       : [Formats] extends [readonly ["structured"]]
         ? UnexpectedHierarchyTextCommands<Commands> extends never
           ? HierarchyUsageValidation<Commands>
@@ -1850,6 +1808,20 @@ type HierarchyOutputValidation<Commands, Output extends OutputCapability> =
             ]
         : HierarchyUsageValidation<Commands>
     : HierarchyUsageValidation<Commands>;
+
+type ValidationIntersection<Validation extends readonly unknown[]> =
+  Validation extends readonly []
+    ? unknown
+    : Validation extends readonly [infer Error]
+      ? Error
+      : never;
+
+type HierarchyContract<Commands, Output extends OutputCapability> = [
+  TextEnabledForOutput<Output>,
+] extends [true]
+  ? Readonly<{ readonly commands: HierarchyTextContracts<Commands> }> &
+      ValidationIntersection<HierarchyUsageValidation<Commands>>
+  : ValidationIntersection<HierarchyOutputValidation<Commands, Output>>;
 
 type TextEnabledForOutput<Output extends OutputCapability> =
   Output extends OutputCapability<infer Formats>
@@ -2036,14 +2008,16 @@ type RootFallbackCliDefinition<
                       StreamRecordNameContract<Records>;
                     readonly text?: never;
                   }> &
-                    ContractTypeError<
-                      "missingStreamSuccessTextPresenter",
-                      Readonly<{
-                        readonly command: Command;
-                        readonly location: "streamSuccess";
-                        readonly missing: "text";
-                      }>
-                    >);
+                    ([TextEnabled] extends [true]
+                      ? ContractTypeError<
+                          "missingStreamSuccessTextPresenter",
+                          Readonly<{
+                            readonly command: Command;
+                            readonly location: "streamSuccess";
+                            readonly missing: "text";
+                          }>
+                        >
+                      : unknown));
             }>
         );
     }>;
@@ -2081,6 +2055,42 @@ type RootFallbackHandlerDefinition<
     }>;
   }>;
 }>;
+
+type RootFallbackNodeDefinition<
+  Root extends string,
+  Dependencies,
+  Fields extends FieldDefinitions,
+  InputSchema extends ContractSchema,
+  VariantSchemas extends VariantSchemaMap,
+  Variants,
+  RecordSchemas extends VariantSchemaMap,
+  Records,
+  FailureSchemas extends VariantSchemaMap,
+  Failures,
+  TextEnabled extends boolean,
+  Kind extends RootFallbackKind,
+> = (RootFallbackCliDefinition<
+  Root,
+  Dependencies,
+  Fields,
+  InputSchema,
+  VariantSchemas,
+  Variants,
+  RecordSchemas,
+  Records,
+  FailureSchemas,
+  Failures,
+  TextEnabled
+> &
+  RootFallbackHandlerDefinition<
+    Root,
+    Dependencies,
+    InputSchema,
+    DataVariantDefinitionsForSchemas<VariantSchemas, boolean>,
+    StreamRecordDefinitionsForSchemas<RecordSchemas, boolean>,
+    FailureVariantDefinitionsForSchemas<FailureSchemas, boolean>,
+    Kind
+  >)["commands"][Root];
 
 export interface DefineCli<Dependencies> {
   /**
@@ -2370,30 +2380,36 @@ export interface DefineCli<Dependencies> {
     const Failures,
     const Output extends OutputCapability,
     const Kind extends RootFallbackKind,
+    const Commands,
   >(
-    definition: RootFallbackCliDefinition<
-      Root,
-      Dependencies,
-      Fields,
-      InputSchema,
-      VariantSchemas,
-      Variants,
-      RecordSchemas,
-      Records,
-      FailureSchemas,
-      Failures,
-      TextEnabledForOutput<Output>
-    > &
-      RootFallbackHandlerDefinition<
-        Root,
-        Dependencies,
-        InputSchema,
-        DataVariantDefinitionsForSchemas<VariantSchemas, boolean>,
-        StreamRecordDefinitionsForSchemas<RecordSchemas, boolean>,
-        FailureVariantDefinitionsForSchemas<FailureSchemas, boolean>,
-        Kind
-      > &
-      Readonly<{ readonly output: Output }>,
+    definition: RootCliDefinitionBase<Root> &
+      Readonly<{
+        readonly output: Output;
+        readonly commands: Commands &
+          Readonly<
+            Record<
+              Root,
+              | RootFallbackNodeDefinition<
+                  Root,
+                  Dependencies,
+                  Fields,
+                  InputSchema,
+                  VariantSchemas,
+                  Variants,
+                  RecordSchemas,
+                  Records,
+                  FailureSchemas,
+                  Failures,
+                  TextEnabledForOutput<Output>,
+                  Kind
+                >
+              | RootGroupDefinition
+            >
+          >;
+      }> &
+      (Commands extends Readonly<Record<Root, { readonly kind: "rootGroup" }>>
+        ? HierarchyCliDefinition<Root> & HierarchyContract<Commands, Output>
+        : unknown),
   ): CliContract<
     Root,
     Dependencies,
@@ -2487,6 +2503,48 @@ type UsageConstraintProperty<Constraints> =
     : unknown;
 
 export interface DefineCommand<Command extends string, Dependencies> {
+  <
+    const Definition extends object,
+    const Parent extends string,
+    const Fields extends FieldDefinitions,
+    InputSchema extends ContractSchema,
+    const VariantSchemas extends VariantSchemaMap,
+    const Variants,
+    const RecordSchemas extends VariantSchemaMap,
+    const Records,
+    const FailureSchemas extends VariantSchemaMap,
+    const Failures,
+    const Kind extends RootFallbackKind,
+  >(
+    definition: Definition &
+      Omit<
+        RootFallbackCliDefinition<
+          Command,
+          Dependencies,
+          Fields,
+          InputSchema,
+          VariantSchemas,
+          Variants,
+          RecordSchemas,
+          Records,
+          FailureSchemas,
+          Failures,
+          boolean
+        >["commands"][Command],
+        "kind"
+      > &
+      RootFallbackHandlerDefinition<
+        Command,
+        Dependencies,
+        InputSchema,
+        DataVariantDefinitionsForSchemas<VariantSchemas, boolean>,
+        StreamRecordDefinitionsForSchemas<RecordSchemas, boolean>,
+        FailureVariantDefinitionsForSchemas<FailureSchemas, boolean>,
+        Kind
+      >["commands"][Command] &
+      Omit<HierarchyCommandFacts<Parent>, typeof executableCommandType>,
+  ): Readonly<Record<Command, Definition & HierarchyCommandFacts<Parent>>>;
+
   <
     const Definition extends object,
     const Parent extends string,

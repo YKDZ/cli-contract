@@ -44,8 +44,7 @@ const completeHierarchy = defineHierarchy({
           description: "不可用",
           schema: payload,
           exitCode: 9,
-          text: (value: Readonly<{ readonly message: string }>) =>
-            text.line(value.message),
+          text: (value) => text.line(value.message),
         },
       },
       handler: ({ dependencies, outcome }) => {
@@ -73,8 +72,7 @@ const completeHierarchy = defineHierarchy({
             description: "找到",
             schema: payload,
             exitCode: 0,
-            text: (value: Readonly<{ readonly message: string }>) =>
-              text.line(value.message),
+            text: (value) => text.line(value.message),
           },
         },
       },
@@ -105,8 +103,7 @@ const completeHierarchy = defineHierarchy({
           update: {
             description: "更新",
             schema: payload,
-            text: (value: Readonly<{ readonly message: string }>) =>
-              text.line(value.message),
+            text: (value) => text.line(value.message),
           },
         },
       },
@@ -138,9 +135,9 @@ defineMissingCompletion({
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
   usageFailureExitCode: 64,
+  // @ts-expect-error 层级 completion 缺少 presenter 必须在根装配时拒绝。
   commands: {
     missingCompletion: {
-      // @ts-expect-error 层级 completion 缺少 presenter 必须在根装配时拒绝。
       kind: "rootGroup",
       name: "missing-completion",
       description: "遗漏 completion",
@@ -164,9 +161,9 @@ defineMissingData({
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
   usageFailureExitCode: 64,
+  // @ts-expect-error 层级 data 变体缺少 presenter 必须在根装配时拒绝。
   commands: {
     missingData: {
-      // @ts-expect-error 层级 data 变体缺少 presenter 必须在根装配时拒绝。
       kind: "rootGroup",
       name: "missing-data",
       description: "遗漏 data",
@@ -202,9 +199,9 @@ defineMissingFailure({
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
   usageFailureExitCode: 64,
+  // @ts-expect-error 层级 failure 变体缺少 presenter 必须在根装配时拒绝。
   commands: {
     missingFailure: {
-      // @ts-expect-error 层级 failure 变体缺少 presenter 必须在根装配时拒绝。
       kind: "rootGroup",
       name: "missing-failure",
       description: "遗漏 failure",
@@ -230,9 +227,9 @@ defineMissingRecord({
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
   usageFailureExitCode: 64,
+  // @ts-expect-error 层级 stream record 缺少 presenter 必须在根装配时拒绝。
   commands: {
     missingRecord: {
-      // @ts-expect-error 层级 stream record 缺少 presenter 必须在根装配时拒绝。
       kind: "rootGroup",
       name: "missing-record",
       description: "遗漏 record",
@@ -270,9 +267,9 @@ defineMissingStreamSuccess({
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
   usageFailureExitCode: 64,
+  // @ts-expect-error 层级 stream success 缺少 presenter 必须在根装配时拒绝。
   commands: {
     missingStreamSuccess: {
-      // @ts-expect-error 层级 stream success 缺少 presenter 必须在根装配时拒绝。
       kind: "rootGroup",
       name: "missing-stream-success",
       description: "遗漏 stream success",

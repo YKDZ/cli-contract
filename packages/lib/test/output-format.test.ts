@@ -580,6 +580,158 @@ void test("动态文本输出逐个定位 data 与 failure presenter", () => {
   );
 });
 
+void test("动态层级在执行前闭合五类文本 presenter", () => {
+  const payload = z.object({ message: z.string() });
+  let handlerStarted = 0;
+  const define = defineCli();
+
+  assert.throws(
+    () =>
+      define({
+        root: "workspace",
+        help: helpCapability(),
+        output: outputCapability({ defaultFormat: "text" }) as OutputCapability,
+        usageFailureExitCode: 64,
+        commands: {
+          workspace: {
+            kind: "rootGroup",
+            name: "workspace",
+            description: "工作区",
+          },
+          ...define.command("completion")({
+            kind: "command",
+            parent: "workspace",
+            name: "completion",
+            description: "完成",
+            input: z.object({}),
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => {
+              handlerStarted += 1;
+              return outcome.completion();
+            },
+          }),
+          ...define.command("data")({
+            kind: "command",
+            parent: "workspace",
+            name: "data",
+            description: "数据",
+            fields: {},
+            input: z.object({}),
+            success: {
+              kind: "data",
+              variants: {
+                found: { description: "找到", schema: payload, exitCode: 0 },
+              },
+            },
+            failures: {},
+            handler: ({ outcome }) => {
+              handlerStarted += 1;
+              return outcome.data.found({ message: "找到" });
+            },
+          }),
+          ...define.command("failure")({
+            kind: "command",
+            parent: "workspace",
+            name: "failure",
+            description: "失败",
+            input: z.object({}),
+            success: { kind: "completion", text: () => text.silent },
+            failures: {
+              unavailable: {
+                description: "不可用",
+                schema: payload,
+                exitCode: 9,
+              },
+            },
+            handler: ({ outcome }) => {
+              handlerStarted += 1;
+              return outcome.completion();
+            },
+          }),
+          ...define.command("record")({
+            kind: "command",
+            parent: "workspace",
+            name: "record",
+            description: "记录",
+            fields: {},
+            input: z.object({}),
+            success: {
+              kind: "stream",
+              text: () => text.silent,
+              records: { update: { description: "更新", schema: payload } },
+            },
+            failures: {},
+            async *handler({ outcome }) {
+              handlerStarted += 1;
+              yield outcome.record.update({ message: "更新" });
+              return outcome.streamSuccess();
+            },
+          }),
+          ...define.command("streamSuccess")({
+            kind: "command",
+            parent: "workspace",
+            name: "stream-success",
+            description: "流终态",
+            fields: {},
+            input: z.object({}),
+            success: {
+              kind: "stream",
+              records: {
+                update: {
+                  description: "更新",
+                  schema: payload,
+                  text: (value) => text.line(value.message),
+                },
+              },
+            },
+            failures: {},
+            async *handler({ outcome }) {
+              handlerStarted += 1;
+              yield outcome.record.update({ message: "更新" });
+              return outcome.streamSuccess();
+            },
+          }),
+        },
+      }),
+    (error) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "missingTextPresenter",
+          command: "completion",
+          location: "completion",
+        },
+        {
+          code: "missingTextPresenter",
+          command: "data",
+          location: "data",
+          variant: "found",
+        },
+        {
+          code: "missingTextPresenter",
+          command: "failure",
+          location: "failure",
+          variant: "unavailable",
+        },
+        {
+          code: "missingTextPresenter",
+          command: "record",
+          location: "record",
+          variant: "update",
+        },
+        {
+          code: "missingTextPresenter",
+          command: "streamSuccess",
+          location: "streamSuccess",
+        },
+      ]);
+      return true;
+    },
+  );
+  assert.equal(handlerStarted, 0);
+});
+
 void test("compatibility flag 在定义期闭合到已启用格式和 control 拼写", () => {
   for (const [flag, format] of [
     ["--plain_mode", "structured"],
