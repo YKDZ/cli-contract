@@ -142,7 +142,7 @@ void test("格式 control 全路径生效、保持在 invocation 元数据且不
     {
       kind: "usageFailure",
       command: "greet",
-      usage: { command: "greet", synopsis: "greet --name <value>" },
+      usage: { command: "greet", synopsis: "greet --name <name>" },
       issues: [
         {
           code: "invalidOutputFormat",
@@ -164,7 +164,7 @@ void test("格式 control 全路径生效、保持在 invocation 元数据且不
     {
       kind: "usageFailure",
       command: "greet",
-      usage: { command: "greet", synopsis: "greet --name <value>" },
+      usage: { command: "greet", synopsis: "greet --name <name>" },
       issues: [
         {
           code: "conflictingOutputFormat",

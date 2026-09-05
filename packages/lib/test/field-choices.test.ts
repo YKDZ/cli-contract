@@ -129,7 +129,7 @@ void test("Zod 的直接 enum 同源投影到 grammar、manifest、synopsis 与�
   assert.deepEqual(exported, before);
   assert.equal(
     cli.grammar.root.usage.synopsis,
-    'choose <mode:"interactive"|"allow-all"> [<files:"a\\"b"|"line\\nbreak"...>] [--mode <"interactive"|"allow-all">] [--tag <"red"|"green">]... [--refined <value>]',
+    "choose <mode> [<files...>] [--mode <option>] [--tag <tag>]... [--refined <refined>]",
   );
 
   const writes: string[] = [];
@@ -141,7 +141,7 @@ void test("Zod 的直接 enum 同源投影到 grammar、manifest、synopsis 与�
     },
   });
   assert.deepEqual(writes, [
-    'choose <mode:"interactive"|"allow-all"> [<files:"a\\"b"|"line\\nbreak"...>] [--mode <"interactive"|"allow-all">] [--tag <"red"|"green">]... [--refined <value>]\n选择模式\n<mode:"interactive"|"allow-all">\t位置模式\n[<files:"a\\"b"|"line\\nbreak"...>]\t文件\n[--mode <"interactive"|"allow-all">] (default: "interactive")\t选项模式\n[--tag <"red"|"green">]...\t标签\n[--refined <value>]\t精炼\n--help\n',
+    'choose <mode> [<files...>] [--mode <option>] [--tag <tag>]... [--refined <refined>]\n选择模式\n<mode> (choices: "interactive", "allow-all")\t位置模式\n[<files...>] (choices: "a\\"b", "line\\nbreak")\t文件\n[--mode <option>] (choices: "interactive", "allow-all") (default: "interactive")\t选项模式\n[--tag <tag>]... (choices: "red", "green")\t标签\n[--refined <refined>]\t精炼\n--help\n',
   ]);
   const invalidChoices = parseCliInvocation(cli, [
     "unexpected",
@@ -556,7 +556,7 @@ void test("组合、引用、条件和非字符串 enum 不推断候选值", asy
   );
   assert.equal(
     cli.grammar.root.usage.synopsis,
-    "counterexample [--any-of <value>] [--one-of <value>] [--reference <value>] [--conditional <value>] [--mixed <value>] [--empty <value>] [--tag <value>]... [<values...>]",
+    "counterexample [--any-of <anyOf>] [--one-of <oneOf>] [--reference <reference>] [--conditional <conditional>] [--mixed <mixed>] [--empty <empty>] [--tag <tag>]... [<values...>]",
   );
   const writes: string[] = [];
   await executeCli(cli, {
@@ -567,7 +567,7 @@ void test("组合、引用、条件和非字符串 enum 不推断候选值", asy
     },
   });
   assert.deepEqual(writes, [
-    "counterexample [--any-of <value>] [--one-of <value>] [--reference <value>] [--conditional <value>] [--mixed <value>] [--empty <value>] [--tag <value>]... [<values...>]\n反例\n[--any-of <value>]\tanyOf\n[--one-of <value>]\toneOf\n[--reference <value>]\t引用\n[--conditional <value>]\t条件\n[--mixed <value>]\t混合\n[--empty <value>]\t空\n[--tag <value>]...\t标签\n[<values...>]\t值\n--help\n",
+    "counterexample [--any-of <anyOf>] [--one-of <oneOf>] [--reference <reference>] [--conditional <conditional>] [--mixed <mixed>] [--empty <empty>] [--tag <tag>]... [<values...>]\n反例\n[--any-of <anyOf>]\tanyOf\n[--one-of <oneOf>]\toneOf\n[--reference <reference>]\t引用\n[--conditional <conditional>]\t条件\n[--mixed <mixed>]\t混合\n[--empty <empty>]\t空\n[--tag <tag>]...\t标签\n[<values...>]\t值\n--help\n",
   ]);
 });
 

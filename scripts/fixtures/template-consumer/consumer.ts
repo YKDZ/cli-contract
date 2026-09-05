@@ -263,7 +263,7 @@ async function main(): Promise<void> {
       },
     ],
     usage:
-      'template add package --preset <"ts-cli"|"ts-lib"|"rust-bin"|"vue-app"|"vue-hono-app"|"vike-app"> --name <value> [--path <value>] [--link-from <value>]... [--dry-run]',
+      "template add package --preset <preset> --name <name> [--path <path>] [--link-from <linkFrom>]... [--dry-run]",
     helpArgv: ["template", "add", "package", "--help"],
   });
 }

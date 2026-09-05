@@ -288,9 +288,15 @@ function formatHelpField(
   field: ReturnType<typeof getCompiledCli>["fields"][number],
 ): string {
   const cardinality = formatFieldUsage(field, true);
-  return field.default === undefined
-    ? cardinality
-    : `${cardinality} (default: ${JSON.stringify(field.default)})`;
+  const choices =
+    field.choices === undefined
+      ? ""
+      : ` (choices: ${field.choices.map((choice) => JSON.stringify(choice)).join(", ")})`;
+  const defaultValue =
+    field.default === undefined
+      ? ""
+      : ` (default: ${JSON.stringify(field.default)})`;
+  return `${cardinality}${choices}${defaultValue}`;
 }
 
 async function executeApplicationResult<Contract extends CliContract>(

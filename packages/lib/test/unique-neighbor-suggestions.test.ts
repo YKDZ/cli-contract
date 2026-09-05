@@ -161,7 +161,7 @@ void test("长选项建议从当前有效 scope 与核心 controls 机械选择"
     usage: {
       command: "addPackage",
       synopsis:
-        "workspace package add [--verbose] [--registry <value>] <name> [--force] [--label <value>]",
+        "workspace package add [--verbose] [--registry <registry>] <name> [--force] [--label <label>]",
     },
   });
 });

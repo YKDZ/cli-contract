@@ -110,7 +110,7 @@ void test("词法问题保留首个可靠 token、字段与 spelling 事实", ()
   const cli = createCopyCli();
   const usage = {
     command: "copyFiles",
-    synopsis: "copy-files <source> [<destination>] [--force] [--label <value>]",
+    synopsis: "copy-files <source> [<destination>] [--force] [--label <label>]",
   } as const;
 
   assert.deepEqual(parseCliInvocation(cli, ["source.txt", "--unknown", "x"]), {
@@ -218,7 +218,7 @@ void test("字段事实从同一 grammar 投影到 usage、help 与 manifest", a
   );
   assert.equal(
     cli.grammar.root.usage.synopsis,
-    "copy-files <source> [<destination>] [--force] [--label <value>]",
+    "copy-files <source> [<destination>] [--force] [--label <label>]",
   );
 
   const writes: string[] = [];
@@ -230,7 +230,7 @@ void test("字段事实从同一 grammar 投影到 usage、help 与 manifest", a
     },
   });
   assert.deepEqual(writes, [
-    "copy-files <source> [<destination>] [--force] [--label <value>]\n复制文件\n<source>\t源文件\n[<destination>]\t目标文件\n[--force, -f]\t覆盖目标文件\n[--label, -l <value>]\t复制标签\n--help\n",
+    "copy-files <source> [<destination>] [--force] [--label <label>]\n复制文件\n<source>\t源文件\n[<destination>]\t目标文件\n[--force, -f]\t覆盖目标文件\n[--label, -l <label>]\t复制标签\n--help\n",
   ]);
 });
 

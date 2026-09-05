@@ -106,7 +106,7 @@ void test("value option 经模式变换后产生具名 data 结果", async () =>
         required: true,
       },
     ],
-    usage: { command: "greet", synopsis: "greet --name <value>" },
+    usage: { command: "greet", synopsis: "greet --name <name>" },
   });
   assert.deepEqual(cli.manifest.commands.greet.success, {
     kind: "data",
@@ -189,7 +189,7 @@ void test("输入模式正常拒绝产生 inputRejected 且不执行 handler", a
     {
       destination: "stderr",
       chunk:
-        '{"schemaVersion":"1","command":"greet","kind":"usageFailure","issues":[{"code":"inputRejected","evidence":[{"message":"name 不能为空","path":["name"]}]}],"usage":"greet --name <value>","helpArgv":["greet","--help"]}\n',
+        '{"schemaVersion":"1","command":"greet","kind":"usageFailure","issues":[{"code":"inputRejected","evidence":[{"message":"name 不能为空","path":["name"]}]}],"usage":"greet --name <name>","helpArgv":["greet","--help"]}\n',
     },
   ]);
   assert.deepEqual(termination, {

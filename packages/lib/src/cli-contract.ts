@@ -2441,7 +2441,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
   );
   const usage = deepFreeze({
     command: definition.root,
-    synopsis: createUsageSynopsis(command.name, fields, usageConstraints),
+    synopsis: createUsageSynopsis(command.name, fields),
   });
   const controls = compileControls(definition);
   const grammar = deepFreeze({
@@ -2674,7 +2674,6 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
       synopsis: createUsageSynopsis(
         commandPath(id, definition.commands),
         effectiveFields,
-        usageConstraints,
       ),
     });
     runtimeCommands[id] = Object.freeze({
@@ -3804,26 +3803,21 @@ function compileSuccess(
 function createUsageSynopsis(
   commandName: string,
   fields: readonly FieldGrammar[],
-  usageConstraints: readonly UsageConstraintGrammar[] = [],
 ): string {
-  return [
-    commandName,
-    ...fields.map((field) => formatFieldUsage(field)),
-    ...usageConstraints.map(formatUsageConstraintSynopsis),
-  ].join(" ");
+  return [commandName, ...fields.map((field) => formatFieldUsage(field))].join(
+    " ",
+  );
 }
 
 export function formatFieldUsage(
   field: FieldGrammar,
   includeShortAlias = false,
 ): string {
-  const choices =
-    field.choices?.map((choice) => JSON.stringify(choice)).join("|") ?? "value";
   const value =
     field.kind === "positional"
-      ? `<${field.key}${field.choices === undefined ? "" : `:${choices}`}>`
+      ? `<${field.key}>`
       : field.kind === "variadicPositional"
-        ? `<${field.key}${field.choices === undefined ? "" : `:${choices}`}...>`
+        ? `<${field.key}...>`
         : field.kind === "flag"
           ? [
               field.longOption,
@@ -3839,21 +3833,9 @@ export function formatFieldUsage(
               ...(includeShortAlias && field.shortAlias !== undefined
                 ? [field.shortAlias]
                 : []),
-            ].join(", ")} <${choices}>`;
+            ].join(", ")} <${field.key}>`;
   if (field.kind === "repeatableOption") {
     return field.required ? `(${value})...` : `[${value}]...`;
   }
   return field.required ? value : `[${value}]`;
-}
-
-function formatUsageConstraintSynopsis(
-  constraint: UsageConstraintGrammar,
-): string {
-  if (constraint.kind === "requires")
-    return `[requires ${constraint.field} ${constraint.requires}]`;
-  if (constraint.kind === "exclusive")
-    return `[exclusive ${constraint.fields.join("|")}]`;
-  return `[forbidden ${constraint.values
-    .map(({ field, value }) => `${field}=${String(value)}`)
-    .join(",")}]`;
 }
