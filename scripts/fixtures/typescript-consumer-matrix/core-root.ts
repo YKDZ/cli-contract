@@ -21,6 +21,7 @@ const requiredEitherInput = z.union([
   z.object({ count: z.number() }),
   z.object({ name: z.string() }),
 ]);
+const messagePayload = z.object({ message: z.string() });
 
 const define = defineCli<Readonly<{}>>();
 const contract = define({
@@ -106,6 +107,199 @@ const unionCompletionAcceptingEmpty = defineCli()({
   },
 });
 void unionCompletionAcceptingEmpty;
+
+const completeNamedVariants = defineCli()({
+  root: "completeNamedVariants",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "text" }),
+  usageFailureExitCode: 64,
+  commands: {
+    completeNamedVariants: {
+      kind: "rootCommand",
+      name: "complete-named-variants",
+      description: "完整具名变体",
+      fields: {
+        name: {
+          kind: "valueOption",
+          longOption: "--name",
+          description: "名称",
+        },
+      },
+      input: textInput,
+      success: {
+        kind: "data",
+        variants: {
+          accepted: {
+            description: "已接受",
+            schema: messagePayload,
+            exitCode: 0,
+            text: (payload) => {
+              payload.message satisfies string;
+              return text.line(payload.message);
+            },
+          },
+          deferred: {
+            description: "已延后",
+            schema: messagePayload,
+            exitCode: 0,
+            text: (payload) => {
+              payload.message satisfies string;
+              return text.line(payload.message);
+            },
+          },
+        },
+      },
+      failures: {
+        unavailable: {
+          description: "不可用",
+          schema: messagePayload,
+          exitCode: 9,
+          text: (payload) => {
+            payload.message satisfies string;
+            return text.line(payload.message);
+          },
+        },
+      },
+      handler: ({ outcome }) =>
+        outcome.data.accepted({ message: "已接受请求" }),
+    },
+  },
+});
+void completeNamedVariants;
+
+defineCli()({
+  root: "missingDataVariantText",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "text" }),
+  usageFailureExitCode: 64,
+  commands: {
+    missingDataVariantText: {
+      kind: "rootCommand",
+      name: "missing-data-variant-text",
+      description: "遗漏 data presenter",
+      fields: {
+        name: {
+          kind: "valueOption",
+          longOption: "--name",
+          description: "名称",
+        },
+      },
+      input: textInput,
+      success: {
+        kind: "data",
+        // @ts-expect-error 每个 data 变体都必须声明 text presenter。
+        variants: {
+          accepted: {
+            description: "已接受",
+            schema: messagePayload,
+            exitCode: 0,
+            text: (payload) => {
+              payload.message satisfies string;
+              return text.line(payload.message);
+            },
+          },
+          deferred: {
+            description: "已延后",
+            schema: messagePayload,
+            exitCode: 0,
+          },
+        },
+      },
+      failures: {},
+      handler: ({ outcome }) =>
+        outcome.data.accepted({ message: "已接受请求" }),
+    },
+  },
+});
+
+defineCli()({
+  root: "missingDataFailureText",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "text" }),
+  usageFailureExitCode: 64,
+  commands: {
+    missingDataFailureText: {
+      kind: "rootCommand",
+      name: "missing-data-failure-text",
+      description: "data 的遗漏 failure presenter",
+      fields: {
+        name: {
+          kind: "valueOption",
+          longOption: "--name",
+          description: "名称",
+        },
+      },
+      input: textInput,
+      success: {
+        kind: "data",
+        variants: {
+          accepted: {
+            description: "已接受",
+            schema: messagePayload,
+            exitCode: 0,
+            text: (payload) => {
+              payload.message satisfies string;
+              return text.line(payload.message);
+            },
+          },
+        },
+      },
+      // @ts-expect-error 每个 failure 变体都必须声明 text presenter。
+      failures: {
+        unavailable: {
+          description: "不可用",
+          schema: messagePayload,
+          exitCode: 9,
+          text: (payload) => {
+            payload.message satisfies string;
+            return text.line(payload.message);
+          },
+        },
+        forbidden: {
+          description: "禁止",
+          schema: messagePayload,
+          exitCode: 13,
+        },
+      },
+      handler: ({ outcome }) =>
+        outcome.data.accepted({ message: "已接受请求" }),
+    },
+  },
+});
+
+defineCli()({
+  root: "missingCompletionFailureText",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "text" }),
+  usageFailureExitCode: 64,
+  commands: {
+    missingCompletionFailureText: {
+      kind: "rootCommand",
+      name: "missing-completion-failure-text",
+      description: "completion 的遗漏 failure presenter",
+      input: emptyInput,
+      success: { kind: "completion", text: () => text.silent },
+      // @ts-expect-error completion 的 failure 变体也必须声明 text presenter。
+      failures: {
+        unavailable: {
+          description: "不可用",
+          schema: messagePayload,
+          exitCode: 9,
+          text: (payload) => {
+            payload.message satisfies string;
+            return text.line(payload.message);
+          },
+        },
+        forbidden: {
+          description: "禁止",
+          schema: messagePayload,
+          exitCode: 13,
+        },
+      },
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
 
 defineCli()({
   root: "missingRawField",

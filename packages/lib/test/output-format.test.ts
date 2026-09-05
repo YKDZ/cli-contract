@@ -507,6 +507,79 @@ void test("text 开关在定义期要求或禁止同位 presenter", () => {
   );
 });
 
+void test("动态文本输出逐个定位 data 与 failure presenter", () => {
+  const payload = z.object({ message: z.string() });
+  assert.throws(
+    () =>
+      defineCli()({
+        root: "missingNamedPresenters",
+        help: helpCapability(),
+        output: outputCapability({ defaultFormat: "text" }) as OutputCapability,
+        usageFailureExitCode: 64,
+        commands: {
+          missingNamedPresenters: {
+            kind: "rootCommand",
+            name: "missing-named-presenters",
+            description: "遗漏具名 presenter",
+            fields: {},
+            input: z.object({}),
+            success: {
+              kind: "data",
+              variants: {
+                accepted: {
+                  description: "已接受",
+                  schema: payload,
+                  exitCode: 0,
+                  text: (value: Readonly<{ readonly message: string }>) =>
+                    text.line(value.message),
+                },
+                deferred: {
+                  description: "已延后",
+                  schema: payload,
+                  exitCode: 0,
+                },
+              },
+            },
+            failures: {
+              unavailable: {
+                description: "不可用",
+                schema: payload,
+                exitCode: 9,
+                text: (value: Readonly<{ readonly message: string }>) =>
+                  text.line(value.message),
+              },
+              forbidden: {
+                description: "禁止",
+                schema: payload,
+                exitCode: 13,
+              },
+            },
+            handler: ({ outcome }) =>
+              outcome.data.accepted({ message: "已接受请求" }),
+          },
+        },
+      }),
+    (error) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "missingTextPresenter",
+          command: "missingNamedPresenters",
+          location: "data",
+          variant: "deferred",
+        },
+        {
+          code: "missingTextPresenter",
+          command: "missingNamedPresenters",
+          location: "failure",
+          variant: "forbidden",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
 void test("compatibility flag 在定义期闭合到已启用格式和 control 拼写", () => {
   for (const [flag, format] of [
     ["--plain_mode", "structured"],

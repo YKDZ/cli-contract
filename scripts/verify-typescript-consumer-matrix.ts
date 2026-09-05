@@ -31,6 +31,7 @@ async function readFixtures(): Promise<Readonly<Record<string, string>>> {
         "completion-missing.ts",
         "core-node.ts",
         "core-root.ts",
+        "named-variant-missing.ts",
         "schema-input.ts",
       ].map(async (name) => [
         name,
@@ -123,6 +124,7 @@ async function verifyCoreOnly(
       "core-node.ts",
       "core-root.ts",
       "completion-missing.ts",
+      "named-variant-missing.ts",
       "schema-input.ts",
     ]);
     runCommand(
@@ -149,6 +151,7 @@ async function verifyCoreOnly(
         await compileFixture(project, resolution, fixture);
       }
       await verifyMissingCompletionDiagnostic(project, resolution);
+      await verifyMissingNamedVariantDiagnostic(project, resolution);
     }
   } finally {
     await Promise.all([
@@ -279,6 +282,57 @@ async function verifyMissingCompletionDiagnostic(
   if (unrelatedFragments.some((fragment) => diagnostics.includes(fragment))) {
     throw new Error(
       `Missing-completion diagnostic included unrelated fallback errors\n${diagnostics}`,
+    );
+  }
+}
+
+async function verifyMissingNamedVariantDiagnostic(
+  project: string,
+  resolution: (typeof resolutions)[number],
+): Promise<void> {
+  const fixture = "named-variant-missing.ts";
+  const tsconfig = `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`;
+  await writeFile(
+    resolve(project, tsconfig),
+    `${JSON.stringify(tsconfigFor(resolution, fixture))}\n`,
+  );
+  const result = spawnSync(
+    resolve(project, "node_modules/.bin/tsc"),
+    ["--project", tsconfig, "--pretty", "false"],
+    { cwd: project, encoding: "utf8" },
+  );
+  if (result.error !== undefined) throw result.error;
+  const diagnostics = `${result.stderr}\n${result.stdout}`;
+  const requiredFragments = [
+    "named-variant-missing.ts",
+    "missingDataVariantTextPresenter",
+    "missingFailureVariantTextPresenter",
+    'command: "missingDataVariantText"',
+    'command: "missingDataFailureText"',
+    'command: "missingCompletionFailureText"',
+    'location: "data"',
+    'location: "failure"',
+    'variant: "deferred"',
+    'variant: "forbidden"',
+    'missing: "text"',
+  ];
+  if (
+    result.status === 0 ||
+    requiredFragments.some((fragment) => !diagnostics.includes(fragment))
+  ) {
+    throw new Error(
+      `Named-variant diagnostic did not expose its local contract evidence\n${diagnostics}`,
+    );
+  }
+  const unrelatedFragments = [
+    "fieldInputMustAcceptRawValue",
+    "missingCompletionTextPresenter",
+    "Property 'data' does not exist",
+    "implicitly has an 'any'",
+  ];
+  if (unrelatedFragments.some((fragment) => diagnostics.includes(fragment))) {
+    throw new Error(
+      `Named-variant diagnostic included unrelated fallback errors\n${diagnostics}`,
     );
   }
 }

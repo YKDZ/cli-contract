@@ -29,6 +29,7 @@ import type {
   CompletionOutcome,
   DataFactUnion,
   DataOutcome,
+  DataVariantDefinition,
   DataVariantDefinitions,
   FailureFactUnion,
   FailureOutcome,
@@ -656,6 +657,76 @@ type CompletionSuccessDefinition<
         readonly text?: CompletionTextPresenter;
       }>;
 
+type MissingVariantTextPresenters<
+  Variants extends Readonly<Record<string, unknown>>,
+> = {
+  [Variant in keyof Variants & string]: Variants[Variant] extends Readonly<{
+    readonly text: unknown;
+  }>
+    ? never
+    : Variant;
+}[keyof Variants & string];
+
+type NamedVariantTextContract<
+  Command extends string,
+  Code extends string,
+  Location extends "data" | "failure",
+  Variants extends Readonly<Record<string, unknown>>,
+  TextEnabled extends boolean,
+  TextDisabledDefinition,
+> = [TextEnabled] extends [true]
+  ? MissingVariantTextPresenters<Variants> extends never
+    ? unknown
+    : ContractTypeError<
+        Code,
+        Readonly<{
+          readonly command: Command;
+          readonly location: Location;
+          readonly variant: MissingVariantTextPresenters<Variants>;
+          readonly missing: "text";
+        }>
+      >
+  : [TextEnabled] extends [false]
+    ? TextDisabledDefinition
+    : unknown;
+
+type DataVariantTextContract<
+  Command extends string,
+  Variants extends DataVariantDefinitions,
+  TextEnabled extends boolean,
+> = NamedVariantTextContract<
+  Command,
+  "missingDataVariantTextPresenter",
+  "data",
+  Variants,
+  TextEnabled,
+  DataVariantDefinitions<false>
+>;
+
+type TextDataVariantDefinitions<
+  Variants extends Readonly<Record<string, Readonly<{ readonly schema: ContractSchema }>>>,
+> = Readonly<{
+  readonly [Variant in keyof Variants]: Variants[Variant] extends Readonly<{
+    readonly schema: infer Schema extends ContractSchema;
+  }>
+    ? Omit<DataVariantDefinition<ContractSchemaOutput<Schema>, true>, "schema"> &
+        Readonly<{ readonly schema: Schema }>
+    : never;
+}>;
+
+type FailureVariantTextContract<
+  Command extends string,
+  Failures extends FailureVariantDefinitions,
+  TextEnabled extends boolean,
+> = NamedVariantTextContract<
+  Command,
+  "missingFailureVariantTextPresenter",
+  "failure",
+  Failures,
+  TextEnabled,
+  FailureVariantDefinitions<false>
+>;
+
 export interface CompletionRootCommandDefinition<
   Command extends string,
   Dependencies,
@@ -674,7 +745,9 @@ export interface CompletionRootCommandDefinition<
     FieldIdentityContract<Fields>;
   readonly input: InputSchema & RawFieldInputContract<Fields, InputSchema>;
   readonly success: CompletionSuccessDefinition<Command, TextEnabled>;
-  readonly failures: Failures & FailureVariantNameContract<Failures>;
+  readonly failures: Failures &
+    FailureVariantNameContract<Failures> &
+    FailureVariantTextContract<Command, Failures, TextEnabled>;
   readonly handler: (
     context: CompletionHandlerContext<
       Command,
@@ -1775,11 +1848,14 @@ type DataOrCompletionRootCliDefinition<
           Variants,
           Failures
         >,
-        "fields" | "input" | "success" | "handler"
+        "failures" | "fields" | "input" | "success" | "handler"
       > &
         Readonly<{
           readonly input: InputSchema &
             RootFallbackRawFieldInputContract<Fields, InputSchema>;
+          readonly failures: Failures &
+            FailureVariantNameContract<Failures> &
+            FailureVariantTextContract<Command, Failures, TextEnabled>;
         }> &
         (
           | Readonly<{
@@ -1788,7 +1864,9 @@ type DataOrCompletionRootCliDefinition<
                 FieldIdentityContract<Fields>;
               readonly success: Readonly<{
                 readonly kind: "data";
-                readonly variants: Variants & DataVariantNameContract<Variants>;
+                readonly variants: Variants &
+                  DataVariantNameContract<Variants> &
+                  DataVariantTextContract<Command, Variants, TextEnabled>;
               }>;
             }>
           | Readonly<{
@@ -1957,7 +2035,7 @@ export interface DefineCli<Dependencies> {
     const Root extends string,
     const Fields extends FieldDefinitions,
     InputSchema extends ContractSchema,
-    const Variants extends DataVariantDefinitions<true>,
+    const Variants extends TextDataVariantDefinitions<Variants>,
     const Failures extends FailureVariantDefinitions<true>,
   >(
     definition: DataRootCliDefinition<
