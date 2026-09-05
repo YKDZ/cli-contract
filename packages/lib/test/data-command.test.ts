@@ -186,7 +186,11 @@ void test("输入模式正常拒绝产生 inputRejected 且不执行 handler", a
 
   assert.equal(runCount, 0);
   assert.deepEqual(writes, [
-    { destination: "stderr", chunk: "greet --name <value>\n" },
+    {
+      destination: "stderr",
+      chunk:
+        '{"schemaVersion":"1","command":"greet","kind":"usageFailure","issues":[{"code":"inputRejected","evidence":[{"message":"name 不能为空","path":["name"]}]}],"usage":"greet --name <value>","helpArgv":["greet","--help"]}\n',
+    },
   ]);
   assert.deepEqual(termination, {
     kind: "usageFailure",

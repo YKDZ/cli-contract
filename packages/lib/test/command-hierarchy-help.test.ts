@@ -155,6 +155,19 @@ void test("grammar、manifest 与完整帮助投影同一父前子后层级", as
     "addPackage",
     "listPackages",
   ]);
+  const usageFailureWire = JSON.stringify(cli.manifest.usageFailure.wire);
+  for (const [command, helpArgv] of [
+    ["workspace", '["workspace","--help"]'],
+    ["package", '["workspace","package","--help"]'],
+    ["addPackage", '["workspace","package","add","--help"]'],
+    ["listPackages", '["workspace","package","list","--help"]'],
+  ]) {
+    assert.match(
+      usageFailureWire,
+      new RegExp(`\\"command\\":\\{\\"const\\":\\"${command}\\"\\}`),
+    );
+    assert.ok(usageFailureWire.includes(`"helpArgv":{"const":${helpArgv}}`));
+  }
 
   const writes: string[] = [];
   await executeCli(cli, {

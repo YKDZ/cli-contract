@@ -124,7 +124,7 @@ void test("三类闭合关系在无歧义解析后按声明顺序聚合，失败
   assert.equal(termination.kind, "usageFailure");
   assert.equal(executions, 0);
   assert.deepEqual(writes, [
-    "publish [--auth <value>] [--token <value>] [--output <value>] [--quiet] [--format <value>] [requires auth token] [exclusive output|quiet] [forbidden format=json,quiet=true]\n",
+    '{"schemaVersion":"1","command":"publish","kind":"usageFailure","issues":[{"code":"requiredByUsageConstraint","field":"auth","requires":"token"},{"code":"exclusiveUsageConstraint","fields":["output","quiet"]},{"code":"forbiddenUsageCombination","values":[{"field":"format","value":"json"},{"field":"quiet","value":true}]}],"usage":"publish [--auth <value>] [--token <value>] [--output <value>] [--quiet] [--format <value>] [requires auth token] [exclusive output|quiet] [forbidden format=json,quiet=true]","helpArgv":["publish","--help"]}\n',
   ]);
 });
 

@@ -169,13 +169,54 @@ void test("多余 positional 产生结构化用法失败和简短 usage", async 
   });
 
   assert.equal(runCount, 0);
-  assert.deepEqual(writes, [{ destination: "stderr", chunk: "fixture\n" }]);
+  assert.deepEqual(writes, [
+    {
+      destination: "stderr",
+      chunk:
+        '{"schemaVersion":"1","command":"fixture","kind":"usageFailure","issues":[{"code":"unexpectedPositional","position":0,"value":"extra"}],"usage":"fixture","helpArgv":["fixture","--help"]}\n',
+    },
+  ]);
   assert.deepEqual(termination, {
     kind: "usageFailure",
     command: "fixture",
     issues: invocation.issues,
     exitCode: 64,
   });
+});
+
+void test("usage failure manifest 闭合全部问题 wire 形状", () => {
+  const wire = JSON.stringify(createFixtureCli().manifest.usageFailure.wire);
+  for (const code of [
+    "conflictingFlag",
+    "conflictingOutputFormat",
+    "exclusiveUsageConstraint",
+    "forbiddenUsageCombination",
+    "inputRejected",
+    "invalidFieldChoice",
+    "invalidOutputFormat",
+    "missingOptionValue",
+    "missingRequiredField",
+    "repeatedOption",
+    "requiredByUsageConstraint",
+    "unexpectedOptionValue",
+    "unexpectedPositional",
+    "unknownCommand",
+    "unknownOption",
+  ]) {
+    assert.match(wire, new RegExp(`\\"const\\":\\"${code}\\"`));
+  }
+  assert.match(wire, /"command":\{"const":"fixture"\}/);
+  assert.match(wire, /"usage":\{"const":"fixture"\}/);
+  assert.match(wire, /"helpArgv":\{"const":\["fixture","--help"\]\}/);
+  assert.doesNotMatch(wire, /"exitCode"/);
+});
+
+void test("inputRejected wire evidence 至少保留一个执行期 schema issue", () => {
+  const wire = JSON.stringify(createFixtureCli().manifest.usageFailure.wire);
+  assert.match(
+    wire,
+    /"code":\{"const":"inputRejected"\}.*?"evidence":\{.*?"minItems":1,"type":"array"\}\},"required":\["code","evidence"\]/,
+  );
 });
 
 void test("定义期请求两侧 Draft 2020-12 并公开不可变投影", () => {

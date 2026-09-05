@@ -9,6 +9,7 @@ import {
   formatFieldUsage,
   getCompiledCli,
   isIssuedOutcomeFact,
+  usageFailureHelpArgv,
   type CliContract,
   type CliContractDependencies,
   type CliContractResult,
@@ -39,6 +40,7 @@ import {
   createStreamHeaderEnvelope,
   createStreamRecordEnvelope,
   createStreamSuccessEnvelope,
+  createUsageFailureEnvelope,
 } from "#/outcome-wire";
 
 export type CliOutputDestination = "stderr" | "stdout";
@@ -177,9 +179,10 @@ export async function executeCli<const Contract extends CliContract>(
       });
     }
     case "usageFailure": {
-      await writeCliOutput(options.write, {
-        destination: "stderr",
-        chunk: `${options.invocation.usage.synopsis}\n`,
+      await writeUsageFailure(compiled, options.write, {
+        command: command.id,
+        issues: options.invocation.issues,
+        usage: options.invocation.usage.synopsis,
       });
       return Object.freeze({
         kind: "usageFailure",
@@ -212,9 +215,10 @@ export async function executeCli<const Contract extends CliContract>(
             ),
           }),
         ]) as readonly [InputRejectedIssue];
-        await writeCliOutput(options.write, {
-          destination: "stderr",
-          chunk: `${command.usage.synopsis}\n`,
+        await writeUsageFailure(compiled, options.write, {
+          command: command.id,
+          issues,
+          usage: command.usage.synopsis,
         });
         return Object.freeze({
           kind: "usageFailure",
@@ -242,6 +246,28 @@ export async function executeCli<const Contract extends CliContract>(
       );
     }
   }
+}
+
+async function writeUsageFailure(
+  compiled: ReturnType<typeof getCompiledCli>,
+  write: WriteCliOutput,
+  failure: Readonly<{
+    readonly command: string;
+    readonly issues: NonEmptyUsageIssues;
+    readonly usage: string;
+  }>,
+): Promise<void> {
+  await writeCliOutput(write, {
+    destination: "stderr",
+    chunk: `${JSON.stringify(
+      createUsageFailureEnvelope(
+        failure.command,
+        failure.issues,
+        failure.usage,
+        usageFailureHelpArgv(compiled.commands, failure.command),
+      ),
+    )}\n`,
+  });
 }
 
 function formatUsageConstraint(

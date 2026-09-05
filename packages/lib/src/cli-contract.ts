@@ -49,6 +49,7 @@ import {
   createStreamHeaderWireSchema,
   createStreamRecordWireSchema,
   createStreamSuccessWireSchema,
+  createUsageFailureWireSchema,
 } from "#/outcome-wire";
 import {
   compileStreamRecords,
@@ -1284,7 +1285,10 @@ export interface CliManifest<
     ? Readonly<Record<string, CommandGroupManifest | ExecutableCommandManifest>>
     : Readonly<Record<Root, RootCommandManifest>>;
   readonly controls: CliGrammar<Root, RootKind>["controls"];
-  readonly usageFailure: Readonly<{ readonly exitCode: number }>;
+  readonly usageFailure: Readonly<{
+    readonly exitCode: number;
+    readonly wire: JsonObject;
+  }>;
   readonly wire: RootKind extends "rootGroup"
     ? Readonly<Record<string, CommandWireManifest>>
     : CommandWireManifest;
@@ -1362,7 +1366,10 @@ export interface HierarchyCliManifest<Root extends string, Commands> {
     [Command in keyof Commands]: HierarchyManifestNode<Commands[Command]>;
   }>;
   readonly controls: HierarchyCliGrammar<Root, Commands>["controls"];
-  readonly usageFailure: Readonly<{ readonly exitCode: number }>;
+  readonly usageFailure: Readonly<{
+    readonly exitCode: number;
+    readonly wire: JsonObject;
+  }>;
   readonly wire: Readonly<{
     [Command in HierarchyExecutableKeys<Commands>]: CommandWireManifest;
   }>;
@@ -2427,7 +2434,19 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
       },
     },
     controls,
-    usageFailure: { exitCode: definition.usageFailureExitCode },
+    usageFailure: {
+      exitCode: definition.usageFailureExitCode,
+      wire: createUsageFailureWireSchema([
+        {
+          command: definition.root,
+          usage: usage.synopsis,
+          helpArgv: usageFailureHelpArgv(
+            { [definition.root]: { name: command.name } },
+            definition.root,
+          ),
+        },
+      ]),
+    },
     wire: deepFreeze({
       ...compiledSuccess.wire,
       ...(Object.keys(compiledFailures.wire).length === 0
@@ -2701,7 +2720,16 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
     root: definition.root,
     commands: manifestCommands,
     controls,
-    usageFailure: { exitCode: definition.usageFailureExitCode },
+    usageFailure: {
+      exitCode: definition.usageFailureExitCode,
+      wire: createUsageFailureWireSchema(
+        Object.values(runtimeCommands).map((command) => ({
+          command: command.id,
+          usage: command.usage.synopsis,
+          helpArgv: usageFailureHelpArgv(runtimeCommands, command.id),
+        })),
+      ),
+    },
     wire,
   });
   const contract = Object.freeze({
@@ -2991,6 +3019,13 @@ function commandPath(
   id: string,
   commands: RuntimeCliDefinition["commands"],
 ): string {
+  return commandPathTokens(id, commands).join(" ");
+}
+
+function commandPathTokens(
+  id: string,
+  commands: RuntimeCliDefinition["commands"],
+): string[] {
   const names: string[] = [];
   let current: string | undefined = id;
   while (current !== undefined) {
@@ -2999,7 +3034,26 @@ function commandPath(
     names.unshift(node.name);
     current = node.parent;
   }
-  return names.join(" ");
+  return names;
+}
+
+export function usageFailureHelpArgv(
+  commands: Readonly<
+    Record<
+      string,
+      Readonly<{ readonly name: string; readonly parent?: string }>
+    >
+  >,
+  command: string,
+): readonly string[] {
+  const path: string[] = [];
+  let current = commands[command];
+  while (current !== undefined) {
+    path.unshift(current.name);
+    current =
+      current.parent === undefined ? undefined : commands[current.parent];
+  }
+  return [...path, "--help"];
 }
 
 function compileSharedOptions(

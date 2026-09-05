@@ -206,6 +206,39 @@ void test("selector 紧邻 help 时在根与层级路径即时生效", () => {
   );
 });
 
+void test("format controls 不改变 usage failure 的固定 JSON 通道", async () => {
+  const cli = createTextCli();
+  for (const [argv, code] of [
+    [["--plain", "--unknown"], "unknownOption"],
+    [["--unknown", "--plain"], "unknownOption"],
+    [["--output-format", "yaml"], "invalidOutputFormat"],
+    [["--plain", "--output-format", "text"], "conflictingOutputFormat"],
+  ] as const) {
+    const writes: Array<Readonly<{ destination: string; chunk: string }>> = [];
+    const termination = await executeCli(cli, {
+      invocation: parseCliInvocation(cli, argv),
+      dependencies: undefined,
+      write: (output) => {
+        writes.push(output);
+      },
+    });
+    assert.equal(termination.kind, "usageFailure");
+    assert.deepEqual(
+      writes.map(({ destination }) => destination),
+      ["stderr"],
+    );
+    const chunk = writes[0]?.chunk;
+    assert.ok(chunk?.endsWith("\n"));
+    const envelope = JSON.parse(chunk ?? "") as {
+      readonly kind: string;
+      readonly issues: readonly Readonly<{ readonly code: string }>[];
+    };
+    assert.equal(envelope.kind, "usageFailure");
+    assert.equal(envelope.issues[0]?.code, code);
+    assert.equal(chunk, `${JSON.stringify(envelope)}\n`);
+  }
+});
+
 void test("帮助从 controls 投影 selector 与 compatibility flags", async () => {
   const cli = createTextHierarchyCli();
   for (const argv of [
