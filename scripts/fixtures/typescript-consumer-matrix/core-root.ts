@@ -160,12 +160,56 @@ const completeNamedVariants = defineCli()({
           },
         },
       },
-      handler: ({ outcome }) =>
-        outcome.data.accepted({ message: "已接受请求" }),
+      handler: ({ outcome }) => {
+        const accepted = outcome.data.accepted({ message: "已接受请求" });
+        accepted.variant satisfies "accepted";
+        const unavailable = outcome.failure.unavailable({
+          message: "暂不可用",
+        });
+        unavailable.variant satisfies "unavailable";
+        return accepted;
+      },
     },
   },
 });
 void completeNamedVariants;
+
+const completeCompletionFailures = defineCli()({
+  root: "completeCompletionFailures",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "text" }),
+  usageFailureExitCode: 64,
+  commands: {
+    completeCompletionFailures: {
+      kind: "rootCommand",
+      name: "complete-completion-failures",
+      description: "completion 的完整 failure presenter",
+      input: emptyInput,
+      success: { kind: "completion", text: () => text.silent },
+      failures: {
+        unavailable: {
+          description: "不可用",
+          schema: messagePayload,
+          exitCode: 9,
+          text: (payload) => {
+            payload.message satisfies string;
+            return text.line(payload.message);
+          },
+        },
+      },
+      handler: ({ outcome }) => {
+        const completion = outcome.completion();
+        completion.kind satisfies "completion";
+        const unavailable = outcome.failure.unavailable({
+          message: "暂不可用",
+        });
+        unavailable.variant satisfies "unavailable";
+        return completion;
+      },
+    },
+  },
+});
+void completeCompletionFailures;
 
 defineCli()({
   root: "missingDataVariantText",

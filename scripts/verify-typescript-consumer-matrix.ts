@@ -324,15 +324,16 @@ async function verifyMissingNamedVariantDiagnostic(
       `Named-variant diagnostic did not expose its local contract evidence\n${diagnostics}`,
     );
   }
-  const unrelatedFragments = [
-    "fieldInputMustAcceptRawValue",
-    "missingCompletionTextPresenter",
-    "Property 'data' does not exist",
-    "implicitly has an 'any'",
-  ];
-  if (unrelatedFragments.some((fragment) => diagnostics.includes(fragment))) {
+  const diagnosticHeaders = diagnostics.match(
+    /^named-variant-missing\.ts\(\d+,\d+\): error TS\d+:/gm,
+  );
+  const allErrorHeaders = diagnostics.match(/^.+\(\d+,\d+\): error TS\d+:/gm);
+  if (
+    diagnosticHeaders?.length !== 3 ||
+    allErrorHeaders?.length !== diagnosticHeaders.length
+  ) {
     throw new Error(
-      `Named-variant diagnostic included unrelated fallback errors\n${diagnostics}`,
+      `Named-variant diagnostic included an unexpected compiler error\n${diagnostics}`,
     );
   }
 }

@@ -24,6 +24,7 @@ import {
 import { copySingleLineText, isSingleLineText } from "#/description";
 import { deepFreeze } from "#/json-value";
 import type {
+  AtomicTextPresenter,
   CompletionFact,
   CompletionTextPresenter,
   CompletionOutcome,
@@ -562,13 +563,13 @@ type RawFieldInputContract<
         }>
       >;
 
-type InvalidDataVariantNames<Variants extends DataVariantDefinitions> = {
+type InvalidDataVariantNames<Variants> = {
   [Variant in keyof Variants & string]: IsLowerCamelCase<Variant> extends true
     ? never
     : Variant;
 }[keyof Variants & string];
 
-type DataVariantNameContract<Variants extends DataVariantDefinitions> =
+type DataVariantNameContract<Variants> =
   InvalidDataVariantNames<Variants> extends never
     ? unknown
     : ContractTypeError<
@@ -578,13 +579,13 @@ type DataVariantNameContract<Variants extends DataVariantDefinitions> =
         }>
       >;
 
-type InvalidFailureVariantNames<Failures extends FailureVariantDefinitions> = {
+type InvalidFailureVariantNames<Failures> = {
   [Variant in keyof Failures & string]: IsLowerCamelCase<Variant> extends true
     ? never
     : Variant;
 }[keyof Failures & string];
 
-type FailureVariantNameContract<Failures extends FailureVariantDefinitions> =
+type FailureVariantNameContract<Failures> =
   InvalidFailureVariantNames<Failures> extends never
     ? unknown
     : ContractTypeError<
@@ -657,9 +658,7 @@ type CompletionSuccessDefinition<
         readonly text?: CompletionTextPresenter;
       }>;
 
-type MissingVariantTextPresenters<
-  Variants extends Readonly<Record<string, unknown>>,
-> = {
+type MissingVariantTextPresenters<Variants> = {
   [Variant in keyof Variants & string]: Variants[Variant] extends Readonly<{
     readonly text: unknown;
   }>
@@ -671,7 +670,7 @@ type NamedVariantTextContract<
   Command extends string,
   Code extends string,
   Location extends "data" | "failure",
-  Variants extends Readonly<Record<string, unknown>>,
+  Variants,
   TextEnabled extends boolean,
   TextDisabledDefinition,
 > = [TextEnabled] extends [true]
@@ -692,7 +691,7 @@ type NamedVariantTextContract<
 
 type DataVariantTextContract<
   Command extends string,
-  Variants extends DataVariantDefinitions,
+  Variants,
   TextEnabled extends boolean,
 > = NamedVariantTextContract<
   Command,
@@ -703,20 +702,50 @@ type DataVariantTextContract<
   DataVariantDefinitions<false>
 >;
 
-type TextDataVariantDefinitions<
-  Variants extends Readonly<Record<string, Readonly<{ readonly schema: ContractSchema }>>>,
+type AtomicTextPresenterContract<
+  Payload,
+  TextEnabled extends boolean,
+> = [TextEnabled] extends [true]
+  ? Readonly<{ readonly text: AtomicTextPresenter<Payload> }>
+  : [TextEnabled] extends [false]
+    ? Readonly<{ readonly text?: never }>
+    : Readonly<{ readonly text?: AtomicTextPresenter<Payload> }>;
+
+type AtomicVariantDefinitionForSchema<
+  Schema extends ContractSchema,
+  TextEnabled extends boolean,
 > = Readonly<{
-  readonly [Variant in keyof Variants]: Variants[Variant] extends Readonly<{
-    readonly schema: infer Schema extends ContractSchema;
-  }>
-    ? Omit<DataVariantDefinition<ContractSchemaOutput<Schema>, true>, "schema"> &
-        Readonly<{ readonly schema: Schema }>
-    : never;
+  readonly description: string;
+  readonly schema: Schema;
+  readonly exitCode: number;
+}> &
+  AtomicTextPresenterContract<ContractSchemaOutput<Schema>, TextEnabled>;
+
+type VariantSchemaMap = Record<string, ContractSchema>;
+
+type DataVariantDefinitionsForSchemas<
+  Schemas extends VariantSchemaMap,
+  TextEnabled extends boolean,
+> = Readonly<{
+  readonly [Variant in keyof Schemas]: AtomicVariantDefinitionForSchema<
+    Schemas[Variant],
+    TextEnabled
+  >;
+}>;
+
+type FailureVariantDefinitionsForSchemas<
+  Schemas extends VariantSchemaMap,
+  TextEnabled extends boolean,
+> = Readonly<{
+  readonly [Variant in keyof Schemas]: AtomicVariantDefinitionForSchema<
+    Schemas[Variant],
+    TextEnabled
+  >;
 }>;
 
 type FailureVariantTextContract<
   Command extends string,
-  Failures extends FailureVariantDefinitions,
+  Failures,
   TextEnabled extends boolean,
 > = NamedVariantTextContract<
   Command,
@@ -1833,27 +1862,29 @@ type DataOrCompletionRootCliDefinition<
   Dependencies,
   Fields extends FieldDefinitions,
   InputSchema extends ContractSchema,
-  Variants extends DataVariantDefinitions,
-  Failures extends FailureVariantDefinitions,
+  VariantSchemas extends VariantSchemaMap,
+  Variants,
+  FailureSchemas extends VariantSchemaMap,
+  Failures,
   TextEnabled extends boolean,
 > = RootCliDefinitionBase<Root> &
   Readonly<{
     readonly commands: Readonly<{
-      readonly [Command in Root]: Omit<
-        DataRootCommandDefinition<
-          Command,
-          Dependencies,
-          Fields,
-          InputSchema,
-          Variants,
-          Failures
-        >,
-        "failures" | "fields" | "input" | "success" | "handler"
-      > &
+      readonly [Command in Root]: Readonly<{
+        readonly kind: "rootCommand";
+        readonly name: string;
+        readonly description: string;
+        readonly helpSupplement?: TextLines;
+        readonly usageConstraints?: readonly UsageConstraint<Fields>[];
+      }> &
         Readonly<{
           readonly input: InputSchema &
             RootFallbackRawFieldInputContract<Fields, InputSchema>;
           readonly failures: Failures &
+            FailureVariantDefinitionsForSchemas<
+              FailureSchemas,
+              boolean
+            > &
             FailureVariantNameContract<Failures> &
             FailureVariantTextContract<Command, Failures, TextEnabled>;
         }> &
@@ -1865,6 +1896,10 @@ type DataOrCompletionRootCliDefinition<
               readonly success: Readonly<{
                 readonly kind: "data";
                 readonly variants: Variants &
+                  DataVariantDefinitionsForSchemas<
+                    VariantSchemas,
+                    boolean
+                  > &
                   DataVariantNameContract<Variants> &
                   DataVariantTextContract<Command, Variants, TextEnabled>;
               }>;
@@ -1982,7 +2017,11 @@ export interface DefineCli<Dependencies> {
 
   <
     const Root extends string,
-    const Failures extends FailureVariantDefinitions<true>,
+    const FailureSchemas extends VariantSchemaMap,
+    const Failures extends FailureVariantDefinitionsForSchemas<
+      FailureSchemas,
+      true
+    >,
   >(
     definition: CompletionRootCliDefinition<
       Root,
@@ -2007,7 +2046,11 @@ export interface DefineCli<Dependencies> {
     const Root extends string,
     const Fields extends FieldDefinitions,
     InputSchema extends ContractSchema,
-    const Failures extends FailureVariantDefinitions<true>,
+    const FailureSchemas extends VariantSchemaMap,
+    const Failures extends FailureVariantDefinitionsForSchemas<
+      FailureSchemas,
+      true
+    >,
   >(
     definition: CompletionRootCliDefinition<
       Root,
@@ -2035,8 +2078,13 @@ export interface DefineCli<Dependencies> {
     const Root extends string,
     const Fields extends FieldDefinitions,
     InputSchema extends ContractSchema,
-    const Variants extends TextDataVariantDefinitions<Variants>,
-    const Failures extends FailureVariantDefinitions<true>,
+    const VariantSchemas extends VariantSchemaMap,
+    const Variants extends DataVariantDefinitionsForSchemas<VariantSchemas, true>,
+    const FailureSchemas extends VariantSchemaMap,
+    const Failures extends FailureVariantDefinitionsForSchemas<
+      FailureSchemas,
+      true
+    >,
   >(
     definition: DataRootCliDefinition<
       Root,
@@ -2163,8 +2211,10 @@ export interface DefineCli<Dependencies> {
     const Root extends string,
     const Fields extends FieldDefinitions,
     InputSchema extends ContractSchema,
-    const Variants extends DataVariantDefinitions,
-    const Failures extends FailureVariantDefinitions,
+    const VariantSchemas extends VariantSchemaMap,
+    const Variants,
+    const FailureSchemas extends VariantSchemaMap,
+    const Failures,
     const Output extends OutputCapability,
     const Kind extends RootFallbackKind,
   >(
@@ -2173,7 +2223,9 @@ export interface DefineCli<Dependencies> {
       Dependencies,
       Fields,
       InputSchema,
+      VariantSchemas,
       Variants,
+      FailureSchemas,
       Failures,
       TextEnabledForOutput<Output>
     > &
@@ -2181,8 +2233,8 @@ export interface DefineCli<Dependencies> {
         Root,
         Dependencies,
         InputSchema,
-        Variants,
-        Failures,
+        DataVariantDefinitionsForSchemas<VariantSchemas, boolean>,
+        FailureVariantDefinitionsForSchemas<FailureSchemas, boolean>,
         Kind
       > &
       Readonly<{ readonly output: Output }>,
@@ -2190,7 +2242,12 @@ export interface DefineCli<Dependencies> {
     Root,
     Dependencies,
     RawFieldInput<Fields>,
-    RootFallbackContractResult<Root, Variants, Failures, Kind>,
+    RootFallbackContractResult<
+      Root,
+      DataVariantDefinitionsForSchemas<VariantSchemas, boolean>,
+      FailureVariantDefinitionsForSchemas<FailureSchemas, boolean>,
+      Kind
+    >,
     "rootCommand"
   >;
 }

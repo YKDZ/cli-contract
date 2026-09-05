@@ -116,7 +116,7 @@ defineCli()({
           description: "不可用",
           schema: messagePayload,
           exitCode: 9,
-          text: (payload: MessagePayload) => text.line(payload.message),
+          text: (payload) => text.line(payload.message),
         },
         forbidden: {
           description: "禁止",
