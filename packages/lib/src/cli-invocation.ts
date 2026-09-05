@@ -123,6 +123,14 @@ export interface InputRejectedIssue {
   readonly evidence: readonly SchemaIssueEvidence[];
 }
 
+export interface InvalidFieldChoiceIssue {
+  readonly code: "invalidFieldChoice";
+  readonly position: number;
+  readonly field: string;
+  readonly value: string;
+  readonly choices: readonly string[];
+}
+
 export interface InvalidOutputFormatIssue {
   readonly code: "invalidOutputFormat";
   readonly position: number;
@@ -157,6 +165,7 @@ export type UsageIssue =
   | ExclusiveUsageConstraintIssue
   | ForbiddenUsageCombinationIssue
   | InputRejectedIssue
+  | InvalidFieldChoiceIssue
   | InvalidOutputFormatIssue
   | MissingOptionValueIssue
   | MissingRequiredFieldIssue
@@ -198,6 +207,7 @@ export function parseCliInvocation<const Contract extends CliContract>(
   const compiled = getCompiledCli(cliContract);
   const input: Record<string, boolean | string | string[]> = {};
   const occurrencesByField = new Map<string, ParsedOptionOccurrence[]>();
+  const valueOccurrencesByField = new Map<string, FieldValueOccurrence[]>();
   const outputOccurrences: OutputFormatOccurrence[] = [];
   let selected = compiled.commands[compiled.root];
   if (selected === undefined)
@@ -244,6 +254,7 @@ export function parseCliInvocation<const Contract extends CliContract>(
         position,
         input,
         occurrencesByField,
+        valueOccurrencesByField,
       );
       if (option.kind === "issue") {
         return usageFailure(
@@ -335,6 +346,7 @@ export function parseCliInvocation<const Contract extends CliContract>(
         position,
         input,
         occurrencesByField,
+        valueOccurrencesByField,
       );
       if (option.kind === "issue") {
         return usageFailure(cliContract, command, usage, option.issue);
@@ -356,12 +368,19 @@ export function parseCliInvocation<const Contract extends CliContract>(
       input[positional.key] = token;
       positionalIndex += 1;
     }
+    addFieldValueOccurrence(
+      valueOccurrencesByField,
+      positional.key,
+      position,
+      token,
+    );
   }
 
   const structuralIssues = collectStructuralIssues(
     fields,
     input,
     occurrencesByField,
+    valueOccurrencesByField,
     selected.usageConstraints,
   );
   if (structuralIssues.length > 0) {
@@ -497,6 +516,11 @@ function selectOutputFormat(
 type ParsedOptionOccurrence = OptionOccurrenceEvidence &
   Readonly<{ readonly polarity: "negative" | "positive" | "value" }>;
 
+type FieldValueOccurrence = Readonly<{
+  readonly position: number;
+  readonly value: string;
+}>;
+
 function consumeOption(
   compiled: ReturnType<typeof getCompiledCli>,
   fields: ReturnType<typeof getCompiledCli>["fields"],
@@ -504,6 +528,7 @@ function consumeOption(
   position: number,
   input: Record<string, boolean | string | string[]>,
   occurrencesByField: Map<string, ParsedOptionOccurrence[]>,
+  valueOccurrencesByField: Map<string, FieldValueOccurrence[]>,
 ):
   | Readonly<{ readonly kind: "consumed"; readonly nextPosition: number }>
   | Readonly<{ readonly kind: "issue"; readonly issue: UsageIssue }> {
@@ -569,6 +594,12 @@ function consumeOption(
   }
   if (option.value !== undefined) {
     addOptionValue(input, field.key, option.value, field.kind);
+    addFieldValueOccurrence(
+      valueOccurrencesByField,
+      field.key,
+      position,
+      option.value,
+    );
     addOptionOccurrence(
       occurrencesByField,
       field.key,
@@ -597,6 +628,12 @@ function consumeOption(
     };
   }
   addOptionValue(input, field.key, value, field.kind);
+  addFieldValueOccurrence(
+    valueOccurrencesByField,
+    field.key,
+    position + 1,
+    value,
+  );
   addOptionOccurrence(
     occurrencesByField,
     field.key,
@@ -605,6 +642,17 @@ function consumeOption(
     "value",
   );
   return { kind: "consumed", nextPosition: position + 2 };
+}
+
+function addFieldValueOccurrence(
+  valueOccurrencesByField: Map<string, FieldValueOccurrence[]>,
+  field: string,
+  position: number,
+  value: string,
+): void {
+  const occurrences = valueOccurrencesByField.get(field) ?? [];
+  occurrences.push({ position, value });
+  valueOccurrencesByField.set(field, occurrences);
 }
 
 function addOptionOccurrence(
@@ -623,6 +671,7 @@ function collectStructuralIssues(
   fields: ReturnType<typeof getCompiledCli>["fields"],
   input: Readonly<Record<string, boolean | string | string[]>>,
   occurrencesByField: ReadonlyMap<string, readonly ParsedOptionOccurrence[]>,
+  valueOccurrencesByField: ReadonlyMap<string, readonly FieldValueOccurrence[]>,
   usageConstraints: ReturnType<
     typeof getCompiledCli
   >["commands"][string]["usageConstraints"],
@@ -632,45 +681,57 @@ function collectStructuralIssues(
     if (field.required && !Object.hasOwn(input, field.key)) {
       issues.push({ code: "missingRequiredField", field: field.key });
     }
-    if (
-      field.kind === "positional" ||
-      field.kind === "variadicPositional" ||
-      field.kind === "repeatableOption"
-    ) {
-      return issues;
-    }
     const occurrences = occurrencesByField.get(field.key) ?? [];
-    if (field.kind === "flag") {
-      const positiveOccurrences = occurrences.filter(
-        ({ polarity }) => polarity === "positive",
-      );
-      const negativeOccurrences = occurrences.filter(
-        ({ polarity }) => polarity === "negative",
-      );
-      if (positiveOccurrences.length > 0 && negativeOccurrences.length > 0) {
+    if (
+      field.kind !== "positional" &&
+      field.kind !== "variadicPositional" &&
+      field.kind !== "repeatableOption"
+    ) {
+      if (field.kind === "flag") {
+        const positiveOccurrences = occurrences.filter(
+          ({ polarity }) => polarity === "positive",
+        );
+        const negativeOccurrences = occurrences.filter(
+          ({ polarity }) => polarity === "negative",
+        );
+        if (positiveOccurrences.length > 0 && negativeOccurrences.length > 0) {
+          issues.push({
+            code: "conflictingFlag",
+            field: field.key,
+            positiveOccurrences: freezeOccurrenceEvidence(
+              positiveOccurrences,
+            ) as [OptionOccurrenceEvidence, ...OptionOccurrenceEvidence[]],
+            negativeOccurrences: freezeOccurrenceEvidence(
+              negativeOccurrences,
+            ) as [OptionOccurrenceEvidence, ...OptionOccurrenceEvidence[]],
+          });
+          return issues;
+        }
+      }
+      if (occurrences.length > 1) {
         issues.push({
-          code: "conflictingFlag",
+          code: "repeatedOption",
           field: field.key,
-          positiveOccurrences: freezeOccurrenceEvidence(
-            positiveOccurrences,
-          ) as [OptionOccurrenceEvidence, ...OptionOccurrenceEvidence[]],
-          negativeOccurrences: freezeOccurrenceEvidence(
-            negativeOccurrences,
-          ) as [OptionOccurrenceEvidence, ...OptionOccurrenceEvidence[]],
+          occurrences: freezeOccurrenceEvidence(occurrences) as [
+            OptionOccurrenceEvidence,
+            OptionOccurrenceEvidence,
+            ...OptionOccurrenceEvidence[],
+          ],
         });
-        return issues;
       }
     }
-    if (occurrences.length > 1) {
-      issues.push({
-        code: "repeatedOption",
-        field: field.key,
-        occurrences: freezeOccurrenceEvidence(occurrences) as [
-          OptionOccurrenceEvidence,
-          OptionOccurrenceEvidence,
-          ...OptionOccurrenceEvidence[],
-        ],
-      });
+    if (field.choices !== undefined) {
+      for (const occurrence of valueOccurrencesByField.get(field.key) ?? []) {
+        if (!field.choices.includes(occurrence.value)) {
+          issues.push({
+            code: "invalidFieldChoice",
+            position: occurrence.position,
+            field: field.key,
+            value: occurrence.value,
+            choices: Object.freeze([...field.choices]),
+          });
+        }
+      }
     }
     return issues;
   });

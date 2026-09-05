@@ -164,8 +164,13 @@ void test("Zod 的直接 enum 同源投影到 grammar、manifest、synopsis 与�
     "--tag",
     "other",
   ]);
-  assert.equal(invalidChoices.kind, "parsed");
-  if (invalidChoices.kind !== "parsed") assert.fail("候选值不由 parser 拒绝");
+  assert.equal(invalidChoices.kind, "usageFailure");
+  if (invalidChoices.kind !== "usageFailure")
+    assert.fail("候选值必须由 parser 拒绝");
+  assert.deepEqual(
+    invalidChoices.issues.map((issue) => issue.code),
+    ["invalidFieldChoice", "invalidFieldChoice", "invalidFieldChoice"],
+  );
   const termination = await executeCli(cli, {
     invocation: invalidChoices,
     dependencies: undefined,
@@ -173,7 +178,7 @@ void test("Zod 的直接 enum 同源投影到 grammar、manifest、synopsis 与�
   });
   assert.equal(termination.kind, "usageFailure");
   if (termination.kind === "usageFailure") {
-    assert.equal(termination.issues[0]?.code, "inputRejected");
+    assert.equal(termination.issues[0]?.code, "invalidFieldChoice");
   }
 });
 
@@ -220,6 +225,240 @@ void test("Valibot 的直接 enum 同样覆盖单值与 repeatable option", () =
     mode: ["interactive", "allow-all"],
     tag: ["red", "green"],
   });
+});
+
+void test("每个显式字段候选值在 parser 聚合并在 validation 与 handler 前终止", async () => {
+  const source = z.object({
+    mode: z.enum(["safe", "force"]),
+    files: z.array(z.enum(["keep", "drop"])).optional(),
+    option: z.enum(["fast", "slow"]).optional(),
+    tag: z.array(z.enum(["red", "green"])).optional(),
+    requires: z.string().optional(),
+  });
+  let validationCalls = 0;
+  let handlerCalls = 0;
+  const input = {
+    "~standard": {
+      ...source["~standard"],
+      validate(value: unknown) {
+        validationCalls += 1;
+        return source["~standard"].validate(value);
+      },
+    },
+  } as unknown as ContractSchema<
+    Readonly<{
+      readonly mode: string;
+      readonly files?: readonly string[];
+      readonly option?: string;
+      readonly tag?: readonly string[];
+      readonly requires?: string;
+    }>
+  >;
+  const cli = defineCli()({
+    root: "choices",
+    help: helpCapability(),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      choices: {
+        kind: "rootCommand",
+        name: "choices",
+        description: "候选值",
+        fields: {
+          mode: { kind: "positional", description: "模式" },
+          files: { kind: "variadicPositional", description: "文件" },
+          option: {
+            kind: "valueOption",
+            longOption: "--option",
+            shortAlias: "-o",
+            description: "选项",
+          },
+          tag: {
+            kind: "repeatableOption",
+            longOption: "--tag",
+            shortAlias: "-t",
+            description: "标签",
+          },
+          requires: {
+            kind: "valueOption",
+            longOption: "--requires",
+            description: "前置字段",
+          },
+        },
+        usageConstraints: [
+          { kind: "requires", field: "option", requires: "requires" },
+        ],
+        input,
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => {
+          handlerCalls += 1;
+          return outcome.completion();
+        },
+      },
+    },
+  });
+
+  const invocation = parseCliInvocation(cli, [
+    "outside-mode",
+    "outside-first",
+    "keep",
+    "outside-second",
+    "-o",
+    "outside-option",
+    "--option",
+    "fast",
+    "--tag=outside-equals",
+    "-t",
+    "outside-separated",
+  ]);
+  assert.equal(invocation.kind, "usageFailure");
+  if (invocation.kind !== "usageFailure") assert.fail("必须是 usage failure");
+  assert.deepEqual(invocation.issues, [
+    {
+      code: "invalidFieldChoice",
+      position: 0,
+      field: "mode",
+      value: "outside-mode",
+      choices: ["safe", "force"],
+    },
+    {
+      code: "invalidFieldChoice",
+      position: 1,
+      field: "files",
+      value: "outside-first",
+      choices: ["keep", "drop"],
+    },
+    {
+      code: "invalidFieldChoice",
+      position: 3,
+      field: "files",
+      value: "outside-second",
+      choices: ["keep", "drop"],
+    },
+    {
+      code: "repeatedOption",
+      field: "option",
+      occurrences: [
+        { position: 4, option: "-o" },
+        { position: 6, option: "--option" },
+      ],
+    },
+    {
+      code: "invalidFieldChoice",
+      position: 5,
+      field: "option",
+      value: "outside-option",
+      choices: ["fast", "slow"],
+    },
+    {
+      code: "invalidFieldChoice",
+      position: 8,
+      field: "tag",
+      value: "outside-equals",
+      choices: ["red", "green"],
+    },
+    {
+      code: "invalidFieldChoice",
+      position: 10,
+      field: "tag",
+      value: "outside-separated",
+      choices: ["red", "green"],
+    },
+    {
+      code: "requiredByUsageConstraint",
+      field: "option",
+      requires: "requires",
+    },
+  ]);
+  for (const issue of invocation.issues) {
+    assert.ok(Object.isFrozen(issue));
+    if (issue.code === "invalidFieldChoice") {
+      assert.ok(Object.isFrozen(issue.choices));
+      assert.equal("suggestedChoice" in issue, false);
+    }
+  }
+
+  const termination = await executeCli(cli, {
+    invocation,
+    dependencies: undefined,
+    write: () => undefined,
+  });
+  assert.equal(termination.kind, "usageFailure");
+  assert.equal(validationCalls, 0);
+  assert.equal(handlerCalls, 0);
+});
+
+void test("缺席 default、没有候选值和其余 schema 约束保持原有职责", async () => {
+  const source = z.object({
+    defaultMode: z.enum(["safe", "force"]).optional().default("safe"),
+    constrained: z.string().min(3).optional(),
+  });
+  let handlerCalls = 0;
+  const cli = defineCli()({
+    root: "defaults",
+    help: helpCapability(),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      defaults: {
+        kind: "rootCommand",
+        name: "defaults",
+        description: "默认值",
+        fields: {
+          defaultMode: {
+            kind: "valueOption",
+            longOption: "--mode",
+            description: "默认模式",
+          },
+          constrained: {
+            kind: "valueOption",
+            longOption: "--constrained",
+            description: "约束字段",
+          },
+        },
+        input: source as unknown as ContractSchema<
+          Readonly<{
+            readonly defaultMode?: string;
+            readonly constrained?: string;
+          }>
+        >,
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ input, outcome }) => {
+          handlerCalls += 1;
+          assert.equal(input.defaultMode, "safe");
+          return outcome.completion();
+        },
+      },
+    },
+  });
+
+  const defaulted = parseCliInvocation(cli, []);
+  assert.equal(defaulted.kind, "parsed");
+  const defaultTermination = await executeCli(cli, {
+    invocation: defaulted,
+    dependencies: undefined,
+    write: () => undefined,
+  });
+  assert.equal(defaultTermination.kind, "applicationResult");
+  assert.equal(handlerCalls, 1);
+
+  const constrained = parseCliInvocation(cli, ["--constrained", "no"]);
+  assert.equal(constrained.kind, "parsed");
+  const constrainedTermination = await executeCli(cli, {
+    invocation: constrained,
+    dependencies: undefined,
+    write: () => undefined,
+  });
+  assert.equal(constrainedTermination.kind, "usageFailure");
+  if (constrainedTermination.kind === "usageFailure") {
+    assert.deepEqual(
+      constrainedTermination.issues.map((issue) => issue.code),
+      ["inputRejected"],
+    );
+  }
+  assert.equal(handlerCalls, 1);
 });
 
 void test("真实 Zod 与 Valibot 的 union 投影不会被求解为字段候选值", () => {

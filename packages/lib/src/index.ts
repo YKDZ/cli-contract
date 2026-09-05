@@ -118,6 +118,7 @@ export {
   type ForbiddenUsageCombinationIssue,
   type HelpRequest,
   type InputRejectedIssue,
+  type InvalidFieldChoiceIssue,
   type InvalidOutputFormatIssue,
   type MissingOptionValueIssue,
   type MissingRequiredFieldIssue,

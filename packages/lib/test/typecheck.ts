@@ -17,11 +17,13 @@ import {
   type EmptyCliInput,
   type FieldDefinition,
   type DataVariantDefinition,
+  type InvalidFieldChoiceIssue,
   type OutputCapability,
   type StreamRootCommandDefinition,
   type StreamRecordDefinition,
   type ShortOptionAlias,
   type TextLines,
+  type UsageIssue,
   type UsageConstraint,
 } from "@ykdz/cli-contract";
 import * as v from "valibot";
@@ -48,6 +50,30 @@ void zodInput;
 void zodOutput;
 void valibotInput;
 void valibotOutput;
+
+function exhaustivelyRecognizeUsageIssue(issue: UsageIssue): string {
+  switch (issue.code) {
+    case "conflictingFlag":
+    case "conflictingOutputFormat":
+    case "exclusiveUsageConstraint":
+    case "forbiddenUsageCombination":
+    case "inputRejected":
+    case "invalidOutputFormat":
+    case "missingOptionValue":
+    case "missingRequiredField":
+    case "repeatedOption":
+    case "requiredByUsageConstraint":
+    case "unexpectedOptionValue":
+    case "unexpectedPositional":
+    case "unknownCommand":
+    case "unknownOption":
+      return issue.code;
+    case "invalidFieldChoice":
+      issue satisfies InvalidFieldChoiceIssue;
+      return issue.choices.join(",");
+  }
+}
+void exhaustivelyRecognizeUsageIssue;
 
 declare const emptyInput: ContractSchema<EmptyCliInput>;
 declare const namedInput: ContractSchema<
