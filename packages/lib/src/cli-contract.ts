@@ -30,7 +30,6 @@ import type {
   CompletionOutcome,
   DataFactUnion,
   DataOutcome,
-  DataVariantDefinition,
   DataVariantDefinitions,
   FailureFactUnion,
   FailureOutcome,
@@ -702,10 +701,9 @@ type DataVariantTextContract<
   DataVariantDefinitions<false>
 >;
 
-type AtomicTextPresenterContract<
-  Payload,
-  TextEnabled extends boolean,
-> = [TextEnabled] extends [true]
+type AtomicTextPresenterContract<Payload, TextEnabled extends boolean> = [
+  TextEnabled,
+] extends [true]
   ? Readonly<{ readonly text: AtomicTextPresenter<Payload> }>
   : [TextEnabled] extends [false]
     ? Readonly<{ readonly text?: never }>
@@ -1859,7 +1857,7 @@ type RootFallbackContractResult<
 
 type DataOrCompletionRootCliDefinition<
   Root extends string,
-  Dependencies,
+  _Dependencies,
   Fields extends FieldDefinitions,
   InputSchema extends ContractSchema,
   VariantSchemas extends VariantSchemaMap,
@@ -1881,10 +1879,7 @@ type DataOrCompletionRootCliDefinition<
           readonly input: InputSchema &
             RootFallbackRawFieldInputContract<Fields, InputSchema>;
           readonly failures: Failures &
-            FailureVariantDefinitionsForSchemas<
-              FailureSchemas,
-              boolean
-            > &
+            FailureVariantDefinitionsForSchemas<FailureSchemas, boolean> &
             FailureVariantNameContract<Failures> &
             FailureVariantTextContract<Command, Failures, TextEnabled>;
         }> &
@@ -1896,10 +1891,7 @@ type DataOrCompletionRootCliDefinition<
               readonly success: Readonly<{
                 readonly kind: "data";
                 readonly variants: Variants &
-                  DataVariantDefinitionsForSchemas<
-                    VariantSchemas,
-                    boolean
-                  > &
+                  DataVariantDefinitionsForSchemas<VariantSchemas, boolean> &
                   DataVariantNameContract<Variants> &
                   DataVariantTextContract<Command, Variants, TextEnabled>;
               }>;
@@ -2079,7 +2071,10 @@ export interface DefineCli<Dependencies> {
     const Fields extends FieldDefinitions,
     InputSchema extends ContractSchema,
     const VariantSchemas extends VariantSchemaMap,
-    const Variants extends DataVariantDefinitionsForSchemas<VariantSchemas, true>,
+    const Variants extends DataVariantDefinitionsForSchemas<
+      VariantSchemas,
+      true
+    >,
     const FailureSchemas extends VariantSchemaMap,
     const Failures extends FailureVariantDefinitionsForSchemas<
       FailureSchemas,
