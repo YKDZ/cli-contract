@@ -33,6 +33,7 @@ async function readFixtures(): Promise<Readonly<Record<string, string>>> {
         "core-root.ts",
         "named-variant-missing.ts",
         "schema-input.ts",
+        "stream-text-coverage.ts",
       ].map(async (name) => [
         name,
         await readFile(
@@ -126,6 +127,7 @@ async function verifyCoreOnly(
       "completion-missing.ts",
       "named-variant-missing.ts",
       "schema-input.ts",
+      "stream-text-coverage.ts",
     ]);
     runCommand(
       "npm",
@@ -152,12 +154,64 @@ async function verifyCoreOnly(
       }
       await verifyMissingCompletionDiagnostic(project, resolution);
       await verifyMissingNamedVariantDiagnostic(project, resolution);
+      await compileFixture(project, resolution, "stream-text-coverage.ts");
+      await verifyMissingStreamDiagnostic(project, resolution, fixtures);
     }
   } finally {
     await Promise.all([
       rm(project, { recursive: true, force: true }),
       rm(npmCache, { recursive: true, force: true }),
     ]);
+  }
+}
+
+async function verifyMissingStreamDiagnostic(
+  project: string,
+  resolution: (typeof resolutions)[number],
+  fixtures: Readonly<Record<string, string>>,
+): Promise<void> {
+  const fixture = "stream-text-coverage-unchecked.ts";
+  const source = fixtures["stream-text-coverage.ts"];
+  if (source === undefined) throw new Error("Missing stream coverage fixture");
+  await writeFile(
+    resolve(project, fixture),
+    source.replaceAll(/\s*\/\/ @ts-expect-error[^\n]*/g, ""),
+  );
+  const tsconfig = `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`;
+  await writeFile(
+    resolve(project, tsconfig),
+    `${JSON.stringify(tsconfigFor(resolution, fixture))}\n`,
+  );
+  const result = spawnSync(
+    resolve(project, "node_modules/.bin/tsc"),
+    ["--project", tsconfig, "--pretty", "false"],
+    { cwd: project, encoding: "utf8" },
+  );
+  if (result.error !== undefined) throw result.error;
+  const diagnostics = `${result.stderr}\n${result.stdout}`;
+  const required = [
+    "missingStreamRecordTextPresenter",
+    "missingStreamSuccessTextPresenter",
+    'command: "missingRecord"',
+    'command: "missingSuccess"',
+    'location: "record"',
+    'location: "success"',
+    'variant: "item"',
+    'missing: "text"',
+  ];
+  const headers = diagnostics.match(
+    /^stream-text-coverage-unchecked\.ts\(\d+,\d+\): error TS\d+:/gm,
+  );
+  const allHeaders = diagnostics.match(/^.+\(\d+,\d+\): error TS\d+:/gm);
+  if (
+    result.status === 0 ||
+    required.some((fragment) => !diagnostics.includes(fragment)) ||
+    headers?.length !== 2 ||
+    allHeaders?.length !== headers.length
+  ) {
+    throw new Error(
+      `Missing-stream diagnostic did not expose only local contract evidence\n${diagnostics}`,
+    );
   }
 }
 
