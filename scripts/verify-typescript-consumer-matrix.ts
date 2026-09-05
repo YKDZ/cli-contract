@@ -200,7 +200,10 @@ async function verifyHierarchyTextCoverageDiagnostic(
   const fixture = "hierarchy-text-coverage-unchecked.ts";
   await writeFile(
     resolve(project, fixture),
-    source.replaceAll(/\s*\/\/ @ts-expect-error[^\n]*/g, ""),
+    source.replaceAll(
+      /\s*\/\/ @ts-expect-error \[hierarchy-text-coverage\][^\n]*/g,
+      "",
+    ),
   );
   const tsconfig = `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`;
   await writeFile(

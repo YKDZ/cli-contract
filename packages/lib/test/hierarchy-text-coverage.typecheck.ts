@@ -135,7 +135,7 @@ defineMissingCompletion({
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
   usageFailureExitCode: 64,
-  // @ts-expect-error 层级 completion 缺少 presenter 必须在根装配时拒绝。
+  // @ts-expect-error [hierarchy-text-coverage] 层级 completion 缺少 presenter 必须在根装配时拒绝。
   commands: {
     missingCompletion: {
       kind: "rootGroup",
@@ -161,7 +161,7 @@ defineMissingData({
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
   usageFailureExitCode: 64,
-  // @ts-expect-error 层级 data 变体缺少 presenter 必须在根装配时拒绝。
+  // @ts-expect-error [hierarchy-text-coverage] 层级 data 变体缺少 presenter 必须在根装配时拒绝。
   commands: {
     missingData: {
       kind: "rootGroup",
@@ -199,7 +199,7 @@ defineMissingFailure({
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
   usageFailureExitCode: 64,
-  // @ts-expect-error 层级 failure 变体缺少 presenter 必须在根装配时拒绝。
+  // @ts-expect-error [hierarchy-text-coverage] 层级 failure 变体缺少 presenter 必须在根装配时拒绝。
   commands: {
     missingFailure: {
       kind: "rootGroup",
@@ -227,7 +227,7 @@ defineMissingRecord({
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
   usageFailureExitCode: 64,
-  // @ts-expect-error 层级 stream record 缺少 presenter 必须在根装配时拒绝。
+  // @ts-expect-error [hierarchy-text-coverage] 层级 stream record 缺少 presenter 必须在根装配时拒绝。
   commands: {
     missingRecord: {
       kind: "rootGroup",
@@ -267,7 +267,7 @@ defineMissingStreamSuccess({
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
   usageFailureExitCode: 64,
-  // @ts-expect-error 层级 stream success 缺少 presenter 必须在根装配时拒绝。
+  // @ts-expect-error [hierarchy-text-coverage] 层级 stream success 缺少 presenter 必须在根装配时拒绝。
   commands: {
     missingStreamSuccess: {
       kind: "rootGroup",
@@ -304,5 +304,178 @@ defineMissingStreamSuccess({
         return outcome.streamSuccess();
       },
     }),
+  },
+});
+
+const defineUndeclaredCompletionFailure = defineCli();
+const undeclaredCompletionFailure = defineUndeclaredCompletionFailure.command(
+  "completionLeaf",
+)({
+  kind: "command",
+  parent: "failureRoot",
+  name: "completion",
+  description: "completion failure",
+  input: emptyInput,
+  success: { kind: "completion" },
+  failures: {},
+  handler: ({ outcome }) => {
+    // @ts-expect-error hierarchy completion 的空 failure 表不提供未知构造器。
+    return outcome.failure.undeclared({});
+  },
+});
+defineUndeclaredCompletionFailure({
+  root: "failureRoot",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    failureRoot: {
+      kind: "rootGroup",
+      name: "failures",
+      description: "failures",
+    },
+    ...undeclaredCompletionFailure,
+  },
+});
+
+const defineUndeclaredDataFailure = defineCli();
+const undeclaredDataFailure = defineUndeclaredDataFailure.command("dataLeaf")({
+  kind: "command",
+  parent: "dataFailureRoot",
+  name: "data",
+  description: "data failure",
+  fields: {},
+  input: emptyInput,
+  success: {
+    kind: "data",
+    variants: { found: { description: "found", schema: payload, exitCode: 0 } },
+  },
+  failures: {},
+  handler: ({ outcome }) => {
+    // @ts-expect-error hierarchy data 的空 failure 表不提供未知构造器。
+    return outcome.failure.undeclared({});
+  },
+});
+defineUndeclaredDataFailure({
+  root: "dataFailureRoot",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    dataFailureRoot: {
+      kind: "rootGroup",
+      name: "failures",
+      description: "failures",
+    },
+    ...undeclaredDataFailure,
+  },
+});
+
+const defineUndeclaredStreamFailure = defineCli();
+const undeclaredStreamFailure = defineUndeclaredStreamFailure.command(
+  "streamLeaf",
+)({
+  kind: "command",
+  parent: "streamFailureRoot",
+  name: "stream",
+  description: "stream failure",
+  fields: {},
+  input: emptyInput,
+  success: {
+    kind: "stream",
+    records: { update: { description: "update", schema: payload } },
+  },
+  failures: {},
+  async *handler({ outcome }) {
+    yield outcome.record.update({ message: "update" });
+    // @ts-expect-error hierarchy stream 的空 failure 表不提供未知构造器。
+    return outcome.failure.undeclared({});
+  },
+});
+defineUndeclaredStreamFailure({
+  root: "streamFailureRoot",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    streamFailureRoot: {
+      kind: "rootGroup",
+      name: "failures",
+      description: "failures",
+    },
+    ...undeclaredStreamFailure,
+  },
+});
+
+const defineDataWithoutFields = defineCli();
+const dataWithFields = defineDataWithoutFields.command("dataLeaf")({
+  kind: "command",
+  parent: "dataWithoutFields",
+  name: "data",
+  description: "data",
+  fields: {},
+  input: emptyInput,
+  success: {
+    kind: "data",
+    variants: {
+      found: { description: "found", schema: payload, exitCode: 0 },
+    },
+  },
+  failures: {},
+  handler: ({ outcome }) => outcome.data.found({ message: "found" }),
+});
+const { fields: _dataFields, ...dataWithoutFieldsDefinition } =
+  dataWithFields.dataLeaf;
+const dataWithoutFields = defineDataWithoutFields.command("dataLeaf")(
+  // @ts-expect-error hierarchy data 命令必须显式声明 fields。
+  dataWithoutFieldsDefinition,
+);
+defineDataWithoutFields({
+  root: "dataWithoutFields",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    dataWithoutFields: { kind: "rootGroup", name: "data", description: "data" },
+    ...dataWithoutFields,
+  },
+});
+
+const defineStreamWithoutFields = defineCli();
+const streamWithFields = defineStreamWithoutFields.command("streamLeaf")({
+  kind: "command",
+  parent: "streamWithoutFields",
+  name: "stream",
+  description: "stream",
+  fields: {},
+  input: emptyInput,
+  success: {
+    kind: "stream",
+    records: { update: { description: "update", schema: payload } },
+  },
+  failures: {},
+  async *handler({ outcome }) {
+    yield outcome.record.update({ message: "update" });
+    return outcome.streamSuccess();
+  },
+});
+const { fields: _streamFields, ...streamWithoutFieldsDefinition } =
+  streamWithFields.streamLeaf;
+const streamWithoutFields = defineStreamWithoutFields.command("streamLeaf")(
+  // @ts-expect-error hierarchy stream 命令必须显式声明 fields。
+  streamWithoutFieldsDefinition,
+);
+defineStreamWithoutFields({
+  root: "streamWithoutFields",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    streamWithoutFields: {
+      kind: "rootGroup",
+      name: "stream",
+      description: "stream",
+    },
+    ...streamWithoutFields,
   },
 });

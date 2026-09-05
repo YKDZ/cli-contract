@@ -2502,6 +2502,26 @@ type UsageConstraintProperty<Constraints> =
     ? Readonly<{ readonly usageConstraints: Constraints }>
     : unknown;
 
+type ActualFailureDefinitions<Failures> =
+  Failures extends FailureVariantDefinitions ? Failures : never;
+
+type RootFallbackFieldsProperty<
+  Fields extends FieldDefinitions,
+  InputSchema extends ContractSchema,
+> =
+  | Readonly<{
+      readonly fields: CheckedFieldDefinitions<Fields> &
+        FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
+        FieldIdentityContract<Fields>;
+      readonly success: Readonly<{ readonly kind: "data" | "stream" }>;
+    }>
+  | Readonly<{
+      readonly fields?: CheckedFieldDefinitions<Fields> &
+        FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
+        FieldIdentityContract<Fields>;
+      readonly success: Readonly<{ readonly kind: "completion" }>;
+    }>;
+
 export interface DefineCommand<Command extends string, Dependencies> {
   <
     const Definition extends object,
@@ -2531,15 +2551,16 @@ export interface DefineCommand<Command extends string, Dependencies> {
           Failures,
           boolean
         >["commands"][Command],
-        "kind"
+        "kind" | "fields"
       > &
+      RootFallbackFieldsProperty<Fields, InputSchema> &
       RootFallbackHandlerDefinition<
         Command,
         Dependencies,
         InputSchema,
         DataVariantDefinitionsForSchemas<VariantSchemas, boolean>,
         StreamRecordDefinitionsForSchemas<RecordSchemas, boolean>,
-        FailureVariantDefinitionsForSchemas<FailureSchemas, boolean>,
+        ActualFailureDefinitions<Failures>,
         Kind
       >["commands"][Command] &
       Omit<HierarchyCommandFacts<Parent>, typeof executableCommandType>,
