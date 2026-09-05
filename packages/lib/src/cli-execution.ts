@@ -360,8 +360,18 @@ function formatCoreControls(
     ...(versionEntry === undefined ? [] : [versionEntry]),
     ...(output.selector === undefined
       ? []
-      : [helpLine(`${output.selector} <structured|text>`)]),
-    ...Object.keys(output.compatibilityFlags ?? {}).map(helpLine),
+      : [
+          helpLine(
+            `${output.selector} <${output.formats.join("|")}> (choices: ${output.formats.map((format) => JSON.stringify(format)).join(", ")}) (default: ${JSON.stringify(output.defaultFormat)})`,
+          ),
+        ]),
+    ...Object.entries(output.compatibilityFlags ?? {}).map(([flag, format]) =>
+      helpLine(
+        output.selector === undefined
+          ? `${flag} = ${format}`
+          : `${flag} = ${output.selector} ${format}`,
+      ),
+    ),
   ];
 }
 

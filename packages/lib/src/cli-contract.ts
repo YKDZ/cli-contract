@@ -2280,6 +2280,11 @@ function copyHelpHeadings(value: unknown): HelpHeadings {
   return Object.freeze(headings) as HelpHeadings;
 }
 
+/**
+ * 在根契约显式装配版本提前请求，并自动覆盖整棵命令树。`value` 与可选
+ * `description` 均由消费者拥有；核心只注册固定 spelling、投影帮助并写出 value，
+ * 不读取包元数据、不添加前缀或默认说明，也不把版本当作命令输入。
+ */
 export function versionCapability(
   definition: VersionCapabilityDefinition,
 ): VersionCapability {
@@ -2372,6 +2377,12 @@ function compileControls(definition: RuntimeCliDefinition) {
   });
 }
 
+/**
+ * 在根契约显式装配一次应用结果的输出格式能力，并自动覆盖整棵命令树。
+ * 它把 selector 与兼容 flag 保留为调用控制，不进入命令 input 或 handler；帮助、版本
+ * 与用法失败使用各自固定投影。`defaultFormat`、text 支持和兼容映射必须由消费者
+ * 显式选择，不能在命令节点另行装配格式或输出 profile。
+ */
 export function outputCapability<
   const Definition extends OutputCapabilityDefinition,
 >(definition: Definition): OutputCapability<OutputFormatsFor<Definition>> {

@@ -138,7 +138,7 @@ void test("根级 -h 配置机械投影到 controls、各节点 parser 与完整
     {
       destination: "stdout",
       chunk:
-        "运行任务\n\n用法\n  workspace task run\n\n选项\n  --help, -h\n  --output-format <structured|text>\n",
+        '运行任务\n\n用法\n  workspace task run\n\n选项\n  --help, -h\n  --output-format <structured|text> (choices: "structured", "text") (default: "structured")\n',
     },
   ]);
   assert.deepEqual(termination, {
@@ -161,7 +161,7 @@ void test("根级 -h 配置机械投影到 controls、各节点 parser 与完整
     {
       destination: "stdout",
       chunk:
-        "任务\n\n用法\n  workspace task <command>\n\n命令\n  run\n    运行任务\n\n选项\n  --help, -h\n  --output-format <structured|text>\n",
+        '任务\n\n用法\n  workspace task <command>\n\n命令\n  run\n    运行任务\n\n选项\n  --help, -h\n  --output-format <structured|text> (choices: "structured", "text") (default: "structured")\n',
     },
   ]);
   assert.deepEqual(groupTermination, {
@@ -179,7 +179,7 @@ void test("根级 -h 配置机械投影到 controls、各节点 parser 与完整
     },
   });
   assert.deepEqual(rootWrites, [
-    "工作区\n\n用法\n  workspace <command>\n\n命令\n  task <command>\n    任务\n\n选项\n  --help, -h\n  --output-format <structured|text>\n\n补充\n  先完成准备。\n\n  随后执行任务。\n",
+    '工作区\n\n用法\n  workspace <command>\n\n命令\n  task <command>\n    任务\n\n选项\n  --help, -h\n  --output-format <structured|text> (choices: "structured", "text") (default: "structured")\n\n补充\n  先完成准备。\n\n  随后执行任务。\n',
   ]);
 });
 

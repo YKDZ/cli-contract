@@ -239,7 +239,7 @@ void test("format controls 不改变 usage failure 的固定 JSON 通道", async
   }
 });
 
-void test("帮助从 controls 投影 selector 与 compatibility flags", async () => {
+void test("帮助以同源 controls 投影双格式 selector、默认值与 compatibility 映射", async () => {
   const cli = createTextHierarchyCli();
   for (const argv of [
     ["--help"],
@@ -255,9 +255,87 @@ void test("帮助从 controls 投影 selector 与 compatibility flags", async ()
       },
     });
     const help = writes.join("");
-    assert.match(help, /--output-format <structured\|text>/);
-    assert.match(help, /--plain/);
+    assert.match(
+      help,
+      /  --output-format <structured\|text> \(choices: "structured", "text"\) \(default: "text"\)\n  --plain = --output-format text\n/,
+    );
+    assert.doesNotMatch(help, /显示格式|默认格式|应用结果/);
   }
+});
+
+void test("单格式 compatibility flag 显示真实目标但不虚构 selector", async () => {
+  const cli = defineCli()({
+    root: "machine",
+    help: helpCapability(),
+    output: outputCapability({
+      defaultFormat: "structured",
+      compatibilityFlags: { "--json": "structured" },
+    }),
+    usageFailureExitCode: 64,
+    commands: {
+      machine: {
+        kind: "rootCommand",
+        name: "machine",
+        description: "机器输出",
+        input: z.object({}),
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      },
+    },
+  });
+
+  assert.deepEqual(cli.grammar.controls.output, {
+    defaultFormat: "structured",
+    formats: ["structured"],
+    compatibilityFlags: { "--json": "structured" },
+  });
+  assert.deepEqual(cli.manifest.controls.output, cli.grammar.controls.output);
+  assert.deepEqual(parseCliInvocation(cli, ["--json", "--help"]), {
+    kind: "help",
+    command: "machine",
+  });
+
+  const writes: Array<Readonly<{ destination: string; chunk: string }>> = [];
+  const termination = await executeCli(cli, {
+    invocation: parseCliInvocation(cli, ["--help", "--json", "ignored"]),
+    dependencies: undefined,
+    write: (output) => {
+      writes.push(output);
+    },
+  });
+  assert.deepEqual(writes, [
+    {
+      destination: "stdout",
+      chunk: "机器输出\n\n  machine\n\n  --help\n  --json = structured\n",
+    },
+  ]);
+  assert.deepEqual(termination, {
+    kind: "help",
+    command: "machine",
+    exitCode: 0,
+  });
+});
+
+void test("help 之前已识别的格式冲突仍是用法失败", () => {
+  const cli = createTextCli();
+  assert.deepEqual(
+    parseCliInvocation(cli, ["--plain", "--output-format", "text", "--help"]),
+    {
+      kind: "usageFailure",
+      command: "greet",
+      usage: { command: "greet", synopsis: "greet --name <name>" },
+      issues: [
+        {
+          code: "conflictingOutputFormat",
+          occurrences: [
+            { position: 0, option: "--plain", format: "text" },
+            { position: 1, option: "--output-format", format: "text" },
+          ],
+        },
+      ],
+    },
+  );
 });
 
 void test("structured wire 保持不变，text data 与 failure 使用固定通道和 atomic line", async () => {
