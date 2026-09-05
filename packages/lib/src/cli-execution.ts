@@ -45,13 +45,23 @@ import {
 
 export type CliOutputDestination = "stderr" | "stdout";
 
+/** 核心已完成投影和通道路由的非空文本 chunk；宿主写入时不再改写格式或目的通道。 */
 export interface CliOutput {
   readonly destination: CliOutputDestination;
   readonly chunk: string;
 }
 
+/**
+ * 宿主提供的异步输出接缝；异步写入必须返回代表完成的 Promise。
+ * 核心等待每次写入后才继续写出或拉取下一条流记录，保留跨通道顺序与背压。
+ * 抛出或拒绝会以保留原始 cause 和目的通道的 CliWriteError 拒绝执行，不自动重试。
+ */
 export type WriteCliOutput = (output: CliOutput) => Promise<void> | void;
 
+/**
+ * 正常控制流完成全部可控写入后的程序化结果；宿主仍须落实真实进程退出状态。
+ * 流结果只保留终态，不累计已写记录。程序缺陷与写入错误使执行拒绝，不进入此联合。
+ */
 export type CliTermination<Contract extends CliContract = CliContract> =
   | Readonly<{
       readonly kind: "applicationResult";
@@ -90,6 +100,17 @@ type RuntimeHandler = (context: {
 
 type RuntimeStreamGenerator = AsyncGenerator<unknown, unknown, void>;
 
+/**
+ * 执行同一契约签发的调用：验证 raw input，将模式的验证结果和宿主依赖交给 handler，
+ * 再验证、投影结果并顺序等待宿主写入。帮助、版本和用法失败不执行业务 handler。
+ *
+ * 宿主负责参数来源、依赖构造、输出端口和真实进程退出；应 await 本函数，
+ * 等可控写入完成后再使用终止结果的 exitCode，不能提前结束进程。
+ *
+ * 消费者模式、handler、generator 或呈现器抛出的值保留原始身份；核心检测的契约违反
+ * 使用 ContractExecutionError，输出端口失败使用 CliWriteError。执行拒绝时不自动写诊断，
+ * 活动流会执行必要清理，已经写出的合法前缀不会撤回，也不会追加伪造的成功终态。
+ */
 // oxlint-disable-next-line typescript/consistent-return
 export async function executeCli<const Contract extends CliContract>(
   cliContract: Contract,
