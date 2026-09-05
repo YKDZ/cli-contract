@@ -34,13 +34,13 @@ interface CandidateResult {
 }
 
 async function main(): Promise<void> {
-  const commandArgs = process.argv.slice(2);
-  const outputDirectory = await prepareOutputDirectory(
-    commandArgs[0] === "--" ? commandArgs.slice(1) : commandArgs,
-  );
+  const { commandArgs, skipBuild } = parseCommandArgs(process.argv.slice(2));
+  const outputDirectory = await prepareOutputDirectory(commandArgs);
 
-  runPnpm(["--filter", corePackage, "run", "build"]);
-  runPnpm(["--filter", testingPackage, "run", "build"]);
+  if (!skipBuild) {
+    runPnpm(["--filter", corePackage, "run", "build"]);
+    runPnpm(["--filter", testingPackage, "run", "build"]);
+  }
 
   const coreTarball = await packOnce(corePackage, outputDirectory);
   const testingTarball = await packOnce(testingPackage, outputDirectory);
@@ -57,6 +57,16 @@ async function main(): Promise<void> {
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 
+function parseCommandArgs(args: readonly string[]): Readonly<{
+  readonly commandArgs: readonly string[];
+  readonly skipBuild: boolean;
+}> {
+  const values = args[0] === "--" ? args.slice(1) : args;
+  const skipBuild = values.at(-1) === "--skip-build";
+  const commandArgs = skipBuild ? values.slice(0, -1) : values;
+  return { commandArgs, skipBuild };
+}
+
 async function prepareOutputDirectory(
   args: readonly string[],
 ): Promise<string> {
@@ -66,7 +76,7 @@ async function prepareOutputDirectory(
     args[1] === undefined
   ) {
     throw new Error(
-      "Usage: pnpm candidate:pack -- --output-dir <empty-directory>",
+      "Usage: pnpm candidate:pack -- --output-dir <empty-directory> [--skip-build]",
     );
   }
 
