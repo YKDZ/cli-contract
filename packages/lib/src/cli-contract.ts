@@ -1678,48 +1678,6 @@ export type CliContractRoot<Contract> =
 
 type HasTextPresenter<Value> =
   Value extends Readonly<{ readonly text: unknown }> ? true : false;
-type AllTextPresenters<Definitions> =
-  Exclude<
-    {
-      [Key in keyof Definitions]: HasTextPresenter<Definitions[Key]>;
-    }[keyof Definitions],
-    true
-  > extends never
-    ? true
-    : false;
-type MissingHierarchyTextCommands<Commands> = {
-  [Command in keyof Commands]: Commands[Command] extends Readonly<{
-    readonly kind: "command";
-    readonly success: infer Success;
-    readonly failures: infer Failures;
-  }>
-    ? Success extends Readonly<{ readonly kind: "completion" }>
-      ? HasTextPresenter<Success> extends true
-        ? AllTextPresenters<Failures> extends true
-          ? never
-          : Command
-        : Command
-      : Success extends Readonly<{ readonly variants: infer Variants }>
-        ? AllTextPresenters<Variants> extends true
-          ? AllTextPresenters<Failures> extends true
-            ? never
-            : Command
-          : Command
-        : Success extends Readonly<{
-              readonly kind: "stream";
-              readonly records: infer Records;
-            }>
-          ? HasTextPresenter<Success> extends true
-            ? AllTextPresenters<Records> extends true
-              ? AllTextPresenters<Failures> extends true
-                ? never
-                : Command
-              : Command
-            : Command
-          : Command
-    : never;
-}[keyof Commands];
-
 type HasAnyTextPresenter<Definitions> = true extends {
   [Key in keyof Definitions]: HasTextPresenter<Definitions[Key]>;
 }[keyof Definitions]
@@ -1782,19 +1740,103 @@ type HierarchyUsageValidation<Commands> =
         >,
       ];
 
+type HierarchyFailureTextErrors<Command extends string, Failures> =
+  MissingVariantTextPresenters<Failures> extends never
+    ? never
+    : ContractTypeError<
+        "missingFailureVariantTextPresenter",
+        Readonly<{
+          readonly command: Command;
+          readonly location: "failure";
+          readonly variant: MissingVariantTextPresenters<Failures>;
+          readonly missing: "text";
+        }>
+      >;
+
+type HierarchyDataTextErrors<Command extends string, Variants> =
+  MissingVariantTextPresenters<Variants> extends never
+    ? never
+    : ContractTypeError<
+        "missingDataVariantTextPresenter",
+        Readonly<{
+          readonly command: Command;
+          readonly location: "data";
+          readonly variant: MissingVariantTextPresenters<Variants>;
+          readonly missing: "text";
+        }>
+      >;
+
+type HierarchyStreamRecordTextErrors<Command extends string, Records> =
+  MissingVariantTextPresenters<Records> extends never
+    ? never
+    : ContractTypeError<
+        "missingStreamRecordTextPresenter",
+        Readonly<{
+          readonly command: Command;
+          readonly location: "record";
+          readonly variant: MissingVariantTextPresenters<Records>;
+          readonly missing: "text";
+        }>
+      >;
+
+type HierarchyCommandTextErrors<Command extends string, Definition> =
+  Definition extends Readonly<{
+    readonly success: infer Success;
+    readonly failures: infer Failures;
+  }>
+    ? Success extends Readonly<{ readonly kind: "completion" }>
+      ?
+          | (HasTextPresenter<Success> extends true
+              ? never
+              : ContractTypeError<
+                  "missingCompletionTextPresenter",
+                  Readonly<{
+                    readonly command: Command;
+                    readonly location: "completion";
+                    readonly missing: "text";
+                  }>
+                >)
+          | HierarchyFailureTextErrors<Command, Failures>
+      : Success extends Readonly<{
+            readonly kind: "data";
+            readonly variants: infer Variants;
+          }>
+        ?
+            | HierarchyDataTextErrors<Command, Variants>
+            | HierarchyFailureTextErrors<Command, Failures>
+        : Success extends Readonly<{
+              readonly kind: "stream";
+              readonly records: infer Records;
+            }>
+          ?
+              | (HasTextPresenter<Success> extends true
+                  ? never
+                  : ContractTypeError<
+                      "missingStreamSuccessTextPresenter",
+                      Readonly<{
+                        readonly command: Command;
+                        readonly location: "streamSuccess";
+                        readonly missing: "text";
+                      }>
+                    >)
+              | HierarchyStreamRecordTextErrors<Command, Records>
+              | HierarchyFailureTextErrors<Command, Failures>
+          : never
+    : never;
+
+type HierarchyTextErrors<Commands> = {
+  [Command in keyof Commands & string]: HierarchyCommandTextErrors<
+    Command,
+    Commands[Command]
+  >;
+}[keyof Commands & string];
+
 type HierarchyOutputValidation<Commands, Output extends OutputCapability> =
   Output extends OutputCapability<infer Formats>
     ? [Formats] extends [readonly ["structured", "text"]]
-      ? MissingHierarchyTextCommands<Commands> extends never
+      ? [HierarchyTextErrors<Commands>] extends [never]
         ? HierarchyUsageValidation<Commands>
-        : readonly [
-            ContractTypeError<
-              "missingHierarchyTextPresenter",
-              Readonly<{
-                readonly commands: MissingHierarchyTextCommands<Commands>;
-              }>
-            >,
-          ]
+        : readonly [HierarchyTextErrors<Commands>]
       : [Formats] extends [readonly ["structured"]]
         ? UnexpectedHierarchyTextCommands<Commands> extends never
           ? HierarchyUsageValidation<Commands>
@@ -2041,6 +2083,11 @@ type RootFallbackHandlerDefinition<
 }>;
 
 export interface DefineCli<Dependencies> {
+  /**
+   * 为命令组创建可执行后代，再把返回记录展开到同一个 `commands` 对象中交给
+   * `defineCli()` 装配。后代只声明自己的输入和结果；根级 output 的全树约束在最终
+   * 装配处统一判定。
+   */
   readonly command: <const Command extends string>(
     command: Command,
   ) => DefineCommand<Command, Dependencies>;
@@ -2094,6 +2141,11 @@ export interface DefineCli<Dependencies> {
     "rootCommand"
   >;
 
+  /**
+   * 使用 `defineCli().command("命令")({...})` 组合可执行后代，再在此处以根级
+   * `output` 一次装配整棵树。启用 text 时，所有后代结果位置的 presenter 由最终根
+   * 装配统一约束，无需在叶命令重复声明输出能力。
+   */
   <
     const Root extends string,
     const Commands extends Readonly<Record<string, CommandNodeDefinition>>,
