@@ -1673,11 +1673,17 @@ type TextEnabledForOutput<Output extends OutputCapability> =
           : boolean
     : boolean;
 
+type RequiredSchemaInputKeys<Input> = {
+  [Key in keyof Input & string]-?: {} extends Pick<Input, Key> ? never : Key;
+}[keyof Input & string];
+
 type RootFallbackRawFieldInputContract<
   Fields extends FieldDefinitions,
   InputSchema extends ContractSchema,
 > = FieldDefinitions extends Fields
-  ? unknown
+  ? RequiredSchemaInputKeys<ContractSchemaInput<InputSchema>> extends never
+    ? unknown
+    : RawFieldInputContract<Fields, InputSchema>
   : RawFieldInputContract<Fields, InputSchema>;
 
 type RootFallbackKind = "completion" | "data";
@@ -1721,6 +1727,20 @@ type RootFallbackHandlerResult<
     | Promise<
         DataFactUnion<Command, Variants> | FailureFactUnion<Command, Failures>
       >;
+}[Kind];
+
+type RootFallbackContractResult<
+  Command extends string,
+  Variants extends DataVariantDefinitions,
+  Failures extends FailureVariantDefinitions,
+  Kind extends RootFallbackKind,
+> = {
+  readonly completion:
+    | CompletionFact<Command>
+    | FailureFactUnion<Command, Failures>;
+  readonly data:
+    | DataFactUnion<Command, Variants>
+    | FailureFactUnion<Command, Failures>;
 }[Kind];
 
 type DataOrCompletionRootCliDefinition<
@@ -2080,7 +2100,7 @@ export interface DefineCli<Dependencies> {
     Root,
     Dependencies,
     RawFieldInput<Fields>,
-    DataFactUnion<Root, Variants> | FailureFactUnion<Root, Failures>,
+    RootFallbackContractResult<Root, Variants, Failures, Kind>,
     "rootCommand"
   >;
 }

@@ -4,11 +4,14 @@ import {
   outputCapability,
   text,
   type CliContract,
+  type CliContractResult,
+  type CompletionFact,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
 const emptyInput = z.object({});
 const textInput = z.object({ name: z.string().optional() });
+const countInput = z.object({ count: z.number() });
 
 const define = defineCli<Readonly<{}>>();
 const contract = define({
@@ -32,6 +35,49 @@ const contract = define({
 
 const publicContract: CliContract = contract;
 void publicContract;
+
+const textCompletionWithoutField = defineCli()({
+  root: "emptyTextCompletion",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "text" }),
+  usageFailureExitCode: 64,
+  commands: {
+    emptyTextCompletion: {
+      kind: "rootCommand",
+      name: "empty-text-completion",
+      description: "无字段的文本 completion",
+      input: emptyInput,
+      success: { kind: "completion", text: () => text.silent },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+declare const textCompletionWithoutFieldResult: CliContractResult<
+  typeof textCompletionWithoutField
+>;
+const textCompletionResult: CompletionFact<"emptyTextCompletion"> =
+  textCompletionWithoutFieldResult;
+void textCompletionResult;
+
+defineCli()({
+  root: "missingRawField",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "text" }),
+  usageFailureExitCode: 64,
+  commands: {
+    missingRawField: {
+      kind: "rootCommand",
+      name: "missing-raw-field",
+      description: "缺少 raw 字段",
+      // @ts-expect-error 未声明字段时输入模式不能要求 raw count。
+      input: countInput,
+      success: { kind: "completion", text: () => text.silent },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
 
 defineCli()({
   root: "missingCompletion",
