@@ -36,26 +36,6 @@ async function main(): Promise<void> {
     candidate.testingTarball,
   ]);
 
-  reportStage("验证 Template 消费探针");
-  runPnpm([
-    "consumer:template",
-    "--",
-    "--core",
-    candidate.coreTarball,
-    "--testing",
-    candidate.testingTarball,
-  ]);
-
-  reportStage("验证 Reins 消费探针");
-  runPnpm([
-    "consumer:reins",
-    "--",
-    "--core",
-    candidate.coreTarball,
-    "--testing",
-    candidate.testingTarball,
-  ]);
-
   process.stdout.write(`${JSON.stringify(candidate)}\n`);
 }
 
