@@ -8,6 +8,10 @@ import {
 const cliInvocationType = Symbol("CliInvocation.type");
 const invocationContracts = new WeakMap<object, object>();
 
+/**
+ * 已通过调用语法检查的原始输入；契约模式尚未验证、转换或填充默认值。
+ * 业务处理器应使用执行内核交付的已验证输入，而不是直接消费此处的 input。
+ */
 export interface ParsedInvocation<Command extends string, Input = unknown> {
   readonly kind: "parsed";
   readonly command: Command;
@@ -189,6 +193,7 @@ export interface UsageFailure<Command extends string> {
   readonly usage: CommandUsage<Command>;
 }
 
+/** 解析器签发的闭合调用事实，只能交还产生它的同一个契约执行；不要自行拼装。 */
 export type CliInvocation<Contract extends CliContract = CliContract> =
   UnboundCliInvocation<Contract> & {
     readonly [cliInvocationType]: Contract;
@@ -200,6 +205,14 @@ type UnboundCliInvocation<Contract extends CliContract> =
   | VersionRequest<CliContractRoot<Contract>>
   | UsageFailure<CliContractRoot<Contract>>;
 
+/**
+ * 将宿主提供的参数 token 同步、无副作用地解析为同一契约的调用事实。
+ * 参数从命令路径或字段开始，不包含 Node 可执行文件和脚本路径；来源与 shell 拆词由宿主负责。
+ *
+ * 解析器检查调用语法与用法约束，保留帮助、版本和用法失败等闭合分支；
+ * 已解析的 raw input 尚未经过契约模式验证。它不读取进程或环境，不执行 handler，也不写输出。
+ * 将返回值交给 {@link executeCli}，由执行内核完成后续验证与投影。
+ */
 export function parseCliInvocation<const Contract extends CliContract>(
   cliContract: Contract,
   argv: readonly string[],

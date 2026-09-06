@@ -24,6 +24,7 @@ import {
 import { copySingleLineText, isSingleLineText } from "#/description";
 import { deepFreeze } from "#/json-value";
 import type {
+  AtomicTextPresenter,
   CompletionFact,
   CompletionTextPresenter,
   CompletionOutcome,
@@ -37,6 +38,7 @@ import type {
   TextLine,
   TextLines,
   StreamOutcome,
+  StreamTextPresenter,
   StreamRecordDefinitions,
   StreamRecordFactUnion,
   StreamSuccessFact,
@@ -104,11 +106,30 @@ export interface HelpCapability {
   readonly kind: "helpCapability";
   readonly longOption: "--help";
   readonly shortAlias?: "-h";
+  readonly headings?: HelpHeadings;
   readonly [cliContractType]: "help";
 }
 
+/**
+ * 根级帮助中既定段落的可选标题。未声明标题时仍保留对应机械内容和缩进，
+ * 不会由核心补写默认文案。
+ */
+export interface HelpHeadings {
+  readonly usage?: string;
+  readonly commands?: string;
+  readonly arguments?: string;
+  readonly options?: string;
+  readonly constraints?: string;
+  readonly supplement?: string;
+}
+
+/**
+ * 根契约一次装配并自动投影到整棵命令树的帮助能力配置。标题只属于固定段落，
+ * 不能由单个命令覆盖或用作自定义帮助模板。
+ */
 export interface HelpCapabilityDefinition {
   readonly shortAlias?: "-h";
+  readonly headings?: HelpHeadings;
 }
 
 export interface VersionCapability {
@@ -542,13 +563,15 @@ type RawFieldInputContract<
         }>
       >;
 
-type InvalidDataVariantNames<Variants extends DataVariantDefinitions> = {
+type InvalidVariantNames<Variants> = {
   [Variant in keyof Variants & string]: IsLowerCamelCase<Variant> extends true
     ? never
     : Variant;
 }[keyof Variants & string];
 
-type DataVariantNameContract<Variants extends DataVariantDefinitions> =
+type InvalidDataVariantNames<Variants> = InvalidVariantNames<Variants>;
+
+type DataVariantNameContract<Variants> =
   InvalidDataVariantNames<Variants> extends never
     ? unknown
     : ContractTypeError<
@@ -558,13 +581,9 @@ type DataVariantNameContract<Variants extends DataVariantDefinitions> =
         }>
       >;
 
-type InvalidFailureVariantNames<Failures extends FailureVariantDefinitions> = {
-  [Variant in keyof Failures & string]: IsLowerCamelCase<Variant> extends true
-    ? never
-    : Variant;
-}[keyof Failures & string];
+type InvalidFailureVariantNames<Failures> = InvalidVariantNames<Failures>;
 
-type FailureVariantNameContract<Failures extends FailureVariantDefinitions> =
+type FailureVariantNameContract<Failures> =
   InvalidFailureVariantNames<Failures> extends never
     ? unknown
     : ContractTypeError<
@@ -612,6 +631,174 @@ export interface StreamHandlerContext<
     FailureOutcome<Command, Failures>;
 }
 
+type CompletionSuccessDefinition<
+  Command extends string,
+  TextEnabled extends boolean,
+> = TextEnabled extends true
+  ?
+      | Readonly<{
+          readonly kind: "completion";
+          readonly text: CompletionTextPresenter;
+        }>
+      | (Readonly<{ readonly kind: "completion" }> &
+          ContractTypeError<
+            "missingCompletionTextPresenter",
+            Readonly<{
+              readonly command: Command;
+              readonly location: "completion";
+              readonly missing: "text";
+            }>
+          >)
+  : TextEnabled extends false
+    ? Readonly<{ readonly kind: "completion"; readonly text?: never }>
+    : Readonly<{
+        readonly kind: "completion";
+        readonly text?: CompletionTextPresenter;
+      }>;
+
+type MissingVariantTextPresenters<Variants> = {
+  [Variant in keyof Variants & string]: Variants[Variant] extends Readonly<{
+    readonly text: unknown;
+  }>
+    ? never
+    : Variant;
+}[keyof Variants & string];
+
+type NamedVariantTextContract<
+  Command extends string,
+  Code extends string,
+  Location extends "data" | "failure" | "record",
+  Variants,
+  TextEnabled extends boolean,
+  TextDisabledDefinition,
+> = [TextEnabled] extends [true]
+  ? MissingVariantTextPresenters<Variants> extends never
+    ? unknown
+    : ContractTypeError<
+        Code,
+        Readonly<{
+          readonly command: Command;
+          readonly location: Location;
+          readonly variant: MissingVariantTextPresenters<Variants>;
+          readonly missing: "text";
+        }>
+      >
+  : [TextEnabled] extends [false]
+    ? TextDisabledDefinition
+    : unknown;
+
+type DataVariantTextContract<
+  Command extends string,
+  Variants,
+  TextEnabled extends boolean,
+> = NamedVariantTextContract<
+  Command,
+  "missingDataVariantTextPresenter",
+  "data",
+  Variants,
+  TextEnabled,
+  DataVariantDefinitions<false>
+>;
+
+type AtomicTextPresenterContract<Payload, TextEnabled extends boolean> = [
+  TextEnabled,
+] extends [true]
+  ? Readonly<{ readonly text: AtomicTextPresenter<Payload> }>
+  : [TextEnabled] extends [false]
+    ? Readonly<{ readonly text?: never }>
+    : Readonly<{ readonly text?: AtomicTextPresenter<Payload> }>;
+
+type AtomicVariantDefinitionForSchema<
+  Schema extends ContractSchema,
+  TextEnabled extends boolean,
+> = Readonly<{
+  readonly description: string;
+  readonly schema: Schema;
+  readonly exitCode: number;
+}> &
+  AtomicTextPresenterContract<ContractSchemaOutput<Schema>, TextEnabled>;
+
+type VariantSchemaMap = Record<string, ContractSchema>;
+
+type DataVariantDefinitionsForSchemas<
+  Schemas extends VariantSchemaMap,
+  TextEnabled extends boolean,
+> = Readonly<{
+  readonly [Variant in keyof Schemas]: AtomicVariantDefinitionForSchema<
+    Schemas[Variant],
+    TextEnabled
+  >;
+}>;
+
+type FailureVariantDefinitionsForSchemas<
+  Schemas extends VariantSchemaMap,
+  TextEnabled extends boolean,
+> = Readonly<{
+  readonly [Variant in keyof Schemas]: AtomicVariantDefinitionForSchema<
+    Schemas[Variant],
+    TextEnabled
+  >;
+}>;
+
+type FailureVariantTextContract<
+  Command extends string,
+  Failures,
+  TextEnabled extends boolean,
+> = NamedVariantTextContract<
+  Command,
+  "missingFailureVariantTextPresenter",
+  "failure",
+  Failures,
+  TextEnabled,
+  FailureVariantDefinitions<false>
+>;
+
+type StreamRecordTextContract<
+  Command extends string,
+  Records,
+  TextEnabled extends boolean,
+> = NamedVariantTextContract<
+  Command,
+  "missingStreamRecordTextPresenter",
+  "record",
+  Records,
+  TextEnabled,
+  StreamRecordDefinitions<false>
+>;
+
+type StreamRecordNameContract<Records> =
+  InvalidVariantNames<Records> extends never
+    ? unknown
+    : ContractTypeError<
+        "streamRecordMustBeLowerCamelCase",
+        Readonly<{
+          readonly records: InvalidVariantNames<Records>;
+        }>
+      >;
+
+type StreamRecordDefinitionForSchema<
+  Schema extends ContractSchema,
+  TextEnabled extends boolean,
+> = Readonly<{
+  readonly description: string;
+  readonly schema: Schema;
+}> &
+  ([TextEnabled] extends [false]
+    ? Readonly<{ readonly text?: never }>
+    : Readonly<{
+        readonly text?: StreamTextPresenter<ContractSchemaOutput<Schema>>;
+      }>);
+
+type StreamRecordDefinitionsForSchemas<
+  Schemas extends VariantSchemaMap,
+  TextEnabled extends boolean,
+> = Readonly<{
+  readonly [Variant in keyof Schemas]: StreamRecordDefinitionForSchema<
+    Schemas[Variant],
+    TextEnabled
+  >;
+}>;
+
 export interface CompletionRootCommandDefinition<
   Command extends string,
   Dependencies,
@@ -629,13 +816,10 @@ export interface CompletionRootCommandDefinition<
     FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
     FieldIdentityContract<Fields>;
   readonly input: InputSchema & RawFieldInputContract<Fields, InputSchema>;
-  readonly success: Readonly<{ readonly kind: "completion" }> &
-    (TextEnabled extends true
-      ? Readonly<{ readonly text: CompletionTextPresenter }>
-      : TextEnabled extends false
-        ? Readonly<{ readonly text?: never }>
-        : Readonly<{ readonly text?: CompletionTextPresenter }>);
-  readonly failures: Failures & FailureVariantNameContract<Failures>;
+  readonly success: CompletionSuccessDefinition<Command, TextEnabled>;
+  readonly failures: Failures &
+    FailureVariantNameContract<Failures> &
+    FailureVariantTextContract<Command, Failures, TextEnabled>;
   readonly handler: (
     context: CompletionHandlerContext<
       Command,
@@ -707,7 +891,9 @@ export interface StreamRootCommandDefinition<
   readonly input: InputSchema & RawFieldInputContract<Fields, InputSchema>;
   readonly success: Readonly<{
     readonly kind: "stream";
-    readonly records: Records & StreamRecordDefinitions<TextEnabled>;
+    readonly records: Records &
+      StreamRecordDefinitions<TextEnabled> &
+      StreamRecordNameContract<Records>;
   }> &
     (TextEnabled extends true
       ? Readonly<{ readonly text: CompletionTextPresenter }>
@@ -1235,6 +1421,7 @@ export interface CliGrammar<
     readonly help: Readonly<{
       readonly longOption: "--help";
       readonly shortAlias?: "-h";
+      readonly headings?: HelpHeadings;
     }>;
     readonly version?: Readonly<{
       readonly longOption: "--version";
@@ -1491,48 +1678,6 @@ export type CliContractRoot<Contract> =
 
 type HasTextPresenter<Value> =
   Value extends Readonly<{ readonly text: unknown }> ? true : false;
-type AllTextPresenters<Definitions> =
-  Exclude<
-    {
-      [Key in keyof Definitions]: HasTextPresenter<Definitions[Key]>;
-    }[keyof Definitions],
-    true
-  > extends never
-    ? true
-    : false;
-type MissingHierarchyTextCommands<Commands> = {
-  [Command in keyof Commands]: Commands[Command] extends Readonly<{
-    readonly kind: "command";
-    readonly success: infer Success;
-    readonly failures: infer Failures;
-  }>
-    ? Success extends Readonly<{ readonly kind: "completion" }>
-      ? HasTextPresenter<Success> extends true
-        ? AllTextPresenters<Failures> extends true
-          ? never
-          : Command
-        : Command
-      : Success extends Readonly<{ readonly variants: infer Variants }>
-        ? AllTextPresenters<Variants> extends true
-          ? AllTextPresenters<Failures> extends true
-            ? never
-            : Command
-          : Command
-        : Success extends Readonly<{
-              readonly kind: "stream";
-              readonly records: infer Records;
-            }>
-          ? HasTextPresenter<Success> extends true
-            ? AllTextPresenters<Records> extends true
-              ? AllTextPresenters<Failures> extends true
-                ? never
-                : Command
-              : Command
-            : Command
-          : Command
-    : never;
-}[keyof Commands];
-
 type HasAnyTextPresenter<Definitions> = true extends {
   [Key in keyof Definitions]: HasTextPresenter<Definitions[Key]>;
 }[keyof Definitions]
@@ -1595,19 +1740,61 @@ type HierarchyUsageValidation<Commands> =
         >,
       ];
 
+type HierarchyCommandTextContract<Command extends string, Definition> =
+  Definition extends Readonly<{
+    readonly success: infer Success;
+    readonly failures: infer Failures;
+  }>
+    ? Success extends Readonly<{ readonly kind: "completion" }>
+      ? FailureVariantTextContract<Command, Failures, true> &
+          (HasTextPresenter<Success> extends true
+            ? unknown
+            : ContractTypeError<
+                "missingCompletionTextPresenter",
+                Readonly<{
+                  readonly command: Command;
+                  readonly location: "completion";
+                  readonly missing: "text";
+                }>
+              >)
+      : Success extends Readonly<{
+            readonly kind: "data";
+            readonly variants: infer Variants;
+          }>
+        ? DataVariantTextContract<Command, Variants, true> &
+            FailureVariantTextContract<Command, Failures, true>
+        : Success extends Readonly<{
+              readonly kind: "stream";
+              readonly records: infer Records;
+            }>
+          ? StreamRecordTextContract<Command, Records, true> &
+              FailureVariantTextContract<Command, Failures, true> &
+              (HasTextPresenter<Success> extends true
+                ? unknown
+                : ContractTypeError<
+                    "missingStreamSuccessTextPresenter",
+                    Readonly<{
+                      readonly command: Command;
+                      readonly location: "streamSuccess";
+                      readonly missing: "text";
+                    }>
+                  >)
+          : unknown
+    : unknown;
+
+type HierarchyTextContracts<Commands> = Readonly<{
+  [Command in keyof Commands & string]: HierarchyCommandTextContract<
+    Command,
+    Commands[Command]
+  >;
+}>;
+
 type HierarchyOutputValidation<Commands, Output extends OutputCapability> =
   Output extends OutputCapability<infer Formats>
     ? [Formats] extends [readonly ["structured", "text"]]
-      ? MissingHierarchyTextCommands<Commands> extends never
+      ? Commands extends HierarchyTextContracts<Commands>
         ? HierarchyUsageValidation<Commands>
-        : readonly [
-            ContractTypeError<
-              "missingHierarchyTextPresenter",
-              Readonly<{
-                readonly commands: MissingHierarchyTextCommands<Commands>;
-              }>
-            >,
-          ]
+        : readonly [never]
       : [Formats] extends [readonly ["structured"]]
         ? UnexpectedHierarchyTextCommands<Commands> extends never
           ? HierarchyUsageValidation<Commands>
@@ -1622,7 +1809,295 @@ type HierarchyOutputValidation<Commands, Output extends OutputCapability> =
         : HierarchyUsageValidation<Commands>
     : HierarchyUsageValidation<Commands>;
 
+type ValidationIntersection<Validation extends readonly unknown[]> =
+  Validation extends readonly []
+    ? unknown
+    : Validation extends readonly [infer Error]
+      ? Error
+      : never;
+
+type HierarchyContract<Commands, Output extends OutputCapability> = [
+  TextEnabledForOutput<Output>,
+] extends [true]
+  ? Readonly<{ readonly commands: HierarchyTextContracts<Commands> }> &
+      ValidationIntersection<HierarchyUsageValidation<Commands>>
+  : ValidationIntersection<HierarchyOutputValidation<Commands, Output>>;
+
+type TextEnabledForOutput<Output extends OutputCapability> =
+  Output extends OutputCapability<infer Formats>
+    ? [Formats] extends [never]
+      ? boolean
+      : [Formats] extends [readonly ["structured", "text"]]
+        ? true
+        : [Formats] extends [readonly ["structured"]]
+          ? false
+          : boolean
+    : boolean;
+
+type EmptyRawObject = Readonly<Record<never, never>>;
+
+type DistributedInputStringKeys<Input> = Input extends unknown
+  ? Extract<keyof Input, string>
+  : never;
+
+type MissingRootFallbackFieldsContract<InputSchema extends ContractSchema> =
+  ContractTypeError<
+    "fieldInputMustAcceptRawValue",
+    Readonly<{
+      readonly fields: DistributedInputStringKeys<
+        ContractSchemaInput<InputSchema>
+      >;
+    }>
+  >;
+
+type RootFallbackRawFieldInputContract<
+  Fields extends FieldDefinitions,
+  InputSchema extends ContractSchema,
+> = FieldDefinitions extends Fields
+  ? EmptyRawObject extends ContractSchemaInput<InputSchema>
+    ? unknown
+    : MissingRootFallbackFieldsContract<InputSchema>
+  : RawFieldInputContract<Fields, InputSchema>;
+
+type RootFallbackKind = "completion" | "data" | "stream";
+
+type RootFallbackHandlerContext<
+  Command extends string,
+  Dependencies,
+  InputSchema extends ContractSchema,
+  Variants extends DataVariantDefinitions,
+  Records extends StreamRecordDefinitions,
+  Failures extends FailureVariantDefinitions,
+  Kind extends RootFallbackKind,
+> = {
+  readonly completion: CompletionHandlerContext<
+    Command,
+    Dependencies,
+    Failures,
+    ContractSchemaOutput<InputSchema>
+  >;
+  readonly data: DataHandlerContext<
+    Command,
+    Dependencies,
+    ContractSchemaOutput<InputSchema>,
+    Variants,
+    Failures
+  >;
+  readonly stream: StreamHandlerContext<
+    Command,
+    Dependencies,
+    ContractSchemaOutput<InputSchema>,
+    Records,
+    Failures
+  >;
+}[Kind];
+
+type RootFallbackHandlerResult<
+  Command extends string,
+  Variants extends DataVariantDefinitions,
+  Records extends StreamRecordDefinitions,
+  Failures extends FailureVariantDefinitions,
+  Kind extends RootFallbackKind,
+> = {
+  readonly completion:
+    | CompletionFact<Command>
+    | FailureFactUnion<Command, Failures>
+    | Promise<CompletionFact<Command> | FailureFactUnion<Command, Failures>>;
+  readonly data:
+    | DataFactUnion<Command, Variants>
+    | FailureFactUnion<Command, Failures>
+    | Promise<
+        DataFactUnion<Command, Variants> | FailureFactUnion<Command, Failures>
+      >;
+  readonly stream: AsyncGenerator<
+    StreamRecordFactUnion<Command, Records>,
+    StreamSuccessFact<Command> | FailureFactUnion<Command, Failures>,
+    void
+  >;
+}[Kind];
+
+type RootFallbackContractResult<
+  Command extends string,
+  Variants extends DataVariantDefinitions,
+  Failures extends FailureVariantDefinitions,
+  Kind extends RootFallbackKind,
+> = {
+  readonly completion:
+    | CompletionFact<Command>
+    | FailureFactUnion<Command, Failures>;
+  readonly data:
+    | DataFactUnion<Command, Variants>
+    | FailureFactUnion<Command, Failures>;
+  readonly stream:
+    | StreamSuccessFact<Command>
+    | FailureFactUnion<Command, Failures>;
+}[Kind];
+
+type RootFallbackCliDefinition<
+  Root extends string,
+  _Dependencies,
+  Fields extends FieldDefinitions,
+  InputSchema extends ContractSchema,
+  VariantSchemas extends VariantSchemaMap,
+  Variants,
+  RecordSchemas extends VariantSchemaMap,
+  Records,
+  FailureSchemas extends VariantSchemaMap,
+  Failures,
+  TextEnabled extends boolean,
+> = RootCliDefinitionBase<Root> &
+  Readonly<{
+    readonly commands: Readonly<{
+      readonly [Command in Root]: Readonly<{
+        readonly kind: "rootCommand";
+        readonly name: string;
+        readonly description: string;
+        readonly helpSupplement?: TextLines;
+        readonly usageConstraints?: readonly UsageConstraint<Fields>[];
+      }> &
+        Readonly<{
+          readonly input: InputSchema &
+            RootFallbackRawFieldInputContract<Fields, InputSchema>;
+          readonly failures: Failures &
+            FailureVariantDefinitionsForSchemas<FailureSchemas, boolean> &
+            FailureVariantNameContract<Failures> &
+            FailureVariantTextContract<Command, Failures, TextEnabled>;
+        }> &
+        (
+          | Readonly<{
+              readonly fields: CheckedFieldDefinitions<Fields> &
+                FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
+                FieldIdentityContract<Fields>;
+              readonly success: Readonly<{
+                readonly kind: "data";
+                readonly variants: Variants &
+                  DataVariantDefinitionsForSchemas<VariantSchemas, boolean> &
+                  DataVariantNameContract<Variants> &
+                  DataVariantTextContract<Command, Variants, TextEnabled>;
+              }>;
+            }>
+          | Readonly<{
+              readonly fields?: CheckedFieldDefinitions<Fields> &
+                FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
+                FieldIdentityContract<Fields>;
+              readonly success: CompletionSuccessDefinition<Root, TextEnabled>;
+            }>
+          | Readonly<{
+              readonly fields?: CheckedFieldDefinitions<Fields> &
+                FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
+                FieldIdentityContract<Fields>;
+              readonly success:
+                | (Readonly<{
+                    readonly kind: "stream";
+                    readonly records: Records &
+                      StreamRecordDefinitionsForSchemas<
+                        RecordSchemas,
+                        boolean
+                      > &
+                      StreamRecordNameContract<Records>;
+                    readonly text: CompletionTextPresenter;
+                  }> &
+                    StreamRecordTextContract<Command, Records, TextEnabled>)
+                | (Readonly<{
+                    readonly kind: "stream";
+                    readonly records: Records &
+                      StreamRecordDefinitionsForSchemas<
+                        RecordSchemas,
+                        boolean
+                      > &
+                      StreamRecordNameContract<Records>;
+                    readonly text?: never;
+                  }> &
+                    ([TextEnabled] extends [true]
+                      ? ContractTypeError<
+                          "missingStreamSuccessTextPresenter",
+                          Readonly<{
+                            readonly command: Command;
+                            readonly location: "streamSuccess";
+                            readonly missing: "text";
+                          }>
+                        >
+                      : unknown));
+            }>
+        );
+    }>;
+  }>;
+
+type RootFallbackHandlerDefinition<
+  Root extends string,
+  Dependencies,
+  InputSchema extends ContractSchema,
+  Variants extends DataVariantDefinitions,
+  Records extends StreamRecordDefinitions,
+  Failures extends FailureVariantDefinitions,
+  Kind extends RootFallbackKind,
+> = Readonly<{
+  readonly commands: Readonly<{
+    readonly [Command in Root]: Readonly<{
+      readonly success: Readonly<{ readonly kind: Kind }>;
+      readonly handler: (
+        context: RootFallbackHandlerContext<
+          Command,
+          Dependencies,
+          InputSchema,
+          Variants,
+          Records,
+          Failures,
+          NoInfer<Kind>
+        >,
+      ) => RootFallbackHandlerResult<
+        Command,
+        Variants,
+        Records,
+        Failures,
+        NoInfer<Kind>
+      >;
+    }>;
+  }>;
+}>;
+
+type RootFallbackNodeDefinition<
+  Root extends string,
+  Dependencies,
+  Fields extends FieldDefinitions,
+  InputSchema extends ContractSchema,
+  VariantSchemas extends VariantSchemaMap,
+  Variants,
+  RecordSchemas extends VariantSchemaMap,
+  Records,
+  FailureSchemas extends VariantSchemaMap,
+  Failures,
+  TextEnabled extends boolean,
+  Kind extends RootFallbackKind,
+> = (RootFallbackCliDefinition<
+  Root,
+  Dependencies,
+  Fields,
+  InputSchema,
+  VariantSchemas,
+  Variants,
+  RecordSchemas,
+  Records,
+  FailureSchemas,
+  Failures,
+  TextEnabled
+> &
+  RootFallbackHandlerDefinition<
+    Root,
+    Dependencies,
+    InputSchema,
+    DataVariantDefinitionsForSchemas<VariantSchemas, boolean>,
+    StreamRecordDefinitionsForSchemas<RecordSchemas, boolean>,
+    FailureVariantDefinitionsForSchemas<FailureSchemas, boolean>,
+    Kind
+  >)["commands"][Root];
+
 export interface DefineCli<Dependencies> {
+  /**
+   * 为命令组创建可执行后代，再把返回记录展开到同一个 `commands` 对象中交给
+   * `defineCli()` 装配。后代只声明自己的输入和结果；根级 output 的全树约束在最终
+   * 装配处统一判定。
+   */
   readonly command: <const Command extends string>(
     command: Command,
   ) => DefineCommand<Command, Dependencies>;
@@ -1676,6 +2151,11 @@ export interface DefineCli<Dependencies> {
     "rootCommand"
   >;
 
+  /**
+   * 使用 `defineCli().command("命令")({...})` 组合可执行后代，再在此处以根级
+   * `output` 一次装配整棵树。启用 text 时，所有后代结果位置的 presenter 由最终根
+   * 装配统一约束，无需在叶命令重复声明输出能力。
+   */
   <
     const Root extends string,
     const Commands extends Readonly<Record<string, CommandNodeDefinition>>,
@@ -1695,7 +2175,11 @@ export interface DefineCli<Dependencies> {
 
   <
     const Root extends string,
-    const Failures extends FailureVariantDefinitions<true>,
+    const FailureSchemas extends VariantSchemaMap,
+    const Failures extends FailureVariantDefinitionsForSchemas<
+      FailureSchemas,
+      true
+    >,
   >(
     definition: CompletionRootCliDefinition<
       Root,
@@ -1720,7 +2204,11 @@ export interface DefineCli<Dependencies> {
     const Root extends string,
     const Fields extends FieldDefinitions,
     InputSchema extends ContractSchema,
-    const Failures extends FailureVariantDefinitions<true>,
+    const FailureSchemas extends VariantSchemaMap,
+    const Failures extends FailureVariantDefinitionsForSchemas<
+      FailureSchemas,
+      true
+    >,
   >(
     definition: CompletionRootCliDefinition<
       Root,
@@ -1748,8 +2236,16 @@ export interface DefineCli<Dependencies> {
     const Root extends string,
     const Fields extends FieldDefinitions,
     InputSchema extends ContractSchema,
-    const Variants extends DataVariantDefinitions<true>,
-    const Failures extends FailureVariantDefinitions<true>,
+    const VariantSchemas extends VariantSchemaMap,
+    const Variants extends DataVariantDefinitionsForSchemas<
+      VariantSchemas,
+      true
+    >,
+    const FailureSchemas extends VariantSchemaMap,
+    const Failures extends FailureVariantDefinitionsForSchemas<
+      FailureSchemas,
+      true
+    >,
   >(
     definition: DataRootCliDefinition<
       Root,
@@ -1821,8 +2317,20 @@ export interface DefineCli<Dependencies> {
     "rootCommand"
   >;
 
-  <const Root extends string, const Failures extends FailureVariantDefinitions>(
-    definition: CompletionRootCliDefinition<Root, Dependencies, Failures>,
+  <
+    const Root extends string,
+    const Failures extends FailureVariantDefinitions,
+    const Output extends OutputCapability,
+  >(
+    definition: CompletionRootCliDefinition<
+      Root,
+      Dependencies,
+      Failures,
+      Readonly<Record<never, never>>,
+      ContractSchema<EmptyCliInput>,
+      TextEnabledForOutput<Output>
+    > &
+      Readonly<{ readonly output: Output }>,
   ): CliContract<
     Root,
     Dependencies,
@@ -1836,15 +2344,18 @@ export interface DefineCli<Dependencies> {
     const Fields extends FieldDefinitions,
     InputSchema extends ContractSchema,
     const Failures extends FailureVariantDefinitions,
+    const Output extends OutputCapability,
   >(
     definition: CompletionRootCliDefinition<
       Root,
       Dependencies,
       Failures,
       Fields,
-      InputSchema
+      InputSchema,
+      TextEnabledForOutput<Output>
     > &
       Readonly<{
+        readonly output: Output;
         readonly commands: Readonly<{
           readonly [Command in Root]: Readonly<{ readonly fields: Fields }>;
         }>;
@@ -1861,22 +2372,54 @@ export interface DefineCli<Dependencies> {
     const Root extends string,
     const Fields extends FieldDefinitions,
     InputSchema extends ContractSchema,
-    const Variants extends DataVariantDefinitions,
-    const Failures extends FailureVariantDefinitions,
+    const VariantSchemas extends VariantSchemaMap,
+    const Variants,
+    const RecordSchemas extends VariantSchemaMap,
+    const Records,
+    const FailureSchemas extends VariantSchemaMap,
+    const Failures,
+    const Output extends OutputCapability,
+    const Kind extends RootFallbackKind,
+    const Commands,
   >(
-    definition: DataRootCliDefinition<
-      Root,
-      Dependencies,
-      Fields,
-      InputSchema,
-      Variants,
-      Failures
-    >,
+    definition: RootCliDefinitionBase<Root> &
+      Readonly<{
+        readonly output: Output;
+        readonly commands: Commands &
+          Readonly<
+            Record<
+              Root,
+              | RootFallbackNodeDefinition<
+                  Root,
+                  Dependencies,
+                  Fields,
+                  InputSchema,
+                  VariantSchemas,
+                  Variants,
+                  RecordSchemas,
+                  Records,
+                  FailureSchemas,
+                  Failures,
+                  TextEnabledForOutput<Output>,
+                  Kind
+                >
+              | RootGroupDefinition
+            >
+          >;
+      }> &
+      (Commands extends Readonly<Record<Root, { readonly kind: "rootGroup" }>>
+        ? HierarchyCliDefinition<Root> & HierarchyContract<Commands, Output>
+        : unknown),
   ): CliContract<
     Root,
     Dependencies,
     RawFieldInput<Fields>,
-    DataFactUnion<Root, Variants> | FailureFactUnion<Root, Failures>,
+    RootFallbackContractResult<
+      Root,
+      DataVariantDefinitionsForSchemas<VariantSchemas, boolean>,
+      FailureVariantDefinitionsForSchemas<FailureSchemas, boolean>,
+      Kind
+    >,
     "rootCommand"
   >;
 }
@@ -1959,7 +2502,70 @@ type UsageConstraintProperty<Constraints> =
     ? Readonly<{ readonly usageConstraints: Constraints }>
     : unknown;
 
+type ActualFailureDefinitions<Failures> =
+  Failures extends FailureVariantDefinitions ? Failures : never;
+
+type RootFallbackFieldsProperty<
+  Fields extends FieldDefinitions,
+  InputSchema extends ContractSchema,
+> =
+  | Readonly<{
+      readonly fields: CheckedFieldDefinitions<Fields> &
+        FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
+        FieldIdentityContract<Fields>;
+      readonly success: Readonly<{ readonly kind: "data" | "stream" }>;
+    }>
+  | Readonly<{
+      readonly fields?: CheckedFieldDefinitions<Fields> &
+        FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
+        FieldIdentityContract<Fields>;
+      readonly success: Readonly<{ readonly kind: "completion" }>;
+    }>;
+
 export interface DefineCommand<Command extends string, Dependencies> {
+  <
+    const Definition extends object,
+    const Parent extends string,
+    const Fields extends FieldDefinitions,
+    InputSchema extends ContractSchema,
+    const VariantSchemas extends VariantSchemaMap,
+    const Variants,
+    const RecordSchemas extends VariantSchemaMap,
+    const Records,
+    const FailureSchemas extends VariantSchemaMap,
+    const Failures,
+    const Kind extends RootFallbackKind,
+  >(
+    definition: Definition &
+      Omit<
+        RootFallbackCliDefinition<
+          Command,
+          Dependencies,
+          Fields,
+          InputSchema,
+          VariantSchemas,
+          Variants,
+          RecordSchemas,
+          Records,
+          FailureSchemas,
+          Failures,
+          boolean
+        >["commands"][Command],
+        "kind" | "fields"
+      > &
+      RootFallbackFieldsProperty<Fields, InputSchema> &
+      RootFallbackHandlerDefinition<
+        Command,
+        Dependencies,
+        InputSchema,
+        DataVariantDefinitionsForSchemas<VariantSchemas, boolean>,
+        StreamRecordDefinitionsForSchemas<RecordSchemas, boolean>,
+        ActualFailureDefinitions<Failures>,
+        Kind
+      >["commands"][Command] &
+      Omit<HierarchyCommandFacts<Parent>, typeof executableCommandType>,
+  ): Readonly<Record<Command, Definition & HierarchyCommandFacts<Parent>>>;
+
   <
     const Definition extends object,
     const Parent extends string,
@@ -2216,6 +2822,10 @@ type RuntimeCliDefinition = RootCliDefinitionBase<string> &
     readonly commands: Readonly<Record<string, RuntimeCommandDefinition>>;
   }>;
 
+/**
+ * 显式装配根级帮助，并机械覆盖根、命令组和可执行命令。`headings` 只为固定
+ * 段落提供可选标签；未提供时仍输出同一段落内容，不生成默认文案或逐命令模板。
+ */
 export function helpCapability(
   definition: HelpCapabilityDefinition = {},
 ): HelpCapability {
@@ -2228,11 +2838,39 @@ export function helpCapability(
     ...(definition.shortAlias === undefined
       ? {}
       : { shortAlias: definition.shortAlias }),
+    ...(definition.headings === undefined
+      ? {}
+      : { headings: copyHelpHeadings(definition.headings) }),
   }) as HelpCapability;
   helpCapabilities.add(capability);
   return capability;
 }
 
+function copyHelpHeadings(value: unknown): HelpHeadings {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new TypeError("帮助标题必须是对象");
+  }
+  const allowed = new Set([
+    "usage",
+    "commands",
+    "arguments",
+    "options",
+    "constraints",
+    "supplement",
+  ]);
+  const headings: Record<string, string> = {};
+  for (const [key, heading] of Object.entries(value)) {
+    if (!allowed.has(key)) throw new TypeError("帮助标题包含未知段落");
+    headings[key] = copySingleLineText(heading, `帮助标题 ${key}`);
+  }
+  return Object.freeze(headings);
+}
+
+/**
+ * 在根契约显式装配版本提前请求，并自动覆盖整棵命令树。`value` 与可选
+ * `description` 均由消费者拥有；核心只注册固定 spelling、投影帮助并写出 value，
+ * 不读取包元数据、不添加前缀或默认说明，也不把版本当作命令输入。
+ */
 export function versionCapability(
   definition: VersionCapabilityDefinition,
 ): VersionCapability {
@@ -2294,6 +2932,9 @@ function compileControls(definition: RuntimeCliDefinition) {
       ...(definition.help.shortAlias === undefined
         ? {}
         : { shortAlias: definition.help.shortAlias }),
+      ...(definition.help.headings === undefined
+        ? {}
+        : { headings: definition.help.headings }),
     },
     ...(version === undefined
       ? {}
@@ -2322,6 +2963,12 @@ function compileControls(definition: RuntimeCliDefinition) {
   });
 }
 
+/**
+ * 在根契约显式装配一次应用结果的输出格式能力，并自动覆盖整棵命令树。
+ * 它把 selector 与兼容 flag 保留为调用控制，不进入命令 input 或 handler；帮助、版本
+ * 与用法失败使用各自固定投影。`defaultFormat`、text 支持和兼容映射必须由消费者
+ * 显式选择，不能在命令节点另行装配格式或输出 profile。
+ */
 export function outputCapability<
   const Definition extends OutputCapabilityDefinition,
 >(definition: Definition): OutputCapability<OutputFormatsFor<Definition>> {
@@ -2343,6 +2990,10 @@ export function outputCapability<
   return capability;
 }
 
+/**
+ * 定义一个闭合 CLI 契约。根级 help 与 output 能力在此处一次装配，并据此约束根命令的结果投影；
+ * 动态声明仍会在定义期报告 `ContractDefinitionError`，不能以它替代静态可判定声明的类型检查。
+ */
 export function defineCli<Dependencies = undefined>(): DefineCli<Dependencies> {
   const define = ((definition: RuntimeCliDefinition) =>
     compileCli(definition)) as unknown as DefineCli<Dependencies>;
@@ -2441,7 +3092,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
   );
   const usage = deepFreeze({
     command: definition.root,
-    synopsis: createUsageSynopsis(command.name, fields, usageConstraints),
+    synopsis: createUsageSynopsis(command.name, fields),
   });
   const controls = compileControls(definition);
   const grammar = deepFreeze({
@@ -2674,7 +3325,6 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
       synopsis: createUsageSynopsis(
         commandPath(id, definition.commands),
         effectiveFields,
-        usageConstraints,
       ),
     });
     runtimeCommands[id] = Object.freeze({
@@ -3573,7 +4223,7 @@ function collectTextPresenterIssues(
       command,
       textEnabled,
       "completion",
-      success as Readonly<Record<string, unknown>>,
+      success,
       issues,
     );
   } else if (success.kind === "data") {
@@ -3582,7 +4232,7 @@ function collectTextPresenterIssues(
         command,
         textEnabled,
         "data",
-        definition as Readonly<Record<string, unknown>>,
+        definition,
         issues,
         variant,
       );
@@ -3592,7 +4242,7 @@ function collectTextPresenterIssues(
       command,
       textEnabled,
       "streamSuccess",
-      success as Readonly<Record<string, unknown>>,
+      success,
       issues,
     );
     for (const [variant, definition] of Object.entries(success.records)) {
@@ -3600,7 +4250,7 @@ function collectTextPresenterIssues(
         command,
         textEnabled,
         "record",
-        definition as Readonly<Record<string, unknown>>,
+        definition,
         issues,
         variant,
       );
@@ -3611,7 +4261,7 @@ function collectTextPresenterIssues(
       command,
       textEnabled,
       "failure",
-      definition as Readonly<Record<string, unknown>>,
+      definition,
       issues,
       variant,
     );
@@ -3804,26 +4454,21 @@ function compileSuccess(
 function createUsageSynopsis(
   commandName: string,
   fields: readonly FieldGrammar[],
-  usageConstraints: readonly UsageConstraintGrammar[] = [],
 ): string {
-  return [
-    commandName,
-    ...fields.map((field) => formatFieldUsage(field)),
-    ...usageConstraints.map(formatUsageConstraintSynopsis),
-  ].join(" ");
+  return [commandName, ...fields.map((field) => formatFieldUsage(field))].join(
+    " ",
+  );
 }
 
 export function formatFieldUsage(
   field: FieldGrammar,
   includeShortAlias = false,
 ): string {
-  const choices =
-    field.choices?.map((choice) => JSON.stringify(choice)).join("|") ?? "value";
   const value =
     field.kind === "positional"
-      ? `<${field.key}${field.choices === undefined ? "" : `:${choices}`}>`
+      ? `<${field.key}>`
       : field.kind === "variadicPositional"
-        ? `<${field.key}${field.choices === undefined ? "" : `:${choices}`}...>`
+        ? `<${field.key}...>`
         : field.kind === "flag"
           ? [
               field.longOption,
@@ -3839,21 +4484,9 @@ export function formatFieldUsage(
               ...(includeShortAlias && field.shortAlias !== undefined
                 ? [field.shortAlias]
                 : []),
-            ].join(", ")} <${choices}>`;
+            ].join(", ")} <${field.key}>`;
   if (field.kind === "repeatableOption") {
     return field.required ? `(${value})...` : `[${value}]...`;
   }
   return field.required ? value : `[${value}]`;
-}
-
-function formatUsageConstraintSynopsis(
-  constraint: UsageConstraintGrammar,
-): string {
-  if (constraint.kind === "requires")
-    return `[requires ${constraint.field} ${constraint.requires}]`;
-  if (constraint.kind === "exclusive")
-    return `[exclusive ${constraint.fields.join("|")}]`;
-  return `[forbidden ${constraint.values
-    .map(({ field, value }) => `${field}=${String(value)}`)
-    .join(",")}]`;
 }
