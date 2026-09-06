@@ -10,7 +10,7 @@ import {
   helpCapability,
   outputCapability,
   parseCliInvocation,
-  type CliInvocation,
+  type OutputCapability,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
@@ -37,6 +37,10 @@ function createCompletionCli(onRun: () => Promise<void> | void) {
   });
 }
 
+function createDynamicTextOutput(): OutputCapability {
+  return outputCapability({ defaultFormat: "text" });
+}
+
 void test("错配契约的 invocation 以闭合执行问题拒绝", async () => {
   let runCount = 0;
   const first = createCompletionCli(() => {
@@ -45,9 +49,7 @@ void test("错配契约的 invocation 以闭合执行问题拒绝", async () => 
   const second = createCompletionCli(() => {
     runCount += 1;
   });
-  const invocation = parseCliInvocation(first, []) as unknown as CliInvocation<
-    typeof second
-  >;
+  const invocation = parseCliInvocation(first, []);
   const writes: string[] = [];
 
   await assert.rejects(
@@ -307,7 +309,7 @@ void test("defineCli 在动态启用 text 时仍要求 completion presenter", ()
       defineCli()({
         root: "fixture",
         help: helpCapability(),
-        output: outputCapability({ defaultFormat: "text" } as never),
+        output: createDynamicTextOutput(),
         usageFailureExitCode: 64,
         commands: {
           fixture: {

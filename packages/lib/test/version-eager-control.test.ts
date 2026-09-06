@@ -198,7 +198,7 @@ void test("version 与 help 保持独立请求、终止身份且帮助只使用�
   assert.equal(version.kind, "version");
   assert.equal(help.kind, "help");
   assert.deepEqual(versionWrites, ["2.3.4\n"]);
-  assert.match(helpWrites.join(""), /--version, -V\t显示版本\n/);
+  assert.match(helpWrites.join(""), /  --version, -V\n    显示版本\n/);
   assert.doesNotMatch(versionWrites.join(""), /workspace|v2\.3\.4/);
 });
 
@@ -329,7 +329,7 @@ void test("version capability 复制并闭合单行 value 与 description", asyn
     },
   });
   assert.deepEqual(versionWrites, ["2.3.4\n"]);
-  assert.match(helpWrites.join(""), /--version\t显示版本\n/);
+  assert.match(helpWrites.join(""), /  --version\n    显示版本\n/);
   assert.doesNotMatch(helpWrites.join(""), /注入内容/);
 });
 

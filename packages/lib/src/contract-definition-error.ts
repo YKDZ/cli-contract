@@ -328,6 +328,10 @@ type FieldKind =
   | "valueOption"
   | "repeatableOption";
 
+/**
+ * 定义期发现动态声明违反契约时抛出的闭合问题集合，在执行 handler 前定位无效声明。
+ * 它服务作者修正契约，不代表命令调用的用法失败；核心不会自动将它写入 CLI 诊断输出。
+ */
 export class ContractDefinitionError extends Error {
   readonly issues: readonly [
     ContractDefinitionIssue,

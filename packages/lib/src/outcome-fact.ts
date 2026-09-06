@@ -87,11 +87,28 @@ function createTextFragment(value: string): TextFragment {
   return projection as TextFragment;
 }
 
-/** 受控文本投影构造器；执行内核拥有实际 framing。 */
+/** 在呈现器中显式构造文本投影；这里只验证文本值，实际通道路由与分帧由执行内核负责。 */
 export const text = Object.freeze({
+  /**
+   * 构造非空单行，拒绝 CR、LF、NUL；核心写出时追加恰好一个 LF。
+   * 适用于原子结果、流记录及流成功终态，呈现器应提供完整文本而不依赖核心补写文案。
+   */
   line: createTextLine,
+  /**
+   * 构造有序行组，至少一行非空；每行拒绝 CR、LF、NUL，空成员显式保留空白行。
+   * 核心用 LF 连接并追加一个终止 LF。用于原子结果、失败、流成功终态或帮助补充，
+   * 不用于流记录；例如 text.lines(["处理完成", "", "详细说明"])。
+   */
   lines: createTextLines,
+  /**
+   * 仅用于流记录中需要连续拼接的增量文本；必须非空且不含 NUL，可以含换行。
+   * 核心原样写出，不追加 LF，因此不承诺一行对应一条记录。
+   */
   fragment: createTextFragment,
+  /**
+   * completion 成功或流成功终态显式选择不写文本字节；仍须由呈现器返回此值。
+   * 省略呈现器不等于静默，data、failure 和流记录也不能用它代替输出。
+   */
   silent: silentText,
 });
 

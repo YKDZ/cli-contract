@@ -18,7 +18,17 @@ function createAliasedHierarchy(onRun: () => void = () => undefined) {
   const supplement = text.lines(["先完成准备。", "", "随后执行任务。"]);
   const cli = define({
     root: "workspace",
-    help: helpCapability({ shortAlias: "-h" }),
+    help: helpCapability({
+      shortAlias: "-h",
+      headings: {
+        usage: "用法",
+        commands: "命令",
+        arguments: "参数",
+        options: "选项",
+        constraints: "约束",
+        supplement: "补充",
+      },
+    }),
     output: outputCapability({ defaultFormat: "structured", text: true }),
     usageFailureExitCode: 64,
     commands: {
@@ -61,6 +71,14 @@ void test("根级 -h 配置机械投影到 controls、各节点 parser 与完整
   assert.deepEqual(cli.grammar.controls.help, {
     longOption: "--help",
     shortAlias: "-h",
+    headings: {
+      usage: "用法",
+      commands: "命令",
+      arguments: "参数",
+      options: "选项",
+      constraints: "约束",
+      supplement: "补充",
+    },
   });
   assert.deepEqual(cli.manifest.controls.help, cli.grammar.controls.help);
   assert.deepEqual(cli.grammar.root.helpSupplement, supplement.lines);
@@ -120,7 +138,7 @@ void test("根级 -h 配置机械投影到 controls、各节点 parser 与完整
     {
       destination: "stdout",
       chunk:
-        "workspace task run\n运行任务\n--help, -h\n--output-format <structured|text>\n",
+        '运行任务\n\n用法\n  workspace task run\n\n选项\n  --help, -h\n  --output-format <structured|text> (choices: "structured", "text") (default: "structured")\n',
     },
   ]);
   assert.deepEqual(termination, {
@@ -143,7 +161,7 @@ void test("根级 -h 配置机械投影到 controls、各节点 parser 与完整
     {
       destination: "stdout",
       chunk:
-        "workspace task <command>\n任务\nrun\t运行任务\n--help, -h\n--output-format <structured|text>\n",
+        '任务\n\n用法\n  workspace task <command>\n\n命令\n  run\n    运行任务\n\n选项\n  --help, -h\n  --output-format <structured|text> (choices: "structured", "text") (default: "structured")\n',
     },
   ]);
   assert.deepEqual(groupTermination, {
@@ -161,7 +179,7 @@ void test("根级 -h 配置机械投影到 controls、各节点 parser 与完整
     },
   });
   assert.deepEqual(rootWrites, [
-    "workspace <command>\n工作区\ntask\t任务\n--help, -h\n--output-format <structured|text>\n先完成准备。\n\n随后执行任务。\n",
+    '工作区\n\n用法\n  workspace <command>\n\n命令\n  task <command>\n    任务\n\n选项\n  --help, -h\n  --output-format <structured|text> (choices: "structured", "text") (default: "structured")\n\n补充\n  先完成准备。\n\n  随后执行任务。\n',
   ]);
 });
 
@@ -203,8 +221,50 @@ void test("未启用短别名时 -h 保留给字段且帮助不注入补充", ()
   });
 });
 
+void test("缺席标题只省略标题行，空段落不注入默认文案", async () => {
+  const cli = defineCli()({
+    root: "minimal",
+    help: helpCapability({ headings: { usage: "用法" } }),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      minimal: {
+        kind: "rootCommand",
+        name: "minimal",
+        description: "最小命令",
+        input: z.object({}),
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      },
+    },
+  });
+  const writes: string[] = [];
+  await executeCli(cli, {
+    invocation: parseCliInvocation(cli, ["--help"]),
+    dependencies: undefined,
+    write: ({ chunk }) => {
+      writes.push(chunk);
+    },
+  });
+  assert.deepEqual(writes, ["最小命令\n\n用法\n  minimal\n\n  --help\n"]);
+  assert.doesNotMatch(
+    writes.join(""),
+    /^(?:命令|参数|选项|约束|补充|显示帮助)$/m,
+  );
+});
+
 void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补充被拒绝", () => {
   assert.throws(() => helpCapability({ shortAlias: "-x" } as never), TypeError);
+  for (const headings of [
+    { usage: "" },
+    { commands: "命令\n列表" },
+    { arguments: "参数\r列表" },
+    { options: "选项\0列表" },
+    { extra: "额外" },
+  ]) {
+    assert.throws(() => helpCapability({ headings }), TypeError);
+  }
 
   const define = defineCli();
   assert.throws(

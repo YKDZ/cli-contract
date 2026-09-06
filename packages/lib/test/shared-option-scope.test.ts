@@ -185,7 +185,7 @@ void test("shared option 在声明 scope 后任意位置生效，leaf option 不
       usage: {
         command: "addPackage",
         synopsis:
-          "workspace package add [--verbose] [--registry <value>] <name> [requires registry verbose]",
+          "workspace package add [--verbose] [--registry <registry>] <name>",
       },
     },
   );
@@ -228,7 +228,7 @@ void test("grammar、help 与 manifest 同时保留声明 scope 和叶有效字�
   });
   assert.match(
     writes.join(""),
-    /^workspace package add \[--verbose\] \[--registry <value>\] <name>/,
+    /添加包\n\n  workspace package add \[--verbose\] \[--registry <registry>\] <name>/,
   );
 });
 

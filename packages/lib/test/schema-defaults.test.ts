@@ -105,7 +105,7 @@ void test("Zod 默认只由 validation 施加，并同源投影到 grammar、man
   });
   assert.equal(validationCalls, 0);
   assert.deepEqual(helpWrites, [
-    'greet [--name <value>]\n生成问候\n[--name <value>] (default: "Ada")\t问候对象\n--help\n',
+    '生成问候\n\n  greet [--name <name>]\n\n  [--name <name>] (default: "Ada")\n    问候对象\n  --help\n',
   ]);
 
   await executeCli(cli, {
@@ -115,6 +115,71 @@ void test("Zod 默认只由 validation 施加，并同源投影到 grammar、man
   });
   assert.equal(validationCalls, 1);
   assert.deepEqual(received, [{ name: "Ada" }]);
+});
+
+void test("显式 false 和空数组默认值保留在同源帮助详情", async () => {
+  const cli = defineCli()({
+    root: "defaults",
+    help: helpCapability(),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      defaults: {
+        kind: "rootCommand",
+        name: "defaults",
+        description: "默认值",
+        fields: {
+          enabled: {
+            kind: "flag",
+            longOption: "--enabled",
+            description: "启用",
+          },
+          tags: {
+            kind: "repeatableOption",
+            longOption: "--tag",
+            description: "标签",
+          },
+        },
+        input: z.object({
+          enabled: z.boolean().optional().default(false),
+          tags: z.array(z.string()).optional().default([]),
+        }),
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      },
+    },
+  });
+
+  assert.deepEqual(cli.grammar.root.fields, [
+    {
+      kind: "flag",
+      key: "enabled",
+      longOption: "--enabled",
+      description: "启用",
+      required: false,
+      default: false,
+    },
+    {
+      kind: "repeatableOption",
+      key: "tags",
+      longOption: "--tag",
+      description: "标签",
+      required: false,
+      default: [],
+    },
+  ]);
+  const writes: string[] = [];
+  await executeCli(cli, {
+    invocation: parseCliInvocation(cli, ["--help"]),
+    dependencies: undefined,
+    write: ({ chunk }) => {
+      writes.push(chunk);
+    },
+  });
+  assert.deepEqual(writes, [
+    "默认值\n\n  defaults [--enabled] [--tag <tags>]...\n\n  [--enabled] (default: false)\n    启用\n  [--tag <tags>]... (default: [])\n    标签\n  --help\n",
+  ]);
 });
 
 void test("输出保证存在而输入可缺席时，缺少 input default 注解在定义期拒绝", () => {

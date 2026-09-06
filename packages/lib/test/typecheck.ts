@@ -646,9 +646,9 @@ defineMissingTextStreamHierarchy({
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
   usageFailureExitCode: 64,
+  // @ts-expect-error text 层级 stream 的终态与每个 record 都必须声明 presenter。
   commands: {
     missingTextStreamTree: {
-      // @ts-expect-error text 层级 stream 的终态与每个 record 都必须声明 presenter。
       kind: "rootGroup",
       name: "missing-text-stream-tree",
       description: "缺少文本流 presenter",
@@ -1089,6 +1089,7 @@ void cli;
 void dataCli;
 
 const defineScopedCli = defineCli();
+// @ts-expect-error 叶输入必须覆盖祖先声明的 shared option。
 defineScopedCli({
   root: "scoped",
   help: helpCapability(),
@@ -1096,7 +1097,6 @@ defineScopedCli({
   usageFailureExitCode: 64,
   commands: {
     scoped: {
-      // @ts-expect-error 叶输入必须覆盖祖先声明的 shared option。
       kind: "rootGroup",
       name: "scoped",
       description: "测试共享选项",
@@ -1262,9 +1262,9 @@ defineInvalidTextHierarchy({
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
   usageFailureExitCode: 64,
+  // @ts-expect-error text hierarchy 的 completion 必须声明 presenter。
   commands: {
     missingCompletionTree: {
-      // @ts-expect-error text hierarchy 的 completion 必须声明 presenter。
       kind: "rootGroup",
       name: "missing-completion-tree",
       description: "缺少完成 presenter",
@@ -1288,9 +1288,9 @@ defineInvalidFailureHierarchy({
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
   usageFailureExitCode: 64,
+  // @ts-expect-error text hierarchy 的 failure 必须声明 presenter。
   commands: {
     missingFailureTree: {
-      // @ts-expect-error text hierarchy 的 failure 必须声明 presenter。
       kind: "rootGroup",
       name: "missing-failure-tree",
       description: "缺少失败 presenter",
@@ -1315,6 +1315,7 @@ defineInvalidFailureHierarchy({
 });
 
 const defineStructuredHierarchy = defineCli();
+// @ts-expect-error structured-only hierarchy 禁止声明 presenter。
 defineStructuredHierarchy({
   root: "structuredTree",
   help: helpCapability(),
@@ -1322,7 +1323,6 @@ defineStructuredHierarchy({
   usageFailureExitCode: 64,
   commands: {
     structuredTree: {
-      // @ts-expect-error structured-only hierarchy 禁止声明 presenter。
       kind: "rootGroup",
       name: "structured-tree",
       description: "结构化层级命令",

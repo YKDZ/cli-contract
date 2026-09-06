@@ -33,7 +33,7 @@ function emptyInputSchema(
           !Array.isArray(value) &&
           Object.keys(value).length === 0
         ) {
-          return { value: Object.freeze({}) as EmptyCliInput };
+          return { value: Object.freeze({}) };
         }
 
         return { issues: [{ message: "输入必须是空对象" }] };
@@ -126,7 +126,7 @@ void test("帮助从契约机械产生且不执行 handler", async () => {
   assert.deepEqual(writes, [
     {
       destination: "stdout",
-      chunk: "fixture\n演示最小 CLI\n--help\n",
+      chunk: "演示最小 CLI\n\n  fixture\n\n  --help\n",
     },
   ]);
   assert.deepEqual(termination, {
