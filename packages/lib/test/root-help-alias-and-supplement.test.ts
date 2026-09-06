@@ -263,7 +263,7 @@ void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补
     { options: "选项\0列表" },
     { extra: "额外" },
   ]) {
-    assert.throws(() => helpCapability({ headings } as never), TypeError);
+    assert.throws(() => helpCapability({ headings }), TypeError);
   }
 
   const define = defineCli();

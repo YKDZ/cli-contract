@@ -33,7 +33,7 @@ function emptyInputSchema(
           !Array.isArray(value) &&
           Object.keys(value).length === 0
         ) {
-          return { value: Object.freeze({}) as EmptyCliInput };
+          return { value: Object.freeze({}) };
         }
 
         return { issues: [{ message: "输入必须是空对象" }] };

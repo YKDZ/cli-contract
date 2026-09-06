@@ -14,6 +14,10 @@ import {
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
+function createDynamicTextOutput(): OutputCapability {
+  return outputCapability({ defaultFormat: "text" });
+}
+
 const message = z.object({ message: z.string() });
 
 function createTextCli() {
@@ -479,7 +483,7 @@ void test("text 开关在定义期要求或禁止同位 presenter", () => {
       defineCli()({
         root: "missing",
         help: helpCapability(),
-        output: outputCapability({ defaultFormat: "text" }) as OutputCapability,
+        output: createDynamicTextOutput(),
         usageFailureExitCode: 64,
         commands: {
           missing: {
@@ -514,7 +518,7 @@ void test("动态文本输出逐个定位 data 与 failure presenter", () => {
       defineCli()({
         root: "missingNamedPresenters",
         help: helpCapability(),
-        output: outputCapability({ defaultFormat: "text" }) as OutputCapability,
+        output: createDynamicTextOutput(),
         usageFailureExitCode: 64,
         commands: {
           missingNamedPresenters: {
@@ -590,7 +594,7 @@ void test("动态层级在执行前闭合五类文本 presenter", () => {
       define({
         root: "workspace",
         help: helpCapability(),
-        output: outputCapability({ defaultFormat: "text" }) as OutputCapability,
+        output: createDynamicTextOutput(),
         usageFailureExitCode: 64,
         commands: {
           workspace: {

@@ -104,7 +104,9 @@ async function prepareOutputDirectory(
     if (isMissingPath(error)) {
       const parent = await stat(dirname(outputDirectory));
       if (!parent.isDirectory()) {
-        throw new Error("Candidate output parent must be a directory");
+        throw new Error("Candidate output parent must be a directory", {
+          cause: error,
+        });
       }
       await mkdir(outputDirectory);
     } else {

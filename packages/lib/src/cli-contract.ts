@@ -2863,7 +2863,7 @@ function copyHelpHeadings(value: unknown): HelpHeadings {
     if (!allowed.has(key)) throw new TypeError("帮助标题包含未知段落");
     headings[key] = copySingleLineText(heading, `帮助标题 ${key}`);
   }
-  return Object.freeze(headings) as HelpHeadings;
+  return Object.freeze(headings);
 }
 
 /**
@@ -4223,7 +4223,7 @@ function collectTextPresenterIssues(
       command,
       textEnabled,
       "completion",
-      success as Readonly<Record<string, unknown>>,
+      success,
       issues,
     );
   } else if (success.kind === "data") {
@@ -4232,7 +4232,7 @@ function collectTextPresenterIssues(
         command,
         textEnabled,
         "data",
-        definition as Readonly<Record<string, unknown>>,
+        definition,
         issues,
         variant,
       );
@@ -4242,7 +4242,7 @@ function collectTextPresenterIssues(
       command,
       textEnabled,
       "streamSuccess",
-      success as Readonly<Record<string, unknown>>,
+      success,
       issues,
     );
     for (const [variant, definition] of Object.entries(success.records)) {
@@ -4250,7 +4250,7 @@ function collectTextPresenterIssues(
         command,
         textEnabled,
         "record",
-        definition as Readonly<Record<string, unknown>>,
+        definition,
         issues,
         variant,
       );
@@ -4261,7 +4261,7 @@ function collectTextPresenterIssues(
       command,
       textEnabled,
       "failure",
-      definition as Readonly<Record<string, unknown>>,
+      definition,
       issues,
       variant,
     );
