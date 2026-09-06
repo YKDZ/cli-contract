@@ -61,37 +61,39 @@ export function rejectedDeclarations() {
     },
   });
 
-  const missingPresenter = {
-    root: "check",
+  defineCli()({
+    root: "missingCompletion",
     help: helpCapability(),
     output: outputCapability({ defaultFormat: "text" }),
     usageFailureExitCode: 64,
     commands: {
-      check: {
+      missingCompletion: {
         kind: "rootCommand",
         name: "check",
         description: "检查类型",
-        fields: {},
         input: z.object({}),
-        success: { kind: "completion", exitCode: 0 },
+        // @ts-expect-error 启用 text 后不能遗漏成功的文本呈现器。
+        success: { kind: "completion" },
         failures: {},
-        handler() {
-          throw new Error("仅用于检查声明，不能运行");
-        },
+        handler: ({ outcome }) => outcome.completion(),
       },
     },
-  } as const;
-  // @ts-expect-error 启用 text 后不能遗漏成功的文本呈现器，空输出不是隐式成功。
-  defineCli()(missingPresenter);
+  });
+
   defineCli()({
-    ...missingPresenter,
+    root: "validCompletion",
+    help: helpCapability(),
+    output: outputCapability({ defaultFormat: "text" }),
+    usageFailureExitCode: 64,
     commands: {
-      check: {
-        ...missingPresenter.commands.check,
-        success: {
-          ...missingPresenter.commands.check.success,
-          text: () => text.line("完成"),
-        },
+      validCompletion: {
+        kind: "rootCommand",
+        name: "check",
+        description: "检查类型",
+        input: z.object({}),
+        success: { kind: "completion", text: () => text.silent },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
       },
     },
   });

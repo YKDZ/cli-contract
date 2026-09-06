@@ -1,7 +1,7 @@
 {
   "extends": "@cli-contract/typescript-config/base.json",
   "compilerOptions": {
-    "declaration": true,
+    "declaration": false,
     "erasableSyntaxOnly": true,
     "module": "nodenext",
     "moduleResolution": "nodenext",

@@ -10,12 +10,19 @@ import {
 import { cli } from "../src/index.ts";
 
 // 新增命令或失败时，场景表会提示遗漏。
+const dependencies = {
+  async *readLogs() {
+    yield { message: "started" };
+    yield { message: "ready" };
+  },
+};
 const commands = defineCommandScenarios(cli, {
-  lookup: { argv: ["alice", "--json"], dependencies: undefined },
+  lookup: { argv: ["get", "alice", "--json"], dependencies },
+  logs: { argv: ["logs", "--json"], dependencies },
 });
 const failures = defineFailureScenarios(cli, {
   lookup: {
-    notFound: { argv: ["bob", "--json"], dependencies: undefined },
+    notFound: { argv: ["get", "bob", "--json"], dependencies },
   },
 });
 
@@ -25,6 +32,21 @@ for (const [command, scenario] of Object.entries(commands)) {
     const capture = await runCliScenario({ cliContract: cli, ...scenario });
     assert.equal(capture.termination.exitCode, 0);
     assert.equal(capture.stderr, "");
+    if (command === "logs") {
+      assert.deepEqual(
+        capture.stdout
+          .trimEnd()
+          .split("\n")
+          .map((line) => JSON.parse(line)),
+        [
+          { schemaVersion: "1", command: "logs", kind: "stream" },
+          { kind: "record", variant: "entry", data: { message: "started" } },
+          { kind: "record", variant: "entry", data: { message: "ready" } },
+          { kind: "streamSuccess" },
+        ],
+      );
+      return;
+    }
     assert.deepEqual(JSON.parse(capture.stdout), {
       schemaVersion: "1",
       command: "lookup",

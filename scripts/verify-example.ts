@@ -44,6 +44,23 @@ export async function verifyExample(
     ]).trim();
     if (tag !== `v${core.version}`)
       throw new Error("请在对应发布 tag 上运行 npm 示例");
+    const modified = runCommand("git", [
+      "status",
+      "--porcelain",
+      "--",
+      "packages/example",
+      "packages/lib/package.json",
+      "packages/testing/package.json",
+      "packages/typescript-config",
+      "pnpm-lock.yaml",
+      "scripts/verify-example.ts",
+      "scripts/installed-consumer.ts",
+      "scripts/fixtures/installed-runtime.ts",
+    ]);
+    if (modified.trim())
+      throw new Error(
+        "发布版本体验要求示例及其依赖配置与 tag 一致；请先保存或撤回相关修改",
+      );
   }
   const replacements: Record<string, string> = {
     [core.name]: candidate ? `file:${candidate.coreTarball}` : core.version,
