@@ -1,16 +1,11 @@
-import { spawnSync } from "node:child_process";
-import {
-  lstat,
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { lstat, mkdir, readFile, readdir, stat } from "node:fs/promises";
 import { basename, dirname, relative, resolve, sep } from "node:path";
+
+import {
+  runCommand,
+  verifyInstalledRuntime,
+  withInstalledConsumer,
+} from "./installed-consumer.ts";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const corePackage = "@ykdz/cli-contract";
@@ -49,7 +44,18 @@ async function main(): Promise<void> {
   const testing = await inspectTarball(testingTarball, testingPackage);
   verifyLockstep(core, testing);
 
-  await verifyInstalledRuntime(core.tarball, testing.tarball);
+  await withInstalledConsumer(
+    {
+      name: "cli-contract-candidate-consumer",
+      private: true,
+      type: "module",
+      dependencies: {
+        [corePackage]: `file:${core.tarball}`,
+        [testingPackage]: `file:${testing.tarball}`,
+      },
+    },
+    verifyInstalledRuntime,
+  );
   const result: CandidateResult = {
     coreTarball: core.tarball,
     testingTarball: testing.tarball,
@@ -487,131 +493,8 @@ function verifyLockstep(core: PackedManifest, testing: PackedManifest): void {
   }
 }
 
-async function verifyInstalledRuntime(
-  coreTarball: string,
-  testingTarball: string,
-): Promise<void> {
-  const project = await mkdtemp(resolve(tmpdir(), "cli-contract-candidate-"));
-  const npmCache = await mkdtemp(
-    resolve(tmpdir(), "cli-contract-candidate-npm-cache-"),
-  );
-  try {
-    await writeFile(
-      resolve(project, "package.json"),
-      `${JSON.stringify({
-        name: "cli-contract-candidate-consumer",
-        private: true,
-        type: "module",
-        dependencies: {
-          [corePackage]: `file:${coreTarball}`,
-          [testingPackage]: `file:${testingTarball}`,
-        },
-      })}\n`,
-    );
-    runCommand(
-      "npm",
-      [
-        "install",
-        "--ignore-scripts",
-        "--no-package-lock",
-        "--no-audit",
-        "--no-fund",
-        "--loglevel",
-        "error",
-      ],
-      project,
-      { NPM_CONFIG_CACHE: npmCache },
-    );
-    await writeFile(
-      resolve(project, "runtime-probe.mjs"),
-      runtimeProbeSource(),
-    );
-    runCommand("node", ["runtime-probe.mjs"], project, {
-      CANDIDATE_PROJECT_ROOT: project,
-      CANDIDATE_REPOSITORY_ROOT: repositoryRoot,
-    });
-  } finally {
-    await Promise.all([
-      rm(project, { recursive: true, force: true }),
-      rm(npmCache, { recursive: true, force: true }),
-    ]);
-  }
-}
-
-function runtimeProbeSource(): string {
-  return [
-    'import { realpathSync } from "node:fs";',
-    'import { createRequire } from "node:module";',
-    'import { relative, resolve, sep } from "node:path";',
-    'import { fileURLToPath, pathToFileURL } from "node:url";',
-    "",
-    'const project = resolve(process.env.CANDIDATE_PROJECT_ROOT ?? "");',
-    'const repository = resolve(process.env.CANDIDATE_REPOSITORY_ROOT ?? "");',
-    'const nodeModules = resolve(project, "node_modules");',
-    "const imports = {",
-    '  core: "@ykdz/cli-contract",',
-    '  coreNode: "@ykdz/cli-contract/node",',
-    '  testing: "@ykdz/cli-contract-testing",',
-    "};",
-    "const resolved = Object.fromEntries(",
-    "  Object.entries(imports).map(([key, specifier]) => [",
-    "    key,",
-    "    realpathSync(fileURLToPath(import.meta.resolve(specifier))),",
-    "  ]),",
-    ");",
-    "for (const path of Object.values(resolved)) {",
-    "  const fromNodeModules = relative(nodeModules, path);",
-    "  const fromRepository = relative(repository, path);",
-    "  if (",
-    '    fromNodeModules === "" ||',
-    '    fromNodeModules.startsWith(".." + sep) ||',
-    '    fromRepository === "" ||',
-    '    !fromRepository.startsWith(".." + sep)',
-    "  ) {",
-    '    throw new Error("Package resolution escaped the temporary installation: " + path);',
-    "  }",
-    "}",
-    "const testingCore = realpathSync(",
-    '  createRequire(pathToFileURL(resolved.testing)).resolve("@ykdz/cli-contract"),',
-    ");",
-    "if (testingCore !== resolved.core) {",
-    '  throw new Error("Testing entry resolved a different core implementation");',
-    "}",
-    "const core = await import(imports.core);",
-    "const coreNode = await import(imports.coreNode);",
-    "const testing = await import(imports.testing);",
-    'if (typeof core.defineCli !== "function") throw new Error("Core root entry did not load");',
-    'if (typeof coreNode.nodeCliOutput !== "function") throw new Error("Core node entry did not load");',
-    'if (typeof testing.runCliScenario !== "function") throw new Error("Testing root entry did not load");',
-    "",
-  ].join("\n");
-}
-
 function runPnpm(args: readonly string[]): string {
   return runCommand("pnpm", args, repositoryRoot);
-}
-
-function runCommand(
-  command: string,
-  args: readonly string[],
-  cwd: string,
-  environment?: Readonly<Record<string, string>>,
-): string {
-  const result = spawnSync(command, args, {
-    cwd,
-    encoding: "utf8",
-    env:
-      environment === undefined
-        ? process.env
-        : { ...process.env, ...environment },
-  });
-  if (result.error !== undefined) throw result.error;
-  if (result.status !== 0) {
-    throw new Error(
-      `${command} ${args.join(" ")} failed with status ${result.status ?? "unknown"}\n${result.stderr}\n${result.stdout}`,
-    );
-  }
-  return result.stdout;
 }
 
 function readTarText(tarball: string, entry: string): string {

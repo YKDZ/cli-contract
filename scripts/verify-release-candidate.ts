@@ -1,5 +1,9 @@
 import { spawnSync } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+
+import { verifyExample } from "./verify-example.ts";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 
@@ -9,10 +13,32 @@ interface CandidateResult {
 }
 
 async function main(): Promise<void> {
-  const outputDirectory = parseOutputDirectory(process.argv.slice(2));
+  const args = process.argv.slice(2);
+  const checkOnly = args[0] === "--check";
+  if (checkOnly && args.slice(1).some((arg) => arg !== "--force")) {
+    throw new Error("用法：pnpm check [--force]");
+  }
+  const outputDirectory = checkOnly
+    ? await mkdtemp(resolve(tmpdir(), "cli-contract-check-"))
+    : parseOutputDirectory(args);
+  try {
+    await verifyCandidate(
+      outputDirectory,
+      !checkOnly,
+      !checkOnly || args.includes("--force"),
+    );
+  } finally {
+    if (checkOnly) await rm(outputDirectory, { recursive: true, force: true });
+  }
+}
 
-  reportStage("运行根检查");
-  runPnpm(["run", "check", "--force"]);
+async function verifyCandidate(
+  outputDirectory: string,
+  release: boolean,
+  force: boolean,
+): Promise<void> {
+  reportStage("运行 workspace 检查");
+  runPnpm(["run", "check:workspace", ...(force ? ["--force"] : [])]);
 
   reportStage("打包并验证候选制品");
   const candidate = parseCandidateResult(
@@ -26,17 +52,22 @@ async function main(): Promise<void> {
     ]),
   );
 
-  reportStage("验证 TypeScript 6/7 消费矩阵");
-  runPnpm([
-    "consumer:types",
-    "--",
-    "--core",
-    candidate.coreTarball,
-    "--testing",
-    candidate.testingTarball,
-  ]);
+  reportStage("运行独立安装的端到端示例");
+  await verifyExample(candidate);
 
-  process.stdout.write(`${JSON.stringify(candidate)}\n`);
+  if (release) {
+    reportStage("验证 TypeScript 6/7 消费矩阵");
+    runPnpm([
+      "consumer:types",
+      "--",
+      "--core",
+      candidate.coreTarball,
+      "--testing",
+      candidate.testingTarball,
+    ]);
+
+    process.stdout.write(`${JSON.stringify(candidate)}\n`);
+  }
 }
 
 function parseOutputDirectory(args: readonly string[]): string {

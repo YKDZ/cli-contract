@@ -1,0 +1,7 @@
+{
+  "extends": ["//"],
+  "tags": ["contract-example"],
+  "tasks": {
+    "typecheck": { "dependsOn": ["^build"] }
+  }
+}

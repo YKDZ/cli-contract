@@ -1,30 +1,10 @@
 {
-  "name": "@ykdz/cli-contract-testing",
-  "version": "0.1.1",
-  "description": "Consumer test scenarios for @ykdz/cli-contract.",
-  "keywords": [
-    "cli",
-    "contract",
-    "nodejs",
-    "testing",
-    "typescript"
-  ],
-  "homepage": "https://github.com/YKDZ/cli-contract",
-  "bugs": {
-    "url": "https://github.com/YKDZ/cli-contract/issues"
-  },
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/YKDZ/cli-contract.git"
-  },
-  "files": [
-    "dist"
-  ],
+  "name": "@cli-contract/example",
+  "private": true,
   "type": "module",
   "imports": {
     "#/*": {
-      "types": "./dist/*.d.ts",
+      "types": "./src/*.ts",
       "default": "./dist/*.js"
     }
   },
@@ -34,30 +14,31 @@
       "default": "./dist/index.js"
     }
   },
-  "publishConfig": {
-    "access": "public"
-  },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json --pretty false && node ../../scripts/link-example.ts",
+    "build": "tsc -p tsconfig.build.json --pretty false",
     "format:check": "oxfmt --list-different --config ../../oxfmt.config.ts .",
     "format:write": "oxfmt --write --config ../../oxfmt.config.ts .",
     "lint": "oxlint --quiet --format=unix --config ../../oxlint.config.ts --ignore-pattern node_modules .",
     "lint:fix": "oxlint --format=unix --config ../../oxlint.config.ts . --fix",
-    "test": "node --test --conditions=source test/*.test.ts",
+    "start": "node src/main.ts",
+    "test": "node --test test/*.test.ts",
+    "test:e2e": "node --test test/*.e2e.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
   },
   "dependencies": {
-    "@ykdz/cli-contract": "workspace:*"
+    "@ykdz/cli-contract": "workspace:*",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@cli-contract/typescript-config": "workspace:*",
     "@types/node": "catalog:",
+    "@ykdz/cli-contract-testing": "workspace:*",
     "oxfmt": "catalog:",
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
     "typescript-7": "catalog:"
   },
   "engines": {
-    "node": ">=24"
+    "node": "24"
   }
 }

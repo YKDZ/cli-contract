@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 
 const rootOwnedFormatInputs = [
   "package.json",
+  "README.md",
   "pnpm-workspace.yaml",
   "pnpm-lock.yaml",
   "turbo.json",

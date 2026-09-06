@@ -3,6 +3,7 @@
   "compilerOptions": {
     "customConditions": ["source"],
     "erasableSyntaxOnly": true,
+    "rewriteRelativeImportExtensions": true,
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "target": "es2023",

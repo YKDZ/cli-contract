@@ -2993,6 +2993,7 @@ export function outputCapability<
 /**
  * 定义一个闭合 CLI 契约。根级 help 与 output 能力在此处一次装配，并据此约束根命令的结果投影；
  * 动态声明仍会在定义期报告 `ContractDefinitionError`，不能以它替代静态可判定声明的类型检查。
+ * @see {@link https://github.com/YKDZ/cli-contract/tree/main/packages/example | 端到端示例}
  */
 export function defineCli<Dependencies = undefined>(): DefineCli<Dependencies> {
   const define = ((definition: RuntimeCliDefinition) =>
