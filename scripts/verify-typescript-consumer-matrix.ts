@@ -24,22 +24,34 @@ async function main(): Promise<void> {
 }
 
 async function readFixtures(): Promise<Readonly<Record<string, string>>> {
+  const hierarchyFixture = "hierarchy-text-coverage.typecheck.ts";
   return Object.fromEntries(
-    await Promise.all(
-      ["consumer.ts", "core-node.ts", "core-root.ts", "schema-input.ts"].map(
-        async (name) => [
-          name,
-          await readFile(
-            resolve(
-              repositoryRoot,
-              "scripts/fixtures/typescript-consumer-matrix",
-              name,
-            ),
-            "utf8",
+    await Promise.all([
+      ...[
+        "consumer.ts",
+        "completion-missing.ts",
+        "core-node.ts",
+        "core-root.ts",
+        "named-variant-missing.ts",
+        "schema-input.ts",
+        "stream-record-name.ts",
+        "stream-text-coverage.ts",
+      ].map(async (name) => [
+        name,
+        await readFile(
+          resolve(
+            repositoryRoot,
+            "scripts/fixtures/typescript-consumer-matrix",
+            name,
           ),
-        ],
-      ),
-    ),
+          "utf8",
+        ),
+      ]),
+      readFile(
+        resolve(repositoryRoot, "packages/lib/test", hierarchyFixture),
+        "utf8",
+      ).then((source) => [hierarchyFixture, source]),
+    ]),
   );
 }
 
@@ -118,7 +130,12 @@ async function verifyCoreOnly(
     await writeFixtures(project, fixtures, [
       "core-node.ts",
       "core-root.ts",
+      "completion-missing.ts",
+      "named-variant-missing.ts",
       "schema-input.ts",
+      "stream-record-name.ts",
+      "stream-text-coverage.ts",
+      "hierarchy-text-coverage.typecheck.ts",
     ]);
     runCommand(
       "npm",
@@ -143,12 +160,190 @@ async function verifyCoreOnly(
       ]) {
         await compileFixture(project, resolution, fixture);
       }
+      await verifyMissingCompletionDiagnostic(project, resolution);
+      await verifyMissingNamedVariantDiagnostic(project, resolution);
+      await compileFixture(project, resolution, "stream-text-coverage.ts");
+      await compileFixture(project, resolution, "stream-record-name.ts");
+      await compileFixture(
+        project,
+        resolution,
+        "hierarchy-text-coverage.typecheck.ts",
+      );
+      await verifyHierarchyTextCoverageDiagnostic(
+        project,
+        resolution,
+        fixtures,
+      );
+      await verifyMissingStreamDiagnostic(project, resolution, fixtures);
+      await verifyInvalidStreamRecordNameDiagnostic(
+        project,
+        resolution,
+        fixtures,
+      );
     }
   } finally {
     await Promise.all([
       rm(project, { recursive: true, force: true }),
       rm(npmCache, { recursive: true, force: true }),
     ]);
+  }
+}
+
+async function verifyHierarchyTextCoverageDiagnostic(
+  project: string,
+  resolution: (typeof resolutions)[number],
+  fixtures: Readonly<Record<string, string>>,
+): Promise<void> {
+  const source = fixtures["hierarchy-text-coverage.typecheck.ts"];
+  if (source === undefined)
+    throw new Error("Missing hierarchy coverage fixture");
+  const fixture = "hierarchy-text-coverage-unchecked.ts";
+  await writeFile(
+    resolve(project, fixture),
+    source.replaceAll(
+      /\s*\/\/ @ts-expect-error \[hierarchy-text-coverage\][^\n]*/g,
+      "",
+    ),
+  );
+  const tsconfig = `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`;
+  await writeFile(
+    resolve(project, tsconfig),
+    `${JSON.stringify(tsconfigFor(resolution, fixture))}\n`,
+  );
+  const result = spawnSync(
+    resolve(project, "node_modules/.bin/tsc"),
+    ["--project", tsconfig, "--pretty", "false"],
+    { cwd: project, encoding: "utf8" },
+  );
+  if (result.error !== undefined) throw result.error;
+  const diagnostics = `${result.stderr}\n${result.stdout}`;
+  const required = [
+    "missingCompletionTextPresenter",
+    "missingDataVariantTextPresenter",
+    "missingFailureVariantTextPresenter",
+    "missingStreamRecordTextPresenter",
+    "missingStreamSuccessTextPresenter",
+    'command: "leaf"',
+    'location: "completion"',
+    'location: "data"',
+    'location: "failure"',
+    'location: "record"',
+    'location: "streamSuccess"',
+    'variant: "found"',
+    'variant: "unavailable"',
+    'variant: "update"',
+  ];
+  const headers = diagnostics.match(
+    /^hierarchy-text-coverage-unchecked\.ts\(\d+,\d+\): error TS\d+:/gm,
+  );
+  const allHeaders = diagnostics.match(/^.+\(\d+,\d+\): error TS\d+:/gm);
+  const unrelated = [
+    "TS7006",
+    "TS7031",
+    `Type '"rootGroup"' is not assignable to type '"rootCommand"'`,
+  ];
+  if (
+    result.status === 0 ||
+    required.some((fragment) => !diagnostics.includes(fragment)) ||
+    unrelated.some((fragment) => diagnostics.includes(fragment)) ||
+    headers?.length !== 5 ||
+    allHeaders?.length !== headers.length
+  ) {
+    throw new Error(
+      `Hierarchy text diagnostic did not expose only local contract evidence\n${diagnostics}`,
+    );
+  }
+}
+
+async function verifyMissingStreamDiagnostic(
+  project: string,
+  resolution: (typeof resolutions)[number],
+  fixtures: Readonly<Record<string, string>>,
+): Promise<void> {
+  const fixture = "stream-text-coverage-unchecked.ts";
+  const source = fixtures["stream-text-coverage.ts"];
+  if (source === undefined) throw new Error("Missing stream coverage fixture");
+  await writeFile(
+    resolve(project, fixture),
+    source.replaceAll(/\s*\/\/ @ts-expect-error[^\n]*/g, ""),
+  );
+  const tsconfig = `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`;
+  await writeFile(
+    resolve(project, tsconfig),
+    `${JSON.stringify(tsconfigFor(resolution, fixture))}\n`,
+  );
+  const result = spawnSync(
+    resolve(project, "node_modules/.bin/tsc"),
+    ["--project", tsconfig, "--pretty", "false"],
+    { cwd: project, encoding: "utf8" },
+  );
+  if (result.error !== undefined) throw result.error;
+  const diagnostics = `${result.stderr}\n${result.stdout}`;
+  const required = [
+    "missingStreamRecordTextPresenter",
+    "missingStreamSuccessTextPresenter",
+    'command: "missingRecord"',
+    'command: "missingSuccess"',
+    'location: "record"',
+    'location: "streamSuccess"',
+    'variant: "item"',
+    'missing: "text"',
+  ];
+  const headers = diagnostics.match(
+    /^stream-text-coverage-unchecked\.ts\(\d+,\d+\): error TS\d+:/gm,
+  );
+  const allHeaders = diagnostics.match(/^.+\(\d+,\d+\): error TS\d+:/gm);
+  if (
+    result.status === 0 ||
+    required.some((fragment) => !diagnostics.includes(fragment)) ||
+    headers?.length !== 2 ||
+    allHeaders?.length !== headers.length
+  ) {
+    throw new Error(
+      `Missing-stream diagnostic did not expose only local contract evidence\n${diagnostics}`,
+    );
+  }
+}
+
+async function verifyInvalidStreamRecordNameDiagnostic(
+  project: string,
+  resolution: (typeof resolutions)[number],
+  fixtures: Readonly<Record<string, string>>,
+): Promise<void> {
+  const fixture = "stream-record-name-unchecked.ts";
+  const source = fixtures["stream-record-name.ts"];
+  if (source === undefined)
+    throw new Error("Missing stream record name fixture");
+  await writeFile(
+    resolve(project, fixture),
+    source.replaceAll(/\s*\/\/ @ts-expect-error[^\n]*/g, ""),
+  );
+  const tsconfig = `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`;
+  await writeFile(
+    resolve(project, tsconfig),
+    `${JSON.stringify(tsconfigFor(resolution, fixture))}\n`,
+  );
+  const result = spawnSync(
+    resolve(project, "node_modules/.bin/tsc"),
+    ["--project", tsconfig, "--pretty", "false"],
+    { cwd: project, encoding: "utf8" },
+  );
+  if (result.error !== undefined) throw result.error;
+  const diagnostics = `${result.stderr}\n${result.stdout}`;
+  const required = ["streamRecordMustBeLowerCamelCase", 'records: "bad_name"'];
+  const headers = diagnostics.match(
+    /^stream-record-name-unchecked\.ts\(\d+,\d+\): error TS\d+:/gm,
+  );
+  const allHeaders = diagnostics.match(/^.+\(\d+,\d+\): error TS\d+:/gm);
+  if (
+    result.status === 0 ||
+    required.some((fragment) => !diagnostics.includes(fragment)) ||
+    headers?.length !== 1 ||
+    allHeaders?.length !== headers.length
+  ) {
+    throw new Error(
+      `Invalid-stream-record-name diagnostic did not expose only local contract evidence\n${diagnostics}`,
+    );
   }
 }
 
@@ -230,6 +425,103 @@ async function compileFixture(
     ["--project", tsconfig, "--pretty", "false"],
     project,
   );
+}
+
+async function verifyMissingCompletionDiagnostic(
+  project: string,
+  resolution: (typeof resolutions)[number],
+): Promise<void> {
+  const fixture = "completion-missing.ts";
+  const tsconfig = `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`;
+  await writeFile(
+    resolve(project, tsconfig),
+    `${JSON.stringify(tsconfigFor(resolution, fixture))}\n`,
+  );
+  const result = spawnSync(
+    resolve(project, "node_modules/.bin/tsc"),
+    ["--project", tsconfig, "--pretty", "false"],
+    { cwd: project, encoding: "utf8" },
+  );
+  if (result.error !== undefined) throw result.error;
+  const diagnostics = `${result.stderr}\n${result.stdout}`;
+  const requiredFragments = [
+    "completion-missing.ts",
+    "missingCompletionTextPresenter",
+    'command: "missingCompletion"',
+    'command: "missingCompletionWithField"',
+    'location: "completion"',
+    'missing: "text"',
+  ];
+  if (
+    result.status === 0 ||
+    requiredFragments.some((fragment) => !diagnostics.includes(fragment))
+  ) {
+    throw new Error(
+      `Missing-completion diagnostic did not expose its local contract evidence\n${diagnostics}`,
+    );
+  }
+  const unrelatedFragments = [
+    "fieldInputMustAcceptRawValue",
+    "Property 'completion' does not exist",
+    "implicitly has an 'any'",
+  ];
+  if (unrelatedFragments.some((fragment) => diagnostics.includes(fragment))) {
+    throw new Error(
+      `Missing-completion diagnostic included unrelated fallback errors\n${diagnostics}`,
+    );
+  }
+}
+
+async function verifyMissingNamedVariantDiagnostic(
+  project: string,
+  resolution: (typeof resolutions)[number],
+): Promise<void> {
+  const fixture = "named-variant-missing.ts";
+  const tsconfig = `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`;
+  await writeFile(
+    resolve(project, tsconfig),
+    `${JSON.stringify(tsconfigFor(resolution, fixture))}\n`,
+  );
+  const result = spawnSync(
+    resolve(project, "node_modules/.bin/tsc"),
+    ["--project", tsconfig, "--pretty", "false"],
+    { cwd: project, encoding: "utf8" },
+  );
+  if (result.error !== undefined) throw result.error;
+  const diagnostics = `${result.stderr}\n${result.stdout}`;
+  const requiredFragments = [
+    "named-variant-missing.ts",
+    "missingDataVariantTextPresenter",
+    "missingFailureVariantTextPresenter",
+    'command: "missingDataVariantText"',
+    'command: "missingDataFailureText"',
+    'command: "missingCompletionFailureText"',
+    'location: "data"',
+    'location: "failure"',
+    'variant: "deferred"',
+    'variant: "forbidden"',
+    'missing: "text"',
+  ];
+  if (
+    result.status === 0 ||
+    requiredFragments.some((fragment) => !diagnostics.includes(fragment))
+  ) {
+    throw new Error(
+      `Named-variant diagnostic did not expose its local contract evidence\n${diagnostics}`,
+    );
+  }
+  const diagnosticHeaders = diagnostics.match(
+    /^named-variant-missing\.ts\(\d+,\d+\): error TS\d+:/gm,
+  );
+  const allErrorHeaders = diagnostics.match(/^.+\(\d+,\d+\): error TS\d+:/gm);
+  if (
+    diagnosticHeaders?.length !== 3 ||
+    allErrorHeaders?.length !== diagnosticHeaders.length
+  ) {
+    throw new Error(
+      `Named-variant diagnostic included an unexpected compiler error\n${diagnostics}`,
+    );
+  }
 }
 
 function tsconfigFor(

@@ -10,8 +10,13 @@ import {
   outputCapability,
   parseCliInvocation,
   text,
+  type OutputCapability,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
+
+function createDynamicTextOutput(): OutputCapability {
+  return outputCapability({ defaultFormat: "text" });
+}
 
 const message = z.object({ message: z.string() });
 
@@ -142,7 +147,7 @@ void test("格式 control 全路径生效、保持在 invocation 元数据且不
     {
       kind: "usageFailure",
       command: "greet",
-      usage: { command: "greet", synopsis: "greet --name <value>" },
+      usage: { command: "greet", synopsis: "greet --name <name>" },
       issues: [
         {
           code: "invalidOutputFormat",
@@ -164,7 +169,7 @@ void test("格式 control 全路径生效、保持在 invocation 元数据且不
     {
       kind: "usageFailure",
       command: "greet",
-      usage: { command: "greet", synopsis: "greet --name <value>" },
+      usage: { command: "greet", synopsis: "greet --name <name>" },
       issues: [
         {
           code: "conflictingOutputFormat",
@@ -239,7 +244,7 @@ void test("format controls 不改变 usage failure 的固定 JSON 通道", async
   }
 });
 
-void test("帮助从 controls 投影 selector 与 compatibility flags", async () => {
+void test("帮助以同源 controls 投影双格式 selector、默认值与 compatibility 映射", async () => {
   const cli = createTextHierarchyCli();
   for (const argv of [
     ["--help"],
@@ -255,9 +260,87 @@ void test("帮助从 controls 投影 selector 与 compatibility flags", async ()
       },
     });
     const help = writes.join("");
-    assert.match(help, /--output-format <structured\|text>/);
-    assert.match(help, /--plain/);
+    assert.match(
+      help,
+      /  --output-format <structured\|text> \(choices: "structured", "text"\) \(default: "text"\)\n  --plain = --output-format text\n/,
+    );
+    assert.doesNotMatch(help, /显示格式|默认格式|应用结果/);
   }
+});
+
+void test("单格式 compatibility flag 显示真实目标但不虚构 selector", async () => {
+  const cli = defineCli()({
+    root: "machine",
+    help: helpCapability(),
+    output: outputCapability({
+      defaultFormat: "structured",
+      compatibilityFlags: { "--json": "structured" },
+    }),
+    usageFailureExitCode: 64,
+    commands: {
+      machine: {
+        kind: "rootCommand",
+        name: "machine",
+        description: "机器输出",
+        input: z.object({}),
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      },
+    },
+  });
+
+  assert.deepEqual(cli.grammar.controls.output, {
+    defaultFormat: "structured",
+    formats: ["structured"],
+    compatibilityFlags: { "--json": "structured" },
+  });
+  assert.deepEqual(cli.manifest.controls.output, cli.grammar.controls.output);
+  assert.deepEqual(parseCliInvocation(cli, ["--json", "--help"]), {
+    kind: "help",
+    command: "machine",
+  });
+
+  const writes: Array<Readonly<{ destination: string; chunk: string }>> = [];
+  const termination = await executeCli(cli, {
+    invocation: parseCliInvocation(cli, ["--help", "--json", "ignored"]),
+    dependencies: undefined,
+    write: (output) => {
+      writes.push(output);
+    },
+  });
+  assert.deepEqual(writes, [
+    {
+      destination: "stdout",
+      chunk: "机器输出\n\n  machine\n\n  --help\n  --json = structured\n",
+    },
+  ]);
+  assert.deepEqual(termination, {
+    kind: "help",
+    command: "machine",
+    exitCode: 0,
+  });
+});
+
+void test("help 之前已识别的格式冲突仍是用法失败", () => {
+  const cli = createTextCli();
+  assert.deepEqual(
+    parseCliInvocation(cli, ["--plain", "--output-format", "text", "--help"]),
+    {
+      kind: "usageFailure",
+      command: "greet",
+      usage: { command: "greet", synopsis: "greet --name <name>" },
+      issues: [
+        {
+          code: "conflictingOutputFormat",
+          occurrences: [
+            { position: 0, option: "--plain", format: "text" },
+            { position: 1, option: "--output-format", format: "text" },
+          ],
+        },
+      ],
+    },
+  );
 });
 
 void test("structured wire 保持不变，text data 与 failure 使用固定通道和 atomic line", async () => {
@@ -400,7 +483,7 @@ void test("text 开关在定义期要求或禁止同位 presenter", () => {
       defineCli()({
         root: "missing",
         help: helpCapability(),
-        output: outputCapability({ defaultFormat: "text" }),
+        output: createDynamicTextOutput(),
         usageFailureExitCode: 64,
         commands: {
           missing: {
@@ -426,6 +509,231 @@ void test("text 开关在定义期要求或禁止同位 presenter", () => {
       return true;
     },
   );
+});
+
+void test("动态文本输出逐个定位 data 与 failure presenter", () => {
+  const payload = z.object({ message: z.string() });
+  assert.throws(
+    () =>
+      defineCli()({
+        root: "missingNamedPresenters",
+        help: helpCapability(),
+        output: createDynamicTextOutput(),
+        usageFailureExitCode: 64,
+        commands: {
+          missingNamedPresenters: {
+            kind: "rootCommand",
+            name: "missing-named-presenters",
+            description: "遗漏具名 presenter",
+            fields: {},
+            input: z.object({}),
+            success: {
+              kind: "data",
+              variants: {
+                accepted: {
+                  description: "已接受",
+                  schema: payload,
+                  exitCode: 0,
+                  text: (value: Readonly<{ readonly message: string }>) =>
+                    text.line(value.message),
+                },
+                deferred: {
+                  description: "已延后",
+                  schema: payload,
+                  exitCode: 0,
+                },
+              },
+            },
+            failures: {
+              unavailable: {
+                description: "不可用",
+                schema: payload,
+                exitCode: 9,
+                text: (value: Readonly<{ readonly message: string }>) =>
+                  text.line(value.message),
+              },
+              forbidden: {
+                description: "禁止",
+                schema: payload,
+                exitCode: 13,
+              },
+            },
+            handler: ({ outcome }) =>
+              outcome.data.accepted({ message: "已接受请求" }),
+          },
+        },
+      }),
+    (error) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "missingTextPresenter",
+          command: "missingNamedPresenters",
+          location: "data",
+          variant: "deferred",
+        },
+        {
+          code: "missingTextPresenter",
+          command: "missingNamedPresenters",
+          location: "failure",
+          variant: "forbidden",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("动态层级在执行前闭合五类文本 presenter", () => {
+  const payload = z.object({ message: z.string() });
+  let handlerStarted = 0;
+  const define = defineCli();
+
+  assert.throws(
+    () =>
+      define({
+        root: "workspace",
+        help: helpCapability(),
+        output: createDynamicTextOutput(),
+        usageFailureExitCode: 64,
+        commands: {
+          workspace: {
+            kind: "rootGroup",
+            name: "workspace",
+            description: "工作区",
+          },
+          ...define.command("completion")({
+            kind: "command",
+            parent: "workspace",
+            name: "completion",
+            description: "完成",
+            input: z.object({}),
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => {
+              handlerStarted += 1;
+              return outcome.completion();
+            },
+          }),
+          ...define.command("data")({
+            kind: "command",
+            parent: "workspace",
+            name: "data",
+            description: "数据",
+            fields: {},
+            input: z.object({}),
+            success: {
+              kind: "data",
+              variants: {
+                found: { description: "找到", schema: payload, exitCode: 0 },
+              },
+            },
+            failures: {},
+            handler: ({ outcome }) => {
+              handlerStarted += 1;
+              return outcome.data.found({ message: "找到" });
+            },
+          }),
+          ...define.command("failure")({
+            kind: "command",
+            parent: "workspace",
+            name: "failure",
+            description: "失败",
+            input: z.object({}),
+            success: { kind: "completion", text: () => text.silent },
+            failures: {
+              unavailable: {
+                description: "不可用",
+                schema: payload,
+                exitCode: 9,
+              },
+            },
+            handler: ({ outcome }) => {
+              handlerStarted += 1;
+              return outcome.completion();
+            },
+          }),
+          ...define.command("record")({
+            kind: "command",
+            parent: "workspace",
+            name: "record",
+            description: "记录",
+            fields: {},
+            input: z.object({}),
+            success: {
+              kind: "stream",
+              text: () => text.silent,
+              records: { update: { description: "更新", schema: payload } },
+            },
+            failures: {},
+            async *handler({ outcome }) {
+              handlerStarted += 1;
+              yield outcome.record.update({ message: "更新" });
+              return outcome.streamSuccess();
+            },
+          }),
+          ...define.command("streamSuccess")({
+            kind: "command",
+            parent: "workspace",
+            name: "stream-success",
+            description: "流终态",
+            fields: {},
+            input: z.object({}),
+            success: {
+              kind: "stream",
+              records: {
+                update: {
+                  description: "更新",
+                  schema: payload,
+                  text: (value) => text.line(value.message),
+                },
+              },
+            },
+            failures: {},
+            async *handler({ outcome }) {
+              handlerStarted += 1;
+              yield outcome.record.update({ message: "更新" });
+              return outcome.streamSuccess();
+            },
+          }),
+        },
+      }),
+    (error) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "missingTextPresenter",
+          command: "completion",
+          location: "completion",
+        },
+        {
+          code: "missingTextPresenter",
+          command: "data",
+          location: "data",
+          variant: "found",
+        },
+        {
+          code: "missingTextPresenter",
+          command: "failure",
+          location: "failure",
+          variant: "unavailable",
+        },
+        {
+          code: "missingTextPresenter",
+          command: "record",
+          location: "record",
+          variant: "update",
+        },
+        {
+          code: "missingTextPresenter",
+          command: "streamSuccess",
+          location: "streamSuccess",
+        },
+      ]);
+      return true;
+    },
+  );
+  assert.equal(handlerStarted, 0);
 });
 
 void test("compatibility flag 在定义期闭合到已启用格式和 control 拼写", () => {

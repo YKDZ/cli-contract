@@ -146,7 +146,7 @@ void test("repeatable、variadic positional 与 negated flag 形成固定 raw �
     usage: {
       command: "archiveFiles",
       synopsis:
-        "archive-files <source> [<files...>] [--tag <value>]... [--color|--no-color]",
+        "archive-files <source> [<files...>] [--tag <tag>]... [--color|--no-color]",
     },
   });
 });
@@ -201,7 +201,7 @@ void test("无歧义解析后按字段声明顺序聚合必填、重复与正负
   const cli = createDiagnosticCli();
   const usage = {
     command: "diagnose",
-    synopsis: "diagnose <source> --mode <value> [--force] [--color|--no-color]",
+    synopsis: "diagnose <source> --mode <mode> [--force] [--color|--no-color]",
   } as const;
 
   assert.deepEqual(
@@ -314,7 +314,7 @@ void test("cardinality 事实同源投影到 grammar、usage、help 与 manifest
   );
   assert.equal(
     cli.grammar.root.usage.synopsis,
-    "archive-files <source> [<files...>] [--tag <value>]... [--color|--no-color]",
+    "archive-files <source> [<files...>] [--tag <tag>]... [--color|--no-color]",
   );
 
   const writes: string[] = [];
@@ -326,7 +326,7 @@ void test("cardinality 事实同源投影到 grammar、usage、help 与 manifest
     },
   });
   assert.deepEqual(writes, [
-    "archive-files <source> [<files...>] [--tag <value>]... [--color|--no-color]\n归档文件\n<source>\t源文件\n[<files...>]\t附加文件\n[--tag, -t <value>]...\t归档标签\n[--color, --no-color]\t彩色输出\n--help\n",
+    "归档文件\n\n  archive-files <source> [<files...>] [--tag <tag>]... [--color|--no-color]\n\n  <source>\n    源文件\n  [<files...>]\n    附加文件\n\n  [--tag, -t <tag>]...\n    归档标签\n  [--color, --no-color]\n    彩色输出\n  --help\n",
   ]);
 });
 

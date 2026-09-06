@@ -6,8 +6,6 @@
     "boundaries": "node --conditions=source scripts/check-boundaries.ts",
     "candidate:pack": "node --conditions=source scripts/create-pack-candidate.ts",
     "candidate:verify": "node --conditions=source scripts/verify-release-candidate.ts",
-    "consumer:reins": "node --conditions=source scripts/verify-reins-consumer.ts",
-    "consumer:template": "node --conditions=source scripts/verify-template-consumer.ts",
     "consumer:types": "node --conditions=source scripts/verify-typescript-consumer-matrix.ts",
     "check": "turbo run boundaries format:check lint typecheck build test test:e2e --continue=dependencies-successful --output-logs=errors-only --log-order=grouped --log-prefix=task",
     "fix": "turbo run lint:fix format:write --continue=dependencies-successful --output-logs=full --log-order=grouped --log-prefix=task",
