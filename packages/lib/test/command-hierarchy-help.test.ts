@@ -5,18 +5,19 @@ import {
   ContractDefinitionError,
   defineCli,
   executeCli,
-  helpCapability,
   outputCapability,
   parseCliInvocation,
   text,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
+import { englishHelpCapability } from "./english-help.ts";
+
 function createWorkspaceCli() {
   const define = defineCli();
   return define({
     root: "workspace",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -185,7 +186,7 @@ void test("grammar、manifest 与完整帮助投影同一父前子后层级", as
 void test("defineCli 聚合拒绝无效 parent、环与同级 spelling 冲突", () => {
   const definition = {
     root: "workspace",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -245,7 +246,7 @@ void test("defineCli 聚合拒绝无效 parent、环与同级 spelling 冲突", 
     () =>
       defineCli()({
         root: "invalidRoot",
-        help: helpCapability(),
+        help: englishHelpCapability(),
         output: outputCapability({ defaultFormat: "structured" }),
         usageFailureExitCode: 64,
         commands: {

@@ -3,7 +3,6 @@ import { test } from "node:test";
 
 import {
   defineCli,
-  helpCapability,
   outputCapability,
   parseCliInvocation,
   text,
@@ -11,11 +10,13 @@ import {
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
+import { englishHelpCapability } from "./english-help.ts";
+
 function createSuggestionCli() {
   const define = defineCli();
   return define({
     root: "workspace",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     version: versionCapability({ value: text.line("1.0.0") }),
     output: outputCapability({
       defaultFormat: "structured",
@@ -166,7 +167,7 @@ void test("建议保持大小写敏感，并在阈值、并列或过远时省略
   const define = defineCli();
   const cli = define({
     root: "root",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {

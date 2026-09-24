@@ -5,13 +5,14 @@ import {
   ContractDefinitionError,
   defineCli,
   executeCli,
-  helpCapability,
   outputCapability,
   parseCliInvocation,
   text,
   versionCapability,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
+
+import { englishHelpCapability } from "./english-help.ts";
 
 function createVersionCli(
   onSchema: () => void = () => undefined,
@@ -20,7 +21,7 @@ function createVersionCli(
   const define = defineCli();
   return define({
     root: "workspace",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     version: versionCapability({
       value: text.line("2.3.4"),
       description: "显示版本",
@@ -63,7 +64,7 @@ function createVersionCli(
 void test("未装配 version 时不投影 spelling 或版本请求", () => {
   const cli = defineCli()({
     root: "quiet",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -233,7 +234,7 @@ void test("版本值与所有 control spelling 在定义期闭合", () => {
       () =>
         defineCli()({
           root: "conflict",
-          help: helpCapability(),
+          help: englishHelpCapability(),
           version: versionCapability({
             value: text.line("2.3.4"),
             shortAlias: "-V",
@@ -291,7 +292,7 @@ void test("version capability 复制并闭合单行 value 与 description", asyn
   externalValue.value = "2.3.4\n注入内容";
   const cli = defineCli()({
     root: "copy",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     version,
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
@@ -339,7 +340,7 @@ void test("层级叶命令的应用选项与 version control 冲突时报告叶�
     () =>
       define({
         root: "workspace",
-        help: helpCapability(),
+        help: englishHelpCapability(),
         version: versionCapability({ value: text.line("2.3.4") }),
         output: outputCapability({ defaultFormat: "structured" }),
         usageFailureExitCode: 64,

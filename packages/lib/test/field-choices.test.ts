@@ -6,7 +6,6 @@ import {
   ContractDefinitionError,
   defineCli,
   executeCli,
-  helpCapability,
   outputCapability,
   parseCliInvocation,
   type ContractSchema,
@@ -14,6 +13,8 @@ import {
 } from "@ykdz/cli-contract";
 import * as v from "valibot";
 import { z } from "zod";
+
+import { englishHelpCapability } from "./english-help.ts";
 
 const draft202012 = { target: "draft-2020-12" as const };
 
@@ -31,7 +32,7 @@ function fieldChoices(
 function createCombinationCli(input: ContractSchema<CombinationRawInput>) {
   return defineCli()({
     root: "combination",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -78,7 +79,7 @@ void test("Zod 的直接 enum 同源投影到 grammar、manifest、synopsis 与�
   ).mode?.enum;
   const cli = defineCli()({
     root: "choose",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -177,7 +178,7 @@ void test("Valibot 的直接 enum 同样覆盖单值与 repeatable option", () =
   );
   const cli = defineCli()({
     root: "valibotChoices",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -232,7 +233,7 @@ void test("每个显式字段候选值在 parser 聚合并在 validation 与 han
   };
   const cli = defineCli()({
     root: "choices",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -373,7 +374,7 @@ void test("缺席 default、没有候选值和其余 schema 约束保持原有�
   let handlerCalls = 0;
   const cli = defineCli()({
     root: "defaults",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -486,7 +487,7 @@ void test("组合、引用、条件和非字符串 enum 不推断候选值", asy
   };
   const cli = defineCli()({
     root: "counterexample",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {

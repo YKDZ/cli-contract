@@ -102,11 +102,76 @@ const outputCapabilities = new WeakSet<object>();
 const versionCapabilities = new WeakSet<object>();
 const compiledCliContracts = new WeakMap<object, RuntimeCompiledCli>();
 
+// 类型约束与定义期检查共用已知属性，避免拼错的声明被静默丢弃。
+const definitionPropertyKeys = {
+  cli: [
+    "root",
+    "help",
+    "version",
+    "output",
+    "usageFailureExitCode",
+    "commands",
+  ],
+  group: [
+    "kind",
+    "parent",
+    "name",
+    "aliases",
+    "description",
+    "helpSupplement",
+    "handler",
+  ],
+  command: [
+    "kind",
+    "parent",
+    "name",
+    "aliases",
+    "description",
+    "helpSupplement",
+    "fields",
+    "input",
+    "success",
+    "failures",
+    "handler",
+    "usageConstraints",
+  ],
+  field: {
+    flag: [
+      "kind",
+      "longOption",
+      "shortAlias",
+      "negatedLongOption",
+      "description",
+    ],
+    option: ["kind", "longOption", "shortAlias", "description"],
+    positional: ["kind", "description"],
+  },
+  usage: {
+    requires: ["kind", "field", "requires"],
+    exclusive: ["kind", "fields"],
+    forbiddenCombination: ["kind", "values"],
+    value: ["field", "value"],
+  },
+  success: {
+    completion: ["kind", "text"],
+    data: ["kind", "variants"],
+    stream: ["kind", "records", "text"],
+  },
+  atomicVariant: ["description", "schema", "exitCode", "text"],
+  streamRecord: ["description", "schema", "text"],
+  capability: {
+    help: ["shortAlias", "headings", "wording"],
+    version: ["value", "description", "shortAlias"],
+    output: ["defaultFormat", "text", "compatibilityFlags"],
+  },
+} as const;
+
 export interface HelpCapability {
   readonly kind: "helpCapability";
   readonly longOption: "--help";
   readonly shortAlias?: "-h";
   readonly headings?: HelpHeadings;
+  readonly wording?: HelpFactWording;
   readonly [cliContractType]: "help";
 }
 
@@ -123,13 +188,26 @@ export interface HelpHeadings {
   readonly supplement?: string;
 }
 
-/**
- * 根契约一次装配并自动投影到整棵命令树的帮助能力配置。标题只属于固定段落，
- * 不能由单个命令覆盖或用作自定义帮助模板。
- */
+export interface HelpFactWording {
+  /** 命令组占位词本身，核心为它添加尖括号。 */
+  readonly commandPlaceholder?: string;
+  /** 字段或输出格式的候选集合，必须包含 `{choices}`。 */
+  readonly choices?: string;
+  /** 字段或输出格式的默认 JSON 值，必须包含 `{value}`。 */
+  readonly default?: string;
+  /** 字段依赖关系，必须包含 `{field}` 与 `{requires}`。 */
+  readonly requires?: string;
+  /** 互斥字段集合，必须包含 `{fields}`。 */
+  readonly exclusive?: string;
+  /** 禁止同时出现的字段和值，必须包含 `{values}`。 */
+  readonly forbiddenCombination?: string;
+}
+
+/** 根契约一次装配的帮助配置；标题可省略，实际出现的事实必须有文案。 */
 export interface HelpCapabilityDefinition {
   readonly shortAlias?: "-h";
   readonly headings?: HelpHeadings;
+  readonly wording?: HelpFactWording;
 }
 
 export interface VersionCapability {
@@ -457,8 +535,154 @@ type CheckedFieldDefinitions<Fields extends FieldDefinitions> = {
   readonly [Field in keyof Fields]: CheckedFieldDefinition<
     Fields[Field],
     Field
-  >;
+  > &
+    RejectUnknownProperties<
+      Fields[Field],
+      AllowedFieldProperties<Fields[Field]>
+    >;
 };
+
+type RejectUnknownProperties<Value, Allowed extends PropertyKey> = Readonly<{
+  [Property in Exclude<keyof Value, Allowed>]?: never;
+}>;
+
+type AllowedFieldProperties<Field> =
+  Field extends Readonly<{
+    readonly kind: "flag";
+  }>
+    ? (typeof definitionPropertyKeys.field.flag)[number]
+    : Field extends Readonly<{
+          readonly kind: "valueOption" | "repeatableOption";
+        }>
+      ? (typeof definitionPropertyKeys.field.option)[number]
+      : (typeof definitionPropertyKeys.field.positional)[number];
+
+type ClosedVariantDefinitions<
+  Definitions,
+  Allowed extends PropertyKey,
+> = Readonly<{
+  [Variant in keyof Definitions]: RejectUnknownProperties<
+    Definitions[Variant],
+    Allowed
+  >;
+}>;
+
+type ClosedAtomicVariants<Variants> = ClosedVariantDefinitions<
+  Variants,
+  (typeof definitionPropertyKeys.atomicVariant)[number]
+>;
+
+type ClosedStreamRecords<Records> = ClosedVariantDefinitions<
+  Records,
+  (typeof definitionPropertyKeys.streamRecord)[number]
+>;
+
+type ClosedFieldDefinitions<Fields> = Readonly<{
+  [Field in keyof Fields]: RejectUnknownProperties<
+    Fields[Field],
+    AllowedFieldProperties<Fields[Field]>
+  >;
+}>;
+
+type ClosedUsageConstraint<Constraint> =
+  Constraint extends Readonly<{ readonly kind: "requires" }>
+    ? RejectUnknownProperties<
+        Constraint,
+        (typeof definitionPropertyKeys.usage.requires)[number]
+      >
+    : Constraint extends Readonly<{ readonly kind: "exclusive" }>
+      ? RejectUnknownProperties<
+          Constraint,
+          (typeof definitionPropertyKeys.usage.exclusive)[number]
+        >
+      : Constraint extends Readonly<{
+            readonly kind: "forbiddenCombination";
+            readonly values: infer Values extends readonly unknown[];
+          }>
+        ? RejectUnknownProperties<
+            Constraint,
+            (typeof definitionPropertyKeys.usage.forbiddenCombination)[number]
+          > &
+            Readonly<{
+              readonly values: {
+                [Index in keyof Values]: RejectUnknownProperties<
+                  Values[Index],
+                  (typeof definitionPropertyKeys.usage.value)[number]
+                >;
+              };
+            }>
+        : unknown;
+
+type ClosedUsageConstraints<Constraints> =
+  Constraints extends readonly unknown[]
+    ? Readonly<{
+        [Index in keyof Constraints]: ClosedUsageConstraint<Constraints[Index]>;
+      }>
+    : unknown;
+
+type ClosedSuccessDefinition<Success> =
+  Success extends Readonly<{
+    readonly kind: "data";
+    readonly variants: infer Variants;
+  }>
+    ? RejectUnknownProperties<
+        Success,
+        (typeof definitionPropertyKeys.success.data)[number]
+      > &
+        Readonly<{ readonly variants: ClosedAtomicVariants<Variants> }>
+    : Success extends Readonly<{
+          readonly kind: "stream";
+          readonly records: infer Records;
+        }>
+      ? RejectUnknownProperties<
+          Success,
+          (typeof definitionPropertyKeys.success.stream)[number]
+        > &
+          Readonly<{ readonly records: ClosedStreamRecords<Records> }>
+      : RejectUnknownProperties<
+          Success,
+          (typeof definitionPropertyKeys.success.completion)[number]
+        >;
+
+type ClosedCommandDefinition<Definition> = RejectUnknownProperties<
+  Definition,
+  (typeof definitionPropertyKeys.command)[number] | typeof executableCommandType
+> &
+  (Definition extends Readonly<{ readonly success: infer Success }>
+    ? Readonly<{ readonly success: ClosedSuccessDefinition<Success> }>
+    : unknown) &
+  (Definition extends Readonly<{ readonly failures: infer Failures }>
+    ? Readonly<{ readonly failures: ClosedAtomicVariants<Failures> }>
+    : unknown) &
+  (Definition extends Readonly<{ readonly fields: infer Fields }>
+    ? Readonly<{ readonly fields: ClosedFieldDefinitions<Fields> }>
+    : unknown) &
+  (Definition extends Readonly<{
+    readonly usageConstraints: infer Constraints;
+  }>
+    ? Readonly<{
+        readonly usageConstraints: ClosedUsageConstraints<Constraints>;
+      }>
+    : unknown);
+
+type ClosedRootCommands<Commands> = Readonly<{
+  [Command in keyof Commands]: Commands[Command] extends Readonly<{
+    readonly kind: "command" | "rootCommand";
+  }>
+    ? ClosedCommandDefinition<Commands[Command]>
+    : RejectUnknownProperties<
+        Commands[Command],
+        (typeof definitionPropertyKeys.group)[number]
+      >;
+}>;
+
+type ClosedRootDefinition<Definition> = RejectUnknownProperties<
+  Definition,
+  (typeof definitionPropertyKeys.cli)[number]
+> &
+  (Definition extends Readonly<{ readonly commands: infer Commands }>
+    ? Readonly<{ readonly commands: ClosedRootCommands<Commands> }>
+    : unknown);
 
 type InvalidFieldIdentities<Fields extends FieldDefinitions> = {
   [Field in keyof Fields & string]: IsLowerCamelCase<Field> extends true
@@ -810,6 +1034,7 @@ export interface CompletionRootCommandDefinition<
   readonly input: InputSchema & RawFieldInputContract<Fields, InputSchema>;
   readonly success: CompletionSuccessDefinition<Command, TextEnabled>;
   readonly failures: Failures &
+    ClosedAtomicVariants<Failures> &
     FailureVariantNameContract<Failures> &
     FailureVariantTextContract<Command, Failures, TextEnabled>;
   readonly handler: (
@@ -844,9 +1069,13 @@ export interface DataRootCommandDefinition<
   readonly input: InputSchema & RawFieldInputContract<Fields, InputSchema>;
   readonly success: Readonly<{
     readonly kind: "data";
-    readonly variants: Variants & DataVariantNameContract<Variants>;
+    readonly variants: Variants &
+      ClosedAtomicVariants<Variants> &
+      DataVariantNameContract<Variants>;
   }>;
-  readonly failures: Failures & FailureVariantNameContract<Failures>;
+  readonly failures: Failures &
+    ClosedAtomicVariants<Failures> &
+    FailureVariantNameContract<Failures>;
   readonly handler: (
     context: DataHandlerContext<
       Command,
@@ -885,6 +1114,7 @@ export interface StreamRootCommandDefinition<
     readonly kind: "stream";
     readonly records: Records &
       StreamRecordDefinitions<TextEnabled> &
+      ClosedStreamRecords<Records> &
       StreamRecordNameContract<Records>;
   }> &
     (TextEnabled extends true
@@ -892,7 +1122,9 @@ export interface StreamRootCommandDefinition<
       : TextEnabled extends false
         ? Readonly<{ readonly text?: never }>
         : Readonly<{ readonly text?: CompletionTextPresenter }>);
-  readonly failures: Failures & FailureVariantNameContract<Failures>;
+  readonly failures: Failures &
+    ClosedAtomicVariants<Failures> &
+    FailureVariantNameContract<Failures>;
   readonly handler: (
     context: StreamHandlerContext<
       Command,
@@ -1373,6 +1605,7 @@ export interface CliGrammar<
       readonly longOption: "--help";
       readonly shortAlias?: "-h";
       readonly headings?: HelpHeadings;
+      readonly wording?: HelpFactWording;
     }>;
     readonly version?: Readonly<{
       readonly longOption: "--version";
@@ -1453,7 +1686,7 @@ export interface CliManifest<
   Root extends string,
   RootKind extends CliRootKind = CliRootKind,
 > {
-  readonly schemaVersion: "2";
+  readonly schemaVersion: "3";
   readonly root: Root;
   readonly commands: RootKind extends "rootGroup"
     ? Readonly<Record<string, CommandGroupManifest | ExecutableCommandManifest>>
@@ -1534,7 +1767,7 @@ type HierarchyExecutableKeys<Commands> = {
 }[keyof Commands];
 
 export interface HierarchyCliManifest<Root extends string, Commands> {
-  readonly schemaVersion: "2";
+  readonly schemaVersion: "3";
   readonly root: Root;
   readonly commands: Readonly<{
     [Command in keyof Commands]: HierarchyManifestNode<Commands[Command]>;
@@ -2051,16 +2284,19 @@ export interface DefineCli<Dependencies> {
     InputSchema extends ContractSchema,
     const Records extends StreamRecordDefinitions<true>,
     const Failures extends FailureVariantDefinitions<true>,
+    const Definition extends object,
   >(
-    definition: StreamRootCliDefinition<
-      Root,
-      Dependencies,
-      Readonly<Record<never, never>>,
-      InputSchema,
-      Records,
-      Failures,
-      true
-    > &
+    definition: Definition &
+      ClosedRootDefinition<Definition> &
+      StreamRootCliDefinition<
+        Root,
+        Dependencies,
+        Readonly<Record<never, never>>,
+        InputSchema,
+        Records,
+        Failures,
+        true
+      > &
       Readonly<{
         readonly output: OutputCapability<readonly ["structured", "text"]>;
       }>,
@@ -2077,15 +2313,18 @@ export interface DefineCli<Dependencies> {
     InputSchema extends ContractSchema,
     const Records extends StreamRecordDefinitions,
     const Failures extends FailureVariantDefinitions,
+    const Definition extends object,
   >(
-    definition: StreamRootCliDefinition<
-      Root,
-      Dependencies,
-      Readonly<Record<never, never>>,
-      InputSchema,
-      Records,
-      Failures
-    > &
+    definition: Definition &
+      ClosedRootDefinition<Definition> &
+      StreamRootCliDefinition<
+        Root,
+        Dependencies,
+        Readonly<Record<never, never>>,
+        InputSchema,
+        Records,
+        Failures
+      > &
       Readonly<{ readonly output: OutputCapability<readonly ["structured"]> }>,
   ): CliContract<
     Root,
@@ -2104,9 +2343,15 @@ export interface DefineCli<Dependencies> {
     const Root extends string,
     const Commands extends Readonly<Record<string, CommandNodeDefinition>>,
     const Output extends OutputCapability,
+    const Definition extends object,
   >(
-    definition: HierarchyCliDefinition<Root> &
-      Readonly<{ readonly commands: Commands; readonly output: Output }>,
+    definition: Definition &
+      ClosedRootDefinition<Definition> &
+      HierarchyCliDefinition<Root> &
+      Readonly<{
+        readonly commands: Commands & ClosedRootCommands<Commands>;
+        readonly output: Output;
+      }>,
     ...validation: HierarchyOutputValidation<Commands, Output>
   ): CliContract<
     Root,
@@ -2124,15 +2369,18 @@ export interface DefineCli<Dependencies> {
       FailureSchemas,
       true
     >,
+    const Definition extends object,
   >(
-    definition: CompletionRootCliDefinition<
-      Root,
-      Dependencies,
-      Failures,
-      Readonly<Record<never, never>>,
-      ContractSchema<EmptyCliInput>,
-      true
-    > &
+    definition: Definition &
+      ClosedRootDefinition<Definition> &
+      CompletionRootCliDefinition<
+        Root,
+        Dependencies,
+        Failures,
+        Readonly<Record<never, never>>,
+        ContractSchema<EmptyCliInput>,
+        true
+      > &
       Readonly<{
         readonly output: OutputCapability<readonly ["structured", "text"]>;
       }>,
@@ -2153,15 +2401,18 @@ export interface DefineCli<Dependencies> {
       FailureSchemas,
       true
     >,
+    const Definition extends object,
   >(
-    definition: CompletionRootCliDefinition<
-      Root,
-      Dependencies,
-      Failures,
-      Fields,
-      InputSchema,
-      true
-    > &
+    definition: Definition &
+      ClosedRootDefinition<Definition> &
+      CompletionRootCliDefinition<
+        Root,
+        Dependencies,
+        Failures,
+        Fields,
+        InputSchema,
+        true
+      > &
       Readonly<{
         readonly output: OutputCapability<readonly ["structured", "text"]>;
         readonly commands: Readonly<{
@@ -2190,15 +2441,18 @@ export interface DefineCli<Dependencies> {
       FailureSchemas,
       true
     >,
+    const Definition extends object,
   >(
-    definition: DataRootCliDefinition<
-      Root,
-      Dependencies,
-      Fields,
-      InputSchema,
-      Variants,
-      Failures
-    > &
+    definition: Definition &
+      ClosedRootDefinition<Definition> &
+      DataRootCliDefinition<
+        Root,
+        Dependencies,
+        Fields,
+        InputSchema,
+        Variants,
+        Failures
+      > &
       Readonly<{
         readonly output: OutputCapability<readonly ["structured", "text"]>;
       }>,
@@ -2216,16 +2470,19 @@ export interface DefineCli<Dependencies> {
     InputSchema extends ContractSchema,
     const Records extends StreamRecordDefinitions<true>,
     const Failures extends FailureVariantDefinitions<true>,
+    const Definition extends object,
   >(
-    definition: StreamRootCliDefinition<
-      Root,
-      Dependencies,
-      Fields,
-      InputSchema,
-      Records,
-      Failures,
-      true
-    > &
+    definition: Definition &
+      ClosedRootDefinition<Definition> &
+      StreamRootCliDefinition<
+        Root,
+        Dependencies,
+        Fields,
+        InputSchema,
+        Records,
+        Failures,
+        true
+      > &
       Readonly<{
         readonly output: OutputCapability<readonly ["structured", "text"]>;
       }>,
@@ -2243,15 +2500,18 @@ export interface DefineCli<Dependencies> {
     InputSchema extends ContractSchema,
     const Records extends StreamRecordDefinitions,
     const Failures extends FailureVariantDefinitions,
+    const Definition extends object,
   >(
-    definition: StreamRootCliDefinition<
-      Root,
-      Dependencies,
-      Fields,
-      InputSchema,
-      Records,
-      Failures
-    > &
+    definition: Definition &
+      ClosedRootDefinition<Definition> &
+      StreamRootCliDefinition<
+        Root,
+        Dependencies,
+        Fields,
+        InputSchema,
+        Records,
+        Failures
+      > &
       Readonly<{ readonly output: OutputCapability<readonly ["structured"]> }>,
   ): CliContract<
     Root,
@@ -2265,15 +2525,18 @@ export interface DefineCli<Dependencies> {
     const Root extends string,
     const Failures extends FailureVariantDefinitions,
     const Output extends OutputCapability,
+    const Definition extends object,
   >(
-    definition: CompletionRootCliDefinition<
-      Root,
-      Dependencies,
-      Failures,
-      Readonly<Record<never, never>>,
-      ContractSchema<EmptyCliInput>,
-      TextEnabledForOutput<Output>
-    > &
+    definition: Definition &
+      ClosedRootDefinition<Definition> &
+      CompletionRootCliDefinition<
+        Root,
+        Dependencies,
+        Failures,
+        Readonly<Record<never, never>>,
+        ContractSchema<EmptyCliInput>,
+        TextEnabledForOutput<Output>
+      > &
       Readonly<{ readonly output: Output }>,
   ): CliContract<
     Root,
@@ -2289,15 +2552,18 @@ export interface DefineCli<Dependencies> {
     InputSchema extends ContractSchema,
     const Failures extends FailureVariantDefinitions,
     const Output extends OutputCapability,
+    const Definition extends object,
   >(
-    definition: CompletionRootCliDefinition<
-      Root,
-      Dependencies,
-      Failures,
-      Fields,
-      InputSchema,
-      TextEnabledForOutput<Output>
-    > &
+    definition: Definition &
+      ClosedRootDefinition<Definition> &
+      CompletionRootCliDefinition<
+        Root,
+        Dependencies,
+        Failures,
+        Fields,
+        InputSchema,
+        TextEnabledForOutput<Output>
+      > &
       Readonly<{
         readonly output: Output;
         readonly commands: Readonly<{
@@ -2325,11 +2591,15 @@ export interface DefineCli<Dependencies> {
     const Output extends OutputCapability,
     const Kind extends RootFallbackKind,
     const Commands,
+    const Definition extends object,
   >(
-    definition: RootCliDefinitionBase<Root> &
+    definition: Definition &
+      ClosedRootDefinition<Definition> &
+      RootCliDefinitionBase<Root> &
       Readonly<{
         readonly output: Output;
         readonly commands: Commands &
+          ClosedRootCommands<Commands> &
           Readonly<
             Record<
               Root,
@@ -2481,6 +2751,7 @@ export interface DefineCommand<Command extends string, Dependencies> {
     const Kind extends RootFallbackKind,
   >(
     definition: Definition &
+      ClosedCommandDefinition<Definition> &
       Omit<
         RootFallbackCliDefinition<
           Command,
@@ -2517,6 +2788,7 @@ export interface DefineCommand<Command extends string, Dependencies> {
     const Constraints extends readonly unknown[] | undefined = undefined,
   >(
     definition: Definition &
+      ClosedCommandDefinition<Definition> &
       HierarchyCommandInput<
         HierarchyCompletionCommandDefinition<
           Command,
@@ -2558,6 +2830,7 @@ export interface DefineCommand<Command extends string, Dependencies> {
     const Constraints extends readonly unknown[] | undefined = undefined,
   >(
     definition: Definition &
+      ClosedCommandDefinition<Definition> &
       HierarchyCommandInput<
         HierarchyCompletionCommandDefinition<
           Command,
@@ -2601,6 +2874,7 @@ export interface DefineCommand<Command extends string, Dependencies> {
     const Constraints extends readonly unknown[] | undefined = undefined,
   >(
     definition: Definition &
+      ClosedCommandDefinition<Definition> &
       HierarchyCommandInput<
         HierarchyDataCommandDefinition<
           Command,
@@ -2645,6 +2919,7 @@ export interface DefineCommand<Command extends string, Dependencies> {
     const Constraints extends readonly unknown[] | undefined = undefined,
   >(
     definition: Definition &
+      ClosedCommandDefinition<Definition> &
       HierarchyCommandInput<
         HierarchyStreamCommandDefinition<
           Command,
@@ -2775,12 +3050,43 @@ type RuntimeCliDefinition = RootCliDefinitionBase<string> &
   }>;
 
 /**
- * 显式装配根级帮助，并机械覆盖根、命令组和可执行命令。`headings` 只为固定
- * 段落提供可选标签；未提供时仍输出同一段落内容，不生成默认文案或逐命令模板。
+ * 显式装配全树帮助。`headings` 是可选段落标题；`wording` 按实际帮助事实
+ * 提供必要模板，由 defineCli 检查完整性；核心不生成默认自然语言。
  */
+export function helpCapability(definition?: undefined): HelpCapability;
+export function helpCapability<
+  const Definition extends HelpCapabilityDefinition,
+>(
+  definition: Definition &
+    RejectUnknownProperties<
+      Definition,
+      (typeof definitionPropertyKeys.capability.help)[number]
+    > &
+    (Definition extends Readonly<{ readonly headings: infer Headings }>
+      ? Readonly<{
+          readonly headings: RejectUnknownProperties<
+            Headings,
+            keyof HelpHeadings
+          >;
+        }>
+      : unknown) &
+    (Definition extends Readonly<{ readonly wording: infer Wording }>
+      ? Readonly<{
+          readonly wording: RejectUnknownProperties<
+            Wording,
+            keyof HelpFactWording
+          >;
+        }>
+      : unknown),
+): HelpCapability;
 export function helpCapability(
   definition: HelpCapabilityDefinition = {},
 ): HelpCapability {
+  assertKnownCapabilityOptions(
+    definition,
+    definitionPropertyKeys.capability.help,
+    "help",
+  );
   if (definition.shortAlias !== undefined && definition.shortAlias !== "-h") {
     throw new TypeError("帮助短别名必须是 -h");
   }
@@ -2793,6 +3099,9 @@ export function helpCapability(
     ...(definition.headings === undefined
       ? {}
       : { headings: copyHelpHeadings(definition.headings) }),
+    ...(definition.wording === undefined
+      ? {}
+      : { wording: copyHelpFactWording(definition.wording) }),
   }) as HelpCapability;
   helpCapabilities.add(capability);
   return capability;
@@ -2818,14 +3127,76 @@ function copyHelpHeadings(value: unknown): HelpHeadings {
   return Object.freeze(headings);
 }
 
+const helpTemplatePlaceholders = {
+  choices: ["choices"],
+  default: ["value"],
+  requires: ["field", "requires"],
+  exclusive: ["fields"],
+  forbiddenCombination: ["values"],
+} as const;
+
+function copyHelpFactWording(value: unknown): HelpFactWording {
+  if (!isPlainRecord(value)) {
+    throw new TypeError("帮助事实文案必须是对象");
+  }
+  const wording: Record<string, string> = {};
+  for (const [slot, raw] of Object.entries(value)) {
+    if (slot === "commandPlaceholder") {
+      const label = copySingleLineText(raw, "命令组占位词");
+      if (
+        label.trim().length === 0 ||
+        label.includes("<") ||
+        label.includes(">")
+      ) {
+        throw new TypeError("命令组占位词无效");
+      }
+      wording[slot] = label;
+      continue;
+    }
+    if (!Object.hasOwn(helpTemplatePlaceholders, slot)) {
+      throw new TypeError(`帮助事实文案包含未知槽位 ${slot}`);
+    }
+    const template = copySingleLineText(raw, `帮助事实模板 ${slot}`);
+    const required = new Set<string>(
+      helpTemplatePlaceholders[slot as keyof typeof helpTemplatePlaceholders],
+    );
+    const placeholders = [
+      ...template.matchAll(/\{([A-Za-z][A-Za-z0-9]*)\}/g),
+    ].map((match) => match[1] ?? "");
+    const outside = template.replace(/\{[A-Za-z][A-Za-z0-9]*\}/g, "");
+    if (
+      template.trim().length === 0 ||
+      outside.includes("{") ||
+      outside.includes("}") ||
+      placeholders.some((placeholder) => !required.has(placeholder)) ||
+      [...required].some((placeholder) => !placeholders.includes(placeholder))
+    ) {
+      throw new TypeError(`帮助事实模板 ${slot} 的占位符无效`);
+    }
+    wording[slot] = template;
+  }
+  return Object.freeze(wording);
+}
+
 /**
  * 在根契约显式装配版本提前请求，并自动覆盖整棵命令树。`value` 与可选
  * `description` 均由消费者拥有；核心只注册固定 spelling、投影帮助并写出 value，
  * 不读取包元数据、不添加前缀或默认说明，也不把版本当作命令输入。
  */
-export function versionCapability(
-  definition: VersionCapabilityDefinition,
+export function versionCapability<
+  const Definition extends VersionCapabilityDefinition,
+>(
+  definition: Definition &
+    RejectUnknownProperties<
+      Definition,
+      (typeof definitionPropertyKeys.capability.version)[number]
+    >,
 ): VersionCapability {
+  assertKnownCapabilityOptions(
+    definition,
+    definitionPropertyKeys.capability.version,
+    "version",
+  );
   const value = copyVersionTextLine(definition.value);
   const description =
     definition.description === undefined
@@ -2887,6 +3258,9 @@ function compileControls(definition: RuntimeCliDefinition) {
       ...(definition.help.headings === undefined
         ? {}
         : { headings: definition.help.headings }),
+      ...(definition.help.wording === undefined
+        ? {}
+        : { wording: definition.help.wording }),
     },
     ...(version === undefined
       ? {}
@@ -2923,7 +3297,18 @@ function compileControls(definition: RuntimeCliDefinition) {
  */
 export function outputCapability<
   const Definition extends OutputCapabilityDefinition,
->(definition: Definition): OutputCapability<OutputFormatsFor<Definition>> {
+>(
+  definition: Definition &
+    RejectUnknownProperties<
+      Definition,
+      (typeof definitionPropertyKeys.capability.output)[number]
+    >,
+): OutputCapability<OutputFormatsFor<Definition>> {
+  assertKnownCapabilityOptions(
+    definition,
+    definitionPropertyKeys.capability.output,
+    "output",
+  );
   const formats =
     definition.defaultFormat === "text" || definition.text === true
       ? (["structured", "text"] as const)
@@ -2940,6 +3325,18 @@ export function outputCapability<
   }) as OutputCapability<OutputFormatsFor<Definition>>;
   outputCapabilities.add(capability);
   return capability;
+}
+
+function assertKnownCapabilityOptions(
+  definition: object,
+  allowed: readonly string[],
+  capability: string,
+): void {
+  for (const property of Object.keys(definition)) {
+    if (!allowed.includes(property)) {
+      throw new TypeError(`${capability} 能力包含未知属性 ${property}`);
+    }
+  }
 }
 
 /**
@@ -2965,12 +3362,30 @@ export function defineCli<Dependencies = undefined>(): DefineCli<Dependencies> {
 
 function compileCli(definition: RuntimeCliDefinition): CliContract {
   const issues: ContractDefinitionIssue[] = [];
+  collectUnknownDefinitionProperties(definition, issues);
   const isHierarchy =
     definition.commands[definition.root]?.kind === "rootGroup";
+  const helpWording = helpCapabilities.has(definition.help)
+    ? definition.help.wording
+    : undefined;
+  if (isTextOutputEnabled(definition.output)) {
+    for (const slot of ["choices", "default"] as const) {
+      if (helpWording?.[slot] === undefined) {
+        reportMissingHelpFactTemplate(issues, definition.root, slot);
+      }
+    }
+  }
   let orderedIds: readonly string[];
   if (isHierarchy) {
     collectCliBaseIssues(definition, issues);
     orderedIds = orderHierarchy(definition, issues);
+    if (helpWording?.commandPlaceholder === undefined) {
+      reportMissingHelpFactTemplate(
+        issues,
+        definition.root,
+        "commandPlaceholder",
+      );
+    }
   } else {
     orderedIds =
       collectRootDefinitionIssues(definition, issues) === undefined
@@ -3002,7 +3417,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
     if (node.kind === "rootGroup" || node.kind === "commandGroup") {
       const usage = deepFreeze({
         command: id,
-        synopsis: `${commandPath(id, definition.commands)} <command>`,
+        synopsis: `${commandPath(id, definition.commands)} <${helpWording?.commandPlaceholder as string}>`,
       });
       const compiledNode: RuntimeCompiledCommand = {
         id,
@@ -3069,6 +3484,18 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
             id,
             issues,
           );
+    if (
+      fields.some((field) => field.choices !== undefined) &&
+      helpWording?.choices === undefined
+    ) {
+      reportMissingHelpFactTemplate(issues, id, "choices");
+    }
+    if (
+      fields.some((field) => field.default !== undefined) &&
+      helpWording?.default === undefined
+    ) {
+      reportMissingHelpFactTemplate(issues, id, "default");
+    }
     const describedInput =
       input === undefined ? undefined : projectFieldDescriptions(input, fields);
     collectControlFieldConflicts(id, fields, definition, issues);
@@ -3080,6 +3507,13 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
       id,
       issues,
     );
+    for (const slot of new Set(
+      usageConstraints.map((constraint) => constraint.kind),
+    )) {
+      if (helpWording?.[slot] === undefined) {
+        reportMissingHelpFactTemplate(issues, id, slot);
+      }
+    }
     const usage = deepFreeze({
       command: id,
       synopsis: createUsageSynopsis(
@@ -3193,7 +3627,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
     controls,
   });
   const manifest = deepFreeze({
-    schemaVersion: "2" as const,
+    schemaVersion: "3" as const,
     root: definition.root,
     commands: manifestCommands,
     controls,
@@ -3220,6 +3654,176 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
     commands: deepFreeze(runtimeCommands),
   });
   return contract;
+}
+
+function reportMissingHelpFactTemplate(
+  issues: ContractDefinitionIssue[],
+  command: string,
+  slot: Extract<
+    ContractDefinitionIssue,
+    { readonly code: "missingHelpFactTemplate" }
+  >["slot"],
+): void {
+  if (
+    issues.some(
+      (issue) =>
+        issue.code === "missingHelpFactTemplate" &&
+        issue.command === command &&
+        issue.slot === slot,
+    )
+  ) {
+    return;
+  }
+  issues.push({ code: "missingHelpFactTemplate", command, slot });
+}
+
+function collectUnknownProperties(
+  value: unknown,
+  path: readonly string[],
+  allowed: readonly string[],
+  issues: ContractDefinitionIssue[],
+): void {
+  if (!isPlainRecord(value)) return;
+  for (const property of Object.keys(value)) {
+    if (!allowed.includes(property)) {
+      issues.push({
+        code: "unknownDefinitionProperty",
+        path: [...path, property],
+      });
+    }
+  }
+}
+
+function collectUnknownVariantProperties(
+  definitions: unknown,
+  path: readonly string[],
+  allowed: readonly string[],
+  issues: ContractDefinitionIssue[],
+): void {
+  if (!isPlainRecord(definitions)) return;
+  for (const [variant, definition] of Object.entries(definitions)) {
+    collectUnknownProperties(definition, [...path, variant], allowed, issues);
+  }
+}
+
+function collectUnknownDefinitionProperties(
+  definition: RuntimeCliDefinition,
+  issues: ContractDefinitionIssue[],
+): void {
+  collectUnknownProperties(definition, [], definitionPropertyKeys.cli, issues);
+  if (!isPlainRecord(definition.commands)) return;
+  for (const [command, node] of Object.entries(definition.commands)) {
+    const path = ["commands", command];
+    if (!isPlainRecord(node)) continue;
+    if (node.kind === "rootGroup" || node.kind === "commandGroup") {
+      collectUnknownProperties(
+        node,
+        path,
+        definitionPropertyKeys.group,
+        issues,
+      );
+      continue;
+    }
+    if (node.kind !== "rootCommand" && node.kind !== "command") continue;
+    collectUnknownProperties(
+      node,
+      path,
+      definitionPropertyKeys.command,
+      issues,
+    );
+    if (isPlainRecord(node.fields)) {
+      for (const [field, fieldDefinition] of Object.entries(node.fields)) {
+        const fieldPath = [...path, "fields", field];
+        if (!isPlainRecord(fieldDefinition)) continue;
+        const allowed =
+          fieldDefinition.kind === "flag"
+            ? definitionPropertyKeys.field.flag
+            : fieldDefinition.kind === "valueOption" ||
+                fieldDefinition.kind === "repeatableOption"
+              ? definitionPropertyKeys.field.option
+              : fieldDefinition.kind === "positional" ||
+                  fieldDefinition.kind === "variadicPositional"
+                ? definitionPropertyKeys.field.positional
+                : undefined;
+        if (allowed !== undefined) {
+          collectUnknownProperties(fieldDefinition, fieldPath, allowed, issues);
+        }
+      }
+    }
+    if (Array.isArray(node.usageConstraints)) {
+      node.usageConstraints.forEach((constraint, index) => {
+        const constraintPath = [...path, "usageConstraints", String(index)];
+        if (!isPlainRecord(constraint)) return;
+        const allowed =
+          constraint.kind === "requires"
+            ? definitionPropertyKeys.usage.requires
+            : constraint.kind === "exclusive"
+              ? definitionPropertyKeys.usage.exclusive
+              : constraint.kind === "forbiddenCombination"
+                ? definitionPropertyKeys.usage.forbiddenCombination
+                : undefined;
+        if (allowed === undefined) return;
+        collectUnknownProperties(constraint, constraintPath, allowed, issues);
+        if (
+          constraint.kind === "forbiddenCombination" &&
+          Array.isArray(constraint.values)
+        ) {
+          constraint.values.forEach((value, valueIndex) =>
+            collectUnknownProperties(
+              value,
+              [...constraintPath, "values", String(valueIndex)],
+              definitionPropertyKeys.usage.value,
+              issues,
+            ),
+          );
+        }
+      });
+    }
+    if (isPlainRecord(node.success)) {
+      const successPath = [...path, "success"];
+      const success = node.success;
+      if (success.kind === "completion") {
+        collectUnknownProperties(
+          success,
+          successPath,
+          definitionPropertyKeys.success.completion,
+          issues,
+        );
+      } else if (success.kind === "data") {
+        collectUnknownProperties(
+          success,
+          successPath,
+          definitionPropertyKeys.success.data,
+          issues,
+        );
+        collectUnknownVariantProperties(
+          success.variants,
+          [...successPath, "variants"],
+          definitionPropertyKeys.atomicVariant,
+          issues,
+        );
+      } else if (success.kind === "stream") {
+        collectUnknownProperties(
+          success,
+          successPath,
+          definitionPropertyKeys.success.stream,
+          issues,
+        );
+        collectUnknownVariantProperties(
+          success.records,
+          [...successPath, "records"],
+          definitionPropertyKeys.streamRecord,
+          issues,
+        );
+      }
+    }
+    collectUnknownVariantProperties(
+      node.failures,
+      [...path, "failures"],
+      definitionPropertyKeys.atomicVariant,
+      issues,
+    );
+  }
 }
 
 export function getCompiledCli(contract: CliContract): RuntimeCompiledCli {

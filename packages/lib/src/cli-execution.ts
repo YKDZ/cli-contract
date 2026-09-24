@@ -15,6 +15,7 @@ import {
   type CliContractDependencies,
   type CliContractResult,
   type CliContractRoot,
+  type HelpFactWording,
   type OutcomeFact,
 } from "#/cli-contract";
 import {
@@ -231,6 +232,7 @@ function createHelpText(
   command: ReturnType<typeof getCompiledCli>["commands"][string],
 ): string {
   const headings = compiled.contract.grammar.controls.help.headings;
+  const wording = compiled.contract.grammar.controls.help.wording;
   const segments = [command.description];
   const commands = Object.values(compiled.commands).filter(
     (candidate) => candidate.parent === command.id,
@@ -248,7 +250,7 @@ function createHelpText(
       field.kind !== "positional" && field.kind !== "variadicPositional",
   );
   const options = [
-    ...optionFields.map(formatHelpField),
+    ...optionFields.map((field) => formatHelpField(field, wording)),
     ...formatCoreControls(compiled),
   ];
 
@@ -260,7 +262,7 @@ function createHelpText(
     headings?.commands,
     commands.map((candidate) =>
       helpDetail(
-        `${[candidate.name, ...candidate.aliases].join(", ")}${isCommandGroup(candidate) ? " <command>" : ""}`,
+        `${[candidate.name, ...candidate.aliases].join(", ")}${isCommandGroup(candidate) ? ` <${requireHelpFactWording(wording?.commandPlaceholder)}>` : ""}`,
         candidate.description,
       ),
     ),
@@ -268,14 +270,14 @@ function createHelpText(
   appendHelpSegment(
     segments,
     headings?.arguments,
-    positionalFields.map(formatHelpField),
+    positionalFields.map((field) => formatHelpField(field, wording)),
   );
   appendHelpSegment(segments, headings?.options, options);
   appendHelpSegment(
     segments,
     headings?.constraints,
     usageConstraints.map((constraint) =>
-      helpLine(formatUsageConstraint(constraint)),
+      helpLine(formatUsageConstraint(constraint, wording)),
     ),
   );
   appendHelpSegment(
@@ -360,7 +362,7 @@ function formatCoreControls(
       ? []
       : [
           helpLine(
-            `${output.selector} <${output.formats.join("|")}> (choices: ${output.formats.map((format) => JSON.stringify(format)).join(", ")}) (default: ${JSON.stringify(output.defaultFormat)})`,
+            `${output.selector} <${output.formats.join("|")}> ${renderHelpFactTemplate(help.wording?.choices, { choices: output.formats.map((format) => JSON.stringify(format)).join(", ") })} ${renderHelpFactTemplate(help.wording?.default, { value: JSON.stringify(output.defaultFormat) })}`,
           ),
         ]),
     ...Object.entries(output.compatibilityFlags ?? {}).map(([flag, format]) =>
@@ -397,28 +399,61 @@ async function writeUsageFailure(
 
 function formatUsageConstraint(
   constraint: CompiledExecutable["usageConstraints"][number],
+  wording: HelpFactWording | undefined,
 ): string {
   if (constraint.kind === "requires")
-    return `${constraint.field} requires ${constraint.requires}`;
+    return renderHelpFactTemplate(wording?.requires, {
+      field: constraint.field,
+      requires: constraint.requires,
+    });
   if (constraint.kind === "exclusive")
-    return `exclusive ${constraint.fields.join(", ")}`;
-  return `forbidden ${constraint.values
-    .map(({ field, value }) => `${field}=${String(value)}`)
-    .join(", ")}`;
+    return renderHelpFactTemplate(wording?.exclusive, {
+      fields: constraint.fields.join(", "),
+    });
+  return renderHelpFactTemplate(wording?.forbiddenCombination, {
+    values: constraint.values
+      .map(({ field, value }) => `${field}=${JSON.stringify(value)}`)
+      .join(", "),
+  });
+}
+
+function renderHelpFactTemplate(
+  template: string | undefined,
+  values: Readonly<Record<string, string>>,
+): string {
+  const factTemplate = requireHelpFactWording(template);
+  return factTemplate.replace(
+    /\{([A-Za-z][A-Za-z0-9]*)\}/g,
+    (_match, key: string) => {
+      const value = values[key];
+      if (value === undefined) {
+        throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+      }
+      return value;
+    },
+  );
+}
+
+function requireHelpFactWording(value: string | undefined): string {
+  if (value === undefined) {
+    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+  }
+  return value;
 }
 
 function formatHelpField(
   field: CompiledExecutable["fields"][number],
+  wording: HelpFactWording | undefined,
 ): HelpEntry {
   const cardinality = formatFieldUsage(field, true);
   const choices =
     field.choices === undefined
       ? ""
-      : ` (choices: ${field.choices.map((choice) => JSON.stringify(choice)).join(", ")})`;
+      : ` ${renderHelpFactTemplate(wording?.choices, { choices: field.choices.map((choice) => JSON.stringify(choice)).join(", ") })}`;
   const defaultValue =
     field.default === undefined
       ? ""
-      : ` (default: ${JSON.stringify(field.default)})`;
+      : ` ${renderHelpFactTemplate(wording?.default, { value: JSON.stringify(field.default) })}`;
   return helpDetail(
     `${cardinality}${choices}${defaultValue}`,
     field.description,

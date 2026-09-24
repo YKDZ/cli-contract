@@ -88,7 +88,7 @@ export class ContractExecutionError extends Error {
   constructor(
     issues: readonly [ContractExecutionIssue, ...ContractExecutionIssue[]],
   ) {
-    super(issues.map(formatContractExecutionIssue).join("；"));
+    super("contractExecutionError");
     this.name = "ContractExecutionError";
     this.issues = Object.freeze(
       issues.map((issue) => Object.freeze(issue)),
@@ -97,35 +97,4 @@ export class ContractExecutionError extends Error {
       ...ContractExecutionIssue[],
     ];
   }
-}
-
-function formatContractExecutionIssue(issue: ContractExecutionIssue): string {
-  switch (issue.code) {
-    case "invocationContractMismatch":
-      return `调用不属于命令 ${issue.expectedCommand} 的 CLI 契约`;
-    case "invalidCliContract":
-      return "CLI 契约不是由 defineCli 创建";
-    case "invalidOutcomeFact":
-      return `命令 ${issue.command} 的 handler 返回了未签发结果`;
-    case "streamHandlerMustReturnAsyncGenerator":
-      return `命令 ${issue.command} 的 stream handler 必须返回 AsyncGenerator`;
-    case "outcomeKindMismatch":
-      return `命令 ${issue.command} 需要 ${issue.expected} 结果，却收到 ${issue.received}`;
-    case "undeclaredOutcomeVariant":
-      return `命令 ${issue.command} 返回了未声明的 ${issue.location} 变体 ${issue.variant}`;
-    case "asynchronousSchemaValidation":
-      return `${formatSchemaTarget(issue)} 的契约模式必须同步验证`;
-    case "invalidStandardResult":
-      return `${formatSchemaTarget(issue)} 的契约模式返回了非法 Standard Result`;
-    case "outputSchemaRejected":
-      return `${formatSchemaTarget(issue)} 的 payload 未通过声明模式`;
-    case "invalidJsonValue":
-      return `${formatSchemaTarget(issue)} 的 payload 不是 JSON 值`;
-  }
-}
-
-function formatSchemaTarget(target: ExecutionSchemaTarget): string {
-  return target.location === "input"
-    ? `命令 ${target.command} 输入`
-    : `命令 ${target.command} 的 ${target.location} 变体 ${target.variant}`;
 }

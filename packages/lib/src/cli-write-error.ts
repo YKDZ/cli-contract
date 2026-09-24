@@ -9,7 +9,7 @@ export class CliWriteError extends Error {
   override readonly cause: unknown;
 
   constructor(destination: CliOutputDestination, cause: unknown) {
-    super(`CLI ${destination} 写入失败`, { cause });
+    super("cliWriteError", { cause });
     this.name = "CliWriteError";
     this.destination = destination;
     this.cause = cause;

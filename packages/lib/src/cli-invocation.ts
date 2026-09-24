@@ -6,6 +6,7 @@ import {
   type CliContractRoot,
   type RuntimeCompiledExecutable,
 } from "#/cli-contract";
+import { ContractExecutionError } from "#/contract-execution-error";
 
 const cliInvocationType = Symbol("CliInvocation.type");
 const invocationContracts = new WeakMap<object, object>();
@@ -226,7 +227,7 @@ export function parseCliInvocation<const Contract extends CliContract>(
   const outputOccurrences: OutputFormatOccurrence[] = [];
   let selected = compiled.commands[compiled.root];
   if (selected === undefined)
-    throw new Error("compiled root command is missing");
+    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
   let position = 0;
   while (!isCompiledExecutable(selected)) {
     const token = argv[position];

@@ -5,12 +5,13 @@ import {
   ContractExecutionError,
   defineCli,
   executeCli,
-  helpCapability,
   outputCapability,
   parseCliInvocation,
   text,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
+
+import { englishHelpCapability } from "./english-help.ts";
 
 const emptyInput = z.object({});
 const item = z.object({ value: z.string() });
@@ -18,7 +19,7 @@ const item = z.object({ value: z.string() });
 function createUncheckedStreamCli(handler: unknown) {
   return defineCli()({
     root: "list",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -78,7 +79,7 @@ void test("stream handler 在 header 前闭合验证 async iterator 协议", asy
 void test("structured stream 按 header、record、终态写出紧凑 NDJSON", async () => {
   const cli = defineCli()({
     root: "list",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -171,7 +172,7 @@ void test("structured stream 按 header、record、终态写出紧凑 NDJSON", a
 void test("stream 可在首帧后直接显式成功", async () => {
   const cli = defineCli()({
     root: "list",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -209,7 +210,7 @@ void test("stream 可在首帧后直接显式成功", async () => {
 void test("stream 失败保留 stdout 前缀且不写成功终态", async () => {
   const cli = defineCli()({
     root: "list",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -262,7 +263,7 @@ void test("record 验证拒绝与写入拒绝均停止拉取并清理 generator"
   let invalidCleanup = false;
   const invalidCli = defineCli()({
     root: "list",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -308,7 +309,7 @@ void test("record 验证拒绝与写入拒绝均停止拉取并清理 generator"
   let cleanup = false;
   const gatedCli = defineCli()({
     root: "list",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -355,7 +356,7 @@ void test("同一 stream handler 可投影为 structured NDJSON 或 text line、
   let executions = 0;
   const cli = defineCli()({
     root: "list",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured", text: true }),
     usageFailureExitCode: 64,
     commands: {
@@ -427,7 +428,7 @@ void test("同一 stream handler 可投影为 structured NDJSON 或 text line、
 void test("text stream success 以 text.lines 写出一个确定的终态 chunk", async () => {
   const cli = defineCli()({
     root: "list",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "text" }),
     usageFailureExitCode: 64,
     commands: {
@@ -472,7 +473,7 @@ void test("text stream failure 保留已写 record、稳定 identity 与 stderr�
   let cleaned = false;
   const cli = defineCli()({
     root: "list",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "text" }),
     usageFailureExitCode: 64,
     commands: {
@@ -548,7 +549,7 @@ void test("text stream failure 保留已写 record、稳定 identity 与 stderr�
   let presenterCleaned = false;
   const invalidPresenterCli = defineCli()({
     root: "invalidPresenter",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "text" }),
     usageFailureExitCode: 64,
     commands: {

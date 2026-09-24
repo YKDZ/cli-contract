@@ -4,17 +4,18 @@ import { test } from "node:test";
 import {
   defineCli,
   executeCli,
-  helpCapability,
   outputCapability,
   parseCliInvocation,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
+import { englishHelpCapability } from "./english-help.ts";
+
 void test("叶命令独立声明应用选项，清单版本与执行线版本各自保持准确", async () => {
   const define = defineCli();
   const cli = define({
     root: "workspace",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -60,7 +61,7 @@ void test("叶命令独立声明应用选项，清单版本与执行线版本各
     },
   });
 
-  assert.equal(cli.manifest.schemaVersion, "2");
+  assert.equal(cli.manifest.schemaVersion, "3");
   for (const command of ["deploy", "inspect"] as const) {
     const node = cli.grammar.nodes.find(
       (candidate) => candidate.id === command,

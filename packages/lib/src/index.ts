@@ -57,6 +57,7 @@ export {
   type FlagGrammar,
   type HelpCapability,
   type HelpCapabilityDefinition,
+  type HelpFactWording,
   type HelpHeadings,
   type HierarchyCliGrammar,
   type HierarchyCliManifest,

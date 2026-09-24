@@ -13,6 +13,8 @@ import {
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
+import { englishHelpWording } from "./english-help.ts";
+
 function createAliasedHierarchy(onRun: () => void = () => undefined) {
   const define = defineCli();
   const supplement = text.lines(["先完成准备。", "", "随后执行任务。"]);
@@ -20,6 +22,7 @@ function createAliasedHierarchy(onRun: () => void = () => undefined) {
     root: "workspace",
     help: helpCapability({
       shortAlias: "-h",
+      wording: englishHelpWording,
       headings: {
         usage: "用法",
         commands: "命令",
@@ -71,6 +74,7 @@ void test("根级 -h 配置机械投影到 controls、各节点 parser 与完整
   assert.deepEqual(cli.grammar.controls.help, {
     longOption: "--help",
     shortAlias: "-h",
+    wording: englishHelpWording,
     headings: {
       usage: "用法",
       commands: "命令",
@@ -263,7 +267,7 @@ void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补
     { options: "选项\0列表" },
     { extra: "额外" },
   ]) {
-    assert.throws(() => helpCapability({ headings }), TypeError);
+    assert.throws(() => helpCapability({ headings } as never), TypeError);
   }
 
   const define = defineCli();
@@ -271,7 +275,10 @@ void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补
     () =>
       define({
         root: "workspace",
-        help: helpCapability({ shortAlias: "-h" }),
+        help: helpCapability({
+          shortAlias: "-h",
+          wording: englishHelpWording,
+        }),
         output: outputCapability({ defaultFormat: "structured" }),
         usageFailureExitCode: 64,
         commands: {
@@ -325,7 +332,10 @@ void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补
     () =>
       defineCli()({
         root: "conflict",
-        help: helpCapability({ shortAlias: "-h" }),
+        help: helpCapability({
+          shortAlias: "-h",
+          wording: englishHelpWording,
+        }),
         version: versionCapability({
           value: text.line("1.0.0"),
           shortAlias: "-V",

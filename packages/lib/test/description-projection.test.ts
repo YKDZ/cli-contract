@@ -6,13 +6,14 @@ import {
   ContractDefinitionError,
   defineCli,
   executeCli,
-  helpCapability,
   outputCapability,
   parseCliInvocation,
   type JsonObject,
 } from "@ykdz/cli-contract";
 import * as v from "valibot";
 import { z } from "zod";
+
+import { englishHelpCapability } from "./english-help.ts";
 
 const draft202012 = { target: "draft-2020-12" as const };
 
@@ -43,7 +44,7 @@ void test("CLI 描述覆盖 Zod 的复制 schema、wire 与 help，且不进入�
   const payloadBefore = structuredClone(payloadExported);
   const cli = defineCli()({
     root: "describe",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -172,7 +173,7 @@ void test("Valibot 的公开 schema 投影同样被复制并由字段描述覆�
   const inputBefore = structuredClone(inputExported);
   const cli = defineCli()({
     root: "valibot",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -221,7 +222,7 @@ void test("层级 stream runtime 不冻结 Valibot schema 引用", () => {
   const define = defineCli();
   const cli = define({
     root: "workspace",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -267,7 +268,7 @@ void test("动态非法描述按声明位置聚合为闭合定义问题", () => 
     () =>
       defineCli()({
         root: "invalid",
-        help: helpCapability(),
+        help: englishHelpCapability(),
         output: outputCapability({ defaultFormat: "structured" }),
         usageFailureExitCode: 64,
         commands: {
@@ -348,7 +349,7 @@ void test("动态非法描述按声明位置聚合为闭合定义问题", () => 
     () =>
       defineCli()({
         root: "invalidStream",
-        help: helpCapability(),
+        help: englishHelpCapability(),
         output: outputCapability({ defaultFormat: "structured" }),
         usageFailureExitCode: 64,
         commands: {
@@ -430,7 +431,7 @@ void test("字段 description 在 schema 兼容性和 kind 早退前独立聚合
       () =>
         defineCli()({
           root: "invalidField",
-          help: helpCapability(),
+          help: englishHelpCapability(),
           output: outputCapability({ defaultFormat: "structured" }),
           usageFailureExitCode: 64,
           commands: {
@@ -468,7 +469,7 @@ void test("stream record 描述覆盖 payload wire，且 frame 不重复描述",
   const payload = z.object({ value: z.string() }).describe("vendor record");
   const cli = defineCli()({
     root: "stream",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {

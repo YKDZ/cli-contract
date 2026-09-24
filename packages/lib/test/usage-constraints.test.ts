@@ -5,16 +5,17 @@ import {
   ContractDefinitionError,
   defineCli,
   executeCli,
-  helpCapability,
   outputCapability,
   parseCliInvocation,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
+import { englishHelpCapability } from "./english-help.ts";
+
 function createConstrainedCli(handler = () => undefined) {
   return defineCli()({
     root: "publish",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -177,14 +178,14 @@ void test("同一约束事实投影到 grammar、manifest、Draft 2020-12 与 he
   });
   assert.match(
     writes.join(""),
-    /--help\n\n  auth requires token\n  exclusive output, quiet\n  forbidden format=json, quiet=true\n$/,
+    /--help\n\n  auth requires token\n  exclusive output, quiet\n  forbidden format="json", quiet=true\n$/,
   );
 });
 
 void test("defineCli 以局部身份拒绝无效约束引用、字段种类、值和矛盾", () => {
   const definition = {
     root: "invalidConstraints",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -246,7 +247,7 @@ void test("defineCli 以局部身份拒绝无效约束引用、字段种类、�
 void test("defineCli 聚合拒绝动态空、单成员和非数组约束成员", () => {
   const definition = {
     root: "invalidShapes",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -339,7 +340,7 @@ void test("defineCli 聚合拒绝动态空、单成员和非数组约束成员",
 void test("defineCli 将显式 null 交给 usage constraint collection 守卫", () => {
   const definition = {
     root: "nullConstraints",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {

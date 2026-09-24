@@ -6,13 +6,14 @@ import {
   ContractExecutionError,
   defineCli,
   executeCli,
-  helpCapability,
   outputCapability,
   parseCliInvocation,
   text,
   type OutputCapability,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
+
+import { englishHelpCapability } from "./english-help.ts";
 
 function createDynamicTextOutput(): OutputCapability {
   return outputCapability({ defaultFormat: "text" });
@@ -23,7 +24,7 @@ const message = z.object({ message: z.string() });
 function createTextCli() {
   return defineCli()({
     root: "greet",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({
       defaultFormat: "structured",
       text: true,
@@ -78,7 +79,7 @@ function createTextHierarchyCli() {
   const define = defineCli();
   return define({
     root: "workspace",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({
       defaultFormat: "text",
       compatibilityFlags: { "--plain": "text" },
@@ -271,7 +272,7 @@ void test("帮助以同源 controls 投影双格式 selector、默认值与 comp
 void test("单格式 compatibility flag 显示真实目标但不虚构 selector", async () => {
   const cli = defineCli()({
     root: "machine",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({
       defaultFormat: "structured",
       compatibilityFlags: { "--json": "structured" },
@@ -410,7 +411,7 @@ void test("text.line 与 text.lines 拒绝非法 framing，completion 可显式 
   ]);
   const cli = defineCli()({
     root: "quiet",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "text" }),
     usageFailureExitCode: 64,
     commands: {
@@ -440,7 +441,7 @@ void test("completion 接受 text.lines，伪造的动态行组在写出前被�
   const createCli = (presenter: () => unknown) =>
     defineCli()({
       root: "complete",
-      help: helpCapability(),
+      help: englishHelpCapability(),
       output: outputCapability({ defaultFormat: "text" }),
       usageFailureExitCode: 64,
       commands: {
@@ -482,7 +483,7 @@ void test("text 开关在定义期要求或禁止同位 presenter", () => {
     () =>
       defineCli()({
         root: "missing",
-        help: helpCapability(),
+        help: englishHelpCapability(),
         output: createDynamicTextOutput(),
         usageFailureExitCode: 64,
         commands: {
@@ -517,7 +518,7 @@ void test("动态文本输出逐个定位 data 与 failure presenter", () => {
     () =>
       defineCli()({
         root: "missingNamedPresenters",
-        help: helpCapability(),
+        help: englishHelpCapability(),
         output: createDynamicTextOutput(),
         usageFailureExitCode: 64,
         commands: {
@@ -593,7 +594,7 @@ void test("动态层级在执行前闭合五类文本 presenter", () => {
     () =>
       define({
         root: "workspace",
-        help: helpCapability(),
+        help: englishHelpCapability(),
         output: createDynamicTextOutput(),
         usageFailureExitCode: 64,
         commands: {
@@ -748,7 +749,7 @@ void test("compatibility flag 在定义期闭合到已启用格式和 control �
       () =>
         defineCli()({
           root: "compatibility",
-          help: helpCapability(),
+          help: englishHelpCapability(),
           output: outputCapability({
             defaultFormat: "structured",
             compatibilityFlags: { [flag]: format } as never,
@@ -786,7 +787,7 @@ void test("compatibility flag 复用输出 control 的应用字段冲突检查",
     () =>
       defineCli()({
         root: "conflictingField",
-        help: helpCapability(),
+        help: englishHelpCapability(),
         output: outputCapability({
           defaultFormat: "structured",
           compatibilityFlags: { "--plain": "structured" },
@@ -837,7 +838,7 @@ void test("compatibility flags 的动态 collection 形状在定义期闭合", (
       () =>
         defineCli()({
           root: "invalidCompatibilityFlags",
-          help: helpCapability(),
+          help: englishHelpCapability(),
           output: outputCapability({
             defaultFormat: "structured",
             compatibilityFlags: compatibilityFlags as never,

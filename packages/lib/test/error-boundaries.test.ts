@@ -10,6 +10,7 @@ import {
   helpCapability,
   outputCapability,
   parseCliInvocation,
+  text,
   type OutputCapability,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
@@ -62,6 +63,7 @@ void test("错配契约的 invocation 以闭合执行问题拒绝", async () => 
     }),
     (error) => {
       assert.ok(error instanceof ContractExecutionError);
+      assert.equal(error.message, "contractExecutionError");
       assert.deepEqual(error.issues, [
         {
           code: "invocationContractMismatch",
@@ -118,6 +120,7 @@ void test("输出端口拒绝时保留 destination 与原始 cause 且不重试"
     }),
     (error) => {
       assert.ok(error instanceof CliWriteError);
+      assert.equal(error.message, "cliWriteError");
       assert.equal(error.destination, "stdout");
       assert.equal(error.cause, cause);
       return true;
@@ -145,6 +148,28 @@ void test("handler 抛出的开放异常保持原始身份", async () => {
       },
     }),
     (error) => error === cause,
+  );
+  assert.deepEqual(writes, []);
+});
+
+void test("执行期文本值检查以稳定 code 拒绝而不写出", async () => {
+  const cli = createCompletionCli(() => {
+    text.line("");
+  });
+  const writes: string[] = [];
+  await assert.rejects(
+    executeCli(cli, {
+      invocation: parseCliInvocation(cli, []),
+      dependencies: undefined,
+      write: ({ chunk }) => {
+        writes.push(chunk);
+      },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof TypeError);
+      assert.equal(error.message, "invalidTextLine");
+      return true;
+    },
   );
   assert.deepEqual(writes, []);
 });
@@ -308,7 +333,12 @@ void test("defineCli 在动态启用 text 时仍要求 completion presenter", ()
     () =>
       defineCli()({
         root: "fixture",
-        help: helpCapability(),
+        help: helpCapability({
+          wording: {
+            choices: "(choices: {choices})",
+            default: "(default: {value})",
+          },
+        }),
         output: createDynamicTextOutput(),
         usageFailureExitCode: 64,
         commands: {

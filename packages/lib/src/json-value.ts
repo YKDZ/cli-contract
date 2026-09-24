@@ -3,7 +3,7 @@ import type { JsonObject, JsonValue } from "#/contract-schema";
 export function copyJsonObject(value: Record<string, unknown>): JsonObject {
   const copy = copyJsonValue(value);
   if (typeof copy !== "object" || copy === null || Array.isArray(copy)) {
-    throw new TypeError("JSON Schema 必须是对象");
+    throw new TypeError("invalidJsonSchemaObject");
   }
   return copy as JsonObject;
 }
@@ -35,25 +35,25 @@ function copyJsonValueWithAncestors(
   }
   if (typeof value === "number") {
     if (!Number.isFinite(value)) {
-      throw new TypeError("JSON 数值必须是有限数");
+      throw new TypeError("nonFiniteJsonNumber");
     }
     return value;
   }
   if (typeof value !== "object") {
-    throw new TypeError("值无法表示为 JSON");
+    throw new TypeError("nonJsonValue");
   }
   if (ancestors.has(value)) {
-    throw new TypeError("JSON 值不能包含循环引用");
+    throw new TypeError("cyclicJsonValue");
   }
   if (
     !Array.isArray(value) &&
     Object.getPrototypeOf(value) !== Object.prototype &&
     Object.getPrototypeOf(value) !== null
   ) {
-    throw new TypeError("JSON object 必须是普通对象");
+    throw new TypeError("invalidJsonObject");
   }
   if (Object.getOwnPropertySymbols(value).length > 0) {
-    throw new TypeError("JSON object 不能包含 symbol key");
+    throw new TypeError("symbolKeyInJsonObject");
   }
 
   ancestors.add(value);
@@ -75,7 +75,7 @@ function copyJsonArray(
 ): readonly JsonValue[] {
   return Array.from({ length: value.length }, (_, index) => {
     if (!(index in value)) {
-      throw new TypeError("JSON array 不能包含空位");
+      throw new TypeError("sparseJsonArray");
     }
     return copyJsonValueWithAncestors(value[index], ancestors);
   });

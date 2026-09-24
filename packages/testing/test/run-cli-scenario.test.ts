@@ -175,7 +175,13 @@ const statusCommand = define.command("status")({
 const consumerFixture = {
   cli: define({
     root: "consumer",
-    help: helpCapability(),
+    help: helpCapability({
+      wording: {
+        commandPlaceholder: "命令",
+        choices: "（候选：{choices}）",
+        default: "（默认：{value}）",
+      },
+    }),
     output: outputCapability({ defaultFormat: "structured", text: true }),
     usageFailureExitCode: 64,
     commands: {

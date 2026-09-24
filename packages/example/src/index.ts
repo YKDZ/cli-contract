@@ -90,6 +90,11 @@ export const cli = define({
       arguments: "参数",
       options: "选项",
     },
+    wording: {
+      commandPlaceholder: "命令",
+      choices: "（候选：{choices}）",
+      default: "（默认：{value}）",
+    },
   }),
   // 启用 text 会要求每个结果变体都有呈现器，新增变体时也会检查。
   output: outputCapability({

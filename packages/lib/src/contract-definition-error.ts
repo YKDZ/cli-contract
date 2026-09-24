@@ -12,6 +12,21 @@ export type SchemaDefinitionTarget =
     }>;
 
 export type ContractDefinitionIssue =
+  | Readonly<{
+      readonly code: "unknownDefinitionProperty";
+      readonly path: readonly string[];
+    }>
+  | Readonly<{
+      readonly code: "missingHelpFactTemplate";
+      readonly command: string;
+      readonly slot:
+        | "commandPlaceholder"
+        | "choices"
+        | "default"
+        | "requires"
+        | "exclusive"
+        | "forbiddenCombination";
+    }>
   | Readonly<
       SchemaDefinitionTarget & {
         readonly code: "missingSchemaCapability";
@@ -337,6 +352,10 @@ export class ContractDefinitionError extends Error {
 
 function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
   switch (issue.code) {
+    case "unknownDefinitionProperty":
+      return `CLI 声明包含未知属性 ${issue.path.join(".")}`;
+    case "missingHelpFactTemplate":
+      return `命令 ${issue.command} 的帮助事实缺少 ${issue.slot} 模板`;
     case "missingSchemaCapability":
       return `${formatSchemaTarget(issue)} 缺少 ${issue.capability} 能力`;
     case "schemaDialectMismatch":

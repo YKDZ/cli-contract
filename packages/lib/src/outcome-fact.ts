@@ -42,7 +42,7 @@ function createTextLine(value: string): TextLine {
     value.includes("\n") ||
     value.includes("\0")
   ) {
-    throw new TypeError("文本行必须非空且不能包含 CR、LF 或 NUL");
+    throw new TypeError("invalidTextLine");
   }
   const projection = Object.freeze({ kind: "line" as const, value });
   issuedTextProjections.add(projection);
@@ -62,9 +62,7 @@ function createTextLines(values: readonly [string, ...string[]]): TextLines {
     ) ||
     values.every((value) => value.length === 0)
   ) {
-    throw new TypeError(
-      "文本行组必须至少包含一个非空行且成员不能包含 CR、LF 或 NUL",
-    );
+    throw new TypeError("invalidTextLines");
   }
   const projection = Object.freeze({
     kind: "lines" as const,
@@ -80,7 +78,7 @@ const silentText = silentProjection as SilentText;
 
 function createTextFragment(value: string): TextFragment {
   if (value.length === 0 || value.includes("\0")) {
-    throw new TypeError("文本片段必须非空且不能包含 NUL");
+    throw new TypeError("invalidTextFragment");
   }
   const projection = Object.freeze({ kind: "fragment" as const, value });
   issuedTextProjections.add(projection);

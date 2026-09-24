@@ -5,12 +5,13 @@ import {
   ContractDefinitionError,
   defineCli,
   executeCli,
-  helpCapability,
   outputCapability,
   parseCliInvocation,
   type ContractSchema,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
+
+import { englishHelpCapability } from "./english-help.ts";
 
 type RawDefaultInput = Readonly<{ readonly name?: string }>;
 type DefaultedInput = Readonly<{ readonly name: string }>;
@@ -21,7 +22,7 @@ function createDefaultingCli(
 ) {
   return defineCli()({
     root: "greet",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
@@ -120,7 +121,7 @@ void test("Zod 默认只由 validation 施加，并同源投影到 grammar、man
 void test("显式 false 和空数组默认值保留在同源帮助详情", async () => {
   const cli = defineCli()({
     root: "defaults",
-    help: helpCapability(),
+    help: englishHelpCapability(),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
