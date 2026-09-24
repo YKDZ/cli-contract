@@ -62,10 +62,9 @@ type CliFailureScenarioCommand<Contract extends CliContract> = {
 /** 仅包含声明了失败变体的命令；没有失败的命令不需要伪键。 */
 export type CliFailureScenarioMap<Contract extends CliContract> = Readonly<{
   [Command in CliFailureScenarioCommand<Contract>]: Readonly<{
-    [Failure in CliFailureScenarioKey<
-      Contract,
-      Command
-    >]: CliScenario<Contract>;
+    [
+      Failure in CliFailureScenarioKey<Contract, Command>
+    ]: CliScenario<Contract>;
   }>;
 }>;
 
