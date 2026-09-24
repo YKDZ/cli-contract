@@ -60,7 +60,7 @@
     "oxlint": "catalog:",
     "oxlint-tsgolint": "catalog:",
     "typescript-7": "catalog:",
-    "valibot": "^1.4.2",
+    "valibot": "^1.5.0",
     "zod": "^4.5.4"
   },
   "engines": {

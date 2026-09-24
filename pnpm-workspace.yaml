@@ -27,4 +27,4 @@ catalog:
   "oxlint-tsgolint": ^7.0.2001
   "turbo": 2.10.11
   "typescript-7": npm:typescript@^7.0.2
-  "valibot": ^1.4.2
+  "valibot": ^1.5.0
