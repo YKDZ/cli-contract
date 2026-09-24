@@ -86,8 +86,6 @@ export {
   type ExecutableCommandManifest,
   type ShortOptionAlias,
   type SchemaManifest,
-  type SharedOptionDefinition,
-  type SharedOptionDefinitions,
   type ValueOptionDefinition,
   type ValueOptionDefinitions,
   type ValueOptionDefinitionsForInput,

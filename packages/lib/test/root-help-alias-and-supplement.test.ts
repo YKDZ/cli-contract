@@ -285,7 +285,13 @@ void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补
             parent: "workspace",
             name: "package",
             description: "包",
-            sharedOptions: {
+          },
+          ...define.command("listPackages")({
+            kind: "command",
+            parent: "package",
+            name: "list",
+            description: "列出包",
+            fields: {
               help: {
                 kind: "flag",
                 longOption: "--application-help",
@@ -293,25 +299,19 @@ void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补
                 description: "帮助",
               },
             },
-          },
-          ...define.command("listPackages")({
-            kind: "command",
-            parent: "package",
-            name: "list",
-            description: "列出包",
             input: z.object({ help: z.boolean().optional() }),
             success: { kind: "completion" },
             failures: {},
-            handler: () => undefined,
-          } as never),
+            handler: ({ outcome }) => outcome.completion(),
+          }),
         },
-      } as never),
+      }),
     (error: unknown) => {
       assert(error instanceof ContractDefinitionError);
       assert.deepEqual(error.issues, [
         {
           code: "fieldOptionConflictsWithControl",
-          command: "package",
+          command: "listPackages",
           field: "help",
           spelling: "-h",
           control: "help",

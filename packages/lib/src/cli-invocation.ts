@@ -1,8 +1,10 @@
 import {
   getCompiledCli,
+  isCompiledExecutable,
   type CliContract,
   type CliContractRawInput,
   type CliContractRoot,
+  type RuntimeCompiledExecutable,
 } from "#/cli-contract";
 
 const cliInvocationType = Symbol("CliInvocation.type");
@@ -226,7 +228,7 @@ export function parseCliInvocation<const Contract extends CliContract>(
   if (selected === undefined)
     throw new Error("compiled root command is missing");
   let position = 0;
-  while (selected.kind === "rootGroup" || selected.kind === "commandGroup") {
+  while (!isCompiledExecutable(selected)) {
     const token = argv[position];
     if (token === undefined) {
       return bindInvocation(cliContract, {
@@ -262,7 +264,7 @@ export function parseCliInvocation<const Contract extends CliContract>(
     if (token.startsWith("-") && token !== "-") {
       const option = consumeOption(
         compiled,
-        selected.fields,
+        [],
         argv,
         position,
         input,
@@ -536,7 +538,7 @@ type FieldValueOccurrence = Readonly<{
 
 function consumeOption(
   compiled: ReturnType<typeof getCompiledCli>,
-  fields: ReturnType<typeof getCompiledCli>["fields"],
+  fields: RuntimeCompiledExecutable["fields"],
   argv: readonly string[],
   position: number,
   input: Record<string, boolean | string | string[]>,
@@ -681,13 +683,11 @@ function addOptionOccurrence(
 }
 
 function collectStructuralIssues(
-  fields: ReturnType<typeof getCompiledCli>["fields"],
+  fields: RuntimeCompiledExecutable["fields"],
   input: Readonly<Record<string, boolean | string | string[]>>,
   occurrencesByField: ReadonlyMap<string, readonly ParsedOptionOccurrence[]>,
   valueOccurrencesByField: ReadonlyMap<string, readonly FieldValueOccurrence[]>,
-  usageConstraints: ReturnType<
-    typeof getCompiledCli
-  >["commands"][string]["usageConstraints"],
+  usageConstraints: RuntimeCompiledExecutable["usageConstraints"],
 ): UsageIssue[] {
   const fieldIssues = fields.flatMap((field): UsageIssue[] => {
     const issues: UsageIssue[] = [];
@@ -836,7 +836,7 @@ function readOptionToken(token: string): Readonly<{
 
 function longOptionsInScope(
   compiled: ReturnType<typeof getCompiledCli>,
-  fields: ReturnType<typeof getCompiledCli>["fields"],
+  fields: RuntimeCompiledExecutable["fields"],
 ): readonly string[] {
   return [
     ...fields.flatMap((field) =>

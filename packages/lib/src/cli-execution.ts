@@ -8,6 +8,7 @@ import {
   createStreamSuccessFact,
   formatFieldUsage,
   getCompiledCli,
+  isCompiledExecutable,
   isIssuedOutcomeFact,
   usageFailureHelpArgv,
   type CliContract,
@@ -42,6 +43,16 @@ import {
   createStreamSuccessEnvelope,
   createUsageFailureEnvelope,
 } from "#/outcome-wire";
+
+type CompiledCommand = ReturnType<typeof getCompiledCli>["commands"][string];
+type CompiledExecutable = Extract<
+  CompiledCommand,
+  { readonly kind: "rootCommand" | "command" }
+>;
+type CompiledGroup = Extract<
+  CompiledCommand,
+  { readonly kind: "rootGroup" | "commandGroup" }
+>;
 
 export type CliOutputDestination = "stderr" | "stdout";
 
@@ -174,12 +185,7 @@ export async function executeCli<const Contract extends CliContract>(
       });
     }
     case "parsed": {
-      if (
-        command.input === undefined ||
-        command.success === undefined ||
-        command.failures === undefined ||
-        command.handler === undefined
-      ) {
+      if (!isCompiledExecutable(command)) {
         throw new ContractExecutionError([{ code: "invalidCliContract" }]);
       }
       const validation = validateSynchronously(
@@ -211,17 +217,7 @@ export async function executeCli<const Contract extends CliContract>(
       }
 
       return executeApplicationResult(
-        {
-          ...compiled,
-          root: command.id,
-          description: command.description,
-          fields: command.fields,
-          usage: command.usage,
-          input: command.input,
-          success: command.success,
-          failures: command.failures,
-          handler: command.handler,
-        },
+        command,
         validation.value,
         options,
         options.invocation.outputFormat,
@@ -239,11 +235,15 @@ function createHelpText(
   const commands = Object.values(compiled.commands).filter(
     (candidate) => candidate.parent === command.id,
   );
-  const positionalFields = command.fields.filter(
+  const fields = isCommandGroup(command) ? [] : command.fields;
+  const usageConstraints = isCommandGroup(command)
+    ? []
+    : command.usageConstraints;
+  const positionalFields = fields.filter(
     (field) =>
       field.kind === "positional" || field.kind === "variadicPositional",
   );
-  const optionFields = command.fields.filter(
+  const optionFields = fields.filter(
     (field) =>
       field.kind !== "positional" && field.kind !== "variadicPositional",
   );
@@ -274,7 +274,7 @@ function createHelpText(
   appendHelpSegment(
     segments,
     headings?.constraints,
-    command.usageConstraints.map((constraint) =>
+    usageConstraints.map((constraint) =>
       helpLine(formatUsageConstraint(constraint)),
     ),
   );
@@ -288,9 +288,7 @@ function createHelpText(
   return `${segments.join("\n\n")}\n`;
 }
 
-function isCommandGroup(
-  command: ReturnType<typeof getCompiledCli>["commands"][string],
-): boolean {
+function isCommandGroup(command: CompiledCommand): command is CompiledGroup {
   return command.kind === "rootGroup" || command.kind === "commandGroup";
 }
 
@@ -398,9 +396,7 @@ async function writeUsageFailure(
 }
 
 function formatUsageConstraint(
-  constraint: ReturnType<
-    typeof getCompiledCli
-  >["commands"][string]["usageConstraints"][number],
+  constraint: CompiledExecutable["usageConstraints"][number],
 ): string {
   if (constraint.kind === "requires")
     return `${constraint.field} requires ${constraint.requires}`;
@@ -412,7 +408,7 @@ function formatUsageConstraint(
 }
 
 function formatHelpField(
-  field: ReturnType<typeof getCompiledCli>["fields"][number],
+  field: CompiledExecutable["fields"][number],
 ): HelpEntry {
   const cardinality = formatFieldUsage(field, true);
   const choices =
@@ -430,7 +426,7 @@ function formatHelpField(
 }
 
 async function executeApplicationResult<Contract extends CliContract>(
-  compiled: ReturnType<typeof getCompiledCli>,
+  compiled: CompiledExecutable,
   input: unknown,
   options: ExecuteCliOptions<Contract>,
   outputFormat: "structured" | "text",
@@ -440,7 +436,7 @@ async function executeApplicationResult<Contract extends CliContract>(
     compiled.success.kind === "completion"
       ? {
           completion: () =>
-            createCompletionFact(compiled.root, issuedOutcomeFacts),
+            createCompletionFact(compiled.id, issuedOutcomeFacts),
         }
       : compiled.success.kind === "data"
         ? {
@@ -450,7 +446,7 @@ async function executeApplicationResult<Contract extends CliContract>(
                   variant,
                   (payload: unknown) =>
                     createDataFact(
-                      compiled.root,
+                      compiled.id,
                       variant,
                       payload,
                       issuedOutcomeFacts,
@@ -466,7 +462,7 @@ async function executeApplicationResult<Contract extends CliContract>(
                   variant,
                   (payload: unknown) =>
                     createStreamRecordFact(
-                      compiled.root,
+                      compiled.id,
                       variant,
                       payload,
                       issuedOutcomeFacts,
@@ -475,7 +471,7 @@ async function executeApplicationResult<Contract extends CliContract>(
               ),
             ),
             streamSuccess: () =>
-              createStreamSuccessFact(compiled.root, issuedOutcomeFacts),
+              createStreamSuccessFact(compiled.id, issuedOutcomeFacts),
           };
   const outcome = Object.freeze({
     ...successOutcome,
@@ -485,7 +481,7 @@ async function executeApplicationResult<Contract extends CliContract>(
           variant,
           (payload: unknown) =>
             createFailureFact(
-              compiled.root,
+              compiled.id,
               variant,
               payload,
               issuedOutcomeFacts,
@@ -500,7 +496,7 @@ async function executeApplicationResult<Contract extends CliContract>(
     outcome,
   });
   if (compiled.success.kind === "stream") {
-    const generator = requireAsyncGenerator(handlerResult, compiled.root);
+    const generator = requireAsyncGenerator(handlerResult, compiled.id);
     return executeStreamResult(
       compiled,
       generator,
@@ -510,33 +506,17 @@ async function executeApplicationResult<Contract extends CliContract>(
     );
   }
   const result = await handlerResult;
-  if (!isIssuedOutcomeFact(result, issuedOutcomeFacts)) {
-    throwExecutionIssue({
-      code: "invalidOutcomeFact",
-      command: compiled.root,
-    });
-  }
-
-  const projected = await projectOutcome(compiled, result, outputFormat);
-  if (projected.prefix !== undefined) {
-    await writeCliOutput(options.write, {
-      destination: projected.destination,
-      chunk: projected.prefix,
-    });
-  }
-  const chunk =
-    projected.present === undefined
-      ? (projected.chunk ?? "")
-      : projected.present();
-  if (chunk !== "") {
-    await writeCliOutput(options.write, {
-      destination: projected.destination,
-      chunk,
-    });
-  }
+  const projected = projectApplicationFact(
+    compiled,
+    result,
+    issuedOutcomeFacts,
+    outputFormat,
+    "atomic",
+  );
+  await writeProjectedOutput(options.write, projected.output);
   return Object.freeze({
     kind: "applicationResult",
-    command: compiled.root as CliContractRoot<Contract>,
+    command: compiled.id as CliContractRoot<Contract>,
     result: projected.result as CliContractResult<Contract>,
     exitCode: projected.exitCode,
   });
@@ -583,7 +563,7 @@ async function writeCliOutput(
 }
 
 async function executeStreamResult<Contract extends CliContract>(
-  compiled: ReturnType<typeof getCompiledCli>,
+  compiled: CompiledExecutable,
   generator: RuntimeStreamGenerator,
   issuedOutcomeFacts: WeakSet<object>,
   options: ExecuteCliOptions<Contract>,
@@ -597,91 +577,36 @@ async function executeStreamResult<Contract extends CliContract>(
     if (outputFormat === "structured") {
       await writeCliOutput(options.write, {
         destination: "stdout",
-        chunk: `${JSON.stringify(createStreamHeaderEnvelope(compiled.root))}\n`,
+        chunk: `${JSON.stringify(createStreamHeaderEnvelope(compiled.id))}\n`,
       });
     }
     for (;;) {
       const step = await generator.next();
       if (!step.done) {
-        if (!isIssuedOutcomeFact(step.value, issuedOutcomeFacts)) {
-          throwExecutionIssue({
-            code: "invalidOutcomeFact",
-            command: compiled.root,
-          });
-        }
-        if (step.value.kind !== "record") {
-          throwExecutionIssue({
-            code: "outcomeKindMismatch",
-            command: compiled.root,
-            expected: "stream",
-            received: step.value.kind,
-          });
-        }
-        const record = compiled.success.records[step.value.variant];
-        if (record === undefined) {
-          throwExecutionIssue({
-            code: "undeclaredOutcomeVariant",
-            command: compiled.root,
-            location: "record",
-            variant: step.value.variant,
-          });
-        }
-        const data = projectAtomicData(record.schema, step.value.data, {
-          command: compiled.root,
-          location: "record",
-          variant: step.value.variant,
-        });
-        const chunk =
-          outputFormat === "structured"
-            ? `${JSON.stringify(
-                createStreamRecordEnvelope(step.value.variant, data),
-              )}\n`
-            : formatStreamRecordText(record.text, data);
-        await writeCliOutput(options.write, { destination: "stdout", chunk });
+        const projected = projectApplicationFact(
+          compiled,
+          step.value,
+          issuedOutcomeFacts,
+          outputFormat,
+          "record",
+        );
+        await writeProjectedOutput(options.write, projected.output);
         continue;
       }
       active = false;
-      if (!isIssuedOutcomeFact(step.value, issuedOutcomeFacts)) {
-        throwExecutionIssue({
-          code: "invalidOutcomeFact",
-          command: compiled.root,
-        });
-      }
-      if (step.value.kind === "failure") {
-        const projected = await projectOutcome(
-          compiled,
-          step.value,
-          outputFormat,
-        );
-        await writeProjectedOutcome(options.write, projected);
-        return Object.freeze({
-          kind: "applicationResult",
-          command: compiled.root as CliContractRoot<Contract>,
-          result: projected.result as CliContractResult<Contract>,
-          exitCode: projected.exitCode,
-        });
-      }
-      if (step.value.kind !== "streamSuccess") {
-        throwExecutionIssue({
-          code: "outcomeKindMismatch",
-          command: compiled.root,
-          expected: "stream",
-          received: step.value.kind,
-        });
-      }
-      if (outputFormat === "structured") {
-        await writeCliOutput(options.write, {
-          destination: "stdout",
-          chunk: `${JSON.stringify(createStreamSuccessEnvelope())}\n`,
-        });
-      } else {
-        await writeTextStreamSuccess(options.write, compiled.success.text);
-      }
+      const projected = projectApplicationFact(
+        compiled,
+        step.value,
+        issuedOutcomeFacts,
+        outputFormat,
+        "terminal",
+      );
+      await writeProjectedOutput(options.write, projected.output);
       return Object.freeze({
         kind: "applicationResult",
-        command: compiled.root as CliContractRoot<Contract>,
-        result: step.value as CliContractResult<Contract>,
-        exitCode: 0,
+        command: compiled.id as CliContractRoot<Contract>,
+        result: projected.result as CliContractResult<Contract>,
+        exitCode: projected.exitCode,
       });
     }
   } catch (cause) {
@@ -696,70 +621,109 @@ async function executeStreamResult<Contract extends CliContract>(
   }
 }
 
-async function writeProjectedOutcome(
+async function writeProjectedOutput(
   write: WriteCliOutput,
-  projected: Awaited<ReturnType<typeof projectOutcome>>,
+  output: CliOutput | undefined,
 ): Promise<void> {
-  if (projected.prefix !== undefined) {
-    await writeCliOutput(write, {
-      destination: projected.destination,
-      chunk: projected.prefix,
+  if (output !== undefined) await writeCliOutput(write, output);
+}
+
+type ProjectedApplicationFact = Readonly<{
+  result: OutcomeFact;
+  output: CliOutput | undefined;
+  exitCode: number;
+}>;
+
+function projectApplicationFact(
+  compiled: CompiledExecutable,
+  value: unknown,
+  issuedOutcomeFacts: WeakSet<object>,
+  outputFormat: "structured" | "text",
+  phase: "atomic" | "record" | "terminal",
+): ProjectedApplicationFact {
+  if (!isIssuedOutcomeFact(value, issuedOutcomeFacts)) {
+    throwExecutionIssue({ code: "invalidOutcomeFact", command: compiled.id });
+  }
+  const result = value;
+  if (phase === "record") {
+    if (result.kind !== "record" || compiled.success.kind !== "stream") {
+      throwExecutionIssue({
+        code: "outcomeKindMismatch",
+        command: compiled.id,
+        expected: "stream",
+        received: result.kind,
+      });
+    }
+    const record = compiled.success.records[result.variant];
+    if (record === undefined) {
+      throwExecutionIssue({
+        code: "undeclaredOutcomeVariant",
+        command: compiled.id,
+        location: "record",
+        variant: result.variant,
+      });
+    }
+    const data = projectAtomicData(record.schema, result.data, {
+      command: compiled.id,
+      location: "record",
+      variant: result.variant,
+    });
+    const chunk =
+      outputFormat === "structured"
+        ? `${JSON.stringify(createStreamRecordEnvelope(result.variant, data))}\n`
+        : formatStreamRecordText(record.text, data);
+    return { result, output: { destination: "stdout", chunk }, exitCode: 0 };
+  }
+  if (phase === "terminal" && result.kind === "streamSuccess") {
+    if (compiled.success.kind !== "stream") {
+      throwExecutionIssue({
+        code: "outcomeKindMismatch",
+        command: compiled.id,
+        expected: "stream",
+        received: result.kind,
+      });
+    }
+    let chunk: string;
+    if (outputFormat === "structured")
+      chunk = `${JSON.stringify(createStreamSuccessEnvelope())}\n`;
+    else {
+      const presenter = compiled.success.text;
+      if (typeof presenter !== "function")
+        throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+      chunk = formatCompletionText(presenter());
+    }
+    return {
+      result,
+      output: chunk === "" ? undefined : { destination: "stdout", chunk },
+      exitCode: 0,
+    };
+  }
+  if (phase === "terminal" && result.kind !== "failure") {
+    throwExecutionIssue({
+      code: "outcomeKindMismatch",
+      command: compiled.id,
+      expected: "stream",
+      received: result.kind,
     });
   }
-  const chunk =
-    projected.present === undefined
-      ? (projected.chunk ?? "")
-      : projected.present();
-  if (chunk !== "") {
-    await writeCliOutput(write, { destination: projected.destination, chunk });
-  }
-}
-
-async function writeTextStreamSuccess(
-  write: WriteCliOutput,
-  presenter: unknown,
-): Promise<void> {
-  if (typeof presenter !== "function") {
-    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
-  }
-  const chunk = formatCompletionText(presenter());
-  if (chunk !== "") {
-    await writeCliOutput(write, { destination: "stdout", chunk });
-  }
-}
-
-async function projectOutcome(
-  compiled: ReturnType<typeof getCompiledCli>,
-  result: OutcomeFact,
-  outputFormat: "structured" | "text",
-): Promise<
-  Readonly<{
-    result: OutcomeFact;
-    chunk?: string;
-    prefix?: string;
-    present?: () => string;
-    exitCode: number;
-    destination: CliOutputDestination;
-  }>
-> {
   if (result.kind === "failure") {
     const failure = compiled.failures[result.variant];
     if (failure === undefined) {
       throwExecutionIssue({
         code: "undeclaredOutcomeVariant",
-        command: compiled.root,
+        command: compiled.id,
         location: "failure",
         variant: result.variant,
       });
     }
     const data = projectAtomicData(failure.schema, result.data, {
-      command: compiled.root,
+      command: compiled.id,
       location: "failure",
       variant: result.variant,
     });
     const normalized = Object.freeze({
       kind: "failure" as const,
-      command: compiled.root,
+      command: compiled.id,
       variant: result.variant,
       data,
     }) as OutcomeFact;
@@ -770,25 +734,27 @@ async function projectOutcome(
       }
       return {
         result: normalized,
-        present: () => formatAtomicText(presenter(data)),
+        output: {
+          destination: "stderr",
+          chunk: formatAtomicText(presenter(data)),
+        },
         exitCode: failure.exitCode,
-        destination: "stderr",
       };
     }
     return {
       result: normalized,
-      chunk: `${JSON.stringify(
-        createFailureEnvelope(compiled.root, result.variant, data),
-      )}\n`,
+      output: {
+        destination: "stderr",
+        chunk: `${JSON.stringify(createFailureEnvelope(compiled.id, result.variant, data))}\n`,
+      },
       exitCode: failure.exitCode,
-      destination: "stderr",
     };
   }
   if (compiled.success.kind === "completion") {
     if (result.kind !== "completion") {
       throwExecutionIssue({
         code: "outcomeKindMismatch",
-        command: compiled.root,
+        command: compiled.id,
         expected: "completion",
         received: result.kind,
       });
@@ -798,24 +764,26 @@ async function projectOutcome(
       if (typeof presenter !== "function") {
         throw new ContractExecutionError([{ code: "invalidCliContract" }]);
       }
+      const chunk = formatCompletionText(presenter());
       return {
         result,
-        present: () => formatCompletionText(presenter()),
+        output: chunk === "" ? undefined : { destination: "stdout", chunk },
         exitCode: 0,
-        destination: "stdout",
       };
     }
     return {
       result,
-      chunk: `${JSON.stringify(createCompletionEnvelope(compiled.root))}\n`,
+      output: {
+        destination: "stdout",
+        chunk: `${JSON.stringify(createCompletionEnvelope(compiled.id))}\n`,
+      },
       exitCode: 0,
-      destination: "stdout",
     };
   }
   if (compiled.success.kind !== "data" || result.kind !== "data") {
     throwExecutionIssue({
       code: "outcomeKindMismatch",
-      command: compiled.root,
+      command: compiled.id,
       expected: "data",
       received: result.kind,
     });
@@ -825,19 +793,19 @@ async function projectOutcome(
   if (variant === undefined) {
     throwExecutionIssue({
       code: "undeclaredOutcomeVariant",
-      command: compiled.root,
+      command: compiled.id,
       location: "data",
       variant: result.variant,
     });
   }
   const data = projectAtomicData(variant.schema, result.data, {
-    command: compiled.root,
+    command: compiled.id,
     location: "data",
     variant: result.variant,
   });
   const normalized = Object.freeze({
     kind: "data" as const,
-    command: compiled.root,
+    command: compiled.id,
     variant: result.variant,
     data,
   }) as OutcomeFact;
@@ -848,18 +816,20 @@ async function projectOutcome(
     }
     return {
       result: normalized,
-      present: () => formatAtomicText(presenter(data)),
+      output: {
+        destination: "stdout",
+        chunk: formatAtomicText(presenter(data)),
+      },
       exitCode: variant.exitCode,
-      destination: "stdout",
     };
   }
   return {
     result: normalized,
-    chunk: `${JSON.stringify(
-      createDataEnvelope(compiled.root, result.variant, data),
-    )}\n`,
+    output: {
+      destination: "stdout",
+      chunk: `${JSON.stringify(createDataEnvelope(compiled.id, result.variant, data))}\n`,
+    },
     exitCode: variant.exitCode,
-    destination: "stdout",
   };
 }
 

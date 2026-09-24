@@ -28,14 +28,6 @@ function createSuggestionCli() {
         kind: "rootGroup",
         name: "workspace",
         description: "工作区",
-        sharedOptions: {
-          verbose: {
-            kind: "flag",
-            longOption: "--verbose",
-            shortAlias: "-v",
-            description: "详细输出",
-          },
-        },
       },
       package: {
         kind: "commandGroup",
@@ -43,14 +35,6 @@ function createSuggestionCli() {
         name: "package",
         aliases: ["pkg"],
         description: "包",
-        sharedOptions: {
-          registry: {
-            kind: "valueOption",
-            longOption: "--registry",
-            shortAlias: "-r",
-            description: "注册表",
-          },
-        },
       },
       ...define.command("addPackage")({
         kind: "command",
@@ -59,6 +43,18 @@ function createSuggestionCli() {
         aliases: ["install"],
         description: "添加包",
         fields: {
+          verbose: {
+            kind: "flag",
+            longOption: "--verbose",
+            shortAlias: "-v",
+            description: "详细输出",
+          },
+          registry: {
+            kind: "valueOption",
+            longOption: "--registry",
+            shortAlias: "-r",
+            description: "注册表",
+          },
           name: {
             kind: "positional",
             description: "包名",
@@ -115,17 +111,17 @@ void test("命令建议只从当前 group 的直接名称与 alias 唯一选择"
     issues: [{ code: "unknownCommand", position: 0, command: "add" }],
     usage: {
       command: "workspace",
-      synopsis: "workspace [--verbose] <command>",
+      synopsis: "workspace <command>",
     },
   });
 });
 
-void test("长选项建议从当前有效 scope 与核心 controls 机械选择", () => {
+void test("长选项建议从当前可执行命令字段与核心 controls 机械选择", () => {
   const cli = createSuggestionCli();
 
   for (const [argv, option, suggestedOption] of [
-    [["--verbsoe"], "--verbsoe", "--verbose"],
-    [["package", "--regsitry"], "--regsitry", "--registry"],
+    [["package", "add", "--verbsoe"], "--verbsoe", "--verbose"],
+    [["package", "add", "--regsitry"], "--regsitry", "--registry"],
     [["package", "add", "--focre"], "--focre", "--force"],
     [["--hepl"], "--hepl", "--help"],
     [["--versoin"], "--versoin", "--version"],
@@ -151,7 +147,7 @@ void test("长选项建议从当前有效 scope 与核心 controls 机械选择"
     issues: [{ code: "unknownOption", position: 0, option: "--regsitry" }],
     usage: {
       command: "workspace",
-      synopsis: "workspace [--verbose] <command>",
+      synopsis: "workspace <command>",
     },
   });
   assert.deepEqual(parseCliInvocation(cli, ["package", "add", "-g"]), {

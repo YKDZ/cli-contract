@@ -1088,39 +1088,6 @@ function verifyTypeErrors() {
 void cli;
 void dataCli;
 
-const defineScopedCli = defineCli();
-// @ts-expect-error 叶输入必须覆盖祖先声明的 shared option。
-defineScopedCli({
-  root: "scoped",
-  help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
-  usageFailureExitCode: 64,
-  commands: {
-    scoped: {
-      kind: "rootGroup",
-      name: "scoped",
-      description: "测试共享选项",
-      sharedOptions: {
-        verbose: {
-          kind: "flag",
-          longOption: "--verbose",
-          description: "详细输出",
-        },
-      },
-    },
-    ...defineScopedCli.command("run")({
-      kind: "command",
-      parent: "scoped",
-      name: "run",
-      description: "运行",
-      input: z.object({}),
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
-    }),
-  },
-});
-
 const defineTextHierarchy = defineCli();
 const textHierarchy = defineTextHierarchy({
   root: "textTree",

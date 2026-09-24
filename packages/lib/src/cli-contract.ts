@@ -354,14 +354,6 @@ export interface ForbiddenCombinationUsageConstraint<
   ];
 }
 
-export type SharedOptionDefinition =
-  | FlagDefinition
-  | RepeatableOptionDefinition
-  | ValueOptionDefinition;
-export type SharedOptionDefinitions = Readonly<
-  Record<string, SharedOptionDefinition>
->;
-
 export type ValueOptionDefinitions = Readonly<
   Record<string, ValueOptionDefinition>
 >;
@@ -949,7 +941,6 @@ export interface RootGroupDefinition {
   readonly description: string;
   readonly helpSupplement?: TextLines;
   readonly handler?: never;
-  readonly sharedOptions?: SharedOptionDefinitions;
 }
 
 export interface CommandGroupDefinition<Parent extends string = string> {
@@ -960,7 +951,6 @@ export interface CommandGroupDefinition<Parent extends string = string> {
   readonly description: string;
   readonly helpSupplement?: TextLines;
   readonly handler?: never;
-  readonly sharedOptions?: SharedOptionDefinitions;
 }
 
 type HierarchyCommandFacts<Parent extends string = string> = Readonly<{
@@ -1046,7 +1036,7 @@ type HierarchyRawInput<Commands> = {
   [Command in keyof Commands]: Commands[Command] extends Readonly<{
     readonly kind: "command";
   }>
-    ? RawFieldInput<EffectiveHierarchyFields<Command, Commands>>
+    ? RawFieldInput<HierarchyCommandFields<Commands[Command]>>
     : never;
 }[keyof Commands];
 
@@ -1084,32 +1074,12 @@ type HierarchyResult<Commands> = {
         : never;
 }[keyof Commands];
 
-type OwnHierarchyFields<Node> =
+type HierarchyCommandFields<Node> =
   Node extends Readonly<{
-    readonly kind: "rootGroup" | "commandGroup";
-    readonly sharedOptions: infer Fields extends SharedOptionDefinitions;
+    readonly kind: "command";
+    readonly fields: infer Fields extends FieldDefinitions;
   }>
     ? Fields
-    : Node extends Readonly<{
-          readonly kind: "command";
-          readonly fields: infer Fields extends FieldDefinitions;
-        }>
-      ? Fields
-      : Readonly<Record<never, never>>;
-
-type EffectiveHierarchyFields<
-  Command extends PropertyKey,
-  Commands,
-  Seen extends PropertyKey = never,
-> = Command extends Seen
-  ? Readonly<Record<never, never>>
-  : Command extends keyof Commands
-    ? Commands[Command] extends Readonly<{
-        readonly parent: infer Parent extends keyof Commands;
-      }>
-      ? EffectiveHierarchyFields<Parent, Commands, Seen | Command> &
-          OwnHierarchyFields<Commands[Command]>
-      : OwnHierarchyFields<Commands[Command]>
     : Readonly<Record<never, never>>;
 
 type KnownInputKeys<Input> = string extends keyof Input
@@ -1126,11 +1096,11 @@ type InvalidHierarchyInputCommands<Commands> = {
     readonly input: infer InputSchema extends ContractSchema;
   }>
     ? EffectiveFieldSetMismatch<
-        EffectiveHierarchyFields<Command, Commands>,
+        HierarchyCommandFields<Commands[Command]>,
         ContractSchemaInput<InputSchema>
       > extends never
       ? IncompatibleRawInputKeys<
-          EffectiveHierarchyFields<Command, Commands>,
+          HierarchyCommandFields<Commands[Command]>,
           ContractSchemaInput<InputSchema>
         > extends never
         ? never
@@ -1173,23 +1143,13 @@ type InvalidHierarchyUsageConstraintCommands<Commands> = {
           > extends readonly (infer Constraint)[]
         ? InvalidUsageConstraintForFields<
             Constraint,
-            EffectiveHierarchyFields<Command, Commands>
+            HierarchyCommandFields<Commands[Command]>
           > extends never
           ? never
           : Command
         : Command
     : never;
 }[keyof Commands];
-
-type HasSharedOptions<Commands> = true extends {
-  [Command in keyof Commands]: Commands[Command] extends Readonly<{
-    readonly sharedOptions: SharedOptionDefinitions;
-  }>
-    ? true
-    : false;
-}[keyof Commands]
-  ? true
-  : false;
 
 type RootIdentityContract<Root extends string> = string extends Root
   ? unknown
@@ -1374,10 +1334,6 @@ export interface RootGroupGrammar<
   Root extends string,
 > extends GroupGrammarBase<Root> {
   readonly kind: "rootGroup";
-  readonly sharedOptions: readonly Exclude<
-    FieldGrammar,
-    PositionalGrammar | VariadicPositionalGrammar
-  >[];
 }
 
 export interface CommandGroupGrammar<
@@ -1385,10 +1341,6 @@ export interface CommandGroupGrammar<
 > extends GroupGrammarBase<Command> {
   readonly kind: "commandGroup";
   readonly parent: string;
-  readonly sharedOptions: readonly Exclude<
-    FieldGrammar,
-    PositionalGrammar | VariadicPositionalGrammar
-  >[];
 }
 
 export interface ExecutableCommandGrammar<
@@ -1397,7 +1349,6 @@ export interface ExecutableCommandGrammar<
   readonly kind: "command";
   readonly parent: string;
   readonly fields: readonly FieldGrammar[];
-  readonly effectiveFields: readonly FieldGrammar[];
   readonly usageConstraints?: readonly UsageConstraintGrammar[];
 }
 
@@ -1481,10 +1432,6 @@ export interface CommandGroupManifest {
   readonly aliases: readonly string[];
   readonly description: string;
   readonly helpSupplement?: readonly string[];
-  readonly sharedOptions: readonly Exclude<
-    FieldGrammar,
-    PositionalGrammar | VariadicPositionalGrammar
-  >[];
 }
 
 export interface ExecutableCommandManifest extends Omit<
@@ -1495,7 +1442,6 @@ export interface ExecutableCommandManifest extends Omit<
   readonly parent: string;
   readonly aliases: readonly string[];
   readonly helpSupplement?: readonly string[];
-  readonly effectiveFields: readonly FieldGrammar[];
 }
 
 export type UsageConstraintGrammar =
@@ -1507,7 +1453,7 @@ export interface CliManifest<
   Root extends string,
   RootKind extends CliRootKind = CliRootKind,
 > {
-  readonly schemaVersion: "1";
+  readonly schemaVersion: "2";
   readonly root: Root;
   readonly commands: RootKind extends "rootGroup"
     ? Readonly<Record<string, CommandGroupManifest | ExecutableCommandManifest>>
@@ -1588,7 +1534,7 @@ type HierarchyExecutableKeys<Commands> = {
 }[keyof Commands];
 
 export interface HierarchyCliManifest<Root extends string, Commands> {
-  readonly schemaVersion: "1";
+  readonly schemaVersion: "2";
   readonly root: Root;
   readonly commands: Readonly<{
     [Command in keyof Commands]: HierarchyManifestNode<Commands[Command]>;
@@ -1719,18 +1665,16 @@ type UnexpectedHierarchyTextCommands<Commands> = {
 
 type HierarchyUsageValidation<Commands> =
   InvalidHierarchyUsageConstraintCommands<Commands> extends never
-    ? HasSharedOptions<Commands> extends false
+    ? InvalidHierarchyInputCommands<Commands> extends never
       ? readonly []
-      : InvalidHierarchyInputCommands<Commands> extends never
-        ? readonly []
-        : readonly [
-            ContractTypeError<
-              "invalidEffectiveCommandInput",
-              Readonly<{
-                readonly commands: InvalidHierarchyInputCommands<Commands>;
-              }>
-            >,
-          ]
+      : readonly [
+          ContractTypeError<
+            "invalidCommandInput",
+            Readonly<{
+              readonly commands: InvalidHierarchyInputCommands<Commands>;
+            }>
+          >,
+        ]
     : readonly [
         ContractTypeError<
           "invalidEffectiveUsageConstraint",
@@ -2739,43 +2683,52 @@ export interface DefineCommand<Command extends string, Dependencies> {
 interface RuntimeCompiledCli {
   readonly contract: CliContract;
   readonly root: string;
-  readonly description: string;
-  readonly fields: readonly FieldGrammar[];
-  readonly usageConstraints: readonly UsageConstraintGrammar[];
-  readonly usage: CommandUsage<string>;
   readonly usageFailureExitCode: number;
-  readonly input: ContractSchema;
-  readonly success:
-    | Readonly<{ readonly kind: "completion"; readonly text?: unknown }>
-    | Readonly<{
-        readonly kind: "data";
-        readonly variants: Readonly<Record<string, RuntimeAtomicVariant>>;
-      }>
-    | Readonly<{
-        readonly kind: "stream";
-        readonly records: Readonly<Record<string, RuntimeStreamRecord>>;
-        readonly text?: unknown;
-      }>;
-  readonly failures: Readonly<Record<string, RuntimeAtomicVariant>>;
-  readonly handler: unknown;
   readonly commands: Readonly<Record<string, RuntimeCompiledCommand>>;
 }
 
-interface RuntimeCompiledCommand {
+type RuntimeCompiledSuccess =
+  | Readonly<{ readonly kind: "completion"; readonly text?: unknown }>
+  | Readonly<{
+      readonly kind: "data";
+      readonly variants: Readonly<Record<string, RuntimeAtomicVariant>>;
+    }>
+  | Readonly<{
+      readonly kind: "stream";
+      readonly records: Readonly<Record<string, RuntimeStreamRecord>>;
+      readonly text?: unknown;
+    }>;
+
+interface RuntimeCompiledCommandBase {
   readonly id: string;
-  readonly kind: "command" | "commandGroup" | "rootCommand" | "rootGroup";
   readonly parent?: string;
   readonly name: string;
   readonly aliases: readonly string[];
   readonly description: string;
   readonly helpSupplement?: readonly string[];
+  readonly usage: CommandUsage<string>;
+}
+
+interface RuntimeCompiledGroup extends RuntimeCompiledCommandBase {
+  readonly kind: "commandGroup" | "rootGroup";
+}
+
+export interface RuntimeCompiledExecutable extends RuntimeCompiledCommandBase {
+  readonly kind: "command" | "rootCommand";
   readonly fields: readonly FieldGrammar[];
   readonly usageConstraints: readonly UsageConstraintGrammar[];
-  readonly usage: CommandUsage<string>;
-  readonly input?: ContractSchema;
-  readonly success?: RuntimeCompiledCli["success"];
-  readonly failures?: Readonly<Record<string, RuntimeAtomicVariant>>;
-  readonly handler?: unknown;
+  readonly input: ContractSchema;
+  readonly success: RuntimeCompiledSuccess;
+  readonly failures: Readonly<Record<string, RuntimeAtomicVariant>>;
+  readonly handler: unknown;
+}
+
+type RuntimeCompiledCommand = RuntimeCompiledGroup | RuntimeCompiledExecutable;
+
+export function isCompiledExecutable(
+  command: RuntimeCompiledCommand,
+): command is RuntimeCompiledExecutable {
+  return command.kind === "rootCommand" || command.kind === "command";
 }
 
 type RuntimeExecutableDefinition = Readonly<{
@@ -2810,7 +2763,6 @@ type RuntimeGroupDefinition = Readonly<{
   readonly aliases?: readonly string[];
   readonly description: string;
   readonly helpSupplement?: TextLines;
-  readonly sharedOptions?: SharedOptionDefinitions;
 }>;
 
 type RuntimeCommandDefinition =
@@ -3012,191 +2964,25 @@ export function defineCli<Dependencies = undefined>(): DefineCli<Dependencies> {
 }
 
 function compileCli(definition: RuntimeCliDefinition): CliContract {
-  if (definition.commands[definition.root]?.kind === "rootGroup") {
-    return compileHierarchyCli(definition);
-  }
-  const definitionIssues: ContractDefinitionIssue[] = [];
-  const command = collectRootDefinitionIssues(definition, definitionIssues);
-  if (command === undefined) {
-    throw new ContractDefinitionError(
-      definitionIssues as [
-        ContractDefinitionIssue,
-        ...ContractDefinitionIssue[],
-      ],
-    );
-  }
-  const helpSupplement = compileHelpSupplement(
-    definition.root,
-    command.helpSupplement,
-    definitionIssues,
-  );
-  const input = compileContractSchema(
-    command.input,
-    {
-      command: definition.root,
-      location: "input",
-    },
-    definitionIssues,
-  );
-  const compiledSuccess = compileSuccess(
-    definition.root,
-    command.success,
-    isTextOutputEnabled(definition.output),
-    definitionIssues,
-  );
-  const compiledFailures = compileFailures(
-    definition.root,
-    command.failures,
-    definitionIssues,
-  );
-  collectTextPresenterIssues(
-    definition.root,
-    isTextOutputEnabled(definition.output),
-    command.success,
-    command.failures,
-    definitionIssues,
-  );
-  const fields =
-    input === undefined
-      ? []
-      : compileInputFields(
-          command.fields ?? {},
-          input.inputSchema,
-          definition.root,
-          definitionIssues,
-        );
-  const describedInput =
-    input === undefined ? undefined : projectFieldDescriptions(input, fields);
-  collectControlFieldConflicts(
-    definition.root,
-    fields,
-    definition,
-    definitionIssues,
-  );
-  const usageConstraints = compileUsageConstraints(
-    command.usageConstraints === undefined ? [] : command.usageConstraints,
-    fields,
-    definition.root,
-    definitionIssues,
-  );
-  if (definitionIssues.length > 0) {
-    throw new ContractDefinitionError(
-      definitionIssues as [
-        ContractDefinitionIssue,
-        ...ContractDefinitionIssue[],
-      ],
-    );
-  }
-  const validInput = projectUsageConstraints(
-    describedInput as SchemaManifest,
-    usageConstraints,
-  );
-  const usage = deepFreeze({
-    command: definition.root,
-    synopsis: createUsageSynopsis(command.name, fields),
-  });
-  const controls = compileControls(definition);
-  const grammar = deepFreeze({
-    root: {
-      kind: "rootCommand" as const,
-      id: definition.root,
-      name: command.name,
-      description: command.description,
-      ...(helpSupplement === undefined ? {} : { helpSupplement }),
-      fields,
-      ...(usageConstraints.length === 0 ? {} : { usageConstraints }),
-      usage,
-    },
-    nodes: [] as const,
-    controls,
-  });
-  const manifest = deepFreeze({
-    schemaVersion: "1" as const,
-    root: definition.root,
-    commands: {
-      [definition.root]: {
-        kind: "rootCommand" as const,
-        name: command.name,
-        description: command.description,
-        ...(helpSupplement === undefined ? {} : { helpSupplement }),
-        fields,
-        ...(usageConstraints.length === 0 ? {} : { usageConstraints }),
-        input: validInput,
-        success: compiledSuccess.manifest,
-        failures: compiledFailures.manifest,
-      },
-    },
-    controls,
-    usageFailure: {
-      exitCode: definition.usageFailureExitCode,
-      wire: createUsageFailureWireSchema([
-        {
-          command: definition.root,
-          usage: usage.synopsis,
-          helpArgv: usageFailureHelpArgv(
-            { [definition.root]: { name: command.name } },
-            definition.root,
-          ),
-        },
-      ]),
-    },
-    wire: deepFreeze({
-      ...compiledSuccess.wire,
-      ...(Object.keys(compiledFailures.wire).length === 0
-        ? {}
-        : { failure: compiledFailures.wire }),
-    }),
-  });
-  const contract = Object.freeze({
-    grammar,
-    manifest,
-  }) as unknown as CliContract;
-
-  compiledCliContracts.set(contract, {
-    contract,
-    root: definition.root,
-    description: command.description,
-    fields,
-    usageConstraints,
-    usage,
-    usageFailureExitCode: definition.usageFailureExitCode,
-    input: command.input,
-    success: compiledSuccess.runtime,
-    failures: compiledFailures.runtime,
-    handler: command.handler,
-    commands: {
-      [definition.root]: {
-        id: definition.root,
-        kind: "rootCommand",
-        name: command.name,
-        aliases: Object.freeze([]),
-        description: command.description,
-        ...(helpSupplement === undefined ? {} : { helpSupplement }),
-        fields,
-        usageConstraints,
-        usage,
-        input: command.input,
-        success: compiledSuccess.runtime,
-        failures: compiledFailures.runtime,
-        handler: command.handler,
-      },
-    },
-  });
-
-  return contract;
-}
-
-function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
   const issues: ContractDefinitionIssue[] = [];
-  collectCliBaseIssues(definition, issues);
-  const orderedIds = orderHierarchy(definition, issues);
-  if (issues.length > 0) {
+  const isHierarchy =
+    definition.commands[definition.root]?.kind === "rootGroup";
+  let orderedIds: readonly string[];
+  if (isHierarchy) {
+    collectCliBaseIssues(definition, issues);
+    orderedIds = orderHierarchy(definition, issues);
+  } else {
+    orderedIds =
+      collectRootDefinitionIssues(definition, issues) === undefined
+        ? []
+        : [definition.root];
+  }
+  if (isHierarchy && issues.length > 0) {
     throw new ContractDefinitionError(
       issues as [ContractDefinitionIssue, ...ContractDefinitionIssue[]],
     );
   }
 
-  const controls = compileControls(definition);
   const runtimeCommands: Record<string, RuntimeCompiledCommand> = {};
   const grammarNodes: CommandGrammar[] = [];
   const manifestCommands: Record<
@@ -3214,21 +3000,9 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
       issues,
     );
     if (node.kind === "rootGroup" || node.kind === "commandGroup") {
-      const sharedOptions = compileSharedOptions(
-        node.sharedOptions ?? {},
-        id,
-        issues,
-      );
-      collectControlFieldConflicts(id, sharedOptions, definition, issues);
-      const scopeOptions = deepFreeze([
-        ...(node.parent === undefined
-          ? []
-          : (runtimeCommands[node.parent]?.fields ?? [])),
-        ...sharedOptions,
-      ]);
       const usage = deepFreeze({
         command: id,
-        synopsis: `${createUsageSynopsis(commandPath(id, definition.commands), scopeOptions)} <command>`,
+        synopsis: `${commandPath(id, definition.commands)} <command>`,
       });
       const compiledNode: RuntimeCompiledCommand = {
         id,
@@ -3238,8 +3012,6 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
         aliases,
         description: node.description,
         ...(helpSupplement === undefined ? {} : { helpSupplement }),
-        fields: scopeOptions,
-        usageConstraints: Object.freeze([]),
         usage,
       };
       runtimeCommands[id] = compiledNode;
@@ -3254,7 +3026,6 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
             description: node.description,
             ...(helpSupplement === undefined ? {} : { helpSupplement }),
             usage,
-            sharedOptions,
           }),
         );
       }
@@ -3265,7 +3036,6 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
         aliases,
         description: node.description,
         ...(helpSupplement === undefined ? {} : { helpSupplement }),
-        sharedOptions,
       });
       continue;
     }
@@ -3290,84 +3060,69 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
       executable.failures,
       issues,
     );
-    const effectiveDefinitions = collectEffectiveFieldDefinitions(
-      id,
-      definition.commands,
-      issues,
-    );
-    const effectiveFields =
+    const fields =
       input === undefined
         ? []
         : compileInputFields(
-            effectiveDefinitions,
+            executable.fields ?? {},
             input.inputSchema,
             id,
             issues,
           );
     const describedInput =
-      input === undefined
-        ? undefined
-        : projectFieldDescriptions(input, effectiveFields);
-    const localKeys = new Set(Object.keys(executable.fields ?? {}));
-    const fields = deepFreeze(
-      effectiveFields.filter((field) => localKeys.has(field.key)),
-    );
+      input === undefined ? undefined : projectFieldDescriptions(input, fields);
     collectControlFieldConflicts(id, fields, definition, issues);
     const usageConstraints = compileUsageConstraints(
       executable.usageConstraints === undefined
         ? []
         : executable.usageConstraints,
-      effectiveFields,
+      fields,
       id,
       issues,
     );
-    const leafUsage = deepFreeze({
+    const usage = deepFreeze({
       command: id,
       synopsis: createUsageSynopsis(
         commandPath(id, definition.commands),
-        effectiveFields,
+        fields,
       ),
     });
     runtimeCommands[id] = Object.freeze({
       id,
-      kind: "command",
-      parent: executable.parent as string,
-      name: executable.name,
-      aliases,
-      description: executable.description,
-      ...(helpSupplement === undefined ? {} : { helpSupplement }),
-      fields: effectiveFields,
-      usageConstraints,
-      usage: leafUsage,
-      input: executable.input,
-      success: compiledSuccess.runtime,
-      failures: compiledFailures.runtime,
-      handler: executable.handler,
-    });
-    grammarNodes.push(
-      deepFreeze({
-        kind: "command" as const,
-        id,
-        parent: executable.parent as string,
-        name: executable.name,
-        aliases,
-        description: executable.description,
-        ...(helpSupplement === undefined ? {} : { helpSupplement }),
-        fields,
-        effectiveFields,
-        ...(usageConstraints.length === 0 ? {} : { usageConstraints }),
-        usage: leafUsage,
-      }),
-    );
-    manifestCommands[id] = deepFreeze({
-      kind: "command" as const,
-      parent: executable.parent as string,
+      kind: executable.kind,
+      ...(executable.parent === undefined ? {} : { parent: executable.parent }),
       name: executable.name,
       aliases,
       description: executable.description,
       ...(helpSupplement === undefined ? {} : { helpSupplement }),
       fields,
-      effectiveFields,
+      usageConstraints,
+      usage,
+      input: executable.input,
+      success: compiledSuccess.runtime,
+      failures: compiledFailures.runtime,
+      handler: executable.handler,
+    });
+    if (executable.kind === "command") {
+      grammarNodes.push(
+        deepFreeze({
+          kind: "command" as const,
+          id,
+          parent: executable.parent as string,
+          name: executable.name,
+          aliases,
+          description: executable.description,
+          ...(helpSupplement === undefined ? {} : { helpSupplement }),
+          fields,
+          ...(usageConstraints.length === 0 ? {} : { usageConstraints }),
+          usage,
+        }),
+      );
+    }
+    const manifestDetails = {
+      description: executable.description,
+      ...(helpSupplement === undefined ? {} : { helpSupplement }),
+      fields,
       ...(usageConstraints.length === 0 ? {} : { usageConstraints }),
       input: projectUsageConstraints(
         describedInput as SchemaManifest,
@@ -3375,7 +3130,21 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
       ),
       success: compiledSuccess.manifest,
       failures: compiledFailures.manifest,
-    });
+    };
+    manifestCommands[id] =
+      executable.kind === "command"
+        ? deepFreeze({
+            kind: "command" as const,
+            parent: executable.parent as string,
+            name: executable.name,
+            aliases,
+            ...manifestDetails,
+          })
+        : deepFreeze({
+            kind: "rootCommand" as const,
+            name: executable.name,
+            ...manifestDetails,
+          });
     wire[id] = deepFreeze({
       ...compiledSuccess.wire,
       ...(Object.keys(compiledFailures.wire).length === 0
@@ -3388,27 +3157,43 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
       issues as [ContractDefinitionIssue, ...ContractDefinitionIssue[]],
     );
 
+  const controls = compileControls(definition);
   const rootCommand = runtimeCommands[
     definition.root
   ] as RuntimeCompiledCommand;
+  const rootGrammar = isCompiledExecutable(rootCommand)
+    ? {
+        kind: "rootCommand" as const,
+        id: rootCommand.id,
+        name: rootCommand.name,
+        description: rootCommand.description,
+        ...(rootCommand.helpSupplement === undefined
+          ? {}
+          : { helpSupplement: rootCommand.helpSupplement }),
+        fields: rootCommand.fields,
+        ...(rootCommand.usageConstraints.length === 0
+          ? {}
+          : { usageConstraints: rootCommand.usageConstraints }),
+        usage: rootCommand.usage,
+      }
+    : {
+        kind: "rootGroup" as const,
+        id: rootCommand.id,
+        name: rootCommand.name,
+        aliases: rootCommand.aliases,
+        description: rootCommand.description,
+        ...(rootCommand.helpSupplement === undefined
+          ? {}
+          : { helpSupplement: rootCommand.helpSupplement }),
+        usage: rootCommand.usage,
+      };
   const grammar = deepFreeze({
-    root: {
-      kind: "rootGroup" as const,
-      id: rootCommand.id,
-      name: rootCommand.name,
-      aliases: rootCommand.aliases,
-      description: rootCommand.description,
-      ...(rootCommand.helpSupplement === undefined
-        ? {}
-        : { helpSupplement: rootCommand.helpSupplement }),
-      usage: rootCommand.usage,
-      sharedOptions: rootCommand.fields,
-    },
+    root: rootGrammar,
     nodes: grammarNodes,
     controls,
   });
   const manifest = deepFreeze({
-    schemaVersion: "1" as const,
+    schemaVersion: "2" as const,
     root: definition.root,
     commands: manifestCommands,
     controls,
@@ -3422,7 +3207,7 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
         })),
       ),
     },
-    wire,
+    wire: isHierarchy ? wire : (wire[definition.root] as CommandWireManifest),
   });
   const contract = Object.freeze({
     grammar,
@@ -3431,15 +3216,7 @@ function compileHierarchyCli(definition: RuntimeCliDefinition): CliContract {
   compiledCliContracts.set(contract, {
     contract,
     root: definition.root,
-    description: rootCommand.description,
-    fields: rootCommand.fields,
-    usageConstraints: rootCommand.usageConstraints,
-    usage: rootCommand.usage,
     usageFailureExitCode: definition.usageFailureExitCode,
-    input: undefined as unknown as ContractSchema,
-    success: { kind: "completion" },
-    failures: {},
-    handler: undefined,
     commands: deepFreeze(runtimeCommands),
   });
   return contract;
@@ -3746,50 +3523,6 @@ export function usageFailureHelpArgv(
       current.parent === undefined ? undefined : commands[current.parent];
   }
   return [...path, "--help"];
-}
-
-function compileSharedOptions(
-  definitions: SharedOptionDefinitions,
-  command: string,
-  issues: ContractDefinitionIssue[],
-): readonly Exclude<
-  FieldGrammar,
-  PositionalGrammar | VariadicPositionalGrammar
->[] {
-  for (const [field, definition] of Object.entries(definitions)) {
-    const dynamicDefinition = definition as FieldDefinition;
-    if (
-      dynamicDefinition.kind === "positional" ||
-      dynamicDefinition.kind === "variadicPositional"
-    ) {
-      issues.push({
-        code: "invalidSharedOptionKind",
-        command,
-        field,
-        received: dynamicDefinition.kind,
-      });
-      continue;
-    }
-  }
-  const properties = Object.fromEntries(
-    Object.entries(definitions).map(([field, definition]) => [
-      field,
-      definition.kind === "flag"
-        ? { type: "boolean" }
-        : definition.kind === "repeatableOption"
-          ? { type: "array", items: { type: "string" } }
-          : { type: "string" },
-    ]),
-  );
-  return compileInputFields(
-    definitions,
-    { type: "object", properties, required: [] },
-    command,
-    issues,
-  ) as readonly Exclude<
-    FieldGrammar,
-    PositionalGrammar | VariadicPositionalGrammar
-  >[];
 }
 
 function compileUsageConstraints(
@@ -4128,66 +3861,6 @@ function projectUsageConstraints(
   });
 }
 
-function collectEffectiveFieldDefinitions(
-  command: string,
-  commands: RuntimeCliDefinition["commands"],
-  issues: ContractDefinitionIssue[],
-): FieldDefinitions {
-  const lineage: RuntimeCommandDefinition[] = [];
-  let current: string | undefined = command;
-  while (current !== undefined) {
-    const node: RuntimeCommandDefinition | undefined = commands[current];
-    if (node === undefined) break;
-    lineage.unshift(node);
-    current = node.parent;
-  }
-
-  const effective: Record<string, FieldDefinition> = {};
-  const spellingOwners = new Map<string, string>();
-  for (const node of lineage) {
-    const definitions: FieldDefinitions =
-      node.kind === "rootGroup" || node.kind === "commandGroup"
-        ? (node.sharedOptions ?? {})
-        : ((node as RuntimeExecutableDefinition).fields ?? {});
-    for (const [field, definition] of Object.entries(definitions)) {
-      if (effective[field] !== undefined) {
-        issues.push({
-          code: "duplicateInheritedFieldIdentity",
-          command,
-          field,
-        });
-        continue;
-      }
-      effective[field] = definition;
-      if (
-        definition.kind === "positional" ||
-        definition.kind === "variadicPositional"
-      ) {
-        continue;
-      }
-      for (const spelling of [
-        definition.longOption,
-        definition.shortAlias,
-        definition.kind === "flag" ? definition.negatedLongOption : undefined,
-      ]) {
-        if (spelling === undefined) continue;
-        const owner = spellingOwners.get(spelling);
-        if (owner !== undefined) {
-          issues.push({
-            code: "duplicateInheritedOptionSpelling",
-            command,
-            spelling,
-            fields: Object.freeze([owner, field]),
-          });
-        } else {
-          spellingOwners.set(spelling, field);
-        }
-      }
-    }
-  }
-  return effective;
-}
-
 function compileFailures(
   command: string,
   failures: FailureVariantDefinitions,
@@ -4373,7 +4046,7 @@ function compileSuccess(
   textEnabled: boolean,
   issues: ContractDefinitionIssue[],
 ): Readonly<{
-  readonly runtime: RuntimeCompiledCli["success"];
+  readonly runtime: RuntimeCompiledExecutable["success"];
   readonly manifest: CommandSuccessManifest;
   readonly wire: CliManifest<string>["wire"];
 }> {

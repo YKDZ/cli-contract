@@ -263,7 +263,7 @@ void test("定义期请求两侧 Draft 2020-12 并公开不可变投影", () => 
     },
   });
   assert.equal(cli.manifest.root, "fixture");
-  assert.equal(cli.manifest.schemaVersion, "1");
+  assert.equal(cli.manifest.schemaVersion, "2");
   assert.deepEqual(cli.manifest.commands.fixture.input, {
     inputSchema: emptyJsonSchema,
     outputSchema: emptyJsonSchema,
