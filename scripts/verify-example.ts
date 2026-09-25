@@ -13,7 +13,7 @@ interface Manifest {
   name: string;
   version?: string;
   type?: string;
-  scripts: Record<string, string>;
+  scripts?: Record<string, string>;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
 }
@@ -31,6 +31,7 @@ export async function verifyExample(
   argv?: readonly string[],
 ): Promise<void> {
   const example = await manifestAt(exampleRoot);
+  if (!example.scripts) throw new TypeError("示例包缺少 scripts");
   const core = await manifestAt(resolve(repositoryRoot, "packages/lib"));
   const testing = await manifestAt(resolve(repositoryRoot, "packages/testing"));
   if (!core.version || core.version !== testing.version)
@@ -134,7 +135,7 @@ async function manifestAt(directory: string): Promise<Manifest> {
     typeof value.name !== "string" ||
     (value.version !== undefined && typeof value.version !== "string") ||
     (value.type !== undefined && typeof value.type !== "string") ||
-    !isStringRecord(value.scripts) ||
+    (value.scripts !== undefined && !isStringRecord(value.scripts)) ||
     (value.dependencies !== undefined && !isStringRecord(value.dependencies)) ||
     (value.devDependencies !== undefined &&
       !isStringRecord(value.devDependencies))
@@ -144,7 +145,7 @@ async function manifestAt(directory: string): Promise<Manifest> {
   return {
     ...value,
     name: value.name,
-    scripts: value.scripts,
+    ...(value.scripts === undefined ? {} : { scripts: value.scripts }),
     ...(value.version === undefined ? {} : { version: value.version }),
     ...(value.type === undefined ? {} : { type: value.type }),
     ...(value.dependencies === undefined
