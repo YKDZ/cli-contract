@@ -297,6 +297,8 @@ export type ContractDefinitionIssue =
       readonly code: "unknownUsageConstraintField";
       readonly command: string;
       readonly constraint: "requires" | "exclusive" | "forbiddenCombination";
+      readonly index: number;
+      readonly member: "field" | "requires" | "fields" | "values.field";
       readonly field: string;
     }>
   | Readonly<{
@@ -449,7 +451,7 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
     case "invalidUsageConstraint":
       return `命令 ${issue.command} 的 usage constraint ${issue.received ?? "非字符串"} 无效`;
     case "unknownUsageConstraintField":
-      return `命令 ${issue.command} 的 ${issue.constraint} usage constraint 引用了不存在字段 ${issue.field}`;
+      return `命令 ${issue.command} 的 usage constraint[${issue.index}] ${issue.constraint}.${issue.member} 引用了不存在字段 ${issue.field}`;
     case "inapplicableUsageConstraintField":
       return `命令 ${issue.command} 的 ${issue.constraint} usage constraint 不适用于字段 ${issue.field}（${issue.kind}）`;
     case "invalidUsageConstraintValue":

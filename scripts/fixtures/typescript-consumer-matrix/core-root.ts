@@ -211,6 +211,7 @@ const completeCompletionFailures = defineCli()({
 });
 void completeCompletionFailures;
 
+// @ts-expect-error 每个 data 变体都必须声明 text presenter。
 defineCli()({
   root: "missingDataVariantText",
   help: helpCapability(),
@@ -231,7 +232,6 @@ defineCli()({
       input: textInput,
       success: {
         kind: "data",
-        // @ts-expect-error 每个 data 变体都必须声明 text presenter。
         variants: {
           accepted: {
             description: "已接受",
@@ -256,6 +256,7 @@ defineCli()({
   },
 });
 
+// @ts-expect-error 每个 failure 变体都必须声明 text presenter。
 defineCli()({
   root: "missingDataFailureText",
   help: helpCapability(),
@@ -288,7 +289,6 @@ defineCli()({
           },
         },
       },
-      // @ts-expect-error 每个 failure 变体都必须声明 text presenter。
       failures: {
         unavailable: {
           description: "不可用",
@@ -311,6 +311,7 @@ defineCli()({
   },
 });
 
+// @ts-expect-error completion 的 failure 变体也必须声明 text presenter。
 defineCli()({
   root: "missingCompletionFailureText",
   help: helpCapability(),
@@ -323,7 +324,6 @@ defineCli()({
       description: "completion 的遗漏 failure presenter",
       input: emptyInput,
       success: { kind: "completion", text: () => text.silent },
-      // @ts-expect-error completion 的 failure 变体也必须声明 text presenter。
       failures: {
         unavailable: {
           description: "不可用",
@@ -364,6 +364,7 @@ defineCli()({
   },
 });
 
+// @ts-expect-error completion 缺少 text presenter 必须在真实 defineCli 入口被拒绝。
 defineCli()({
   root: "missingCompletion",
   help: helpCapability(),
@@ -375,7 +376,6 @@ defineCli()({
       name: "missing-completion",
       description: "缺少 completion presenter",
       input: emptyInput,
-      // @ts-expect-error completion 缺少 text presenter 必须在真实 defineCli 入口被拒绝。
       success: { kind: "completion" },
       failures: {},
       handler: ({ outcome }) => outcome.completion(),
@@ -452,6 +452,7 @@ defineCli()({
   },
 });
 
+// @ts-expect-error 带字段的 completion 缺少 text presenter 必须在真实 defineCli 入口被拒绝。
 defineCli()({
   root: "missingCompletionWithField",
   help: helpCapability(),
@@ -470,7 +471,6 @@ defineCli()({
         },
       },
       input: textInput,
-      // @ts-expect-error 带字段的 completion 缺少 text presenter 必须在真实 defineCli 入口被拒绝。
       success: { kind: "completion" },
       failures: {},
       handler: ({ input, outcome }) => {

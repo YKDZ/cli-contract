@@ -130,12 +130,12 @@ hierarchyResult.command satisfies
   | "watch";
 
 const defineMissingCompletion = defineCli();
+// @ts-expect-error [hierarchy-text-coverage] 层级 completion 缺少 presenter 必须在根装配时拒绝。
 defineMissingCompletion({
   root: "missingCompletion",
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
   usageFailureExitCode: 64,
-  // @ts-expect-error [hierarchy-text-coverage] 层级 completion 缺少 presenter 必须在根装配时拒绝。
   commands: {
     missingCompletion: {
       kind: "rootGroup",
@@ -156,12 +156,12 @@ defineMissingCompletion({
 });
 
 const defineMissingData = defineCli();
+// @ts-expect-error [hierarchy-text-coverage] 层级 data 变体缺少 presenter 必须在根装配时拒绝。
 defineMissingData({
   root: "missingData",
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
   usageFailureExitCode: 64,
-  // @ts-expect-error [hierarchy-text-coverage] 层级 data 变体缺少 presenter 必须在根装配时拒绝。
   commands: {
     missingData: {
       kind: "rootGroup",
@@ -194,12 +194,12 @@ defineMissingData({
 });
 
 const defineMissingFailure = defineCli();
+// @ts-expect-error [hierarchy-text-coverage] 层级 failure 变体缺少 presenter 必须在根装配时拒绝。
 defineMissingFailure({
   root: "missingFailure",
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
   usageFailureExitCode: 64,
-  // @ts-expect-error [hierarchy-text-coverage] 层级 failure 变体缺少 presenter 必须在根装配时拒绝。
   commands: {
     missingFailure: {
       kind: "rootGroup",
@@ -222,12 +222,12 @@ defineMissingFailure({
 });
 
 const defineMissingRecord = defineCli();
+// @ts-expect-error [hierarchy-text-coverage] 层级 stream record 缺少 presenter 必须在根装配时拒绝。
 defineMissingRecord({
   root: "missingRecord",
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
   usageFailureExitCode: 64,
-  // @ts-expect-error [hierarchy-text-coverage] 层级 stream record 缺少 presenter 必须在根装配时拒绝。
   commands: {
     missingRecord: {
       kind: "rootGroup",
@@ -262,12 +262,12 @@ defineMissingRecord({
 });
 
 const defineMissingStreamSuccess = defineCli();
+// @ts-expect-error [hierarchy-text-coverage] 层级 stream success 缺少 presenter 必须在根装配时拒绝。
 defineMissingStreamSuccess({
   root: "missingStreamSuccess",
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
   usageFailureExitCode: 64,
-  // @ts-expect-error [hierarchy-text-coverage] 层级 stream success 缺少 presenter 必须在根装配时拒绝。
   commands: {
     missingStreamSuccess: {
       kind: "rootGroup",

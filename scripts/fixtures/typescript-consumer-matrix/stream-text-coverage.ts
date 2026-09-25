@@ -51,6 +51,7 @@ const complete = defineCli()({
 });
 void complete;
 
+// @ts-expect-error 每个 stream record 都必须声明 text presenter。
 defineCli()({
   root: "missingRecord",
   ...base,
@@ -60,7 +61,6 @@ defineCli()({
       name: "missing-record",
       description: "遗漏记录",
       input,
-      // @ts-expect-error 每个 stream record 都必须声明 text presenter。
       success: {
         kind: "stream",
         text: () => text.silent,
@@ -82,6 +82,7 @@ defineCli()({
   },
 });
 
+// @ts-expect-error stream success 必须声明 text presenter。
 defineCli()({
   root: "missingSuccess",
   ...base,
@@ -91,7 +92,6 @@ defineCli()({
       name: "missing-success",
       description: "遗漏成功",
       input,
-      // @ts-expect-error stream success 必须声明 text presenter。
       success: {
         kind: "stream",
         records: {

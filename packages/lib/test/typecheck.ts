@@ -644,12 +644,12 @@ const textStreamHierarchy = hierarchyStreamDefine({
 void textStreamHierarchy;
 
 const defineMissingTextStreamHierarchy = defineCli();
+// @ts-expect-error text 层级 stream 的终态与每个 record 都必须声明 presenter。
 defineMissingTextStreamHierarchy({
   root: "missingTextStreamTree",
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
   usageFailureExitCode: 64,
-  // @ts-expect-error text 层级 stream 的终态与每个 record 都必须声明 presenter。
   commands: {
     missingTextStreamTree: {
       kind: "rootGroup",
@@ -1227,12 +1227,12 @@ const widenedTextHierarchy = defineWidenedTextHierarchy({
 void widenedTextHierarchy;
 
 const defineInvalidTextHierarchy = defineCli();
+// @ts-expect-error text hierarchy 的 completion 必须声明 presenter。
 defineInvalidTextHierarchy({
   root: "missingCompletionTree",
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
   usageFailureExitCode: 64,
-  // @ts-expect-error text hierarchy 的 completion 必须声明 presenter。
   commands: {
     missingCompletionTree: {
       kind: "rootGroup",
@@ -1253,12 +1253,12 @@ defineInvalidTextHierarchy({
 });
 
 const defineInvalidFailureHierarchy = defineCli();
+// @ts-expect-error text hierarchy 的 failure 必须声明 presenter。
 defineInvalidFailureHierarchy({
   root: "missingFailureTree",
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "text" }),
   usageFailureExitCode: 64,
-  // @ts-expect-error text hierarchy 的 failure 必须声明 presenter。
   commands: {
     missingFailureTree: {
       kind: "rootGroup",

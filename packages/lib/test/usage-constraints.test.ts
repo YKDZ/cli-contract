@@ -229,6 +229,14 @@ void test("defineCli 以局部身份拒绝无效约束引用、字段种类、�
     () => defineCli()(definition as never),
     (error: unknown) => {
       assert(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues[0], {
+        code: "unknownUsageConstraintField",
+        command: "invalidConstraints",
+        constraint: "requires",
+        index: 0,
+        member: "field",
+        field: "missing",
+      });
       assert.deepEqual(
         error.issues.map(({ code }) => code),
         [

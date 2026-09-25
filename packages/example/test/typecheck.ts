@@ -61,6 +61,7 @@ export function rejectedDeclarations() {
     },
   });
 
+  // @ts-expect-error 启用 text 后不能遗漏成功的文本呈现器。
   defineCli()({
     root: "missingCompletion",
     help: helpCapability(),
@@ -72,7 +73,6 @@ export function rejectedDeclarations() {
         name: "check",
         description: "检查类型",
         input: z.object({}),
-        // @ts-expect-error 启用 text 后不能遗漏成功的文本呈现器。
         success: { kind: "completion" },
         failures: {},
         handler: ({ outcome }) => outcome.completion(),

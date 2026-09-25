@@ -3,6 +3,8 @@ import { lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 
+import { API } from "typescript-7/unstable/sync";
+
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const corePackage = "@ykdz/cli-contract";
 const testingPackage = "@ykdz/cli-contract-testing";
@@ -32,10 +34,13 @@ async function readFixtures(): Promise<Readonly<Record<string, string>>> {
         "completion-missing.ts",
         "core-node.ts",
         "core-root.ts",
+        "input-schema-raw-mismatch.ts",
         "named-variant-missing.ts",
         "schema-input.ts",
         "stream-record-name.ts",
         "stream-text-coverage.ts",
+        "unknown-usage-constraint-field.ts",
+        "unexpected-text-presenter.ts",
       ].map(async (name) => [
         name,
         await readFile(
@@ -130,11 +135,14 @@ async function verifyCoreOnly(
     await writeFixtures(project, fixtures, [
       "core-node.ts",
       "core-root.ts",
+      "input-schema-raw-mismatch.ts",
       "completion-missing.ts",
       "named-variant-missing.ts",
       "schema-input.ts",
       "stream-record-name.ts",
       "stream-text-coverage.ts",
+      "unknown-usage-constraint-field.ts",
+      "unexpected-text-presenter.ts",
       "hierarchy-text-coverage.typecheck.ts",
     ]);
     runCommand(
@@ -174,6 +182,12 @@ async function verifyCoreOnly(
         resolution,
         fixtures,
       );
+      await verifyUnknownUsageConstraintFieldDiagnostic(project, resolution);
+      await verifyInputSchemaRawMismatchDiagnostic(project, resolution);
+      await verifyUnexpectedTextPresenterDiagnostic(project, resolution);
+      if (compilerVersion === "7.0.2" && resolution === "nodenext") {
+        verifyAuthoringLanguageService(project, resolution, fixtures);
+      }
       await verifyMissingStreamDiagnostic(project, resolution, fixtures);
       await verifyInvalidStreamRecordNameDiagnostic(
         project,
@@ -218,11 +232,7 @@ async function verifyHierarchyTextCoverageDiagnostic(
   if (result.error !== undefined) throw result.error;
   const diagnostics = `${result.stderr}\n${result.stdout}`;
   const required = [
-    "missingCompletionTextPresenter",
-    "missingDataVariantTextPresenter",
-    "missingFailureVariantTextPresenter",
-    "missingStreamRecordTextPresenter",
-    "missingStreamSuccessTextPresenter",
+    "missingTextPresenter",
     'command: "leaf"',
     'location: "completion"',
     'location: "data"',
@@ -236,6 +246,7 @@ async function verifyHierarchyTextCoverageDiagnostic(
   const headers = diagnostics.match(
     /^hierarchy-text-coverage-unchecked\.ts\(\d+,\d+\): error TS\d+:/gm,
   );
+  const firstLevelCodes = diagnostics.match(/^  [^ ].*missingTextPresenter/gm);
   const allHeaders = diagnostics.match(/^.+\(\d+,\d+\): error TS\d+:/gm);
   const unrelated = [
     "TS7006",
@@ -247,11 +258,258 @@ async function verifyHierarchyTextCoverageDiagnostic(
     required.some((fragment) => !diagnostics.includes(fragment)) ||
     unrelated.some((fragment) => diagnostics.includes(fragment)) ||
     headers?.length !== 5 ||
+    firstLevelCodes?.length !== 5 ||
     allHeaders?.length !== headers.length
   ) {
     throw new Error(
       `Hierarchy text diagnostic did not expose only local contract evidence\n${diagnostics}`,
     );
+  }
+}
+
+async function verifyUnknownUsageConstraintFieldDiagnostic(
+  project: string,
+  resolution: (typeof resolutions)[number],
+): Promise<void> {
+  const fixture = "unknown-usage-constraint-field.ts";
+  const tsconfig = `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`;
+  await writeFile(
+    resolve(project, tsconfig),
+    `${JSON.stringify(tsconfigFor(resolution, fixture))}\n`,
+  );
+  const result = spawnSync(
+    resolve(project, "node_modules/.bin/tsc"),
+    ["--project", tsconfig, "--pretty", "false"],
+    { cwd: project, encoding: "utf8" },
+  );
+  if (result.error !== undefined) throw result.error;
+  const diagnostics = `${result.stderr}\n${result.stdout}`;
+  const required = [
+    "unknownUsageConstraintField",
+    'command: "deploy"',
+    'command: "rootDeploy"',
+    'constraint: "requires"',
+    'member: "requires"',
+    'field: "token"',
+  ];
+  const headers = diagnostics.match(
+    /^unknown-usage-constraint-field\.ts\(\d+,\d+\): error TS\d+:/gm,
+  );
+  const firstLevelCodes = diagnostics.match(
+    /^  [^ ].*unknownUsageConstraintField/gm,
+  );
+  if (
+    result.status === 0 ||
+    headers?.length !== 2 ||
+    firstLevelCodes?.length !== 2 ||
+    required.some((fragment) => !diagnostics.includes(fragment))
+  ) {
+    throw new Error(
+      `Unknown usage constraint field diagnostic is incomplete\n${diagnostics}`,
+    );
+  }
+}
+
+async function verifyInputSchemaRawMismatchDiagnostic(
+  project: string,
+  resolution: (typeof resolutions)[number],
+): Promise<void> {
+  const fixture = "input-schema-raw-mismatch.ts";
+  const tsconfig = `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`;
+  await writeFile(
+    resolve(project, tsconfig),
+    `${JSON.stringify(tsconfigFor(resolution, fixture))}\n`,
+  );
+  const result = spawnSync(
+    resolve(project, "node_modules/.bin/tsc"),
+    ["--project", tsconfig, "--pretty", "false"],
+    { cwd: project, encoding: "utf8" },
+  );
+  if (result.error !== undefined) throw result.error;
+  const diagnostics = `${result.stderr}\n${result.stdout}`;
+  const required = [
+    "fieldInputMustAcceptRawValue",
+    'command: "inspect"',
+    'command: "rootInspect"',
+    'field: "count"',
+    "rawValue: string",
+    "schemaInput: number",
+  ];
+  const headers = diagnostics.match(
+    /^input-schema-raw-mismatch\.ts\(\d+,\d+\): error TS\d+:/gm,
+  );
+  const firstLevelCodes = diagnostics.match(
+    /^  [^ ].*fieldInputMustAcceptRawValue/gm,
+  );
+  if (
+    result.status === 0 ||
+    headers?.length !== 2 ||
+    firstLevelCodes?.length !== 2 ||
+    required.some((fragment) => !diagnostics.includes(fragment))
+  ) {
+    throw new Error(`Input schema raw mismatch is incomplete\n${diagnostics}`);
+  }
+}
+
+async function verifyUnexpectedTextPresenterDiagnostic(
+  project: string,
+  resolution: (typeof resolutions)[number],
+): Promise<void> {
+  const fixture = "unexpected-text-presenter.ts";
+  const tsconfig = `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`;
+  await writeFile(
+    resolve(project, tsconfig),
+    `${JSON.stringify(tsconfigFor(resolution, fixture))}\n`,
+  );
+  const result = spawnSync(
+    resolve(project, "node_modules/.bin/tsc"),
+    ["--project", tsconfig, "--pretty", "false"],
+    { cwd: project, encoding: "utf8" },
+  );
+  if (result.error !== undefined) throw result.error;
+  const diagnostics = `${result.stderr}\n${result.stdout}`;
+  const required = [
+    "unexpectedTextPresenter",
+    'command: "inspect"',
+    'command: "rootInspect"',
+    'location: "failure"',
+    'variant: "permissionDenied"',
+  ];
+  const headers = diagnostics.match(
+    /^unexpected-text-presenter\.ts\(\d+,\d+\): error TS\d+:/gm,
+  );
+  const firstLevelCodes = diagnostics.match(
+    /^  [^ ].*unexpectedTextPresenter/gm,
+  );
+  if (
+    result.status === 0 ||
+    headers?.length !== 2 ||
+    firstLevelCodes?.length !== 2 ||
+    required.some((fragment) => !diagnostics.includes(fragment))
+  ) {
+    throw new Error(
+      `Unexpected text presenter diagnostic is incomplete\n${diagnostics}`,
+    );
+  }
+}
+
+function verifyAuthoringLanguageService(
+  project: string,
+  resolution: (typeof resolutions)[number],
+  fixtures: Readonly<Record<string, string>>,
+): void {
+  const cases = [
+    {
+      fixture: "unknown-usage-constraint-field.ts",
+      count: 2,
+      required: [
+        "unknownUsageConstraintField",
+        'command: "deploy"',
+        'command: "rootDeploy"',
+        'member: "requires"',
+        'field: "token"',
+      ],
+    },
+    {
+      fixture: "input-schema-raw-mismatch.ts",
+      count: 2,
+      required: [
+        "fieldInputMustAcceptRawValue",
+        'command: "inspect"',
+        'command: "rootInspect"',
+        'field: "count"',
+        "rawValue: string",
+        "schemaInput: number",
+      ],
+    },
+    {
+      fixture: "hierarchy-text-coverage-unchecked.ts",
+      count: 5,
+      required: [
+        "missingTextPresenter",
+        'location: "completion"',
+        'location: "data"',
+        'location: "failure"',
+        'location: "record"',
+        'location: "streamSuccess"',
+      ],
+    },
+    {
+      fixture: "unexpected-text-presenter.ts",
+      count: 2,
+      required: [
+        "unexpectedTextPresenter",
+        'command: "inspect"',
+        'command: "rootInspect"',
+        'location: "failure"',
+        'variant: "permissionDenied"',
+      ],
+    },
+  ] as const;
+  const api = new API({ cwd: project });
+  try {
+    const coreSource = fixtures["core-root.ts"];
+    if (coreSource === undefined) throw new Error("Missing core root fixture");
+    const coreConfig = resolve(
+      project,
+      `tsconfig.${resolution}.core-root.json`,
+    );
+    const coreSnapshot = api.updateSnapshot({ openProject: coreConfig });
+    try {
+      const coreProject = coreSnapshot.getProject(coreConfig);
+      if (coreProject === undefined)
+        throw new Error(`Project unavailable: ${coreConfig}`);
+      for (const name of ["defineCli", "helpCapability", "outputCapability"]) {
+        const position = coreSource.indexOf(name);
+        const symbol = coreProject.checker.getSymbolAtPosition(
+          resolve(project, "core-root.ts"),
+          position,
+        );
+        const documentation =
+          symbol === undefined
+            ? ""
+            : coreProject.checker.getDocumentationCommentOfSymbol(
+                coreProject.checker.getAliasedSymbol(symbol),
+              );
+        if (position < 0 || documentation.trim() === "") {
+          throw new Error(`Published authoring hint unavailable: ${name}`);
+        }
+      }
+    } finally {
+      coreSnapshot.dispose();
+    }
+    for (const { fixture, count, required } of cases) {
+      const config = resolve(
+        project,
+        `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`,
+      );
+      const snapshot = api.updateSnapshot({ openProject: config });
+      try {
+        const target = snapshot.getProject(config);
+        if (target === undefined)
+          throw new Error(`Project unavailable: ${config}`);
+        const diagnostics = target.program.getSemanticDiagnostics(
+          resolve(project, fixture),
+        );
+        const firstLevel = diagnostics.flatMap((diagnostic) =>
+          (diagnostic.messageChain ?? []).map((message) => message.text),
+        );
+        const visible = firstLevel.join("\n");
+        if (
+          diagnostics.length !== count ||
+          firstLevel.length < count ||
+          required.some((fragment) => !visible.includes(fragment))
+        ) {
+          throw new Error(
+            `Language service first-level diagnostic is incomplete for ${fixture}\n${visible}`,
+          );
+        }
+      } finally {
+        snapshot.dispose();
+      }
+    }
+  } finally {
+    api.close();
   }
 }
 
@@ -280,8 +538,7 @@ async function verifyMissingStreamDiagnostic(
   if (result.error !== undefined) throw result.error;
   const diagnostics = `${result.stderr}\n${result.stdout}`;
   const required = [
-    "missingStreamRecordTextPresenter",
-    "missingStreamSuccessTextPresenter",
+    "missingTextPresenter",
     'command: "missingRecord"',
     'command: "missingSuccess"',
     'location: "record"',
@@ -446,7 +703,7 @@ async function verifyMissingCompletionDiagnostic(
   const diagnostics = `${result.stderr}\n${result.stdout}`;
   const requiredFragments = [
     "completion-missing.ts",
-    "missingCompletionTextPresenter",
+    "missingTextPresenter",
     'command: "missingCompletion"',
     'command: "missingCompletionWithField"',
     'location: "completion"',
@@ -491,8 +748,7 @@ async function verifyMissingNamedVariantDiagnostic(
   const diagnostics = `${result.stderr}\n${result.stdout}`;
   const requiredFragments = [
     "named-variant-missing.ts",
-    "missingDataVariantTextPresenter",
-    "missingFailureVariantTextPresenter",
+    "missingTextPresenter",
     'command: "missingDataVariantText"',
     'command: "missingDataFailureText"',
     'command: "missingCompletionFailureText"',
