@@ -104,13 +104,12 @@ function parseManifest(
   if (
     value === null ||
     typeof value !== "object" ||
-    typeof (value as Readonly<Record<string, unknown>>).version !== "string"
+    !("version" in value) ||
+    typeof value.version !== "string"
   ) {
     throw new Error(`${path} 缺少字符串 version`);
   }
-  return {
-    version: (value as Readonly<Record<string, unknown>>).version as string,
-  };
+  return { version: value.version };
 }
 
 void main().catch((error: unknown) => {

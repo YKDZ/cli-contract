@@ -72,11 +72,15 @@ void test("Zod 的直接 enum 同源投影到 grammar、manifest、synopsis 与�
   });
   const exported = input["~standard"].jsonSchema.input(draft202012);
   const before = structuredClone(exported);
-  const sourceChoices = (
-    exported.properties as Readonly<
-      Record<string, Readonly<{ enum: readonly string[] }>>
-    >
-  ).mode?.enum;
+  const exportedProperties = exported.properties;
+  assert.ok(
+    typeof exportedProperties === "object" && exportedProperties !== null,
+  );
+  assert.ok("mode" in exportedProperties);
+  const modeSchema = exportedProperties.mode;
+  assert.ok(typeof modeSchema === "object" && modeSchema !== null);
+  assert.ok("enum" in modeSchema && Array.isArray(modeSchema.enum));
+  const sourceChoices = modeSchema.enum;
   const cli = defineCli()({
     root: "choose",
     help: englishHelpCapability(),
@@ -446,6 +450,7 @@ void test("真实 Zod 与 Valibot 的 union 投影不会被求解为字段候选
   ] as const;
 
   for (const producer of inputs) {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 测试模式由 fixture 提供 Standard Schema 能力。
     const input = producer as unknown as ContractSchema<CombinationRawInput>;
     assert.throws(
       () => createCombinationCli(input),

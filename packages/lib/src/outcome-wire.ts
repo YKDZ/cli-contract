@@ -269,6 +269,7 @@ function createEnvelopeSchema(
   return {
     $schema: "https://json-schema.org/draft/2020-12/schema",
     additionalProperties: false,
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 闭合问题联合只生成 JSON Schema 的 JSON 值。
     properties: Object.fromEntries(
       Object.entries(envelope).map(([key, value]) => [
         key,

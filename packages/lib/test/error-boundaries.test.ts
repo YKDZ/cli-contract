@@ -83,6 +83,7 @@ void test("伪造的 CLI 契约在读取公开结构前以闭合执行问题拒�
   const writes: string[] = [];
 
   await assert.rejects(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意伪造契约或返回值，以验证执行边界。
     executeCli({} as typeof cli, {
       invocation: parseCliInvocation(cli, []),
       dependencies: undefined,
@@ -233,6 +234,7 @@ void test("handler 返回未签发对象时以核心执行问题拒绝且不写�
         input: z.object({}),
         success: { kind: "completion" },
         failures: {},
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意伪造契约或返回值，以验证执行边界。
         handler: () => ({ kind: "completion", command: "fixture" }) as never,
       },
     },
@@ -285,6 +287,7 @@ void test("defineCli 一次报告当前声明中的动态无效值", () => {
   };
 
   assert.throws(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意伪造契约或返回值，以验证执行边界。
     () => defineCli()(definition as never),
     (error) => {
       assert.ok(error instanceof ContractDefinitionError);
@@ -399,6 +402,7 @@ void test("defineCli 拒绝字段间重复的 canonical long option", () => {
   };
 
   assert.throws(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意伪造契约或返回值，以验证执行边界。
     () => defineCli()(definition as never),
     (error) => {
       assert.ok(error instanceof ContractDefinitionError);

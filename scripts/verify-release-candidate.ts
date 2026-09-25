@@ -97,10 +97,11 @@ function parseCandidateResult(output: string): CandidateResult {
 
 function isCandidateResult(value: unknown): value is CandidateResult {
   if (value === null || typeof value !== "object") return false;
-  const record = value as Readonly<Record<string, unknown>>;
   return (
-    typeof record.coreTarball === "string" &&
-    typeof record.testingTarball === "string"
+    "coreTarball" in value &&
+    typeof value.coreTarball === "string" &&
+    "testingTarball" in value &&
+    typeof value.testingTarball === "string"
   );
 }
 

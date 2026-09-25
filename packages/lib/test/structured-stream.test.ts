@@ -33,6 +33,7 @@ function createUncheckedStreamCli(handler: unknown) {
           records: { item: { description: "项目", schema: item } },
         },
         failures: {},
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意越过静态类型，以验证流式结果边界。
         handler: handler as never,
       },
     },
@@ -161,6 +162,7 @@ void test("structured stream 按 header、record、终态写出紧凑 NDJSON", a
     properties: { kind: { const: "streamSuccess" } },
     required: ["kind"],
   });
+  // oxlint-disable-next-line unicorn/no-array-sort -- Object.keys 为断言新建数组，排序不修改 manifest。
   assert.deepEqual(Object.keys(cli.manifest.wire.stream ?? {}).sort(), [
     "header",
     "line",
@@ -279,6 +281,7 @@ void test("record 验证拒绝与写入拒绝均停止拉取并清理 generator"
         failures: {},
         async *handler({ outcome }) {
           try {
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意越过静态类型，以验证流式结果边界。
             yield outcome.record.item({ value: 1 as unknown as string });
             yield outcome.record.item({ value: "never" });
             return outcome.streamSuccess();
@@ -565,6 +568,7 @@ void test("text stream failure 保留已写 record、稳定 identity 与 stderr�
             item: {
               description: "项目",
               schema: item,
+              // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意越过静态类型，以验证流式结果边界。
               text: () => text.lines(["不应", "作为 record"]) as never,
             },
           },

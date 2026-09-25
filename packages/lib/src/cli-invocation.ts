@@ -234,6 +234,7 @@ export function parseCliInvocation<const Contract extends CliContract>(
     if (token === undefined) {
       return bindInvocation(cliContract, {
         kind: "help",
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令 id 来自当前 Contract 编译结果，泛型身份在此恢复。
         command: selected.id as CliContractRoot<Contract>,
       });
     }
@@ -241,6 +242,7 @@ export function parseCliInvocation<const Contract extends CliContract>(
     if (eager !== undefined) {
       return bindInvocation(cliContract, {
         kind: eager,
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令 id 来自当前 Contract 编译结果，泛型身份在此恢复。
         command: selected.id as CliContractRoot<Contract>,
       });
     }
@@ -253,7 +255,9 @@ export function parseCliInvocation<const Contract extends CliContract>(
     if (output.kind === "issue") {
       return usageFailure(
         cliContract,
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令 id 来自当前 Contract 编译结果，泛型身份在此恢复。
         selected.id as CliContractRoot<Contract>,
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- usage 与同一已编译命令一同产生，泛型身份在此恢复。
         selected.usage as CommandUsage<CliContractRoot<Contract>>,
         output.issue,
       );
@@ -275,7 +279,9 @@ export function parseCliInvocation<const Contract extends CliContract>(
       if (option.kind === "issue") {
         return usageFailure(
           cliContract,
+          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令 id 来自当前 Contract 编译结果，泛型身份在此恢复。
           selected.id as CliContractRoot<Contract>,
+          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- usage 与同一已编译命令一同产生，泛型身份在此恢复。
           selected.usage as CommandUsage<CliContractRoot<Contract>>,
           option.issue,
         );
@@ -306,7 +312,9 @@ export function parseCliInvocation<const Contract extends CliContract>(
       };
       return usageFailure(
         cliContract,
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令 id 来自当前 Contract 编译结果，泛型身份在此恢复。
         selected.id as CliContractRoot<Contract>,
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- usage 与同一已编译命令一同产生，泛型身份在此恢复。
         selected.usage as CommandUsage<CliContractRoot<Contract>>,
         issue,
       );
@@ -314,7 +322,9 @@ export function parseCliInvocation<const Contract extends CliContract>(
     selected = child;
     position += 1;
   }
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令 id 来自当前 Contract 编译结果，泛型身份在此恢复。
   const command = selected.id as CliContractRoot<Contract>;
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- usage 与同一已编译命令一同产生，泛型身份在此恢复。
   const usage = selected.usage as CommandUsage<CliContractRoot<Contract>>;
   const fields = selected.fields;
 
@@ -325,6 +335,7 @@ export function parseCliInvocation<const Contract extends CliContract>(
   let positionalIndex = 0;
   let optionsEnabled = true;
   for (; position < argv.length; position += 1) {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- position 受 argv.length 限制，argv 的公共类型保证元素为字符串。
     const token = argv[position] as string;
     if (optionsEnabled && token === "--") {
       optionsEnabled = false;
@@ -404,6 +415,7 @@ export function parseCliInvocation<const Contract extends CliContract>(
       cliContract,
       command,
       usage,
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- structuralIssues.length 已检查为正数。
       structuralIssues as [UsageIssue, ...UsageIssue[]],
     );
   }
@@ -411,6 +423,7 @@ export function parseCliInvocation<const Contract extends CliContract>(
   return bindInvocation(cliContract, {
     kind: "parsed",
     command,
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- raw input 由此 Contract 的字段语法解析并冻结，泛型形状在此恢复。
     input: freezeRawInput(input) as CliContractRawInput<Contract>,
     outputFormat:
       outputOccurrences[0]?.format ??
@@ -448,21 +461,24 @@ function consumeOutputControl(
   | Readonly<{ readonly kind: "notControl" }>
   | Readonly<{ readonly kind: "consumed"; readonly nextPosition: number }>
   | Readonly<{ readonly kind: "issue"; readonly issue: UsageIssue }> {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 调用点均传入当前位置的 argv token，公共类型保证字符串。
   const token = argv[position] as string;
   const option = readOptionToken(token);
   const output = compiled.contract.grammar.controls.output;
   if (output.selector === option.spelling) {
+    const nextToken = argv[position + 1];
     if (
       option.value === undefined &&
-      argv[position + 1] !== undefined &&
-      detectEagerControl(compiled, argv[position + 1] as string) !== undefined
+      nextToken !== undefined &&
+      detectEagerControl(compiled, nextToken) !== undefined
     ) {
       return { kind: "consumed", nextPosition: position + 1 };
     }
     const value = option.value ?? argv[position + 1];
     if (
       value === undefined ||
-      !output.formats.includes(value as "structured" | "text")
+      !isOutputFormat(value) ||
+      !output.formats.includes(value)
     ) {
       return {
         kind: "issue",
@@ -481,7 +497,7 @@ function consumeOutputControl(
       {
         position,
         option: option.spelling,
-        format: value as "structured" | "text",
+        format: value,
       },
       nextPosition,
     );
@@ -506,6 +522,10 @@ function consumeOutputControl(
   );
 }
 
+function isOutputFormat(value: unknown): value is "structured" | "text" {
+  return value === "structured" || value === "text";
+}
+
 function selectOutputFormat(
   occurrences: OutputFormatOccurrence[],
   occurrence: OutputFormatOccurrence,
@@ -522,6 +542,7 @@ function selectOutputFormat(
     kind: "issue",
     issue: {
       code: "conflictingOutputFormat",
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 此前已排除单次出现，冲突证据至少有两项。
       occurrences: Object.freeze([
         ...occurrences,
       ]) as ConflictingOutputFormatIssue["occurrences"],
@@ -548,6 +569,7 @@ function consumeOption(
 ):
   | Readonly<{ readonly kind: "consumed"; readonly nextPosition: number }>
   | Readonly<{ readonly kind: "issue"; readonly issue: UsageIssue }> {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 调用点均传入当前位置的 argv token，公共类型保证字符串。
   const token = argv[position] as string;
   const option = readOptionToken(token);
   const field = fields.find(
@@ -712,9 +734,11 @@ function collectStructuralIssues(
           issues.push({
             code: "conflictingFlag",
             field: field.key,
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 正负出现次数均已检查为正数。
             positiveOccurrences: freezeOccurrenceEvidence(
               positiveOccurrences,
             ) as [OptionOccurrenceEvidence, ...OptionOccurrenceEvidence[]],
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 正负出现次数均已检查为正数。
             negativeOccurrences: freezeOccurrenceEvidence(
               negativeOccurrences,
             ) as [OptionOccurrenceEvidence, ...OptionOccurrenceEvidence[]],
@@ -726,6 +750,7 @@ function collectStructuralIssues(
         issues.push({
           code: "repeatedOption",
           field: field.key,
+          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- occurrences.length 已检查大于一。
           occurrences: freezeOccurrenceEvidence(occurrences) as [
             OptionOccurrenceEvidence,
             OptionOccurrenceEvidence,
@@ -771,6 +796,7 @@ function collectStructuralIssues(
           ? [
               {
                 code: "exclusiveUsageConstraint",
+                // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- present.length 已检查大于一。
                 fields: Object.freeze(present) as [string, string, ...string[]],
               },
             ]
@@ -804,8 +830,8 @@ function freezeOccurrenceEvidence(
 function freezeRawInput(
   input: Record<string, boolean | string | string[]>,
 ): Readonly<Record<string, boolean | string | readonly string[]>> {
-  for (const [field, value] of Object.entries(input)) {
-    if (Array.isArray(value)) input[field] = Object.freeze(value) as string[];
+  for (const value of Object.values(input)) {
+    if (Array.isArray(value)) Object.freeze(value);
   }
   return Object.freeze(input);
 }
@@ -969,6 +995,7 @@ function usageFailureFromIssues<Contract extends CliContract>(
   return bindInvocation(contract, {
     kind: "usageFailure",
     command,
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 输入参数是非空元组，映射后长度不变。
     issues: Object.freeze(
       issues.map((issue) => Object.freeze(issue)),
     ) as NonEmptyUsageIssues,
@@ -987,6 +1014,7 @@ function bindInvocation<Contract extends CliContract>(
   contract: Contract,
   invocation: UnboundCliInvocation<Contract>,
 ): CliInvocation<Contract> {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 调用事实由本工厂签发并登记到 invocationContracts。
   const bound = Object.freeze(invocation) as CliInvocation<Contract>;
   invocationContracts.set(bound, contract);
   return bound;

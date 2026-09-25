@@ -2552,6 +2552,7 @@ export interface DefineCli<Dependencies> {
         "rootCommand"
       >;
 }
+/* oxlint-enable typescript/no-unnecessary-type-parameters */
 
 type HierarchyCommandInput<Definition> = Omit<Definition, "kind"> &
   Omit<HierarchyCommandFacts, typeof executableCommandType>;
@@ -2871,6 +2872,7 @@ export interface DefineCommand<Command extends string, Dependencies> {
     >
   >;
 }
+/* oxlint-enable typescript/no-unnecessary-type-parameters */
 
 interface RuntimeCompiledCli {
   readonly contract: CliContract;
@@ -3007,6 +3009,7 @@ export function helpCapability(
   if (definition.shortAlias !== undefined && definition.shortAlias !== "-h") {
     throw new TypeError("帮助短别名必须是 -h");
   }
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- helpCapability 由本工厂签发并登记到 WeakSet，类型品牌不在运行时输出。
   const capability = Object.freeze({
     kind: "helpCapability" as const,
     longOption: "--help" as const,
@@ -3070,13 +3073,11 @@ function copyHelpFactWording(value: unknown): HelpFactWording {
       wording[slot] = label;
       continue;
     }
-    if (!Object.hasOwn(helpTemplatePlaceholders, slot)) {
+    if (!isHelpTemplateSlot(slot)) {
       throw new TypeError(`帮助事实文案包含未知槽位 ${slot}`);
     }
     const template = copySingleLineText(raw, `帮助事实模板 ${slot}`);
-    const required = new Set<string>(
-      helpTemplatePlaceholders[slot as keyof typeof helpTemplatePlaceholders],
-    );
+    const required = new Set<string>(helpTemplatePlaceholders[slot]);
     const placeholders = [
       ...template.matchAll(/\{([A-Za-z][A-Za-z0-9]*)\}/g),
     ].map((match) => match[1] ?? "");
@@ -3093,6 +3094,12 @@ function copyHelpFactWording(value: unknown): HelpFactWording {
     wording[slot] = template;
   }
   return Object.freeze(wording);
+}
+
+function isHelpTemplateSlot(
+  slot: string,
+): slot is keyof typeof helpTemplatePlaceholders {
+  return Object.hasOwn(helpTemplatePlaceholders, slot);
 }
 
 /**
@@ -3122,6 +3129,7 @@ export function versionCapability<
   if (definition.shortAlias !== undefined && definition.shortAlias !== "-V") {
     throw new TypeError("版本短别名必须是 -V");
   }
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- versionCapability 由本工厂签发并登记到 WeakSet，类型品牌不在运行时输出。
   const capability = Object.freeze({
     kind: "versionCapability" as const,
     value,
@@ -3138,11 +3146,13 @@ function copyVersionTextLine(value: unknown): string {
   if (
     typeof value !== "object" ||
     value === null ||
-    (value as TextLine).kind !== "line"
+    !("kind" in value) ||
+    value.kind !== "line" ||
+    !("value" in value)
   ) {
     throw new TypeError("版本值必须是合法单行文本");
   }
-  return copySingleLineText((value as TextLine).value, "版本值");
+  return copySingleLineText(value.value, "版本值");
 }
 
 function copyVersionLine(value: unknown, label = "版本描述"): string {
@@ -3163,8 +3173,8 @@ function compileHelpSupplement(
 }
 
 function compileControls(definition: RuntimeCliDefinition) {
-  const version = versionCapabilities.has(definition.version as object)
-    ? (definition.version as VersionCapability)
+  const version = isVersionCapability(definition.version)
+    ? definition.version
     : undefined;
   return deepFreeze({
     help: {
@@ -3230,6 +3240,7 @@ export function outputCapability<
     definition.defaultFormat === "text" || definition.text === true
       ? (["structured", "text"] as const)
       : (["structured"] as const);
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- outputCapability 由本工厂签发并登记到 WeakSet，类型品牌不在运行时输出。
   const capability = Object.freeze({
     kind: "outputCapability" as const,
     defaultFormat: definition.defaultFormat,
@@ -3262,6 +3273,7 @@ function assertKnownCapabilityOptions(
  * @see {@link https://github.com/YKDZ/cli-contract/tree/main/packages/example | 端到端示例}
  */
 export function defineCli<Dependencies = undefined>(): DefineCli<Dependencies> {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 公共泛型定义接口由此运行时编译入口实现，类型参数只约束调用方。
   const define = ((definition: RuntimeCliDefinition) =>
     compileCli(definition)) as unknown as DefineCli<Dependencies>;
   Object.defineProperty(define, "command", {
@@ -3311,6 +3323,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
   }
   if (isHierarchy && issues.length > 0) {
     throw new ContractDefinitionError(
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- issues.length 已检查为正数，动态数组在此恢复非空元组类型。
       issues as [ContractDefinitionIssue, ...ContractDefinitionIssue[]],
     );
   }
@@ -3324,6 +3337,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
   const wire: Record<string, CommandWireManifest> = {};
 
   for (const id of orderedIds) {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- orderedIds 来自已验证的命令键或根键。
     const node = definition.commands[id] as RuntimeCommandDefinition;
     const aliases = Object.freeze([...(node.aliases ?? [])]);
     const helpSupplement = compileHelpSupplement(
@@ -3334,6 +3348,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
     if (node.kind === "rootGroup" || node.kind === "commandGroup") {
       const usage = deepFreeze({
         command: id,
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 层级契约已在进入循环前检查 commandPlaceholder 必填。
         synopsis: `${commandPath(id, definition.commands)} <${helpWording?.commandPlaceholder as string}>`,
       });
       const compiledNode: RuntimeCompiledCommand = {
@@ -3352,6 +3367,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
           deepFreeze({
             kind: "commandGroup" as const,
             id,
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 非根命令组的 parent 已在层级定义检查中确认。
             parent: node.parent as string,
             name: node.name,
             aliases,
@@ -3372,7 +3388,11 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
       continue;
     }
 
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令组分支已继续下一轮；其余节点按可执行定义编译。
     const executable = node as RuntimeExecutableDefinition;
+    if (typeof executable.handler !== "function") {
+      issues.push({ code: "invalidCommandHandler", command: id });
+    }
     const input = compileContractSchema(
       executable.input,
       { command: id, location: "input" },
@@ -3459,6 +3479,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
         deepFreeze({
           kind: "command" as const,
           id,
+          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- kind 为 command 时，层级定义检查已确认 parent。
           parent: executable.parent as string,
           name: executable.name,
           aliases,
@@ -3470,15 +3491,13 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
         }),
       );
     }
+    if (describedInput === undefined) continue;
     const manifestDetails = {
       description: executable.description,
       ...(helpSupplement === undefined ? {} : { helpSupplement }),
       fields,
       ...(usageConstraints.length === 0 ? {} : { usageConstraints }),
-      input: projectUsageConstraints(
-        describedInput as SchemaManifest,
-        usageConstraints,
-      ),
+      input: projectUsageConstraints(describedInput, usageConstraints),
       success: compiledSuccess.manifest,
       failures: compiledFailures.manifest,
     };
@@ -3486,6 +3505,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
       executable.kind === "command"
         ? deepFreeze({
             kind: "command" as const,
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- kind 为 command 时，层级定义检查已确认 parent。
             parent: executable.parent as string,
             name: executable.name,
             aliases,
@@ -3505,10 +3525,12 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
   }
   if (issues.length > 0)
     throw new ContractDefinitionError(
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- issues.length 已检查为正数，动态数组在此恢复非空元组类型。
       issues as [ContractDefinitionIssue, ...ContractDefinitionIssue[]],
     );
 
   const controls = compileControls(definition);
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 定义检查通过后根命令已在编译循环写入映射。
   const rootCommand = runtimeCommands[
     definition.root
   ] as RuntimeCompiledCommand;
@@ -3558,8 +3580,10 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
         })),
       ),
     },
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 根命令的 wire 已由同一编译循环写入映射。
     wire: isHierarchy ? wire : (wire[definition.root] as CommandWireManifest),
   });
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 契约类型品牌由编译器签发，并登记到 compiledCliContracts。
   const contract = Object.freeze({
     grammar,
     manifest,
@@ -3762,6 +3786,7 @@ function collectRootDefinitionIssues(
     issues.push({
       code: "invalidRootCommandSet",
       root: definition.root,
+      // oxlint-disable-next-line unicorn/no-array-sort -- commandKeys 来自 Object.keys 且不再复用，原地排序不会影响命令对象。
       receivedCommands: commandKeys.sort(),
     });
   }
@@ -3840,8 +3865,7 @@ function collectCliBaseIssues(
         !/^--[a-z0-9]+(?:-[a-z0-9]+)*$/.test(flag) ||
         flag === "--help" ||
         flag === "--output-format" ||
-        (versionCapabilities.has(definition.version as object) &&
-          flag === "--version") ||
+        (isVersionCapability(definition.version) && flag === "--version") ||
         !definition.output.formats.includes(format)
       ) {
         issues.push({
@@ -3878,6 +3902,7 @@ function orderHierarchy(
     issues.push({ code: "rootGroupWithoutChildren", command: definition.root });
   }
   for (const id of ids) {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- id 来自 Object.keys(definition.commands)，此处读取同一对象。
     const node = definition.commands[id] as RuntimeCommandDefinition;
     if (!/^[a-z][A-Za-z0-9]*$/.test(id))
       issues.push({ code: "invalidCommandIdentity", command: id });
@@ -3974,6 +3999,7 @@ function orderHierarchy(
     for (const child of ids.filter(
       (id) => definition.commands[id]?.parent === parent,
     )) {
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- child 来自同一命令对象的键集合。
       const node = definition.commands[child] as RuntimeCommandDefinition;
       for (const spelling of [node.name, ...(node.aliases ?? [])]) {
         const owners = spellings.get(spelling) ?? [];
@@ -4075,6 +4101,7 @@ function compileUsageConstraints(
       });
       continue;
     }
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 定义条目已通过非 null 对象检查，此处读取动态属性。
     const candidate = definition as Readonly<Record<string, unknown>>;
     if (
       candidate.kind !== "requires" &&
@@ -4126,14 +4153,14 @@ function compileUsageConstraints(
         });
       if (field !== undefined && required !== undefined) {
         if (!isOptionalOption(field) || !isOptionalOption(required)) {
-          for (const candidate of [field, required])
-            if (!isOptionalOption(candidate))
+          for (const offendingField of [field, required])
+            if (!isOptionalOption(offendingField))
               issues.push({
                 code: "inapplicableUsageConstraintField",
                 command,
                 constraint: "requires",
-                field: candidate.key,
-                kind: candidate.kind,
+                field: offendingField.key,
+                kind: offendingField.kind,
               });
         }
         if (field.key === required.key)
@@ -4202,6 +4229,7 @@ function compileUsageConstraints(
         compiled.push(
           deepFreeze({
             kind: "exclusive" as const,
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- fields 已检查至少两个字符串，冻结后保留非空元组长度。
             fields: Object.freeze([...fieldsInConstraint]) as [
               string,
               string,
@@ -4238,6 +4266,7 @@ function compileUsageConstraints(
         readonly value: boolean | string;
       }> = [];
       for (const value of candidate.values) {
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- values 已逐项检查 field 和 value 的运行时类型。
         const discreteValue = value as Readonly<{
           readonly field: string;
           readonly value: boolean | string;
@@ -4280,8 +4309,8 @@ function compileUsageConstraints(
         values.push({ field: field.key, value: discreteValue.value });
       }
       const duplicateValueField = values.some(
-        (value, index) =>
-          values.findIndex(({ field }) => field === value.field) !== index,
+        (value, valueIndex) =>
+          values.findIndex(({ field }) => field === value.field) !== valueIndex,
       );
       if (duplicateValueField)
         issues.push({
@@ -4294,6 +4323,7 @@ function compileUsageConstraints(
         compiled.push(
           deepFreeze({
             kind: "forbiddenCombination" as const,
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 源 values 至少两项，且映射长度相等才进入此分支。
             values: Object.freeze(values) as [
               { readonly field: string; readonly value: boolean | string },
               { readonly field: string; readonly value: boolean | string },
@@ -4473,9 +4503,20 @@ function collectTextPresenterIssues(
 }
 
 function isTextOutputEnabled(output: unknown): boolean {
+  return isOutputCapability(output) && output.formats.includes("text");
+}
+
+function isOutputCapability(value: unknown): value is OutputCapability {
   return (
-    outputCapabilities.has(output as object) &&
-    (output as OutputCapability).formats.includes("text")
+    typeof value === "object" && value !== null && outputCapabilities.has(value)
+  );
+}
+
+function isVersionCapability(value: unknown): value is VersionCapability {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    versionCapabilities.has(value)
   );
 }
 
@@ -4505,8 +4546,8 @@ function collectControlFieldConflicts(
       controls.set("--output-format", "outputFormat");
     }
   }
-  if (versionCapabilities.has(definition.version as object)) {
-    const version = definition.version as VersionCapability;
+  if (isVersionCapability(definition.version)) {
+    const version = definition.version;
     controls.set("--version", "version");
     if (version.shortAlias !== undefined) {
       controls.set(version.shortAlias, "version");

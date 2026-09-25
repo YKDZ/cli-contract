@@ -35,6 +35,7 @@ export type StreamTextPresenter<Payload> = {
   bivarianceHack(payload: Payload): TextLine | TextFragment;
 }["bivarianceHack"];
 
+/* oxlint-disable typescript/no-unsafe-type-assertion -- 文本投影仅由这些工厂签发，运行时身份由 WeakSet 核对。 */
 function createTextLine(value: string): TextLine {
   if (
     value.length === 0 ||
@@ -84,6 +85,7 @@ function createTextFragment(value: string): TextFragment {
   issuedTextProjections.add(projection);
   return projection as TextFragment;
 }
+/* oxlint-enable typescript/no-unsafe-type-assertion */
 
 /** 在呈现器中显式构造文本投影；这里只验证文本值，实际通道路由与分帧由执行内核负责。 */
 export const text = Object.freeze({
@@ -315,6 +317,7 @@ export type StreamOutcome<
   streamSuccess(): StreamSuccessFact<Command>;
 }>;
 
+/* oxlint-disable typescript/no-unsafe-type-assertion -- 结果事实的私有类型品牌由签发工厂与 WeakSet 共同保证。 */
 export function createCompletionFact<Command extends string>(
   command: Command,
   issuedOutcomeFacts: WeakSet<object>,
@@ -387,6 +390,7 @@ export function createStreamSuccessFact<Command extends string>(
   issuedOutcomeFacts.add(fact);
   return fact as StreamSuccessFact<Command>;
 }
+/* oxlint-enable typescript/no-unsafe-type-assertion */
 
 export function isIssuedOutcomeFact(
   value: unknown,

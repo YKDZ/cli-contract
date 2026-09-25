@@ -17,20 +17,16 @@ import { englishHelpCapability } from "./english-help.ts";
 
 const draft202012 = { target: "draft-2020-12" as const };
 
+function isJsonObject(value: unknown): value is JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function readObjectProperty(schema: JsonObject, key: string): JsonObject {
   const properties = schema.properties;
-  assert.ok(
-    typeof properties === "object" &&
-      properties !== null &&
-      !Array.isArray(properties),
-  );
-  const property = (properties as JsonObject)[key];
-  assert.ok(
-    typeof property === "object" &&
-      property !== null &&
-      !Array.isArray(property),
-  );
-  return property as JsonObject;
+  assert.ok(isJsonObject(properties));
+  const property = properties[key];
+  assert.ok(isJsonObject(property));
+  return property;
 }
 
 void test("CLI 描述覆盖 Zod 的复制 schema、wire 与 help，且不进入运行时结果", async () => {
@@ -220,6 +216,7 @@ void test("层级 stream runtime 不冻结 Valibot schema 引用", () => {
   assert.equal(Object.isFrozen(payload), false);
 
   const define = defineCli();
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 此测试把真实 Valibot 模式接入泛型命令定义，运行期仍由模式验证。
   const cli = define({
     root: "workspace",
     help: englishHelpCapability(),
@@ -231,6 +228,7 @@ void test("层级 stream runtime 不冻结 Valibot schema 引用", () => {
         name: "workspace",
         description: "Workspace",
       },
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令的 Valibot 模式与本测试的动态泛型输入配对。
       ...define.command("watch")({
         kind: "command",
         parent: "workspace",
@@ -429,6 +427,7 @@ void test("字段 description 在 schema 兼容性和 kind 早退前独立聚合
   for (const candidate of cases) {
     assert.throws(
       () =>
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证定义期拒绝。
         defineCli()({
           root: "invalidField",
           help: englishHelpCapability(),

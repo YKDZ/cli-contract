@@ -343,15 +343,15 @@ export class ContractDefinitionError extends Error {
   ) {
     super(issues.map(formatContractDefinitionIssue).join("；"));
     this.name = "ContractDefinitionError";
-    this.issues = Object.freeze(
-      issues.map((issue) => Object.freeze(issue)),
-    ) as unknown as readonly [
-      ContractDefinitionIssue,
-      ...ContractDefinitionIssue[],
-    ];
+    const [first, ...rest] = issues;
+    this.issues = Object.freeze([
+      Object.freeze(first),
+      ...rest.map((issue) => Object.freeze(issue)),
+    ] as const);
   }
 }
 
+// oxlint-disable-next-line typescript/consistent-return -- 所有闭合定义问题 code 均由 switch 返回。
 function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
   switch (issue.code) {
     case "unknownDefinitionProperty":
@@ -413,7 +413,7 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
     case "invalidCommandNodeKind":
       return `命令 ${issue.command} 的节点 kind 无效`;
     case "invalidCommandHandler":
-      return `不可执行命令组 ${issue.command} 不能声明 handler`;
+      return `命令 ${issue.command} 的 handler 声明无效`;
     case "invalidCommandParent":
       return `命令 ${issue.command} 的 parent ${issue.parent ?? "缺失"} 无效`;
     case "invalidCommandSpelling":

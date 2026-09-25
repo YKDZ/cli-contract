@@ -207,6 +207,7 @@ void test("版本值与所有 control spelling 在定义期闭合", () => {
   assert.throws(
     () =>
       versionCapability({
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意越过静态类型，以验证版本能力边界。
         value: { kind: "line", value: "2.3.4\n" } as never,
       }),
     TypeError,
@@ -232,6 +233,7 @@ void test("版本值与所有 control spelling 在定义期闭合", () => {
           };
     assert.throws(
       () =>
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意越过静态类型，以验证版本能力边界。
         defineCli()({
           root: "conflict",
           help: englishHelpCapability(),
@@ -285,6 +287,7 @@ void test("version capability 复制并闭合单行 value 与 description", asyn
 
   const externalValue = { kind: "line", value: "2.3.4" };
   const version = versionCapability({
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意越过静态类型，以验证版本能力边界。
     value: externalValue as never,
     description: "显示版本",
   });

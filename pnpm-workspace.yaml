@@ -28,3 +28,4 @@ catalog:
   "turbo": 2.11.2
   "typescript-7": npm:typescript@^7.0.2
   "valibot": ^1.5.0
+  "zod": ^4.5.4

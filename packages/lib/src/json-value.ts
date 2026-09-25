@@ -5,6 +5,7 @@ export function copyJsonObject(value: Record<string, unknown>): JsonObject {
   if (typeof copy !== "object" || copy === null || Array.isArray(copy)) {
     throw new TypeError("invalidJsonSchemaObject");
   }
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 上方已排除 null 和数组，复制结果只能是 JSON object。
   return copy as JsonObject;
 }
 

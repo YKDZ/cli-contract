@@ -33,6 +33,7 @@ class ControlledWritable extends EventEmitter {
 }
 
 function asWritable(writable: ControlledWritable): Writable {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 测试对象仅模拟 Writable 的实际写入接口。
   return writable as unknown as Writable;
 }
 

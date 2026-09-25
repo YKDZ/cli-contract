@@ -104,12 +104,6 @@ export interface ExecuteCliOptions<Contract extends CliContract> {
   readonly write: WriteCliOutput;
 }
 
-type RuntimeHandler = (context: {
-  readonly input: unknown;
-  readonly dependencies: unknown;
-  readonly outcome: unknown;
-}) => unknown;
-
 type RuntimeStreamGenerator = AsyncGenerator<unknown, unknown, void>;
 
 /**
@@ -180,6 +174,7 @@ export async function executeCli<const Contract extends CliContract>(
       });
       return Object.freeze({
         kind: "usageFailure",
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令来自当前 Contract 的编译树，泛型身份在此恢复。
         command: command.id as CliContractRoot<Contract>,
         issues: options.invocation.issues,
         exitCode: compiled.usageFailureExitCode,
@@ -211,6 +206,7 @@ export async function executeCli<const Contract extends CliContract>(
         });
         return Object.freeze({
           kind: "usageFailure",
+          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令来自当前 Contract 的编译树，泛型身份在此恢复。
           command: command.id as CliContractRoot<Contract>,
           issues,
           exitCode: compiled.usageFailureExitCode,
@@ -525,7 +521,10 @@ async function executeApplicationResult<Contract extends CliContract>(
       ),
     ),
   });
-  const handlerResult = (compiled.handler as RuntimeHandler)({
+  if (typeof compiled.handler !== "function") {
+    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+  }
+  const handlerResult: unknown = compiled.handler({
     input,
     dependencies: options.dependencies,
     outcome,
@@ -551,7 +550,9 @@ async function executeApplicationResult<Contract extends CliContract>(
   await writeProjectedOutput(options.write, projected.output);
   return Object.freeze({
     kind: "applicationResult",
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令来自当前 Contract 的编译树，泛型身份在此恢复。
     command: compiled.id as CliContractRoot<Contract>,
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 结果经该命令的结果模式验证并由本次执行签发。
     result: projected.result as CliContractResult<Contract>,
     exitCode: projected.exitCode,
   });
@@ -561,29 +562,32 @@ function requireAsyncGenerator(
   value: unknown,
   command: string,
 ): RuntimeStreamGenerator {
-  const candidate = value as Readonly<{
-    readonly [Symbol.asyncIterator]?: unknown;
-    readonly next?: unknown;
-    readonly return?: unknown;
-  }>;
-  let valid = false;
-  try {
-    valid =
-      typeof value === "object" &&
-      value !== null &&
-      typeof candidate[Symbol.asyncIterator] === "function" &&
-      typeof candidate.next === "function" &&
-      typeof candidate.return === "function";
-  } catch {
-    valid = false;
-  }
-  if (!valid) {
+  if (!hasAsyncGeneratorProtocol(value)) {
     throwExecutionIssue({
       code: "streamHandlerMustReturnAsyncGenerator",
       command,
     });
   }
-  return value as RuntimeStreamGenerator;
+  return value;
+}
+
+function hasAsyncGeneratorProtocol(
+  value: unknown,
+): value is RuntimeStreamGenerator {
+  try {
+    return (
+      typeof value === "object" &&
+      value !== null &&
+      Symbol.asyncIterator in value &&
+      typeof value[Symbol.asyncIterator] === "function" &&
+      "next" in value &&
+      typeof value.next === "function" &&
+      "return" in value &&
+      typeof value.return === "function"
+    );
+  } catch {
+    return false;
+  }
 }
 
 async function writeCliOutput(
@@ -639,7 +643,9 @@ async function executeStreamResult<Contract extends CliContract>(
       await writeProjectedOutput(options.write, projected.output);
       return Object.freeze({
         kind: "applicationResult",
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令来自当前 Contract 的编译树，泛型身份在此恢复。
         command: compiled.id as CliContractRoot<Contract>,
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 结果经该命令的结果模式验证并由本次执行签发。
         result: projected.result as CliContractResult<Contract>,
         exitCode: projected.exitCode,
       });
@@ -756,12 +762,12 @@ function projectApplicationFact(
       location: "failure",
       variant: result.variant,
     });
-    const normalized = Object.freeze({
-      kind: "failure" as const,
-      command: compiled.id,
-      variant: result.variant,
+    const normalized = createFailureFact(
+      compiled.id,
+      result.variant,
       data,
-    }) as OutcomeFact;
+      issuedOutcomeFacts,
+    );
     if (outputFormat === "text") {
       const presenter = failure.text;
       if (typeof presenter !== "function") {
@@ -838,12 +844,12 @@ function projectApplicationFact(
     location: "data",
     variant: result.variant,
   });
-  const normalized = Object.freeze({
-    kind: "data" as const,
-    command: compiled.id,
-    variant: result.variant,
+  const normalized = createDataFact(
+    compiled.id,
+    result.variant,
     data,
-  }) as OutcomeFact;
+    issuedOutcomeFacts,
+  );
   if (outputFormat === "text") {
     const presenter = variant.text;
     if (typeof presenter !== "function") {
@@ -874,32 +880,23 @@ function formatCompletionText(value: unknown): string {
 }
 
 function formatTextLine(value: unknown): string {
-  const text = value as Readonly<Record<string, unknown>> | null;
   if (
     !isIssuedTextProjection(value) ||
-    text === null ||
-    typeof value !== "object" ||
-    text.kind !== "line" ||
-    typeof text.value !== "string" ||
-    text.value.length === 0 ||
-    text.value.includes("\r") ||
-    text.value.includes("\n") ||
-    text.value.includes("\0")
+    value.kind !== "line" ||
+    typeof value.value !== "string" ||
+    value.value.length === 0 ||
+    value.value.includes("\r") ||
+    value.value.includes("\n") ||
+    value.value.includes("\0")
   ) {
     throw new ContractExecutionError([{ code: "invalidCliContract" }]);
   }
-  return `${text.value}\n`;
+  return `${value.value}\n`;
 }
 
 function formatAtomicText(value: unknown): string {
-  const text = value as Readonly<Record<string, unknown>> | null;
-  if (
-    isIssuedTextProjection(value) &&
-    text !== null &&
-    typeof value === "object" &&
-    text.kind === "lines"
-  ) {
-    return formatTextLines(text.lines);
+  if (isIssuedTextProjection(value) && value.kind === "lines") {
+    return formatTextLines(value.lines);
   }
   return formatTextLine(value);
 }
@@ -925,13 +922,8 @@ function formatStreamRecordText(presenter: unknown, data: unknown): string {
   if (typeof presenter !== "function") {
     throw new ContractExecutionError([{ code: "invalidCliContract" }]);
   }
-  const value = presenter(data) as Readonly<Record<string, unknown>> | null;
-  if (
-    isIssuedTextProjection(value) &&
-    value !== null &&
-    typeof value === "object" &&
-    value.kind === "fragment"
-  ) {
+  const value: unknown = presenter(data);
+  if (isIssuedTextProjection(value) && value.kind === "fragment") {
     if (
       typeof value.value !== "string" ||
       value.value.length === 0 ||
@@ -947,14 +939,10 @@ function formatStreamRecordText(presenter: unknown, data: unknown): string {
 function isSilentText(
   value: unknown,
 ): value is Readonly<{ readonly kind: "silent" }> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    isIssuedTextProjection(value) &&
-    (value as unknown as Readonly<Record<string, unknown>>).kind === "silent"
-  );
+  return isIssuedTextProjection(value) && value.kind === "silent";
 }
 
+// oxlint-disable-next-line typescript/consistent-return -- 验证失败分支通过 throwExecutionIssue 以 never 终止。
 function projectAtomicData(
   schema: ContractSchema,
   value: unknown,
@@ -1027,15 +1015,14 @@ function isStandardResult(
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
   }
-  const result = value as Readonly<Record<string, unknown>>;
-  if (result.issues === undefined) {
-    return "value" in result;
+  if (!("issues" in value) || value.issues === undefined) {
+    return "value" in value;
   }
   return (
-    !("value" in result) &&
-    Array.isArray(result.issues) &&
-    result.issues.length > 0 &&
-    result.issues.every(isStandardIssue)
+    !("value" in value) &&
+    Array.isArray(value.issues) &&
+    value.issues.length > 0 &&
+    value.issues.every(isStandardIssue)
   );
 }
 

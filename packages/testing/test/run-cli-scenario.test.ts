@@ -32,6 +32,7 @@ function schema<Input, Output>(
     "~standard": {
       version: 1,
       vendor: "@ykdz/cli-contract-testing",
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 测试专用 schema 原样返回 fixture 值，调用方控制其类型。
       validate: (value) => ({ value: value as Output }),
       jsonSchema: {
         input: () => jsonSchema,
@@ -303,12 +304,14 @@ function verifyScenarioTypeErrors() {
     },
   });
 
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 测试 fixture 的泛型连接与静态类型探针需要此断言。
   const commandScenarioSink = null as unknown as Readonly<
     Record<string, CliScenario<typeof consumerFixture.cli>>
   >;
   // @ts-expect-error command 场景映射必须使用显式闭合键，不能使用索引签名 sink。
   void defineCommandScenarios(consumerFixture.cli, commandScenarioSink);
 
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 测试 fixture 的泛型连接与静态类型探针需要此断言。
   const failureScenarioSink = null as unknown as Readonly<{
     readonly inspect: Readonly<
       Record<string, CliScenario<typeof consumerFixture.cli>>

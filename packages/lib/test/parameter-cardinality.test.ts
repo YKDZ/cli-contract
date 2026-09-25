@@ -377,6 +377,7 @@ void test("defineCli 拒绝 variadic 后续 positional 与非法或冲突 negate
   };
 
   assert.throws(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证定义期拒绝。
     () => defineCli()(definition as never),
     (error) => {
       assert.ok(error instanceof ContractDefinitionError);

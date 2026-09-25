@@ -90,11 +90,10 @@ export class ContractExecutionError extends Error {
   ) {
     super("contractExecutionError");
     this.name = "ContractExecutionError";
-    this.issues = Object.freeze(
-      issues.map((issue) => Object.freeze(issue)),
-    ) as unknown as readonly [
-      ContractExecutionIssue,
-      ...ContractExecutionIssue[],
-    ];
+    const [first, ...rest] = issues;
+    this.issues = Object.freeze([
+      Object.freeze(first),
+      ...rest.map((issue) => Object.freeze(issue)),
+    ] as const);
   }
 }

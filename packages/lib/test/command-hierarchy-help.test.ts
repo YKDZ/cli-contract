@@ -244,6 +244,7 @@ void test("defineCli 聚合拒绝无效 parent、环与同级 spelling 冲突", 
 
   assert.throws(
     () =>
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证定义期拒绝。
       defineCli()({
         root: "invalidRoot",
         help: englishHelpCapability(),

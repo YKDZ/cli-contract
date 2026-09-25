@@ -210,6 +210,7 @@ void test("输出模式产生非 JSON 值时拒绝且不写出字节", async () 
     "~standard": {
       ...greetingDataSchema["~standard"],
       validate() {
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意注入无效模式或结果，以验证契约边界。
         return { value: new Date() as unknown as GreetingData };
       },
     },
@@ -301,6 +302,7 @@ void test("定义期拒绝与 value option 不相容的 Input JSON Schema", () =
 });
 
 void test("定义期以闭合问题拒绝缺少标准 JSON Schema 能力的模式", () => {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意注入无效模式或结果，以验证契约边界。
   const missingJsonSchema = {
     "~standard": {
       validate: greetingInputSchema["~standard"].validate,
@@ -327,6 +329,7 @@ void test("定义期以闭合问题拒绝缺少标准 JSON Schema 能力的模�
 });
 
 void test("执行期拒绝 Standard Schema 返回的异步 validation", async () => {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意注入无效模式或结果，以验证契约边界。
   const asynchronousSchema = {
     "~standard": {
       ...greetingInputSchema["~standard"],
@@ -431,6 +434,7 @@ void test("定义期把无法导出的模式归入闭合问题而不泄漏 vendo
 });
 
 void test("定义期拒绝不能忠实形成 JSON 值的 schema 投影", () => {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意注入无效模式或结果，以验证契约边界。
   const invalidProjectionSchema = {
     "~standard": {
       ...greetingInputSchema["~standard"],
@@ -464,6 +468,7 @@ void test("定义期拒绝不能忠实形成 JSON 值的 schema 投影", () => {
 });
 
 void test("defineCli 一次报告输入与 data 模式的全部定义问题", () => {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意注入无效模式或结果，以验证契约边界。
   const missingInputCapability = {
     "~standard": {
       validate: greetingInputSchema["~standard"].validate,
@@ -547,6 +552,7 @@ void test("定义期拒绝没有声明 object 根类型的输入投影", () => {
 
 void test("执行期拒绝非法 Standard Result 且不调用 handler", async () => {
   let runCount = 0;
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意注入无效模式或结果，以验证契约边界。
   const invalidResultSchema = {
     "~standard": {
       ...greetingInputSchema["~standard"],

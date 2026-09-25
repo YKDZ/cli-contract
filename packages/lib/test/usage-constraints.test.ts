@@ -226,6 +226,7 @@ void test("defineCli 以局部身份拒绝无效约束引用、字段种类、�
     },
   };
   assert.throws(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证用法约束拒绝。
     () => defineCli()(definition as never),
     (error: unknown) => {
       assert(error instanceof ContractDefinitionError);
@@ -293,6 +294,7 @@ void test("defineCli 聚合拒绝动态空、单成员和非数组约束成员",
     },
   };
   assert.throws(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证用法约束拒绝。
     () => defineCli()(definition as never),
     (error: unknown) => {
       assert(error instanceof ContractDefinitionError);
@@ -366,6 +368,7 @@ void test("defineCli 将显式 null 交给 usage constraint collection 守卫", 
     },
   };
   assert.throws(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证用法约束拒绝。
     () => defineCli()(definition as never),
     (error: unknown) => {
       assert(error instanceof ContractDefinitionError);

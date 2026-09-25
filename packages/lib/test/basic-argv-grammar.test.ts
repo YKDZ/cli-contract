@@ -292,6 +292,7 @@ void test("defineCli 聚合动态字段身份、spelling 与 positional 顺序�
   };
 
   assert.throws(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证定义期拒绝。
     () => defineCli()(definition as never),
     (error) => {
       assert.ok(error instanceof ContractDefinitionError);
@@ -378,6 +379,7 @@ void test("defineCli 拒绝动态非法命令身份", () => {
   };
 
   assert.throws(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证定义期拒绝。
     () => defineCli()(definition as never),
     (error) => {
       assert.ok(error instanceof ContractDefinitionError);

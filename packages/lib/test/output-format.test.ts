@@ -235,12 +235,18 @@ void test("format controls 不改变 usage failure 的固定 JSON 通道", async
     );
     const chunk = writes[0]?.chunk;
     assert.ok(chunk?.endsWith("\n"));
-    const envelope = JSON.parse(chunk ?? "") as {
-      readonly kind: string;
-      readonly issues: readonly Readonly<{ readonly code: string }>[];
-    };
+    const envelope: unknown = JSON.parse(chunk ?? "");
+    assert.ok(typeof envelope === "object" && envelope !== null);
+    assert.ok("kind" in envelope && "issues" in envelope);
+    assert.ok(Array.isArray(envelope.issues));
+    const firstIssue: unknown = envelope.issues[0];
+    assert.ok(
+      typeof firstIssue === "object" &&
+        firstIssue !== null &&
+        "code" in firstIssue,
+    );
     assert.equal(envelope.kind, "usageFailure");
-    assert.equal(envelope.issues[0]?.code, code);
+    assert.equal(firstIssue.code, code);
     assert.equal(chunk, `${JSON.stringify(envelope)}\n`);
   }
 });
@@ -402,6 +408,7 @@ void test("text.line 与 text.lines 拒绝非法 framing，completion 可显式 
     assert.throws(() => text.line(value), TypeError);
   }
   for (const value of [[], [""], ["a\rb"], ["a\nb"], ["a\0b"]]) {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证输出配置拒绝。
     assert.throws(() => text.lines(value as never), TypeError);
   }
   assert.deepEqual(text.lines(["第一行", "", "最后一行"]).lines, [
@@ -438,6 +445,7 @@ void test("text.line 与 text.lines 拒绝非法 framing，completion 可显式 
 });
 
 void test("completion 接受 text.lines，伪造的动态行组在写出前被拒绝", async () => {
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- 夹具只服务当前测试，局部保留其上下文。
   const createCli = (presenter: () => unknown) =>
     defineCli()({
       root: "complete",
@@ -450,6 +458,7 @@ void test("completion 接受 text.lines，伪造的动态行组在写出前被�
           name: "complete",
           description: "完成任务",
           input: z.object({}),
+          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证输出配置拒绝。
           success: { kind: "completion", text: presenter as never },
           failures: {},
           handler: ({ outcome }) => outcome.completion(),
@@ -752,6 +761,7 @@ void test("compatibility flag 在定义期闭合到已启用格式和 control �
           help: englishHelpCapability(),
           output: outputCapability({
             defaultFormat: "structured",
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证输出配置拒绝。
             compatibilityFlags: { [flag]: format } as never,
           }),
           usageFailureExitCode: 64,
@@ -841,6 +851,7 @@ void test("compatibility flags 的动态 collection 形状在定义期闭合", (
           help: englishHelpCapability(),
           output: outputCapability({
             defaultFormat: "structured",
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证输出配置拒绝。
             compatibilityFlags: compatibilityFlags as never,
           }),
           usageFailureExitCode: 64,

@@ -259,6 +259,7 @@ void test("缺席标题只省略标题行，空段落不注入默认文案", asy
 });
 
 void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补充被拒绝", () => {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证帮助配置拒绝。
   assert.throws(() => helpCapability({ shortAlias: "-x" } as never), TypeError);
   for (const headings of [
     { usage: "" },
@@ -267,6 +268,7 @@ void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补
     { options: "选项\0列表" },
     { extra: "额外" },
   ]) {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证帮助配置拒绝。
     assert.throws(() => helpCapability({ headings } as never), TypeError);
   }
 
@@ -431,6 +433,7 @@ void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补
             kind: "rootCommand",
             name: "forged",
             description: "伪造",
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证帮助配置拒绝。
             helpSupplement: { kind: "lines", lines: ["伪造"] } as never,
             input: z.object({}),
             success: { kind: "completion" },

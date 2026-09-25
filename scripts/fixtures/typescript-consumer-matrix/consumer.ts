@@ -30,6 +30,7 @@ function schema<Input, Output>(): ContractSchema<Input, Output> {
     "~standard": {
       version: 1,
       vendor: "typescript-consumer-matrix",
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 跨包编译矩阵故意使用静态占位与类型探针。
       validate: (value) => ({ value: value as Output }),
       jsonSchema: {
         input: () => ({ type: "object" }),
@@ -138,7 +139,9 @@ const cli = define({
 });
 
 void nodeCliOutput({
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 跨包编译矩阵故意使用静态占位与类型探针。
   stdout: null as unknown as Writable,
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 跨包编译矩阵故意使用静态占位与类型探针。
   stderr: null as unknown as Writable,
 });
 
@@ -216,6 +219,7 @@ function negativeContractShapes(): void {
     result: { argv: [], dependencies: { available: true } },
   });
 
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 跨包编译矩阵故意使用静态占位与类型探针。
   const scenarioSink = null as unknown as Readonly<
     Record<string, CliScenario<typeof cli>>
   >;

@@ -40,8 +40,8 @@ function createDefaultingCli(
         input,
         success: { kind: "completion" },
         failures: {},
-        handler({ input, outcome }) {
-          received.push(input);
+        handler({ input: validatedInput, outcome }) {
+          received.push(validatedInput);
           return outcome.completion();
         },
       },
@@ -52,6 +52,7 @@ function createDefaultingCli(
 void test("Zod 默认只由 validation 施加，并同源投影到 grammar、manifest 与 help", async () => {
   const vendorSchema = z.object({ name: z.string().default("Ada") });
   let validationCalls = 0;
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 测试 fixture 改写模式能力，以验证默认值和定义期拒绝。
   const input = {
     "~standard": {
       ...vendorSchema["~standard"],
@@ -192,6 +193,7 @@ void test("输出保证存在而输入可缺席时，缺少 input default 注解
   assert.throws(
     () =>
       createDefaultingCli(
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 测试 fixture 改写模式能力，以验证默认值和定义期拒绝。
         implicitDefault as unknown as ContractSchema<
           RawDefaultInput,
           DefaultedInput
@@ -265,6 +267,7 @@ void test("默认检查拒绝畸形 output 投影和未映射的 output required
   ] as const;
 
   for (const { outputSchema, issue } of invalidOutputSchemas) {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 测试 fixture 改写模式能力，以验证默认值和定义期拒绝。
     const input = {
       "~standard": {
         ...standard,

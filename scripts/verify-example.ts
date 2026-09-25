@@ -126,9 +126,45 @@ export async function verifyExample(
 }
 
 async function manifestAt(directory: string): Promise<Manifest> {
-  return JSON.parse(
+  const value: unknown = JSON.parse(
     await readFile(resolve(directory, "package.json"), "utf8"),
-  ) as Manifest;
+  );
+  if (
+    !isRecord(value) ||
+    typeof value.name !== "string" ||
+    (value.version !== undefined && typeof value.version !== "string") ||
+    (value.type !== undefined && typeof value.type !== "string") ||
+    !isStringRecord(value.scripts) ||
+    (value.dependencies !== undefined && !isStringRecord(value.dependencies)) ||
+    (value.devDependencies !== undefined &&
+      !isStringRecord(value.devDependencies))
+  ) {
+    throw new TypeError(`包元数据无效：${directory}`);
+  }
+  return {
+    ...value,
+    name: value.name,
+    scripts: value.scripts,
+    ...(value.version === undefined ? {} : { version: value.version }),
+    ...(value.type === undefined ? {} : { type: value.type }),
+    ...(value.dependencies === undefined
+      ? {}
+      : { dependencies: value.dependencies }),
+    ...(value.devDependencies === undefined
+      ? {}
+      : { devDependencies: value.devDependencies }),
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return (
+    isRecord(value) &&
+    Object.values(value).every((entry) => typeof entry === "string")
+  );
 }
 
 async function installedDependencies(

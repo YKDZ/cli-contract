@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "@ykdz/cli-contract": "workspace:*",
-    "zod": "^4.5.4"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@cli-contract/typescript-config": "workspace:*",

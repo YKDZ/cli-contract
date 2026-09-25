@@ -134,6 +134,7 @@ void test("非法失败 payload 在任何写出前被拒绝", async () => {
         },
         handler: ({ outcome }) =>
           outcome.failure.unavailable({
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意注入错误类型，以验证结果边界。
             service: 1 as unknown as string,
           }),
       },

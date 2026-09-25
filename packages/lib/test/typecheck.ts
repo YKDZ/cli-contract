@@ -364,6 +364,7 @@ acceptNegatedFlagRawDefinition<typeof booleanFlagInput>({
   input: booleanFlagInput,
 });
 
+// oxlint-disable-next-line typescript/consistent-return -- 闭合问题联合的所有分支均返回，新增分支交给类型检查发现。
 function exhaustivelyRecognizeUsageIssue(issue: UsageIssue): string {
   switch (issue.code) {
     case "conflictingFlag":
