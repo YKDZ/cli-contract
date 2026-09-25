@@ -34,6 +34,7 @@ async function readFixtures(): Promise<Readonly<Record<string, string>>> {
         "completion-missing.ts",
         "core-node.ts",
         "core-root.ts",
+        "invalid-forbidden-combination.ts",
         "input-schema-raw-mismatch.ts",
         "named-variant-missing.ts",
         "schema-input.ts",
@@ -135,6 +136,7 @@ async function verifyCoreOnly(
     await writeFixtures(project, fixtures, [
       "core-node.ts",
       "core-root.ts",
+      "invalid-forbidden-combination.ts",
       "input-schema-raw-mismatch.ts",
       "completion-missing.ts",
       "named-variant-missing.ts",
@@ -182,9 +184,9 @@ async function verifyCoreOnly(
         resolution,
         fixtures,
       );
-      await verifyUnknownUsageConstraintFieldDiagnostic(project, resolution);
-      await verifyInputSchemaRawMismatchDiagnostic(project, resolution);
-      await verifyUnexpectedTextPresenterDiagnostic(project, resolution);
+      for (const diagnostic of authoringDiagnosticCases) {
+        await verifyAuthoringDiagnostic(project, resolution, diagnostic);
+      }
       if (compilerVersion === "7.0.2" && resolution === "nodenext") {
         verifyAuthoringLanguageService(project, resolution, fixtures);
       }
@@ -267,11 +269,72 @@ async function verifyHierarchyTextCoverageDiagnostic(
   }
 }
 
-async function verifyUnknownUsageConstraintFieldDiagnostic(
+const authoringDiagnosticCases = [
+  {
+    fixture: "unknown-usage-constraint-field.ts",
+    expectedCodes: [
+      "unknownUsageConstraintField",
+      "unknownUsageConstraintField",
+    ],
+    required: [
+      'command: "deploy"',
+      'command: "rootDeploy"',
+      'constraint: "requires"',
+      'member: "requires"',
+      'field: "token"',
+    ],
+  },
+  {
+    fixture: "invalid-forbidden-combination.ts",
+    expectedCodes: [
+      "invalidUsageConstraintValue",
+      "inapplicableUsageConstraintField",
+    ],
+    required: [
+      'command: "invalidValue"',
+      'command: "invalidKind"',
+      'constraint: "forbiddenCombination"',
+      'member: "values.value"',
+      'member: "values.field"',
+      'field: "auth"',
+      'field: "target"',
+      'actual: "yes"',
+      "expected: boolean",
+      'kind: "positional"',
+    ],
+  },
+  {
+    fixture: "input-schema-raw-mismatch.ts",
+    expectedCodes: [
+      "fieldInputMustAcceptRawValue",
+      "fieldInputMustAcceptRawValue",
+    ],
+    required: [
+      'command: "inspect"',
+      'command: "rootInspect"',
+      'field: "count"',
+      "rawValue: string",
+      "schemaInput: number",
+    ],
+  },
+  {
+    fixture: "unexpected-text-presenter.ts",
+    expectedCodes: ["unexpectedTextPresenter", "unexpectedTextPresenter"],
+    required: [
+      'command: "inspect"',
+      'command: "rootInspect"',
+      'location: "failure"',
+      'variant: "permissionDenied"',
+    ],
+  },
+] as const;
+
+async function verifyAuthoringDiagnostic(
   project: string,
   resolution: (typeof resolutions)[number],
+  diagnostic: (typeof authoringDiagnosticCases)[number],
 ): Promise<void> {
-  const fixture = "unknown-usage-constraint-field.ts";
+  const { fixture, expectedCodes, required } = diagnostic;
   const tsconfig = `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`;
   await writeFile(
     resolve(project, tsconfig),
@@ -284,111 +347,29 @@ async function verifyUnknownUsageConstraintFieldDiagnostic(
   );
   if (result.error !== undefined) throw result.error;
   const diagnostics = `${result.stderr}\n${result.stdout}`;
-  const required = [
-    "unknownUsageConstraintField",
-    'command: "deploy"',
-    'command: "rootDeploy"',
-    'constraint: "requires"',
-    'member: "requires"',
-    'field: "token"',
-  ];
-  const headers = diagnostics.match(
-    /^unknown-usage-constraint-field\.ts\(\d+,\d+\): error TS\d+:/gm,
+  const lines = diagnostics.split("\n");
+  const headers = lines.filter(
+    (line) => line.startsWith(`${fixture}(`) && line.includes(": error TS"),
   );
-  const firstLevelCodes = diagnostics.match(
-    /^  [^ ].*unknownUsageConstraintField/gm,
-  );
+  const firstLevelCodes = lines.flatMap((line) => {
+    const match = /^  [^ ].*ContractTypeError<"([^"]+)"/.exec(line);
+    const code = match?.[1];
+    return code === undefined ? [] : [code];
+  });
   if (
     result.status === 0 ||
-    headers?.length !== 2 ||
-    firstLevelCodes?.length !== 2 ||
+    headers.length !== expectedCodes.length ||
+    firstLevelCodes.length !== expectedCodes.length ||
+    firstLevelCodes
+      .sort((left, right) => left.localeCompare(right))
+      .join(",") !==
+      [...expectedCodes]
+        .sort((left, right) => left.localeCompare(right))
+        .join(",") ||
     required.some((fragment) => !diagnostics.includes(fragment))
   ) {
     throw new Error(
-      `Unknown usage constraint field diagnostic is incomplete\n${diagnostics}`,
-    );
-  }
-}
-
-async function verifyInputSchemaRawMismatchDiagnostic(
-  project: string,
-  resolution: (typeof resolutions)[number],
-): Promise<void> {
-  const fixture = "input-schema-raw-mismatch.ts";
-  const tsconfig = `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`;
-  await writeFile(
-    resolve(project, tsconfig),
-    `${JSON.stringify(tsconfigFor(resolution, fixture))}\n`,
-  );
-  const result = spawnSync(
-    resolve(project, "node_modules/.bin/tsc"),
-    ["--project", tsconfig, "--pretty", "false"],
-    { cwd: project, encoding: "utf8" },
-  );
-  if (result.error !== undefined) throw result.error;
-  const diagnostics = `${result.stderr}\n${result.stdout}`;
-  const required = [
-    "fieldInputMustAcceptRawValue",
-    'command: "inspect"',
-    'command: "rootInspect"',
-    'field: "count"',
-    "rawValue: string",
-    "schemaInput: number",
-  ];
-  const headers = diagnostics.match(
-    /^input-schema-raw-mismatch\.ts\(\d+,\d+\): error TS\d+:/gm,
-  );
-  const firstLevelCodes = diagnostics.match(
-    /^  [^ ].*fieldInputMustAcceptRawValue/gm,
-  );
-  if (
-    result.status === 0 ||
-    headers?.length !== 2 ||
-    firstLevelCodes?.length !== 2 ||
-    required.some((fragment) => !diagnostics.includes(fragment))
-  ) {
-    throw new Error(`Input schema raw mismatch is incomplete\n${diagnostics}`);
-  }
-}
-
-async function verifyUnexpectedTextPresenterDiagnostic(
-  project: string,
-  resolution: (typeof resolutions)[number],
-): Promise<void> {
-  const fixture = "unexpected-text-presenter.ts";
-  const tsconfig = `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`;
-  await writeFile(
-    resolve(project, tsconfig),
-    `${JSON.stringify(tsconfigFor(resolution, fixture))}\n`,
-  );
-  const result = spawnSync(
-    resolve(project, "node_modules/.bin/tsc"),
-    ["--project", tsconfig, "--pretty", "false"],
-    { cwd: project, encoding: "utf8" },
-  );
-  if (result.error !== undefined) throw result.error;
-  const diagnostics = `${result.stderr}\n${result.stdout}`;
-  const required = [
-    "unexpectedTextPresenter",
-    'command: "inspect"',
-    'command: "rootInspect"',
-    'location: "failure"',
-    'variant: "permissionDenied"',
-  ];
-  const headers = diagnostics.match(
-    /^unexpected-text-presenter\.ts\(\d+,\d+\): error TS\d+:/gm,
-  );
-  const firstLevelCodes = diagnostics.match(
-    /^  [^ ].*unexpectedTextPresenter/gm,
-  );
-  if (
-    result.status === 0 ||
-    headers?.length !== 2 ||
-    firstLevelCodes?.length !== 2 ||
-    required.some((fragment) => !diagnostics.includes(fragment))
-  ) {
-    throw new Error(
-      `Unexpected text presenter diagnostic is incomplete\n${diagnostics}`,
+      `Published authoring diagnostic is incomplete for ${fixture}\n${diagnostics}`,
     );
   }
 }
@@ -408,6 +389,23 @@ function verifyAuthoringLanguageService(
         'command: "rootDeploy"',
         'member: "requires"',
         'field: "token"',
+      ],
+    },
+    {
+      fixture: "invalid-forbidden-combination.ts",
+      count: 2,
+      required: [
+        "invalidUsageConstraintValue",
+        "inapplicableUsageConstraintField",
+        'command: "invalidValue"',
+        'command: "invalidKind"',
+        'member: "values.value"',
+        'member: "values.field"',
+        'field: "auth"',
+        'field: "target"',
+        'actual: "yes"',
+        "expected: boolean",
+        'kind: "positional"',
       ],
     },
     {

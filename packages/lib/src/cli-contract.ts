@@ -1387,6 +1387,61 @@ type UsageConstraintValueFields<Values> =
       : never
     : never;
 
+type InvalidForbiddenCombinationValue<
+  Command extends string,
+  Value,
+  Fields extends FieldDefinitions,
+> =
+  Value extends Readonly<{
+    readonly field: infer Field extends keyof Fields & string;
+    readonly value: infer Actual;
+  }>
+    ? Fields[Field] extends FlagDefinition
+      ? Actual extends boolean
+        ? never
+        : ContractTypeError<
+            "invalidUsageConstraintValue",
+            Readonly<{
+              readonly command: Command;
+              readonly constraint: "forbiddenCombination";
+              readonly member: "values.value";
+              readonly field: Field;
+              readonly actual: Actual;
+              readonly expected: boolean;
+            }>
+          >
+      : Fields[Field] extends ValueOptionDefinition
+        ? Actual extends string
+          ? never
+          : ContractTypeError<
+              "invalidUsageConstraintValue",
+              Readonly<{
+                readonly command: Command;
+                readonly constraint: "forbiddenCombination";
+                readonly member: "values.value";
+                readonly field: Field;
+                readonly actual: Actual;
+                readonly expected: string;
+              }>
+            >
+        : ContractTypeError<
+            "inapplicableUsageConstraintField",
+            Readonly<{
+              readonly command: Command;
+              readonly constraint: "forbiddenCombination";
+              readonly member: "values.field";
+              readonly field: Field;
+              readonly kind: Fields[Field]["kind"];
+            }>
+          >
+    : never;
+
+type InvalidForbiddenCombinationValues<
+  Command extends string,
+  Values extends readonly unknown[],
+  Fields extends FieldDefinitions,
+> = InvalidForbiddenCombinationValue<Command, Values[number], Fields>;
+
 type InvalidUsageConstraintForFields<
   Command extends string,
   Constraint,
@@ -1441,12 +1496,20 @@ type InvalidUsageConstraintForFields<
             UsageConstraintValueFields<Values>,
             keyof Fields
           > extends never
-          ? Constraint extends ForbiddenCombinationUsageConstraint<Fields>
-            ? never
-            : ContractTypeError<
-                "invalidEffectiveUsageConstraint",
-                Readonly<{ readonly command: Command }>
-              >
+          ? [
+              InvalidForbiddenCombinationValues<Command, Values, Fields>,
+            ] extends [never]
+            ? Constraint extends ForbiddenCombinationUsageConstraint<Fields>
+              ? never
+              : ContractTypeError<
+                  "invalidUsageConstraint",
+                  Readonly<{
+                    readonly command: Command;
+                    readonly constraint: "forbiddenCombination";
+                    readonly member: "values";
+                  }>
+                >
+            : InvalidForbiddenCombinationValues<Command, Values, Fields>
           : ContractTypeError<
               "unknownUsageConstraintField",
               Readonly<{
