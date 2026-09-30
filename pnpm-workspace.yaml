@@ -21,7 +21,7 @@ allowBuilds:
   esbuild: true
 
 catalog:
-  "@types/node": ^24.13.4
+  "@types/node": ^24.19.0
   "oxfmt": ^0.67.0
   "oxlint": ^1.82.0
   "oxlint-tsgolint": ^7.0.2001
