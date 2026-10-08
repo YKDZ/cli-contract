@@ -22,7 +22,7 @@ allowBuilds:
 
 catalog:
   "@types/node": ^24.19.0
-  "oxfmt": ^0.67.0
+  "oxfmt": ^0.71.0
   "oxlint": ^1.82.0
   "oxlint-tsgolint": ^7.0.2003
   "turbo": 2.11.4
