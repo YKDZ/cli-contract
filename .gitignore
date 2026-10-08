@@ -12,7 +12,7 @@ test-results/
 
 /.agents
 /docs
-CONTEXT*.md
+GLOSSARY*.md
 AGENTS.md
 /.scratch
 skills-lock.json
