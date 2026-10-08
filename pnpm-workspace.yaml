@@ -24,7 +24,7 @@ catalog:
   "@types/node": ^24.19.0
   "oxfmt": ^0.67.0
   "oxlint": ^1.82.0
-  "oxlint-tsgolint": ^7.0.2001
+  "oxlint-tsgolint": ^7.0.2003
   "turbo": 2.11.4
   "typescript-7": npm:typescript@^7.0.2
   "valibot": ^1.5.0
