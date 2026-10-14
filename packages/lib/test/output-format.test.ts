@@ -444,6 +444,67 @@ void test("text.line 与 text.lines 拒绝非法 framing，completion 可显式 
   assert.deepEqual(writes, []);
 });
 
+void test("文本构造错误保留稳定 code、闭合原因和适用的行位置", () => {
+  assert.throws(
+    () => text.line(""),
+    (error: unknown) => {
+      assert.ok(error instanceof TypeError);
+      assert.ok("issue" in error);
+      assert.equal(error.message, "invalidTextLine");
+      assert.deepEqual(error.issue, {
+        code: "invalidTextLine",
+        reason: "empty",
+      });
+      return true;
+    },
+  );
+
+  assert.throws(
+    () => text.lines(["有效", "损坏\r内容"]),
+    (error: unknown) => {
+      assert.ok(error instanceof TypeError);
+      assert.ok("issue" in error);
+      assert.equal(error.message, "invalidTextLines");
+      assert.deepEqual(error.issue, {
+        code: "invalidTextLines",
+        reason: "carriageReturn",
+        line: 1,
+      });
+      assert.equal(error.message.includes("损坏"), false);
+      return true;
+    },
+  );
+
+  assert.throws(
+    () => text.lines(["", ""]),
+    (error: unknown) => {
+      assert.ok(error instanceof TypeError);
+      assert.ok("issue" in error);
+      assert.deepEqual(error.issue, {
+        code: "invalidTextLines",
+        reason: "noNonEmptyLine",
+      });
+      return true;
+    },
+  );
+
+  assert.throws(
+    () => text.fragment("首行\n后行\0内容"),
+    (error: unknown) => {
+      assert.ok(error instanceof TypeError);
+      assert.ok("issue" in error);
+      assert.equal(error.message, "invalidTextFragment");
+      assert.deepEqual(error.issue, {
+        code: "invalidTextFragment",
+        reason: "nullCharacter",
+        line: 1,
+      });
+      assert.equal(error.message.includes("内容"), false);
+      return true;
+    },
+  );
+});
+
 void test("completion 接受 text.lines，伪造的动态行组在写出前被拒绝", async () => {
   // oxlint-disable-next-line unicorn/consistent-function-scoping -- 夹具只服务当前测试，局部保留其上下文。
   const createCli = (presenter: () => unknown) =>
@@ -465,7 +526,7 @@ void test("completion 接受 text.lines，伪造的动态行组在写出前被�
         },
       },
     });
-  const cli = createCli(() => text.lines(["完成", "", "下一步"]));
+  const cli = createCli(() => text.lines([" 完成 ", "", "下一步 "]));
   const writes: string[] = [];
   await executeCli(cli, {
     invocation: parseCliInvocation(cli, []),
@@ -474,7 +535,7 @@ void test("completion 接受 text.lines，伪造的动态行组在写出前被�
       writes.push(chunk);
     },
   });
-  assert.deepEqual(writes, ["完成\n\n下一步\n"]);
+  assert.deepEqual(writes, [" 完成 \n\n下一步 \n"]);
 
   const forged = createCli(() => ({ kind: "lines", lines: ["伪造"] }));
   await assert.rejects(
@@ -485,6 +546,53 @@ void test("completion 接受 text.lines，伪造的动态行组在写出前被�
     }),
     ContractExecutionError,
   );
+});
+
+void test("text.fragment 原样保留 CRLF 和末尾换行", async () => {
+  const cli = defineCli()({
+    root: "stream",
+    help: englishHelpCapability(),
+    output: createDynamicTextOutput(),
+    usageFailureExitCode: 64,
+    commands: {
+      stream: {
+        kind: "rootCommand",
+        name: "stream",
+        description: "读取流",
+        fields: {},
+        input: z.object({}),
+        success: {
+          kind: "stream",
+          text: () => text.silent,
+          records: {
+            part: {
+              description: "流片段",
+              schema: z.object({}),
+              text: () => text.fragment("第一行\r\n第二行\n"),
+            },
+          },
+        },
+        failures: {},
+        async *handler({ outcome }) {
+          yield outcome.record.part({});
+          return outcome.streamSuccess();
+        },
+      },
+    },
+  });
+  const writes: Array<Readonly<{ destination: string; chunk: string }>> = [];
+  const termination = await executeCli(cli, {
+    invocation: parseCliInvocation(cli, []),
+    dependencies: undefined,
+    write: (output) => {
+      writes.push(output);
+    },
+  });
+
+  assert.equal(termination.exitCode, 0);
+  assert.deepEqual(writes, [
+    { destination: "stdout", chunk: "第一行\r\n第二行\n" },
+  ]);
 });
 
 void test("text 开关在定义期要求或禁止同位 presenter", () => {

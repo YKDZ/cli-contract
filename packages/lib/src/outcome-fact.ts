@@ -35,15 +35,73 @@ export type StreamTextPresenter<Payload> = {
   bivarianceHack(payload: Payload): TextLine | TextFragment;
 }["bivarianceHack"];
 
+export type TextValueErrorIssue =
+  | Readonly<{
+      readonly code: "invalidTextLine";
+      readonly reason:
+        | "empty"
+        | "carriageReturn"
+        | "lineFeed"
+        | "nullCharacter";
+    }>
+  | Readonly<{
+      readonly code: "invalidTextLines";
+      readonly reason: "notArray" | "noLines" | "noNonEmptyLine";
+    }>
+  | Readonly<{
+      readonly code: "invalidTextLines";
+      readonly reason:
+        | "notString"
+        | "carriageReturn"
+        | "lineFeed"
+        | "nullCharacter";
+      /** `text.lines` 中从 0 开始的非法成员位置。 */
+      readonly line: number;
+    }>
+  | Readonly<{
+      readonly code: "invalidTextFragment";
+      readonly reason: "empty";
+    }>
+  | Readonly<{
+      readonly code: "invalidTextFragment";
+      readonly reason: "nullCharacter";
+      /** 片段中从 0 开始、含 NUL 的行号，按 LF 计数。 */
+      readonly line: number;
+    }>;
+
+/**
+ * 文本构造器发现动态值违反分帧规则时抛出的 TypeError。
+ * `message` 保留稳定 code；`issue` 给出闭合原因和适用的 0 基行位置，且不包含文本内容。
+ */
+export class TextValueError extends TypeError {
+  readonly issue: TextValueErrorIssue;
+
+  constructor(issue: TextValueErrorIssue) {
+    super(issue.code);
+    this.name = "TextValueError";
+    this.issue = Object.freeze(issue);
+  }
+}
+
 /* oxlint-disable typescript/no-unsafe-type-assertion -- 文本投影仅由这些工厂签发，运行时身份由 WeakSet 核对。 */
 function createTextLine(value: string): TextLine {
-  if (
-    value.length === 0 ||
-    value.includes("\r") ||
-    value.includes("\n") ||
-    value.includes("\0")
-  ) {
-    throw new TypeError("invalidTextLine");
+  if (value.length === 0) {
+    throw new TextValueError({ code: "invalidTextLine", reason: "empty" });
+  }
+  if (value.includes("\r")) {
+    throw new TextValueError({
+      code: "invalidTextLine",
+      reason: "carriageReturn",
+    });
+  }
+  if (value.includes("\n")) {
+    throw new TextValueError({ code: "invalidTextLine", reason: "lineFeed" });
+  }
+  if (value.includes("\0")) {
+    throw new TextValueError({
+      code: "invalidTextLine",
+      reason: "nullCharacter",
+    });
   }
   const projection = Object.freeze({ kind: "line" as const, value });
   issuedTextProjections.add(projection);
@@ -51,19 +109,47 @@ function createTextLine(value: string): TextLine {
 }
 
 function createTextLines(values: readonly [string, ...string[]]): TextLines {
-  if (
-    !Array.isArray(values) ||
-    values.length === 0 ||
-    values.some(
-      (value) =>
-        typeof value !== "string" ||
-        value.includes("\r") ||
-        value.includes("\n") ||
-        value.includes("\0"),
-    ) ||
-    values.every((value) => value.length === 0)
-  ) {
-    throw new TypeError("invalidTextLines");
+  if (!Array.isArray(values)) {
+    throw new TextValueError({ code: "invalidTextLines", reason: "notArray" });
+  }
+  if (values.length === 0) {
+    throw new TextValueError({ code: "invalidTextLines", reason: "noLines" });
+  }
+  for (const [line, value] of values.entries()) {
+    if (typeof value !== "string") {
+      throw new TextValueError({
+        code: "invalidTextLines",
+        reason: "notString",
+        line,
+      });
+    }
+    if (value.includes("\r")) {
+      throw new TextValueError({
+        code: "invalidTextLines",
+        reason: "carriageReturn",
+        line,
+      });
+    }
+    if (value.includes("\n")) {
+      throw new TextValueError({
+        code: "invalidTextLines",
+        reason: "lineFeed",
+        line,
+      });
+    }
+    if (value.includes("\0")) {
+      throw new TextValueError({
+        code: "invalidTextLines",
+        reason: "nullCharacter",
+        line,
+      });
+    }
+  }
+  if (values.every((value) => value.length === 0)) {
+    throw new TextValueError({
+      code: "invalidTextLines",
+      reason: "noNonEmptyLine",
+    });
   }
   const projection = Object.freeze({
     kind: "lines" as const,
@@ -78,8 +164,20 @@ issuedTextProjections.add(silentProjection);
 const silentText = silentProjection as SilentText;
 
 function createTextFragment(value: string): TextFragment {
-  if (value.length === 0 || value.includes("\0")) {
-    throw new TypeError("invalidTextFragment");
+  if (value.length === 0) {
+    throw new TextValueError({
+      code: "invalidTextFragment",
+      reason: "empty",
+    });
+  }
+  const nullCharacter = value.indexOf("\0");
+  if (nullCharacter >= 0) {
+    const line = value.slice(0, nullCharacter).split("\n").length - 1;
+    throw new TextValueError({
+      code: "invalidTextFragment",
+      reason: "nullCharacter",
+      line,
+    });
   }
   const projection = Object.freeze({ kind: "fragment" as const, value });
   issuedTextProjections.add(projection);
@@ -87,27 +185,32 @@ function createTextFragment(value: string): TextFragment {
 }
 /* oxlint-enable typescript/no-unsafe-type-assertion */
 
-/** 在呈现器中显式构造文本投影；这里只验证文本值，实际通道路由与分帧由执行内核负责。 */
+/**
+ * 在呈现器中显式构造文本投影；这里只验证文本值，实际通道路由与分帧由执行内核负责。
+ * 动态值违反构造规则时抛出 {@link TextValueError}，其 message 是稳定 code，issue 不含原文。
+ */
 export const text = Object.freeze({
   /**
    * 构造非空单行，拒绝 CR、LF、NUL；核心写出时追加恰好一个 LF。
-   * 适用于原子结果、流记录及流成功终态，呈现器应提供完整文本而不依赖核心补写文案。
+   * 适用于 completion、data、failure、stream success 终态和普通 stream record；
+   * 呈现器提供完整文本，核心不补写文案。非法值会说明具体拒绝原因。
    */
   line: createTextLine,
   /**
-   * 构造有序行组，至少一行非空；每行拒绝 CR、LF、NUL，空成员显式保留空白行。
-   * 核心用 LF 连接并追加一个终止 LF。用于原子结果、失败、流成功终态或帮助补充，
-   * 不用于流记录；例如 text.lines(["处理完成", "", "详细说明"])。
+   * 构造非空元组行组（readonly [string, ...string[]]），至少一个成员非空；每行拒绝 CR、LF、NUL。
+   * 空成员可显式保留空白行。核心以 LF 连接并追加一个终止 LF；动态非法成员会报告其 0 基位置。
+   * 适用于 completion、data、failure、stream success 终态及帮助补充，不适用于 stream record。
+   * 例如 `text.lines(["处理完成", "", "详细说明"])`。
    */
   lines: createTextLines,
   /**
-   * 仅用于流记录中需要连续拼接的增量文本；必须非空且不含 NUL，可以含换行。
-   * 核心原样写出，不追加 LF，因此不承诺一行对应一条记录。
+   * 仅用于 stream record 中需要连续拼接的增量文本；必须非空且不含 NUL，可以含 LF。
+   * 核心原样写出，不追加或转换字符，因此不承诺一行对应一条记录；NUL 的错误位置按 0 基行号给出。
    */
   fragment: createTextFragment,
   /**
-   * completion 成功或流成功终态显式选择不写文本字节；仍须由呈现器返回此值。
-   * 省略呈现器不等于静默，data、failure 和流记录也不能用它代替输出。
+   * 仅供 completion 成功或 stream success 终态显式选择不写文本字节；仍须由呈现器返回此值。
+   * 省略呈现器不等于静默；data、failure 和 stream record 都必须产生文本。
    */
   silent: silentText,
 });

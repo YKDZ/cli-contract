@@ -428,6 +428,13 @@ void validUsageConstraint;
 const explicitTextLines: TextLines = text.lines(["第一行", "", "最后一行"]);
 void explicitTextLines;
 
+const knownNonEmptyTextLines: readonly [string, ...string[]] = ["第一行"];
+void text.lines(knownNonEmptyTextLines);
+
+const dynamicTextLines: string[] = ["第一行"];
+// @ts-expect-error 普通数组没有保留至少一行的静态事实。
+text.lines(dynamicTextLines);
+
 const shortHelp = helpCapability({ shortAlias: "-h" });
 void shortHelp;
 

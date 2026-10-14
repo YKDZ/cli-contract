@@ -63,6 +63,30 @@ if (
   throw new Error("公共入口缺少预期导出");
 }
 
+const privateText = "安装消费者私有文本";
+assert.throws(
+  () =>
+    Reflect.apply(coreModule.text.lines, coreModule.text, [
+      ["有效文本", `${privateText}\r内容`],
+    ]),
+  (error: unknown) => {
+    if (!(error instanceof TypeError)) return false;
+    assert.ok(error instanceof coreModule.TextValueError);
+    const issue = Reflect.get(error, "issue");
+    assert.equal(error.message, "invalidTextLines");
+    assert.deepEqual(issue, {
+      code: "invalidTextLines",
+      reason: "carriageReturn",
+      line: 1,
+    });
+    assert.equal(
+      `${error.message} ${JSON.stringify(issue)}`.includes(privateText),
+      false,
+    );
+    return true;
+  },
+);
+
 const emptyJsonSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   additionalProperties: false,
