@@ -871,7 +871,14 @@ function verifyTypeErrors() {
 
   const countAuthoringDefinition = {
     root: "countAuthoring",
-    help: helpCapability(),
+    help: helpCapability({
+      wording: {
+        countExactly: "{fields} 恰好出现 {count} 项",
+        countAtLeast: "{fields} 至少出现 {min} 项",
+        countAtMost: "{fields} 至多出现 {max} 项",
+        countBetween: "{fields} 出现 {min} 到 {max} 项",
+      },
+    }),
     output: outputCapability({ defaultFormat: "structured" }),
     usageFailureExitCode: 64,
     commands: {
