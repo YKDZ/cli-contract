@@ -52,9 +52,9 @@ export const inspectCombination = define.command("inspect")({
   usageConstraints: [
     {
       kind: "forbiddenCombination",
-      values: [
-        { field: "query", value: "alpha" },
-        { field: "dryRun", value: true },
+      all: [
+        { kind: "equals", field: "query", value: "alpha" },
+        { kind: "equals", field: "dryRun", value: true },
       ],
     },
   ],

@@ -5,6 +5,7 @@ import type {
   CliContractRoot,
   ContractSchemaInput,
   ContractSchemaOutput,
+  UsageFactValue,
 } from "@ykdz/cli-contract";
 import { cli, inspectCombination } from "__DECLARATION_IMPORT__";
 
@@ -41,22 +42,30 @@ const inspectOutput: InspectOutput = {
 const invalidInspectOutput: InspectOutput = { query: "alpha" };
 
 type Constraints = (typeof inspectCombination.inspect.usageConstraints)[number];
-type ForbiddenValues = Extract<
+type ForbiddenFacts = Extract<
   Constraints,
   { readonly kind: "forbiddenCombination" }
->["values"][number];
+>["all"][number];
 type QueryValue = Extract<
-  ForbiddenValues,
-  { readonly field: "query" }
+  ForbiddenFacts,
+  { readonly kind: "equals"; readonly field: "query" }
 >["value"];
 type DryRunValue = Extract<
-  ForbiddenValues,
-  { readonly field: "dryRun" }
+  ForbiddenFacts,
+  { readonly kind: "equals"; readonly field: "dryRun" }
 >["value"];
+type QueryFactDomain = UsageFactValue<
+  typeof inspectCombination.inspect.fields,
+  InspectInput,
+  "query"
+>;
 
 const queryValue: QueryValue = "alpha";
 // @ts-expect-error 生成的声明仍保留字段值字面量。
 const invalidQueryValue: QueryValue = "beta";
+const validQueryFactDomain: QueryFactDomain = "beta";
+// @ts-expect-error 禁配 fact 的 Input 关联值域应在声明再消费后保留。
+const invalidQueryFactDomain: QueryFactDomain = "gamma";
 const dryRunValue: DryRunValue = true;
 // @ts-expect-error flag 值仍保留为布尔字面量。
 const invalidDryRunValue: DryRunValue = "true";
@@ -96,6 +105,8 @@ void inspectOutput;
 void invalidInspectOutput;
 void queryValue;
 void invalidQueryValue;
+void validQueryFactDomain;
+void invalidQueryFactDomain;
 void dryRunValue;
 void invalidDryRunValue;
 void forgedContract;

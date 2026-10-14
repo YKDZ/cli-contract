@@ -366,7 +366,7 @@ void test("structured wire 保持不变，text data 与 failure 使用固定通�
     {
       destination: "stdout",
       chunk:
-        '{"schemaVersion":"1","command":"greet","kind":"data","variant":"greeting","data":{"message":"Ada"}}\n',
+        '{"schemaVersion":"2","command":"greet","kind":"data","variant":"greeting","data":{"message":"Ada"}}\n',
     },
   ]);
 

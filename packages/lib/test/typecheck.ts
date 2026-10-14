@@ -25,6 +25,7 @@ import {
   type TextLines,
   type UsageIssue,
   type UsageConstraint,
+  type UsageFactValue,
 } from "@ykdz/cli-contract";
 import * as v from "valibot";
 import { z } from "zod";
@@ -370,7 +371,7 @@ function exhaustivelyRecognizeUsageIssue(issue: UsageIssue): string {
     case "conflictingFlag":
     case "conflictingOutputFormat":
     case "exclusiveUsageConstraint":
-    case "forbiddenUsageCombination":
+    case "forbiddenCombinationViolation":
     case "inputRejected":
     case "invalidOutputFormat":
     case "missingOptionValue":
@@ -416,14 +417,182 @@ type UsageFixtureFields = Readonly<{
   };
 }>;
 
-const validUsageConstraint: UsageConstraint<UsageFixtureFields> = {
+type UsageFixtureInput = Readonly<{
+  readonly format?: "json" | "yaml";
+  readonly quiet?: boolean;
+  readonly tags?: readonly string[];
+}>;
+
+const validUsageConstraint: UsageConstraint<
+  UsageFixtureFields,
+  UsageFixtureInput
+> = {
   kind: "forbiddenCombination",
-  values: [
-    { field: "format", value: "json" },
-    { field: "quiet", value: true },
+  all: [
+    { kind: "equals", field: "format", value: "json" },
+    { kind: "equals", field: "format", value: "json" },
+    { kind: "present", field: "tags" },
+    { kind: "equals", field: "quiet", value: true },
   ],
 };
 void validUsageConstraint;
+
+const validStaticUsageCli = defineCli()({
+  root: "validStaticFacts",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    validStaticFacts: {
+      kind: "rootCommand",
+      name: "valid-static-facts",
+      description: "可重复的静态事实",
+      fields: {
+        mode: {
+          kind: "valueOption",
+          longOption: "--mode",
+          description: "模式",
+        },
+      },
+      input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+      usageConstraints: [
+        {
+          kind: "forbiddenCombination",
+          all: [
+            { kind: "equals", field: "mode", value: "safe" },
+            { kind: "equals", field: "mode", value: "safe" },
+            { kind: "present", field: "mode" },
+          ],
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+void validStaticUsageCli;
+
+type FormatFactDomain = UsageFactValue<
+  UsageFixtureFields,
+  UsageFixtureInput,
+  "format"
+>;
+const validFormatFact: FormatFactDomain = "yaml";
+// @ts-expect-error 等值事实只能使用对应模式 Input 接受的值。
+const invalidFormatFact: FormatFactDomain = "toml";
+type PositiveFlagFactDomain = UsageFactValue<
+  UsageFixtureFields,
+  UsageFixtureInput,
+  "quiet"
+>;
+const validPositiveFlagFact: PositiveFlagFactDomain = true;
+// @ts-expect-error 无否定 spelling 的 flag 等值事实只能表示 true。
+const invalidPositiveFlagFact: PositiveFlagFactDomain = false;
+void validFormatFact;
+void invalidFormatFact;
+void validPositiveFlagFact;
+void invalidPositiveFlagFact;
+
+const transformedModeSchema = z.object({
+  mode: z
+    .string()
+    .transform((value) => value.length)
+    .pipe(z.number()),
+});
+type TransformedModeInputFact = UsageFactValue<
+  Readonly<{
+    readonly mode: Readonly<{
+      readonly kind: "valueOption";
+      readonly longOption: "--mode";
+      readonly description: "模式";
+    }>;
+  }>,
+  ContractSchemaInput<typeof transformedModeSchema>,
+  "mode"
+>;
+const validRawModeFact: TransformedModeInputFact = "json";
+// @ts-expect-error equals 使用 raw 与 schema Input 的交集，不使用 Output number。
+const invalidTransformedOutputFact: TransformedModeInputFact = 3;
+const transformedModeOutput: ContractSchemaOutput<
+  typeof transformedModeSchema
+> = {
+  mode: 3,
+};
+void validRawModeFact;
+void invalidTransformedOutputFact;
+void transformedModeOutput;
+
+const invalidClosedFactCli = defineCli()({
+  root: "closedFacts",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    closedFacts: {
+      kind: "rootCommand",
+      name: "closed-facts",
+      description: "封闭事实",
+      fields: {
+        mode: {
+          kind: "valueOption",
+          longOption: "--mode",
+          description: "模式",
+        },
+      },
+      input: z.object({ mode: z.string().optional() }),
+      // @ts-expect-error 未知事实成员产生稳定的局部作者诊断。
+      usageConstraints: [
+        {
+          kind: "forbiddenCombination",
+          all: [
+            { kind: "present", field: "mode", typo: true },
+            { kind: "equals", field: "mode", value: "safe" },
+          ],
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+void invalidClosedFactCli;
+
+// @ts-expect-error 同字段两个互不相交的等值事实不能在静态作者期通过。
+defineCli()({
+  root: "staticContradiction",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    staticContradiction: {
+      kind: "rootCommand",
+      name: "static-contradiction",
+      description: "静态矛盾事实",
+      fields: {
+        mode: {
+          kind: "valueOption",
+          longOption: "--mode",
+          description: "模式",
+        },
+      },
+      input: z.object({ mode: z.string().optional() }),
+      usageConstraints: [
+        {
+          kind: "forbiddenCombination",
+          all: [
+            { kind: "equals", field: "mode", value: "safe" },
+            { kind: "equals", field: "mode", value: "force" },
+          ],
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
 
 const explicitTextLines: TextLines = text.lines(["第一行", "", "最后一行"]);
 void explicitTextLines;
@@ -443,6 +612,28 @@ helpCapability({ shortAlias: "-x" });
 
 // @ts-expect-error 帮助事实文案只能使用闭合槽位。
 helpCapability({ wording: { choices: "候选 {choices}", typo: "额外" } });
+
+// @ts-expect-error 静态模板必须出现全部必需占位符。
+helpCapability({ wording: { choices: "候选值" } });
+// @ts-expect-error 静态模板不能引用未知占位符。
+helpCapability({ wording: { choices: "候选 {choices} 或 {other}" } });
+// @ts-expect-error 静态模板必须是单行。
+helpCapability({ wording: { default: "默认值\n{value}" } });
+// @ts-expect-error 等值事实模板必须同时出现字段和值。
+helpCapability({ wording: { equals: "字段 {field}" } });
+// @ts-expect-error 静态帮助模板不能只由空白组成。
+helpCapability({ wording: { commandPlaceholder: "   " } });
+// @ts-expect-error 命令组占位词本身不能再包含尖括号。
+helpCapability({ wording: { commandPlaceholder: "<命令组>" } });
+
+const validHelpFactTemplates = helpCapability({
+  wording: {
+    commandPlaceholder: "命令 组",
+    choices: "候选 {choices}，也可写作 {choices}",
+    default: "默认值 {value}，再次确认 {value}",
+  },
+});
+void validHelpFactTemplates;
 
 // @ts-expect-error TextLines 只能由受控构造器签发。
 const forgedTextLines: TextLines = { kind: "lines", lines: ["伪造"] };
@@ -848,12 +1039,15 @@ function verifyTypeErrors() {
     text: () => text.line("问候"),
   };
   void structuredData;
-  const invalidUsageConstraint: UsageConstraint<UsageFixtureFields> = {
+  const invalidUsageConstraint: UsageConstraint<
+    UsageFixtureFields,
+    UsageFixtureInput
+  > = {
     kind: "forbiddenCombination",
-    values: [
+    all: [
       // @ts-expect-error repeatable option 不能成为离散组合值。
-      { field: "tags", value: "nightly" },
-      { field: "quiet", value: true },
+      { kind: "equals", field: "tags", value: "nightly" },
+      { kind: "equals", field: "quiet", value: true },
     ],
   };
   void invalidUsageConstraint;

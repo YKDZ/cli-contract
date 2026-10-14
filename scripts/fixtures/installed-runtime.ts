@@ -120,9 +120,6 @@ const installedHelp = coreModule.helpCapability({
     commandPlaceholder: "command",
     choices: "(choices: {choices})",
     default: "(default: {value})",
-    requires: "{field} requires {requires}",
-    exclusive: "exclusive {fields}",
-    forbiddenCombination: "forbidden {values}",
   },
 });
 let handlerCalled = false;
@@ -436,3 +433,206 @@ for (const withValue of [false, true]) {
   assert.equal(capture.stderr.endsWith("\n"), true);
   assert.equal(handlerCalled, false);
 }
+
+type JsonSchemaValidation = (value: unknown) => boolean;
+type JsonSchemaValidatorConstructor = new (options?: unknown) => {
+  compile(schema: unknown): JsonSchemaValidation;
+};
+
+function isJsonSchemaValidatorConstructor(
+  value: unknown,
+): value is JsonSchemaValidatorConstructor {
+  if (typeof value !== "function") return false;
+  const prototype = Reflect.get(value, "prototype");
+  return (
+    typeof prototype === "object" &&
+    prototype !== null &&
+    typeof Reflect.get(prototype, "compile") === "function"
+  );
+}
+
+const validatorNamespace: unknown = await import(
+  import.meta.resolve("ajv/dist/2020.js")
+);
+const Ajv2020 = readProperty(validatorNamespace, "default");
+if (!isJsonSchemaValidatorConstructor(Ajv2020)) {
+  throw new TypeError("消费者安装的 Draft 2020-12 验证器无效");
+}
+
+const constrainedInputSchema = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://example.test/installed-consumer-input",
+  $defs: {
+    reference: { const: "stable", type: "string" },
+  },
+  additionalProperties: false,
+  properties: {
+    format: { enum: ["json", "yaml"], type: "string" },
+    quiet: { type: "boolean" },
+    reference: { $ref: "#/$defs/reference", type: "string" },
+  },
+  required: ["reference"],
+  type: "object",
+};
+const constrainedStandardSchema = {
+  "~standard": {
+    version: 1,
+    vendor: "installed-consumer",
+    validate(value: unknown) {
+      return { value };
+    },
+    jsonSchema: {
+      input: () => constrainedInputSchema,
+      output: () => constrainedInputSchema,
+    },
+  },
+};
+const constrainedCli = coreModule.defineCli()({
+  root: "installedFacts",
+  help: coreModule.helpCapability({
+    wording: {
+      choices: "候选 {choices}",
+      present: "字段 {field} 已出现",
+      equals: "字段 {field}={value}",
+      forbiddenCombination: "禁配事实：{facts}",
+    },
+  }),
+  output: coreModule.outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    installedFacts: {
+      kind: "rootCommand",
+      name: "installed-facts",
+      description: "安装消费事实",
+      fields: {
+        format: {
+          kind: "valueOption",
+          longOption: "--format",
+          description: "格式",
+        },
+        quiet: {
+          kind: "flag",
+          longOption: "--quiet",
+          description: "静默",
+        },
+        reference: {
+          kind: "valueOption",
+          longOption: "--reference",
+          description: "引用值",
+        },
+      },
+      input: constrainedStandardSchema,
+      usageConstraints: [
+        {
+          kind: "forbiddenCombination",
+          all: [
+            { kind: "equals", field: "format", value: "json" },
+            { kind: "present", field: "quiet" },
+          ],
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler() {},
+    },
+  },
+});
+
+assert.equal(constrainedCli.manifest.schemaVersion, "4");
+const projectedInput =
+  constrainedCli.manifest.commands.installedFacts.input.inputSchema;
+assert.equal(readProperty(projectedInput, "$id"), constrainedInputSchema.$id);
+assert.deepEqual(
+  readProperty(projectedInput, "$defs"),
+  constrainedInputSchema.$defs,
+);
+assert.equal(
+  readProperty(
+    readProperty(readProperty(projectedInput, "properties"), "reference"),
+    "$ref",
+  ),
+  "#/$defs/reference",
+);
+
+const validateBaseInput = new Ajv2020({ strict: false }).compile(
+  constrainedInputSchema,
+);
+const validateProjectedInput = new Ajv2020({ strict: false }).compile(
+  projectedInput,
+);
+const rawForbiddenInput = {
+  format: "json",
+  quiet: true,
+  reference: "stable",
+};
+assert.equal(validateBaseInput(rawForbiddenInput), true);
+assert.equal(validateProjectedInput(rawForbiddenInput), false);
+
+const allowedInvocation = coreModule.parseCliInvocation(constrainedCli, [
+  "--format",
+  "json",
+  "--reference",
+  "stable",
+]);
+assert.equal(allowedInvocation.kind, "parsed");
+assert.equal(validateProjectedInput(allowedInvocation.input), true);
+
+const forbiddenInvocation = coreModule.parseCliInvocation(constrainedCli, [
+  "--format",
+  "json",
+  "--quiet",
+  "--reference",
+  "stable",
+]);
+const expectedFacts = [
+  { kind: "equals", field: "format", value: "json" },
+  { kind: "present", field: "quiet" },
+];
+assert.equal(forbiddenInvocation.kind, "usageFailure");
+assert.deepEqual(forbiddenInvocation.issues, [
+  { code: "forbiddenCombinationViolation", facts: expectedFacts },
+]);
+
+const usageWrites: Array<Readonly<{ destination: string; chunk: string }>> = [];
+const usageTermination = await coreModule.executeCli(constrainedCli, {
+  invocation: forbiddenInvocation,
+  dependencies: undefined,
+  write(output: Readonly<{ destination: string; chunk: string }>) {
+    usageWrites.push(output);
+  },
+});
+assert.deepEqual(usageTermination, {
+  kind: "usageFailure",
+  command: "installedFacts",
+  issues: [{ code: "forbiddenCombinationViolation", facts: expectedFacts }],
+  exitCode: 64,
+});
+assert.equal(usageWrites.length, 1);
+const usageEnvelope: unknown = JSON.parse(usageWrites[0]!.chunk);
+assert.equal(readProperty(usageEnvelope, "schemaVersion"), "2");
+assert.deepEqual(readProperty(usageEnvelope, "issues"), [
+  { code: "forbiddenCombinationViolation", facts: expectedFacts },
+]);
+const validateUsageWire = new Ajv2020({ strict: false }).compile(
+  constrainedCli.manifest.usageFailure.wire,
+);
+assert.equal(validateUsageWire(usageEnvelope), true);
+
+const helpWrites: Array<Readonly<{ destination: string; chunk: string }>> = [];
+const helpTermination = await coreModule.executeCli(constrainedCli, {
+  invocation: coreModule.parseCliInvocation(constrainedCli, ["--help"]),
+  dependencies: undefined,
+  write(output: Readonly<{ destination: string; chunk: string }>) {
+    helpWrites.push(output);
+  },
+});
+assert.deepEqual(helpTermination, {
+  kind: "help",
+  command: "installedFacts",
+  exitCode: 0,
+});
+assert.equal(helpWrites.length, 1);
+assert.match(
+  helpWrites[0]!.chunk,
+  /禁配事实：字段 format="json", 字段 quiet 已出现/u,
+);

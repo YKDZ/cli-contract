@@ -147,7 +147,7 @@ void test("CLI 描述覆盖 Zod 的复制 schema、wire 与 help，且不进入�
     },
   });
   assert.deepEqual(writes, [
-    '{"schemaVersion":"1","command":"describe","kind":"data","variant":"found","data":{"value":"Ada"}}\n',
+    '{"schemaVersion":"2","command":"describe","kind":"data","variant":"found","data":{"value":"Ada"}}\n',
   ]);
   assert.deepEqual(termination, {
     kind: "applicationResult",
@@ -524,7 +524,7 @@ void test("stream record 描述覆盖 payload wire，且 frame 不重复描述",
     },
   });
   assert.deepEqual(writes, [
-    '{"schemaVersion":"1","command":"stream","kind":"stream"}\n',
+    '{"schemaVersion":"2","command":"stream","kind":"stream"}\n',
     '{"kind":"record","variant":"item","data":{"value":"one"}}\n',
     '{"kind":"streamSuccess"}\n',
   ]);

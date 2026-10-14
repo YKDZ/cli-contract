@@ -6,7 +6,9 @@ export const englishHelpWording = {
   default: "(default: {value})",
   requires: "{field} requires {requires}",
   exclusive: "exclusive {fields}",
-  forbiddenCombination: "forbidden {values}",
+  present: "{field} is present",
+  equals: "{field}={value}",
+  forbiddenCombination: "forbidden combination of {facts}",
 } as const;
 
 export function englishHelpCapability() {

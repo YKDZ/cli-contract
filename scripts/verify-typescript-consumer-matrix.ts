@@ -37,6 +37,7 @@ async function readFixtures(): Promise<Readonly<Record<string, string>>> {
         "exportable-contract.ts",
         "exportable-contract-reconsumer.ts",
         "invalid-forbidden-combination.ts",
+        "invalid-help-fact-templates.ts",
         "input-schema-raw-mismatch.ts",
         "named-variant-missing.ts",
         "schema-input.ts",
@@ -44,6 +45,7 @@ async function readFixtures(): Promise<Readonly<Record<string, string>>> {
         "stream-text-coverage.ts",
         "unknown-usage-constraint-field.ts",
         "unexpected-text-presenter.ts",
+        "valid-help-fact-templates.ts",
       ].map(async (name) => [
         name,
         await readFile(
@@ -139,6 +141,7 @@ async function verifyCoreOnly(
       "core-node.ts",
       "core-root.ts",
       "invalid-forbidden-combination.ts",
+      "invalid-help-fact-templates.ts",
       "input-schema-raw-mismatch.ts",
       "completion-missing.ts",
       "named-variant-missing.ts",
@@ -147,6 +150,7 @@ async function verifyCoreOnly(
       "stream-text-coverage.ts",
       "unknown-usage-constraint-field.ts",
       "unexpected-text-presenter.ts",
+      "valid-help-fact-templates.ts",
       "hierarchy-text-coverage.typecheck.ts",
     ]);
     runCommand(
@@ -170,6 +174,7 @@ async function verifyCoreOnly(
         "core-root.ts",
         "core-node.ts",
         "schema-input.ts",
+        "valid-help-fact-templates.ts",
       ]) {
         await compileFixture(project, resolution, fixture);
       }
@@ -295,19 +300,61 @@ const authoringDiagnosticCases = [
     fixture: "invalid-forbidden-combination.ts",
     expectedCodes: [
       "invalidUsageConstraintValue",
+      "invalidUsageConstraintValue",
       "inapplicableUsageConstraintField",
+      "contradictoryUsageConstraint",
+      "contradictoryUsageConstraint",
+      "unknownDefinitionProperty",
+      "unknownDefinitionProperty",
     ],
     required: [
       'command: "invalidValue"',
       'command: "invalidKind"',
+      'command: "invalidHierarchy"',
+      'command: "invalidContradiction"',
+      'command: "contradictoryHierarchy"',
+      'command: "invalidClosedConstraint"',
+      'command: "invalidClosedFact"',
       'constraint: "forbiddenCombination"',
-      'member: "values.value"',
-      'member: "values.field"',
+      'member: "all.value"',
+      'member: "all.field"',
       'field: "auth"',
+      'field: "mode"',
       'field: "target"',
       'actual: "yes"',
-      "expected: boolean",
-      'kind: "positional"',
+      'actual: "staging"',
+      "expected: true",
+      'kind: "repeatableOption"',
+      'member: "all"',
+      'fields: "mode"',
+      'property: "typo"',
+      'member: "forbiddenCombination"',
+    ],
+  },
+  {
+    fixture: "invalid-help-fact-templates.ts",
+    expectedCodes: [
+      "invalidHelpFactTemplate",
+      "invalidHelpFactTemplate",
+      "invalidHelpFactTemplate",
+      "invalidHelpFactTemplate",
+      "invalidHelpFactTemplate",
+      "invalidHelpFactTemplate",
+    ],
+    required: [
+      'slot: "commandPlaceholder"',
+      'received: "   "',
+      'reason: "empty"',
+      'received: "<命令组>"',
+      'reason: "placeholder"',
+      'slot: "choices"',
+      'received: "候选 {choises}"',
+      'slot: "present"',
+      'received: "字段"',
+      'slot: "equals"',
+      'received: "字段 {field}"',
+      'slot: "forbiddenCombination"',
+      'reason: "singleLine"',
     ],
   },
   {
@@ -412,7 +459,15 @@ async function verifyAuthoringDiagnostic(
     required.some((fragment) => !firstLevel.includes(fragment))
   ) {
     throw new Error(
-      `Published authoring diagnostic first level is incomplete for ${fixture}\n${firstLevel}\nFull diagnostics:\n${diagnostics}`,
+      [
+        `Published authoring diagnostic first level is incomplete for ${fixture}`,
+        `Expected codes: ${expectedCodes.join(", ")}`,
+        `Observed codes: ${firstLevelCodes.join(", ")}`,
+        `Missing first-level evidence: ${required
+          .filter((fragment) => !firstLevel.includes(fragment))
+          .join(", ")}`,
+        firstLevel,
+      ].join("\n"),
     );
   }
 }
@@ -436,19 +491,46 @@ function verifyAuthoringLanguageService(
     },
     {
       fixture: "invalid-forbidden-combination.ts",
-      count: 2,
+      count: 7,
       required: [
         "invalidUsageConstraintValue",
         "inapplicableUsageConstraintField",
         'command: "invalidValue"',
         'command: "invalidKind"',
-        'member: "values.value"',
-        'member: "values.field"',
+        'command: "invalidHierarchy"',
+        'command: "invalidContradiction"',
+        'command: "contradictoryHierarchy"',
+        'command: "invalidClosedConstraint"',
+        'command: "invalidClosedFact"',
+        'member: "all.value"',
+        'member: "all.field"',
         'field: "auth"',
+        'field: "mode"',
         'field: "target"',
         'actual: "yes"',
-        "expected: boolean",
-        'kind: "positional"',
+        'actual: "staging"',
+        "expected: true",
+        'kind: "repeatableOption"',
+        'member: "all"',
+        'fields: "mode"',
+        'property: "typo"',
+        'member: "forbiddenCombination"',
+      ],
+    },
+    {
+      fixture: "invalid-help-fact-templates.ts",
+      count: 6,
+      required: [
+        "invalidHelpFactTemplate",
+        'slot: "commandPlaceholder"',
+        'received: "   "',
+        'reason: "empty"',
+        'received: "<命令组>"',
+        'slot: "choices"',
+        'slot: "present"',
+        'slot: "equals"',
+        'slot: "forbiddenCombination"',
+        'reason: "singleLine"',
       ],
     },
     {
