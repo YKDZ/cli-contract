@@ -4,8 +4,6 @@ import { createRequire } from "node:module";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { ContractDefinitionError } from "@ykdz/cli-contract";
-
 const project = import.meta.dirname;
 const repository = process.env.CANDIDATE_REPOSITORY_ROOT;
 if (!repository) throw new Error("缺少仓库位置");
@@ -314,8 +312,14 @@ assert.throws(
       },
     }),
   (error: unknown) => {
-    assert.ok(error instanceof ContractDefinitionError);
-    assert.deepEqual(error.issues, [
+    if (
+      typeof error !== "object" ||
+      error === null ||
+      !(error instanceof coreModule.ContractDefinitionError)
+    ) {
+      return false;
+    }
+    assert.deepEqual(Reflect.get(error, "issues"), [
       {
         code: "schemaFieldDoesNotAcceptRawValue",
         command: "rawMismatch",
@@ -331,7 +335,7 @@ assert.throws(
       },
     ]);
     assert.match(
-      error.message,
+      String(Reflect.get(error, "message")),
       /命令 rawMismatch 的输入字段 count（commands\.rawMismatch\.input\.properties\.count）需要 raw string，实际输入模式属性为 \{"type":"number"\}/,
     );
     return true;
