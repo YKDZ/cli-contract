@@ -1,3 +1,4 @@
+/* oxlint-disable unicorn/no-thenable -- then 是 when 条件的公开分支名。 */
 import assert from "node:assert/strict";
 import { realpathSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -495,6 +496,7 @@ const constrainedInputSchema = {
   additionalProperties: false,
   properties: {
     format: { enum: ["json", "yaml"], type: "string" },
+    mode: { enum: ["live", "after"], type: "string" },
     quiet: { type: "boolean" },
     reference: { $ref: "#/$defs/reference", type: "string" },
   },
@@ -514,11 +516,14 @@ const constrainedStandardSchema = {
     },
   },
 };
+let constrainedHandlerExecutions = 0;
 const constrainedCli = coreModule.defineCli()({
   root: "installedFacts",
   help: coreModule.helpCapability({
     wording: {
       choices: "候选 {choices}",
+      whenThenOtherwise: "当全部满足 {facts} 时，{then}；否则，{otherwise}",
+      require: "必须提供 {fields}",
       present: "字段 {field} 已出现",
       equals: "字段 {field}={value}",
       forbiddenCombination: "禁配事实：{facts}",
@@ -537,6 +542,11 @@ const constrainedCli = coreModule.defineCli()({
           kind: "valueOption",
           longOption: "--format",
           description: "格式",
+        },
+        mode: {
+          kind: "valueOption",
+          longOption: "--mode",
+          description: "模式",
         },
         quiet: {
           kind: "flag",
@@ -557,6 +567,12 @@ const constrainedCli = coreModule.defineCli()({
           max: 1,
         },
         {
+          kind: "when",
+          all: [{ kind: "equals", field: "mode", value: "after" }],
+          then: { require: ["quiet"] },
+          otherwise: { require: ["format"] },
+        },
+        {
           kind: "forbiddenCombination",
           all: [
             { kind: "equals", field: "format", value: "json" },
@@ -566,7 +582,9 @@ const constrainedCli = coreModule.defineCli()({
       ],
       success: { kind: "completion" },
       failures: {},
-      handler() {},
+      handler() {
+        constrainedHandlerExecutions += 1;
+      },
     },
   },
 });
@@ -600,6 +618,11 @@ const invalidConstraintDefinition: unknown = {
           kind: "valueOption",
           longOption: "--format",
           description: "格式",
+        },
+        mode: {
+          kind: "valueOption",
+          longOption: "--mode",
+          description: "模式",
         },
         quiet: {
           kind: "flag",
@@ -684,7 +707,10 @@ assert.throws(
         command: "probe",
         index: 0,
         aspect: "members",
-        received: "forbiddenCombination",
+        received: 42,
+        member: "all",
+        path: ["commands", "probe", "usageConstraints", 0, "all", 1],
+        expected: "present 或 equals 字段事实对象",
       },
       {
         code: "unknownUsageConstraintField",
@@ -749,7 +775,10 @@ assert.throws(
         command: "probe",
         index: 5,
         aspect: "members",
-        received: "forbiddenCombination",
+        received: "equals",
+        member: "all",
+        path: ["commands", "probe", "usageConstraints", 5, "all", 0],
+        expected: "present{field} 或 equals{field,value}",
       },
     ]);
     return true;
@@ -819,6 +848,34 @@ assert.deepEqual(countOnlyInvocation.issues, [
     absentFields: [],
   },
 ]);
+const rawThenMissingQuiet = {
+  format: "json",
+  mode: "after",
+  reference: "stable",
+};
+const rawOtherwiseMissingFormat = { reference: "stable" };
+const rawThenAllowedInput = {
+  mode: "after",
+  quiet: true,
+  reference: "stable",
+};
+const rawOtherwiseAllowedInput = {
+  format: "yaml",
+  mode: "live",
+  reference: "stable",
+};
+for (const raw of [
+  rawThenMissingQuiet,
+  rawOtherwiseMissingFormat,
+  rawThenAllowedInput,
+  rawOtherwiseAllowedInput,
+]) {
+  assert.equal(validateBaseInput(raw), true);
+}
+assert.equal(validateProjectedInput(rawThenMissingQuiet), false);
+assert.equal(validateProjectedInput(rawOtherwiseMissingFormat), false);
+assert.equal(validateProjectedInput(rawThenAllowedInput), true);
+assert.equal(validateProjectedInput(rawOtherwiseAllowedInput), true);
 
 const allowedInvocation = coreModule.parseCliInvocation(constrainedCli, [
   "--format",
@@ -850,6 +907,82 @@ assert.deepEqual(forbiddenInvocation.issues, [
     absentFields: [],
   },
   { code: "forbiddenCombinationViolation", facts: expectedFacts },
+]);
+
+const thenViolation = coreModule.parseCliInvocation(constrainedCli, [
+  "--mode",
+  "after",
+  "--format",
+  "json",
+  "--reference",
+  "stable",
+]);
+const expectedThenIssue = {
+  code: "conditionalConstraintViolation",
+  branch: "then",
+  conditions: [
+    {
+      kind: "equals",
+      field: "mode",
+      expected: "after",
+      present: true,
+      actual: "after",
+    },
+  ],
+  missingRequiredFields: ["quiet"],
+  presentForbiddenFields: [],
+};
+assert.equal(thenViolation.kind, "usageFailure");
+assert.deepEqual(thenViolation.issues, [expectedThenIssue]);
+
+const otherwiseViolation = coreModule.parseCliInvocation(constrainedCli, [
+  "--reference",
+  "stable",
+]);
+const expectedOtherwiseIssue = {
+  code: "conditionalConstraintViolation",
+  branch: "otherwise",
+  conditions: [
+    {
+      kind: "equals",
+      field: "mode",
+      expected: "after",
+      present: false,
+    },
+  ],
+  missingRequiredFields: ["format"],
+  presentForbiddenFields: [],
+};
+assert.equal(otherwiseViolation.kind, "usageFailure");
+assert.deepEqual(otherwiseViolation.issues, [expectedOtherwiseIssue]);
+
+const outsideExpectedViolation = coreModule.parseCliInvocation(constrainedCli, [
+  "--mode",
+  "outside",
+  "--reference",
+  "stable",
+]);
+assert.equal(outsideExpectedViolation.kind, "usageFailure");
+assert.deepEqual(outsideExpectedViolation.issues, [
+  {
+    code: "invalidFieldChoice",
+    position: 1,
+    field: "mode",
+    value: "outside",
+    choices: ["live", "after"],
+  },
+  {
+    ...expectedOtherwiseIssue,
+    conditions: [
+      {
+        kind: "equals",
+        field: "mode",
+        expected: "after",
+        present: true,
+        actual: "outside",
+      },
+    ],
+  },
 ]);
 
 const usageWrites: Array<Readonly<{ destination: string; chunk: string }>> = [];
@@ -893,6 +1026,34 @@ const validateUsageWire = new Ajv2020({ strict: false }).compile(
 );
 assert.equal(validateUsageWire(usageEnvelope), true);
 
+const conditionalTermination = await coreModule.executeCli(constrainedCli, {
+  invocation: thenViolation,
+  dependencies: undefined,
+  write(output: Readonly<{ destination: string; chunk: string }>) {
+    usageWrites.push(output);
+  },
+});
+assert.deepEqual(conditionalTermination, {
+  kind: "usageFailure",
+  command: "installedFacts",
+  issues: [expectedThenIssue],
+  exitCode: 64,
+});
+assert.equal(usageWrites.length, 2);
+const conditionalEnvelope: unknown = JSON.parse(usageWrites[1]!.chunk);
+assert.deepEqual(readProperty(conditionalEnvelope, "issues"), [
+  expectedThenIssue,
+]);
+assert.equal(validateUsageWire(conditionalEnvelope), true);
+
+const conditionalCapture = await testingModule.runCliScenario({
+  cliContract: constrainedCli,
+  argv: ["--mode", "after", "--format", "json", "--reference", "stable"],
+  dependencies: undefined,
+});
+assert.deepEqual(conditionalCapture.termination, conditionalTermination);
+assert.equal(constrainedHandlerExecutions, 0);
+
 const helpWrites: Array<Readonly<{ destination: string; chunk: string }>> = [];
 const helpTermination = await coreModule.executeCli(constrainedCli, {
   invocation: coreModule.parseCliInvocation(constrainedCli, ["--help"]),
@@ -911,4 +1072,8 @@ assert.match(helpWrites[0]!.chunk, /字段数 format, quiet 至多 1 项/u);
 assert.match(
   helpWrites[0]!.chunk,
   /禁配事实：字段 format="json", 字段 quiet 已出现/u,
+);
+assert.match(
+  helpWrites[0]!.chunk,
+  /当全部满足 字段 mode="after" 时，必须提供 quiet；否则，必须提供 format/u,
 );

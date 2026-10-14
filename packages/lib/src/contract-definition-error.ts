@@ -25,12 +25,16 @@ export type ContractDefinitionIssue =
         | "commandPlaceholder"
         | "choices"
         | "default"
-        | "requires"
         | "forbiddenCombination"
         | "countExactly"
         | "countAtLeast"
         | "countAtMost"
         | "countBetween"
+        | "whenThen"
+        | "whenOtherwise"
+        | "whenThenOtherwise"
+        | "require"
+        | "forbid"
         | "present"
         | "equals";
     }>
@@ -310,7 +314,10 @@ export type ContractDefinitionIssue =
       readonly command: string;
       readonly index: number | null;
       readonly aspect: "collection" | "entry" | "kind" | "members";
-      readonly received: string | null;
+      readonly received: unknown;
+      readonly member?: string;
+      readonly path?: readonly (string | number)[];
+      readonly expected?: string;
     }>
   | Readonly<{
       readonly code: "invalidCountConstraint";
@@ -334,22 +341,30 @@ export type ContractDefinitionIssue =
   | Readonly<{
       readonly code: "unknownUsageConstraintField";
       readonly command: string;
-      readonly constraint: "requires" | "count" | "forbiddenCombination";
+      readonly constraint: "count" | "forbiddenCombination" | "when";
       readonly index: number;
-      readonly member: "field" | "requires" | "fields" | "all.field";
+      readonly member:
+        | "fields"
+        | "all.field"
+        | "then.require"
+        | "then.forbid"
+        | "otherwise.require"
+        | "otherwise.forbid";
       readonly field: string;
     }>
   | Readonly<{
       readonly code: "inapplicableUsageConstraintField";
       readonly command: string;
-      readonly constraint: "requires" | "forbiddenCombination";
+      readonly constraint: "forbiddenCombination" | "when";
+      readonly index?: number;
+      readonly member?: "all.field";
       readonly field: string;
       readonly kind: FieldKind;
     }>
   | Readonly<{
       readonly code: "invalidUsageConstraintValue";
       readonly command: string;
-      readonly constraint: "forbiddenCombination";
+      readonly constraint: "forbiddenCombination" | "when";
       readonly index: number;
       readonly member: "all.value";
       readonly field: string;
@@ -359,8 +374,9 @@ export type ContractDefinitionIssue =
   | Readonly<{
       readonly code: "contradictoryUsageConstraint";
       readonly command: string;
-      readonly constraint: "requires" | "forbiddenCombination";
-      readonly member?: "all";
+      readonly constraint: "forbiddenCombination" | "when";
+      readonly index?: number;
+      readonly member?: "all" | "then" | "otherwise";
       readonly fields: readonly string[];
     }>;
 
@@ -494,17 +510,17 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
     case "missingDataVariant":
       return `命令 ${issue.command} 必须声明至少一个 data 变体`;
     case "invalidUsageConstraint":
-      return `命令 ${issue.command} 的 usage constraint ${issue.received ?? "非字符串"} 无效`;
+      return `命令 ${issue.command} 的 usage constraint${issue.index === null ? "" : `[${issue.index}]`}${issue.member === undefined ? "" : ` ${issue.member}`} ${formatIssueValue(issue.received)} 无效${issue.expected === undefined ? "" : `，期望 ${issue.expected}`}${issue.path === undefined ? "" : `（${issue.path.join(".")}）`}`;
     case "invalidCountConstraint":
       return `命令 ${issue.command} 的 count ${issue.member} 无效（${issue.reason}）`;
     case "unknownUsageConstraintField":
       return `命令 ${issue.command} 的 usage constraint[${issue.index}] ${issue.constraint}.${issue.member} 引用了不存在字段 ${issue.field}`;
     case "inapplicableUsageConstraintField":
-      return `命令 ${issue.command} 的 ${issue.constraint} usage constraint 不适用于字段 ${issue.field}（${issue.kind}）`;
+      return `命令 ${issue.command} 的 ${issue.constraint} usage constraint${issue.member === undefined ? "" : ` ${issue.member}`} 不适用于字段 ${issue.field}（${issue.kind}）`;
     case "invalidUsageConstraintValue":
-      return `命令 ${issue.command} 的禁配事实 ${issue.field}=${formatIssueValue(issue.actual)} 不属于可接受值 ${JSON.stringify(issue.expected)}`;
+      return `命令 ${issue.command} 的 ${issue.constraint} 等值事实 ${issue.field}=${formatIssueValue(issue.actual)} 不属于可接受值 ${JSON.stringify(issue.expected)}`;
     case "contradictoryUsageConstraint":
-      return `命令 ${issue.command} 的 ${issue.constraint} usage constraint 内部矛盾：${issue.fields.join(", ")}`;
+      return `命令 ${issue.command} 的 ${issue.constraint} usage constraint${issue.member === undefined ? "" : ` ${issue.member}`} 内部矛盾：${issue.fields.join(", ")}`;
   }
 }
 

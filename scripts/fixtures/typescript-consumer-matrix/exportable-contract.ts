@@ -1,7 +1,9 @@
+/* oxlint-disable unicorn/no-thenable -- then 是 when 条件的公开分支名。 */
 import {
   defineCli,
   helpCapability,
   outputCapability,
+  type CliContract,
   type ContractSchema,
   type UsageConstraint,
 } from "@ykdz/cli-contract";
@@ -75,6 +77,12 @@ export const inspectCombination = define.command("inspect")({
       fields: ["query", "dryRun"],
       min: 1,
       max: 1,
+    },
+    {
+      kind: "when",
+      all: [{ kind: "equals", field: "query", value: "alpha" }],
+      then: { require: ["dryRun"] },
+      otherwise: { forbid: ["dryRun"] },
     },
     {
       kind: "forbiddenCombination",
@@ -198,3 +206,5 @@ export const cli = define({
     ...tailCombination,
   },
 });
+
+export const wideConditionalContract: CliContract = cli;

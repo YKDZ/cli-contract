@@ -1,3 +1,4 @@
+/* oxlint-disable unicorn/no-thenable -- then 是 when 条件的公开分支名。 */
 import {
   compileAtomicVariants,
   type RuntimeAtomicVariant,
@@ -148,8 +149,9 @@ const definitionPropertyKeys = {
     positional: ["kind", "description"],
   },
   usage: {
-    requires: ["kind", "field", "requires"],
     count: ["kind", "fields", "min", "max"],
+    when: ["kind", "all", "then", "otherwise"],
+    effect: ["require", "forbid"],
     forbiddenCombination: ["kind", "all"],
     fact: {
       present: ["kind", "field"],
@@ -199,8 +201,16 @@ export interface HelpFactWording {
   readonly choices?: string;
   /** 字段或输出格式的默认 JSON 值，必须包含 `{value}`。 */
   readonly default?: string;
-  /** 字段依赖关系，必须包含 `{field}` 与 `{requires}`。 */
-  readonly requires?: string;
+  /** 有效的成立分支，必须包含 `{facts}` 与 `{then}`。 */
+  readonly whenThen?: string;
+  /** 有效的不成立分支，必须包含 `{facts}` 与 `{otherwise}`。 */
+  readonly whenOtherwise?: string;
+  /** 两侧均有效的条件分支，必须包含 `{facts}`、`{then}` 与 `{otherwise}`。 */
+  readonly whenThenOtherwise?: string;
+  /** 效果中的必需字段组，必须包含 `{fields}`。 */
+  readonly require?: string;
+  /** 效果中的禁止字段组，必须包含 `{fields}`。 */
+  readonly forbid?: string;
   /** 字段出现事实，必须包含 `{field}`。 */
   readonly present?: string;
   /** 字段等值事实，必须包含 `{field}` 与 `{value}`。 */
@@ -222,7 +232,11 @@ export const helpTemplateSpecifications = {
   commandPlaceholder: { placeholders: [] },
   choices: { placeholders: ["choices"] },
   default: { placeholders: ["value"] },
-  requires: { placeholders: ["field", "requires"] },
+  whenThen: { placeholders: ["facts", "then"] },
+  whenOtherwise: { placeholders: ["facts", "otherwise"] },
+  whenThenOtherwise: { placeholders: ["facts", "then", "otherwise"] },
+  require: { placeholders: ["fields"] },
+  forbid: { placeholders: ["fields"] },
   present: { placeholders: ["field"] },
   equals: { placeholders: ["field", "value"] },
   forbiddenCombination: { placeholders: ["facts"] },
@@ -438,19 +452,14 @@ export type FieldDefinitions = Readonly<Record<string, FieldDefinition>>;
  * 禁配事实可检查输入字段的出现状态，以及单值 flag、value option、positional 的等值状态。
  * 动态声明在定义期检查可观察的模式候选值。依赖跨字段计算、时间或业务状态的规则仍由 handler 返回具名失败表达。
  */
+/** 由调用语法拥有、可同时投影到 parser 和 Draft 2020-12 的字段关系。 */
 export type UsageConstraint<
   Fields extends FieldDefinitions = FieldDefinitions,
   Input = unknown,
 > =
-  | RequiresUsageConstraint<Extract<keyof Fields, string>>
   | CountUsageConstraint<Fields>
+  | WhenUsageConstraint<Fields, Input>
   | ForbiddenCombinationUsageConstraint<Fields, Input>;
-
-export interface RequiresUsageConstraint<Field extends string = string> {
-  readonly kind: "requires";
-  readonly field: Field;
-  readonly requires: Field;
-}
 
 /**
  * 限制当前命令中 `fields` 所列 raw 输入字段的出现数量；字段组必须非空且无重复。
@@ -470,6 +479,15 @@ export interface CountUsageConstraint<
   ];
   readonly min?: number;
   readonly max?: number;
+}
+
+/**
+ * 条件分支只描述 raw 输入 facts 全部成立或未全部成立时的效果；空效果不增加限制，
+ * 但整条规则至少需要一个非空分支。字段不会被赋值或补入默认值。
+ */
+export interface UsageConstraintEffect<Field extends string = string> {
+  readonly require?: readonly Field[];
+  readonly forbid?: readonly Field[];
 }
 
 /** 表示一个输入字段在 raw argv 解析结果中出现。 */
@@ -550,6 +568,22 @@ export interface ForbiddenCombinationUsageConstraint<
     UsageFact<Fields, Input>,
     ...UsageFact<Fields, Input>[],
   ];
+}
+
+/**
+ * 平面 facts 合取选择成立或不成立分支。观察与效果都依据模式验证、默认和转换前的 raw input。
+ */
+export interface WhenUsageConstraint<
+  Fields extends FieldDefinitions = FieldDefinitions,
+  Input = unknown,
+> {
+  readonly kind: "when";
+  readonly all: readonly [
+    UsageFact<Fields, Input>,
+    ...UsageFact<Fields, Input>[],
+  ];
+  readonly then?: UsageConstraintEffect<Extract<keyof Fields, string>>;
+  readonly otherwise?: UsageConstraintEffect<Extract<keyof Fields, string>>;
 }
 
 export type ValueOptionDefinitions = Readonly<
@@ -704,12 +738,46 @@ type ClosedFieldDefinitions<Fields> = Readonly<{
   >;
 }>;
 
+type ClosedUsageFact<Fact> =
+  Fact extends Readonly<{ readonly kind: "present" }>
+    ? RejectUnknownProperties<
+        Fact,
+        (typeof definitionPropertyKeys.usage.fact.present)[number]
+      >
+    : Fact extends Readonly<{ readonly kind: "equals" }>
+      ? RejectUnknownProperties<
+          Fact,
+          (typeof definitionPropertyKeys.usage.fact.equals)[number]
+        >
+      : unknown;
+
+type ClosedUsageFacts<Facts extends readonly unknown[]> = {
+  readonly [Index in keyof Facts]: ClosedUsageFact<Facts[Index]>;
+};
+
+type ClosedUsageEffect<Effect> = Effect extends object
+  ? RejectUnknownProperties<
+      Effect,
+      (typeof definitionPropertyKeys.usage.effect)[number]
+    >
+  : Effect;
+
 type ClosedUsageConstraint<Constraint> =
-  Constraint extends Readonly<{ readonly kind: "requires" }>
+  Constraint extends Readonly<{
+    readonly kind: "when";
+    readonly all: infer Facts extends readonly unknown[];
+  }>
     ? RejectUnknownProperties<
         Constraint,
-        (typeof definitionPropertyKeys.usage.requires)[number]
-      >
+        (typeof definitionPropertyKeys.usage.when)[number]
+      > &
+        Readonly<{ readonly all: ClosedUsageFacts<Facts> }> &
+        (Constraint extends Readonly<{ readonly then?: infer Then }>
+          ? Readonly<{ readonly then?: ClosedUsageEffect<Then> }>
+          : unknown) &
+        (Constraint extends Readonly<{ readonly otherwise?: infer Otherwise }>
+          ? Readonly<{ readonly otherwise?: ClosedUsageEffect<Otherwise> }>
+          : unknown)
     : Constraint extends Readonly<{ readonly kind: "count" }>
       ? RejectUnknownProperties<
           Constraint,
@@ -1674,6 +1742,25 @@ type HierarchyUsageConstraints<Node> =
     ? Exclude<Constraints, undefined>
     : never;
 
+type ConditionalUsageConstraints<Constraints> =
+  Constraints extends readonly (infer Constraint)[]
+    ? Extract<Constraint, Readonly<{ readonly kind: "when" }>>
+    : never;
+
+type UsageConstraintFactsForNode<Node> = ConditionalUsageConstraints<
+  HierarchyUsageConstraints<Node>
+>;
+
+type HierarchyUsageConstraintFacts<Commands> = Readonly<{
+  [Command in keyof Commands]: UsageConstraintFactsForNode<Commands[Command]>;
+}>;
+
+type RootUsageConstraintFacts<Root extends string, Commands> = Readonly<{
+  [Command in Root]: RootNodeFromCommands<Root, Commands> extends infer Node
+    ? UsageConstraintFactsForNode<Node>
+    : never;
+}>;
+
 type UsageConstraintFactFields<Facts> = Facts extends readonly (infer Fact)[]
   ? Fact extends Readonly<{ readonly field: infer Field extends string }>
     ? Field
@@ -1730,6 +1817,7 @@ type InvalidUsageFactForFields<
   Fact,
   Fields extends FieldDefinitions,
   Input,
+  Constraint extends "when" | "forbiddenCombination" = "forbiddenCombination",
 > =
   Fact extends Readonly<{
     readonly kind: "present";
@@ -1741,7 +1829,7 @@ type InvalidUsageFactForFields<
           "unknownUsageConstraintField",
           Readonly<{
             readonly command: Command;
-            readonly constraint: "forbiddenCombination";
+            readonly constraint: Constraint;
             readonly member: "all.field";
             readonly field: Exclude<Field, keyof Fields>;
           }>
@@ -1758,7 +1846,7 @@ type InvalidUsageFactForFields<
                 "inapplicableUsageConstraintField",
                 Readonly<{
                   readonly command: Command;
-                  readonly constraint: "forbiddenCombination";
+                  readonly constraint: Constraint;
                   readonly member: "all.field";
                   readonly field: Field;
                   readonly kind: Fields[Field]["kind"];
@@ -1770,7 +1858,7 @@ type InvalidUsageFactForFields<
                   "invalidUsageConstraintValue",
                   Readonly<{
                     readonly command: Command;
-                    readonly constraint: "forbiddenCombination";
+                    readonly constraint: Constraint;
                     readonly member: "all.value";
                     readonly field: Field;
                     readonly actual: Actual;
@@ -1782,7 +1870,7 @@ type InvalidUsageFactForFields<
             "unknownUsageConstraintField",
             Readonly<{
               readonly command: Command;
-              readonly constraint: "forbiddenCombination";
+              readonly constraint: Constraint;
               readonly member: "all.field";
               readonly field: Exclude<Field, keyof Fields>;
             }>
@@ -1791,7 +1879,7 @@ type InvalidUsageFactForFields<
           "invalidUsageConstraint",
           Readonly<{
             readonly command: Command;
-            readonly constraint: "forbiddenCombination";
+            readonly constraint: Constraint;
             readonly member: "all";
           }>
         >;
@@ -1808,6 +1896,21 @@ type InvalidForbiddenCombinationFacts<
   : Facts extends readonly []
     ? never
     : InvalidUsageFactForFields<Command, Facts[number], Fields, Input>;
+
+type InvalidWhenFacts<
+  Command extends string,
+  Facts extends readonly unknown[],
+  Fields extends FieldDefinitions,
+  Input,
+> = Facts extends readonly [infer Fact, ...infer Remaining]
+  ? [InvalidUsageFactForFields<Command, Fact, Fields, Input, "when">] extends [
+      never,
+    ]
+    ? InvalidWhenFacts<Command, Remaining, Fields, Input>
+    : InvalidUsageFactForFields<Command, Fact, Fields, Input, "when">
+  : Facts extends readonly []
+    ? never
+    : InvalidUsageFactForFields<Command, Facts[number], Fields, Input, "when">;
 
 type UnknownUsageFactProperty<Fact> =
   Fact extends Readonly<{
@@ -1865,36 +1968,102 @@ type InvalidForbiddenCombinationShape<
           }>
         >);
 
-type InvalidClosedUsageConstraintProperties<
+type UnknownWhenEffectProperty<Effect> = Effect extends object
+  ? Exclude<keyof Effect, (typeof definitionPropertyKeys.usage.effect)[number]>
+  : never;
+
+type UnknownWhenConstraintProperty<Constraint> = Constraint extends object
+  ? Exclude<
+      keyof Constraint,
+      (typeof definitionPropertyKeys.usage.when)[number]
+    >
+  : never;
+
+type InvalidWhenEffectProperties<
   Command extends string,
-  Constraint,
-> =
-  Constraint extends Readonly<{
-    readonly kind: "forbiddenCombination";
-    readonly all: infer Facts;
-  }>
-    ? InvalidForbiddenCombinationShape<Command, Constraint, Facts>
-    : Constraint extends Readonly<{ readonly kind: "count" }>
-      ? [
-          Exclude<
-            keyof Constraint,
-            (typeof definitionPropertyKeys.usage.count)[number]
-          >,
-        ] extends [never]
+  Branch,
+  Effect,
+> = Effect extends object
+  ? [UnknownWhenEffectProperty<Effect>] extends [never]
+    ? never
+    : ContractTypeError<
+        "unknownDefinitionProperty",
+        Readonly<{
+          readonly command: Command;
+          readonly constraint: "when";
+          readonly member: Branch;
+          readonly property: UnknownWhenEffectProperty<Effect>;
+        }>
+      >
+  : never;
+
+type InvalidWhenProperties<Command extends string, Constraint, Facts> =
+  | ([UnknownWhenConstraintProperty<Constraint>] extends [never]
+      ? never
+      : ContractTypeError<
+          "unknownDefinitionProperty",
+          Readonly<{
+            readonly command: Command;
+            readonly constraint: "when";
+            readonly member: "when";
+            readonly property: UnknownWhenConstraintProperty<Constraint>;
+          }>
+        >)
+  | (Facts extends readonly unknown[]
+      ? [UnknownUsageFactProperties<Facts>] extends [never]
         ? never
         : ContractTypeError<
             "unknownDefinitionProperty",
             Readonly<{
               readonly command: Command;
-              readonly constraint: "count";
-              readonly member: "count";
-              readonly property: Exclude<
-                keyof Constraint,
-                (typeof definitionPropertyKeys.usage.count)[number]
-              >;
+              readonly constraint: "when";
+              readonly member: "all";
+              readonly property: UnknownUsageFactProperties<Facts>;
             }>
           >
-      : never;
+      : never)
+  | (Constraint extends Readonly<{ readonly then?: infer Then }>
+      ? InvalidWhenEffectProperties<Command, "then", Then>
+      : never)
+  | (Constraint extends Readonly<{ readonly otherwise?: infer Otherwise }>
+      ? InvalidWhenEffectProperties<Command, "otherwise", Otherwise>
+      : never);
+
+type InvalidClosedUsageConstraintProperties<
+  Command extends string,
+  Constraint,
+> =
+  Constraint extends Readonly<{
+    readonly kind: "when";
+    readonly all: infer Facts;
+  }>
+    ? InvalidWhenProperties<Command, Constraint, Facts>
+    : Constraint extends Readonly<{
+          readonly kind: "forbiddenCombination";
+          readonly all: infer Facts;
+        }>
+      ? InvalidForbiddenCombinationShape<Command, Constraint, Facts>
+      : Constraint extends Readonly<{ readonly kind: "count" }>
+        ? [
+            Exclude<
+              keyof Constraint,
+              (typeof definitionPropertyKeys.usage.count)[number]
+            >,
+          ] extends [never]
+          ? never
+          : ContractTypeError<
+              "unknownDefinitionProperty",
+              Readonly<{
+                readonly command: Command;
+                readonly constraint: "count";
+                readonly member: "count";
+                readonly property: Exclude<
+                  keyof Constraint,
+                  (typeof definitionPropertyKeys.usage.count)[number]
+                >;
+              }>
+            >
+        : never;
 
 type CountDigit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";
 
@@ -2312,6 +2481,167 @@ type InvalidCountConstraintForFields<
         }>
       >;
 
+type UsageEffectFields<Effect, Member extends "require" | "forbid"> =
+  Effect extends Readonly<Record<Member, readonly unknown[]>>
+    ? StaticallyKnownCountTupleFields<
+        Extract<Effect[Member], readonly unknown[]>
+      >
+    : never;
+
+type UsageEffectFieldArrays<
+  Effect,
+  Member extends "require" | "forbid",
+> = Effect extends object
+  ? Member extends keyof Effect
+    ? {} extends Pick<Effect, Member>
+      ? never
+      : Extract<Effect[Member], readonly unknown[]>
+    : never
+  : never;
+
+type StaticallyGuaranteedUsageTupleFields<Fields extends readonly unknown[]> =
+  Fields extends readonly [infer Field, ...infer Remaining]
+    ? string extends Field
+      ? StaticallyGuaranteedUsageTupleFields<Remaining>
+      : IsUnion<Field> extends true
+        ? StaticallyGuaranteedUsageTupleFields<Remaining>
+        : Field extends string
+          ? Field | StaticallyGuaranteedUsageTupleFields<Remaining>
+          : StaticallyGuaranteedUsageTupleFields<Remaining>
+    : never;
+
+type UsageArrayBranchesMissingGuaranteedField<
+  Arrays,
+  Field extends string,
+> = Arrays extends readonly unknown[]
+  ? Field extends StaticallyGuaranteedUsageTupleFields<Arrays>
+    ? never
+    : Arrays
+  : never;
+
+type GuaranteedUsageFieldsAcrossArrays<Arrays> =
+  StaticallyKnownCountTupleFields<
+    Extract<Arrays, readonly unknown[]>
+  > extends infer Candidate
+    ? Candidate extends string
+      ? [UsageArrayBranchesMissingGuaranteedField<Arrays, Candidate>] extends [
+          never,
+        ]
+        ? Candidate
+        : never
+      : never
+    : never;
+
+type GuaranteedUsageEffectFields<
+  Effect,
+  Member extends "require" | "forbid",
+> = GuaranteedUsageFieldsAcrossArrays<UsageEffectFieldArrays<Effect, Member>>;
+
+type UnknownUsageEffectFields<
+  Command extends string,
+  Branch extends "then" | "otherwise",
+  Member extends "require" | "forbid",
+  Effect,
+  Fields extends FieldDefinitions,
+> =
+  UsageEffectFields<Effect, Member> extends infer Field extends string
+    ? string extends Field
+      ? never
+      : Exclude<Field, keyof Fields> extends never
+        ? never
+        : ContractTypeError<
+            "unknownUsageConstraintField",
+            Readonly<{
+              readonly command: Command;
+              readonly constraint: "when";
+              readonly member: `${Branch}.${Member}`;
+              readonly field: Exclude<Field, keyof Fields>;
+            }>
+          >
+    : never;
+
+type DefinitelyEmptyUsageEffectMember<
+  Effect,
+  Member extends "require" | "forbid",
+> = Effect extends undefined
+  ? true
+  : Effect extends object
+    ? Member extends keyof Effect
+      ? [Exclude<Effect[Member], undefined>] extends [never]
+        ? true
+        : Exclude<Effect[Member], undefined> extends readonly []
+          ? true
+          : false
+      : true
+    : true;
+
+type DefinitelyEmptyUsageEffect<Effect> =
+  DefinitelyEmptyUsageEffectMember<Effect, "require"> extends true
+    ? DefinitelyEmptyUsageEffectMember<Effect, "forbid"> extends true
+      ? true
+      : false
+    : false;
+
+type ContradictoryUsageEffectFields<Effect> = Effect extends unknown
+  ? Extract<
+      GuaranteedUsageEffectFields<Effect, "require">,
+      GuaranteedUsageEffectFields<Effect, "forbid">
+    >
+  : never;
+
+type InvalidUsageEffectForFields<
+  Command extends string,
+  Branch extends "then" | "otherwise",
+  Effect,
+  Fields extends FieldDefinitions,
+> =
+  | UnknownUsageEffectFields<Command, Branch, "require", Effect, Fields>
+  | UnknownUsageEffectFields<Command, Branch, "forbid", Effect, Fields>
+  | ([ContradictoryUsageEffectFields<Effect>] extends [never]
+      ? never
+      : ContractTypeError<
+          "contradictoryUsageConstraint",
+          Readonly<{
+            readonly command: Command;
+            readonly constraint: "when";
+            readonly member: Branch;
+            readonly fields: ContradictoryUsageEffectFields<Effect>;
+          }>
+        >);
+
+type WhenEffectForConstraint<
+  Constraint,
+  Branch extends "then" | "otherwise",
+> = Constraint extends object
+  ? Branch extends keyof Constraint
+    ? Exclude<Constraint[Branch], undefined>
+    : undefined
+  : undefined;
+
+type InvalidWhenHasNoEffects<
+  Command extends string,
+  Constraint,
+> = Constraint extends unknown
+  ? [
+      DefinitelyEmptyUsageEffect<WhenEffectForConstraint<Constraint, "then">>,
+    ] extends [true]
+    ? [
+        DefinitelyEmptyUsageEffect<
+          WhenEffectForConstraint<Constraint, "otherwise">
+        >,
+      ] extends [true]
+      ? ContractTypeError<
+          "invalidUsageConstraint",
+          Readonly<{
+            readonly command: Command;
+            readonly constraint: "when";
+            readonly member: "effects";
+          }>
+        >
+      : never
+    : never
+  : never;
+
 type InvalidUsageConstraintForFields<
   Command extends string,
   Constraint,
@@ -2319,31 +2649,102 @@ type InvalidUsageConstraintForFields<
   Input,
 > =
   Constraint extends Readonly<{
-    readonly kind: "requires";
-    readonly field: infer Field extends string;
-    readonly requires: infer Required extends string;
+    readonly kind: "when";
+    readonly all: infer Facts extends readonly unknown[];
   }>
-    ? Exclude<Field, keyof Fields> extends never
-      ? Exclude<Required, keyof Fields> extends never
-        ? never
-        : ContractTypeError<
-            "unknownUsageConstraintField",
+    ? [InvalidWhenProperties<Command, Constraint, Facts>] extends [never]
+      ? Facts extends readonly []
+        ? ContractTypeError<
+            "invalidUsageConstraint",
             Readonly<{
               readonly command: Command;
-              readonly constraint: "requires";
-              readonly member: "requires";
-              readonly field: Exclude<Required, keyof Fields>;
+              readonly constraint: "when";
+              readonly member: "all";
             }>
           >
-      : ContractTypeError<
-          "unknownUsageConstraintField",
-          Readonly<{
-            readonly command: Command;
-            readonly constraint: "requires";
-            readonly member: "field";
-            readonly field: Exclude<Field, keyof Fields>;
-          }>
-        >
+        : [InvalidWhenFacts<Command, Facts, Fields, Input>] extends [never]
+          ? Exclude<
+              UsageConstraintFactFields<Facts>,
+              keyof Fields
+            > extends never
+            ? [ContradictoryUsageFactFields<Facts>] extends [never]
+              ? [
+                  InvalidUsageEffectForFields<
+                    Command,
+                    "then",
+                    Constraint extends Readonly<{ readonly then?: infer Then }>
+                      ? Then
+                      : undefined,
+                    Fields
+                  >,
+                ] extends [never]
+                ? [
+                    InvalidUsageEffectForFields<
+                      Command,
+                      "otherwise",
+                      Constraint extends Readonly<{
+                        readonly otherwise?: infer Otherwise;
+                      }>
+                        ? Otherwise
+                        : undefined,
+                      Fields
+                    >,
+                  ] extends [never]
+                  ? [InvalidWhenHasNoEffects<Command, Constraint>] extends [
+                      never,
+                    ]
+                    ? Constraint extends WhenUsageConstraint<Fields, Input>
+                      ? never
+                      : ContractTypeError<
+                          "invalidUsageConstraint",
+                          Readonly<{
+                            readonly command: Command;
+                            readonly constraint: "when";
+                            readonly member: "when";
+                          }>
+                        >
+                    : InvalidWhenHasNoEffects<Command, Constraint>
+                  : InvalidUsageEffectForFields<
+                      Command,
+                      "otherwise",
+                      Constraint extends Readonly<{
+                        readonly otherwise?: infer Otherwise;
+                      }>
+                        ? Otherwise
+                        : undefined,
+                      Fields
+                    >
+                : InvalidUsageEffectForFields<
+                    Command,
+                    "then",
+                    Constraint extends Readonly<{ readonly then?: infer Then }>
+                      ? Then
+                      : undefined,
+                    Fields
+                  >
+              : ContractTypeError<
+                  "contradictoryUsageConstraint",
+                  Readonly<{
+                    readonly command: Command;
+                    readonly constraint: "when";
+                    readonly member: "all";
+                    readonly fields: ContradictoryUsageFactFields<Facts>;
+                  }>
+                >
+            : ContractTypeError<
+                "unknownUsageConstraintField",
+                Readonly<{
+                  readonly command: Command;
+                  readonly constraint: "when";
+                  readonly member: "all.field";
+                  readonly field: Exclude<
+                    UsageConstraintFactFields<Facts>,
+                    keyof Fields
+                  >;
+                }>
+              >
+          : InvalidWhenFacts<Command, Facts, Fields, Input>
+      : InvalidWhenProperties<Command, Constraint, Facts>
     : Constraint extends Readonly<{ readonly kind: "count" }>
       ? InvalidCountConstraintForFields<Command, Constraint, Fields>
       : Constraint extends Readonly<{
@@ -2740,8 +3141,8 @@ export interface ExecutableCommandManifest extends Omit<
 }
 
 export type UsageConstraintGrammar =
-  | RequiresUsageConstraint
   | CountUsageConstraintGrammar
+  | WhenUsageConstraint
   | ForbiddenCombinationUsageConstraint;
 
 /** 已校验并补全默认端点的数量约束。 */
@@ -2901,6 +3302,7 @@ export interface CliContract<
   Result extends OutcomeFact = OutcomeFact,
   RootKind extends CliRootKind = CliRootKind,
   Commands = never,
+  UsageFacts = Readonly<Record<string, unknown>>,
 > {
   readonly grammar: [Commands] extends [never]
     ? CliGrammar<Root, RootKind>
@@ -2914,8 +3316,18 @@ export interface CliContract<
     readonly result: Result;
     readonly root: Root;
     readonly commands: [Commands] extends [never] ? Root : keyof Commands;
+    readonly usageFacts: UsageFacts;
   }>;
 }
+
+export type CliContractUsageFacts<Contract> =
+  Contract extends Readonly<{
+    readonly [cliContractType]: Readonly<{
+      readonly usageFacts: infer UsageFacts;
+    }>;
+  }>
+    ? UsageFacts
+    : never;
 
 export type CliContractDependencies<Contract> =
   Contract extends CliContract<
@@ -3482,14 +3894,17 @@ export interface DefineCli<Dependencies> {
         HierarchyRawInput<Commands>,
         HierarchyResult<Commands>,
         "rootGroup",
-        Commands
+        Commands,
+        HierarchyUsageConstraintFacts<Commands>
       >
     : CliContract<
         Root,
         Dependencies,
         RootCommandRawInput<Root, Commands>,
         RootCommandResult<Root, Commands>,
-        "rootCommand"
+        "rootCommand",
+        never,
+        RootUsageConstraintFacts<Root, Commands>
       >;
 }
 /* oxlint-enable typescript/no-unnecessary-type-parameters */
@@ -4164,10 +4579,39 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
     for (const constraint of usageConstraints) {
       if (constraint.kind === "count") {
         requiredUsageTemplates.add(countHelpFactForConstraint(constraint).slot);
-      } else {
-        requiredUsageTemplates.add(constraint.kind);
+      }
+      if (constraint.kind === "when") {
+        const hasThen =
+          (constraint.then?.require?.length ?? 0) > 0 ||
+          (constraint.then?.forbid?.length ?? 0) > 0;
+        const hasOtherwise =
+          (constraint.otherwise?.require?.length ?? 0) > 0 ||
+          (constraint.otherwise?.forbid?.length ?? 0) > 0;
+        if (hasThen && hasOtherwise) {
+          requiredUsageTemplates.add("whenThenOtherwise");
+        } else if (hasThen) {
+          requiredUsageTemplates.add("whenThen");
+        } else {
+          requiredUsageTemplates.add("whenOtherwise");
+        }
+        for (const fact of constraint.all) {
+          requiredUsageTemplates.add(fact.kind);
+        }
+        if (
+          (constraint.then?.require?.length ?? 0) > 0 ||
+          (constraint.otherwise?.require?.length ?? 0) > 0
+        ) {
+          requiredUsageTemplates.add("require");
+        }
+        if (
+          (constraint.then?.forbid?.length ?? 0) > 0 ||
+          (constraint.otherwise?.forbid?.length ?? 0) > 0
+        ) {
+          requiredUsageTemplates.add("forbid");
+        }
       }
       if (constraint.kind === "forbiddenCombination") {
+        requiredUsageTemplates.add("forbiddenCombination");
         for (const fact of constraint.all)
           requiredUsageTemplates.add(fact.kind);
       }
@@ -4434,8 +4878,8 @@ function collectUnknownDefinitionProperties(
         const constraintPath = [...path, "usageConstraints", String(index)];
         if (!isPlainRecord(constraint)) return;
         const allowed =
-          constraint.kind === "requires"
-            ? definitionPropertyKeys.usage.requires
+          constraint.kind === "when"
+            ? definitionPropertyKeys.usage.when
             : constraint.kind === "count"
               ? definitionPropertyKeys.usage.count
               : constraint.kind === "forbiddenCombination"
@@ -4444,7 +4888,8 @@ function collectUnknownDefinitionProperties(
         if (allowed === undefined) return;
         collectUnknownProperties(constraint, constraintPath, allowed, issues);
         if (
-          constraint.kind === "forbiddenCombination" &&
+          (constraint.kind === "forbiddenCombination" ||
+            constraint.kind === "when") &&
           Array.isArray(constraint.all)
         ) {
           constraint.all.forEach((fact, factIndex) => {
@@ -4464,6 +4909,18 @@ function collectUnknownDefinitionProperties(
               );
             }
           });
+        }
+        if (constraint.kind === "when") {
+          for (const branch of ["then", "otherwise"] as const) {
+            const effect = constraint[branch];
+            if (!isPlainRecord(effect)) continue;
+            collectUnknownProperties(
+              effect,
+              [...constraintPath, branch],
+              definitionPropertyKeys.usage.effect,
+              issues,
+            );
+          }
         }
       });
     }
@@ -4851,8 +5308,8 @@ function compileUsageConstraints(
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 定义条目已通过非 null 对象检查，此处读取动态属性。
     const candidate = definition as Readonly<Record<string, unknown>>;
     if (
-      candidate.kind !== "requires" &&
       candidate.kind !== "count" &&
+      candidate.kind !== "when" &&
       candidate.kind !== "forbiddenCombination"
     ) {
       issues.push({
@@ -4875,290 +5332,74 @@ function compileUsageConstraints(
       if (compiledCount !== undefined) compiled.push(compiledCount);
       continue;
     }
-    if (candidate.kind === "requires") {
-      if (
-        typeof candidate.field !== "string" ||
-        typeof candidate.requires !== "string"
-      ) {
+    if (candidate.kind === "when") {
+      const facts = compileUsageFacts(
+        candidate.all,
+        "when",
+        index,
+        command,
+        fieldsByKey,
+        issues,
+      );
+      const then = compileUsageEffect(
+        candidate.then,
+        "then",
+        index,
+        command,
+        fieldsByKey,
+        issues,
+      );
+      const otherwise = compileUsageEffect(
+        candidate.otherwise,
+        "otherwise",
+        index,
+        command,
+        fieldsByKey,
+        issues,
+      );
+      const hasEffect = then.hasEffect || otherwise.hasEffect;
+      if (then.valid && otherwise.valid && !hasEffect) {
         issues.push({
           code: "invalidUsageConstraint",
           command,
           index,
           aspect: "members",
-          received: "requires",
+          received: "when",
+          member: "effects",
+          path: ["commands", command, "usageConstraints", index],
+          expected: "至少一个分支包含非空 require 或 forbid 字段组",
         });
-        continue;
       }
-      const field = fieldsByKey.get(candidate.field);
-      const required = fieldsByKey.get(candidate.requires);
-      if (field === undefined)
-        issues.push({
-          code: "unknownUsageConstraintField",
-          command,
-          constraint: "requires",
-          index,
-          member: "field",
-          field: candidate.field,
-        });
-      if (required === undefined)
-        issues.push({
-          code: "unknownUsageConstraintField",
-          command,
-          constraint: "requires",
-          index,
-          member: "requires",
-          field: candidate.requires,
-        });
-      if (field !== undefined && required !== undefined) {
-        if (!isOptionalOption(field) || !isOptionalOption(required)) {
-          for (const offendingField of [field, required])
-            if (!isOptionalOption(offendingField))
-              issues.push({
-                code: "inapplicableUsageConstraintField",
-                command,
-                constraint: "requires",
-                field: offendingField.key,
-                kind: offendingField.kind,
-              });
-        }
-        if (field.key === required.key)
-          issues.push({
-            code: "contradictoryUsageConstraint",
-            command,
-            constraint: "requires",
-            fields: Object.freeze([field.key]),
-          });
+      if (facts.valid && then.valid && otherwise.valid && hasEffect) {
         compiled.push(
           deepFreeze({
-            kind: "requires" as const,
-            field: field.key,
-            requires: required.key,
+            kind: "when" as const,
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- compileUsageFacts仅在all非空且所有事实合法时返回valid。
+            all: facts.facts as [UsageFact, ...UsageFact[]],
+            ...(then.effect === undefined ? {} : { then: then.effect }),
+            ...(otherwise.effect === undefined
+              ? {}
+              : { otherwise: otherwise.effect }),
           }),
         );
       }
       continue;
     }
     if (candidate.kind === "forbiddenCombination") {
-      if (!Array.isArray(candidate.all) || candidate.all.length < 1) {
-        issues.push({
-          code: "invalidUsageConstraint",
-          command,
-          index,
-          aspect: "members",
-          received: "forbiddenCombination",
-        });
-        continue;
-      }
-      const facts: UsageFact[] = [];
-      const factsForValidation: (
-        | UsageFact
-        | Readonly<{
-            readonly kind: "invalidEqualsValue";
-            readonly field: string;
-            readonly value: unknown;
-          }>
-      )[] = [];
-      let malformedFact = false;
-      for (const candidateFact of candidate.all) {
-        if (!isPlainRecord(candidateFact)) {
-          malformedFact = true;
-          continue;
-        }
-        if (
-          candidateFact.kind === "present" &&
-          typeof candidateFact.field === "string"
-        ) {
-          const fact = { kind: "present", field: candidateFact.field } as const;
-          facts.push(fact);
-          factsForValidation.push(fact);
-          continue;
-        }
-        if (
-          candidateFact.kind === "equals" &&
-          typeof candidateFact.field === "string" &&
-          Object.hasOwn(candidateFact, "value")
-        ) {
-          if (
-            typeof candidateFact.value === "boolean" ||
-            typeof candidateFact.value === "string"
-          ) {
-            const fact = {
-              kind: "equals",
-              field: candidateFact.field,
-              value: candidateFact.value,
-            } as const;
-            facts.push(fact);
-            factsForValidation.push(fact);
-          } else {
-            factsForValidation.push({
-              kind: "invalidEqualsValue",
-              field: candidateFact.field,
-              value: candidateFact.value,
-            });
-          }
-          continue;
-        }
-        malformedFact = true;
-      }
-      if (malformedFact) {
-        issues.push({
-          code: "invalidUsageConstraint",
-          command,
-          index,
-          aspect: "members",
-          received: "forbiddenCombination",
-        });
-      }
-      let invalidFactCount = 0;
-      for (const fact of factsForValidation) {
-        if (fact.kind === "invalidEqualsValue") {
-          const field = fieldsByKey.get(fact.field);
-          if (field === undefined) {
-            invalidFactCount += 1;
-            issues.push({
-              code: "unknownUsageConstraintField",
-              command,
-              constraint: "forbiddenCombination",
-              index,
-              member: "all.field",
-              field: fact.field,
-            });
-            continue;
-          }
-          if (
-            field.kind !== "flag" &&
-            field.kind !== "valueOption" &&
-            field.kind !== "positional"
-          ) {
-            invalidFactCount += 1;
-            issues.push({
-              code: "inapplicableUsageConstraintField",
-              command,
-              constraint: "forbiddenCombination",
-              field: field.key,
-              kind: field.kind,
-            });
-            continue;
-          }
-          invalidFactCount += 1;
-          const expected =
-            field.kind === "flag"
-              ? field.negatedLongOption === undefined
-                ? true
-                : "boolean"
-              : field.choices === undefined
-                ? "string"
-                : Object.freeze([...field.choices]);
-          issues.push({
-            code: "invalidUsageConstraintValue",
-            command,
-            constraint: "forbiddenCombination",
-            index,
-            member: "all.value",
-            field: field.key,
-            actual: fact.value,
-            expected,
-          });
-          continue;
-        }
-        const field = fieldsByKey.get(fact.field);
-        if (field === undefined) {
-          invalidFactCount += 1;
-          issues.push({
-            code: "unknownUsageConstraintField",
-            command,
-            constraint: "forbiddenCombination",
-            index,
-            member: "all.field",
-            field: fact.field,
-          });
-          continue;
-        }
-        if (
-          fact.kind === "equals" &&
-          field.kind !== "flag" &&
-          field.kind !== "valueOption" &&
-          field.kind !== "positional"
-        ) {
-          invalidFactCount += 1;
-          issues.push({
-            code: "inapplicableUsageConstraintField",
-            command,
-            constraint: "forbiddenCombination",
-            field: field.key,
-            kind: field.kind,
-          });
-          continue;
-        }
-        if (fact.kind !== "equals") continue;
-        const expectedKind = field.kind === "flag" ? "boolean" : "string";
-        const hasExpectedType =
-          expectedKind === "boolean"
-            ? typeof fact.value === "boolean"
-            : typeof fact.value === "string";
-        const onlyTrue =
-          field.kind === "flag" &&
-          field.negatedLongOption === undefined &&
-          fact.value !== true;
-        const outsideChoices =
-          typeof fact.value === "string" &&
-          field.choices !== undefined &&
-          !field.choices.includes(fact.value);
-        if (!hasExpectedType || onlyTrue || outsideChoices) {
-          invalidFactCount += 1;
-          issues.push({
-            code: "invalidUsageConstraintValue",
-            command,
-            constraint: "forbiddenCombination",
-            index,
-            member: "all.value",
-            field: field.key,
-            actual: fact.value,
-            expected:
-              outsideChoices && field.choices !== undefined
-                ? Object.freeze([...field.choices])
-                : onlyTrue
-                  ? true
-                  : expectedKind === "boolean"
-                    ? "boolean"
-                    : "string",
-          });
-        }
-      }
-      const conflictingFields = new Set<string>();
-      for (const [factIndex, fact] of facts.entries()) {
-        if (fact.kind !== "equals") continue;
-        if (
-          facts.some(
-            (other, otherIndex) =>
-              otherIndex !== factIndex &&
-              other.kind === "equals" &&
-              other.field === fact.field &&
-              other.value !== fact.value,
-          )
-        ) {
-          conflictingFields.add(fact.field);
-        }
-      }
-      if (conflictingFields.size > 0)
-        issues.push({
-          code: "contradictoryUsageConstraint",
-          command,
-          constraint: "forbiddenCombination",
-          member: "all",
-          fields: Object.freeze([...conflictingFields]),
-        });
-      if (
-        invalidFactCount === 0 &&
-        !malformedFact &&
-        conflictingFields.size === 0 &&
-        facts.length === candidate.all.length
-      )
+      const facts = compileUsageFacts(
+        candidate.all,
+        "forbiddenCombination",
+        index,
+        command,
+        fieldsByKey,
+        issues,
+      );
+      if (facts.valid)
         compiled.push(
           deepFreeze({
             kind: "forbiddenCombination" as const,
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 源 all 至少一项，且映射长度相等才进入此分支。
-            all: Object.freeze(facts) as [UsageFact, ...UsageFact[]],
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- compileUsageFacts仅在all非空且所有事实合法时返回valid。
+            all: facts.facts as [UsageFact, ...UsageFact[]],
           }),
         );
       continue;
@@ -5174,12 +5415,373 @@ function compileUsageConstraints(
   return deepFreeze(compiled);
 }
 
-function isOptionalOption(field: FieldGrammar): boolean {
-  return (
-    !field.required &&
-    field.kind !== "positional" &&
-    field.kind !== "variadicPositional"
+interface CompiledUsageFacts {
+  readonly facts: readonly UsageFact[];
+  readonly valid: boolean;
+}
+
+interface CompiledUsageEffect {
+  readonly effect?: UsageConstraintEffect;
+  readonly valid: boolean;
+  readonly hasEffect: boolean;
+}
+
+type UsageFactForValidation =
+  | UsageFact
+  | Readonly<{
+      readonly kind: "invalidEqualsValue";
+      readonly field: string;
+      readonly value: unknown;
+    }>;
+
+function compileUsageFacts(
+  definitions: unknown,
+  constraint: "when" | "forbiddenCombination",
+  index: number,
+  command: string,
+  fieldsByKey: ReadonlyMap<string, FieldGrammar>,
+  issues: ContractDefinitionIssue[],
+): CompiledUsageFacts {
+  if (!Array.isArray(definitions) || definitions.length === 0) {
+    issues.push({
+      code: "invalidUsageConstraint",
+      command,
+      index,
+      aspect: "members",
+      received: constraint,
+      member: "all",
+      path: ["commands", command, "usageConstraints", index, "all"],
+      expected: "非空字段事实数组",
+    });
+    return { facts: [], valid: false };
+  }
+
+  const facts: UsageFact[] = [];
+  const factsForValidation: UsageFactForValidation[] = [];
+  let valid = true;
+  for (const [factIndex, candidateFact] of definitions.entries()) {
+    const path = [
+      "commands",
+      command,
+      "usageConstraints",
+      index,
+      "all",
+      factIndex,
+    ];
+    if (!isPlainRecord(candidateFact)) {
+      valid = false;
+      issues.push({
+        code: "invalidUsageConstraint",
+        command,
+        index,
+        aspect: "members",
+        received: candidateFact,
+        member: "all",
+        path,
+        expected: "present 或 equals 字段事实对象",
+      });
+      continue;
+    }
+    if (
+      candidateFact.kind === "present" &&
+      typeof candidateFact.field === "string"
+    ) {
+      const fact = { kind: "present", field: candidateFact.field } as const;
+      facts.push(fact);
+      factsForValidation.push(fact);
+      continue;
+    }
+    if (
+      candidateFact.kind === "equals" &&
+      typeof candidateFact.field === "string" &&
+      Object.hasOwn(candidateFact, "value")
+    ) {
+      if (
+        typeof candidateFact.value === "boolean" ||
+        typeof candidateFact.value === "string"
+      ) {
+        const fact = {
+          kind: "equals",
+          field: candidateFact.field,
+          value: candidateFact.value,
+        } as const;
+        facts.push(fact);
+        factsForValidation.push(fact);
+      } else {
+        factsForValidation.push({
+          kind: "invalidEqualsValue",
+          field: candidateFact.field,
+          value: candidateFact.value,
+        });
+      }
+      continue;
+    }
+    valid = false;
+    issues.push({
+      code: "invalidUsageConstraint",
+      command,
+      index,
+      aspect: "members",
+      received: candidateFact.kind,
+      member: "all",
+      path,
+      expected: "present{field} 或 equals{field,value}",
+    });
+  }
+
+  let invalidFactCount = 0;
+  for (const fact of factsForValidation) {
+    if (fact.kind === "invalidEqualsValue") {
+      const field = fieldsByKey.get(fact.field);
+      if (field === undefined) {
+        invalidFactCount += 1;
+        issues.push({
+          code: "unknownUsageConstraintField",
+          command,
+          constraint,
+          index,
+          member: "all.field",
+          field: fact.field,
+        });
+        continue;
+      }
+      if (
+        field.kind !== "flag" &&
+        field.kind !== "valueOption" &&
+        field.kind !== "positional"
+      ) {
+        invalidFactCount += 1;
+        issues.push({
+          code: "inapplicableUsageConstraintField",
+          command,
+          constraint,
+          index,
+          member: "all.field",
+          field: field.key,
+          kind: field.kind,
+        });
+        continue;
+      }
+      invalidFactCount += 1;
+      const expected =
+        field.kind === "flag"
+          ? field.negatedLongOption === undefined
+            ? true
+            : "boolean"
+          : field.choices === undefined
+            ? "string"
+            : Object.freeze([...field.choices]);
+      issues.push({
+        code: "invalidUsageConstraintValue",
+        command,
+        constraint,
+        index,
+        member: "all.value",
+        field: field.key,
+        actual: fact.value,
+        expected,
+      });
+      continue;
+    }
+
+    const field = fieldsByKey.get(fact.field);
+    if (field === undefined) {
+      invalidFactCount += 1;
+      issues.push({
+        code: "unknownUsageConstraintField",
+        command,
+        constraint,
+        index,
+        member: "all.field",
+        field: fact.field,
+      });
+      continue;
+    }
+    if (
+      fact.kind === "equals" &&
+      field.kind !== "flag" &&
+      field.kind !== "valueOption" &&
+      field.kind !== "positional"
+    ) {
+      invalidFactCount += 1;
+      issues.push({
+        code: "inapplicableUsageConstraintField",
+        command,
+        constraint,
+        index,
+        member: "all.field",
+        field: field.key,
+        kind: field.kind,
+      });
+      continue;
+    }
+    if (fact.kind !== "equals") continue;
+
+    const expectedKind = field.kind === "flag" ? "boolean" : "string";
+    const hasExpectedType =
+      expectedKind === "boolean"
+        ? typeof fact.value === "boolean"
+        : typeof fact.value === "string";
+    const onlyTrue =
+      field.kind === "flag" &&
+      field.negatedLongOption === undefined &&
+      fact.value !== true;
+    const outsideChoices =
+      typeof fact.value === "string" &&
+      field.choices !== undefined &&
+      !field.choices.includes(fact.value);
+    if (!hasExpectedType || onlyTrue || outsideChoices) {
+      invalidFactCount += 1;
+      issues.push({
+        code: "invalidUsageConstraintValue",
+        command,
+        constraint,
+        index,
+        member: "all.value",
+        field: field.key,
+        actual: fact.value,
+        expected:
+          outsideChoices && field.choices !== undefined
+            ? Object.freeze([...field.choices])
+            : onlyTrue
+              ? true
+              : expectedKind === "boolean"
+                ? "boolean"
+                : "string",
+      });
+    }
+  }
+
+  const conflictingFields = new Set<string>();
+  for (const [factIndex, fact] of facts.entries()) {
+    if (fact.kind !== "equals") continue;
+    if (
+      facts.some(
+        (other, otherIndex) =>
+          otherIndex !== factIndex &&
+          other.kind === "equals" &&
+          other.field === fact.field &&
+          other.value !== fact.value,
+      )
+    ) {
+      conflictingFields.add(fact.field);
+    }
+  }
+  if (conflictingFields.size > 0) {
+    issues.push({
+      code: "contradictoryUsageConstraint",
+      command,
+      constraint,
+      index,
+      member: "all",
+      fields: Object.freeze([...conflictingFields]),
+    });
+  }
+  valid &&=
+    invalidFactCount === 0 &&
+    conflictingFields.size === 0 &&
+    facts.length === definitions.length;
+  return { facts: deepFreeze(facts), valid };
+}
+
+function compileUsageEffect(
+  definition: unknown,
+  branch: "then" | "otherwise",
+  index: number,
+  command: string,
+  fieldsByKey: ReadonlyMap<string, FieldGrammar>,
+  issues: ContractDefinitionIssue[],
+): CompiledUsageEffect {
+  if (definition === undefined) return { valid: true, hasEffect: false };
+  const path = ["commands", command, "usageConstraints", index, branch];
+  if (!isPlainRecord(definition)) {
+    issues.push({
+      code: "invalidUsageConstraint",
+      command,
+      index,
+      aspect: "members",
+      received: definition,
+      member: branch,
+      path,
+      expected: "只包含 require 和 forbid 字段数组的效果对象",
+    });
+    return { valid: false, hasEffect: false };
+  }
+
+  let valid = true;
+  let hasEffect = false;
+  const compiled: { require?: string[]; forbid?: string[] } = {};
+  for (const member of ["require", "forbid"] as const) {
+    if (!Object.hasOwn(definition, member)) continue;
+    const values = definition[member];
+    if (!Array.isArray(values)) {
+      valid = false;
+      issues.push({
+        code: "invalidUsageConstraint",
+        command,
+        index,
+        aspect: "members",
+        received: values,
+        member: `${branch}.${member}`,
+        path: [...path, member],
+        expected: "字段名称数组",
+      });
+      continue;
+    }
+    if (values.length > 0) hasEffect = true;
+    const compiledFields: string[] = [];
+    for (const [fieldIndex, field] of values.entries()) {
+      if (typeof field !== "string") {
+        valid = false;
+        issues.push({
+          code: "invalidUsageConstraint",
+          command,
+          index,
+          aspect: "members",
+          received: field,
+          member: `${branch}.${member}`,
+          path: [...path, member, fieldIndex],
+          expected: "字段名称字符串",
+        });
+        continue;
+      }
+      if (!fieldsByKey.has(field)) {
+        valid = false;
+        issues.push({
+          code: "unknownUsageConstraintField",
+          command,
+          constraint: "when",
+          index,
+          member: `${branch}.${member}`,
+          field,
+        });
+        continue;
+      }
+      compiledFields.push(field);
+    }
+    compiled[member] = compiledFields;
+  }
+
+  const forbidden = new Set(compiled.forbid ?? []);
+  const conflictingFields = [...new Set(compiled.require ?? [])].filter(
+    (field) => forbidden.has(field),
   );
+  if (conflictingFields.length > 0) {
+    valid = false;
+    issues.push({
+      code: "contradictoryUsageConstraint",
+      command,
+      constraint: "when",
+      index,
+      member: branch,
+      fields: Object.freeze(conflictingFields),
+    });
+  }
+  return {
+    effect: deepFreeze(compiled),
+    valid,
+    hasEffect,
+  };
 }
 
 function compileCountUsageConstraint(
@@ -5417,16 +6019,6 @@ function projectUsageConstraints(
     : {};
   let countConstraintIndex = 0;
   for (const constraint of projectedConstraints) {
-    if (constraint.kind === "requires") {
-      constraintSchemas.push(
-        Object.fromEntries([
-          ["if", { required: [constraint.field] }],
-          // oxlint-disable-next-line unicorn/no-thenable -- Draft 2020-12 固定关键字。
-          ["then", { required: [constraint.requires] }],
-        ]),
-      );
-      continue;
-    }
     if (constraint.kind === "count") {
       constraintSchemas.push(
         projectCountConstraint(
@@ -5436,6 +6028,36 @@ function projectUsageConstraints(
         ),
       );
       countConstraintIndex += 1;
+      continue;
+    }
+    if (constraint.kind === "when") {
+      const condition = {
+        allOf: constraint.all.map((fact) =>
+          fact.kind === "present"
+            ? { required: [fact.field] }
+            : {
+                properties: { [fact.field]: { const: fact.value } },
+                required: [fact.field],
+              },
+        ),
+      };
+      const effects: Record<string, JsonValue> = {};
+      const then = constraint.then;
+      if (
+        then !== undefined &&
+        ((then.require?.length ?? 0) > 0 || (then.forbid?.length ?? 0) > 0)
+      ) {
+        effects.then = usageEffectSchema(then);
+      }
+      const otherwise = constraint.otherwise;
+      if (
+        otherwise !== undefined &&
+        ((otherwise.require?.length ?? 0) > 0 ||
+          (otherwise.forbid?.length ?? 0) > 0)
+      ) {
+        effects.else = usageEffectSchema(otherwise);
+      }
+      constraintSchemas.push({ if: condition, ...effects });
       continue;
     }
     constraintSchemas.push({
@@ -5538,6 +6160,26 @@ function countStateDefinitionName(
   present: number,
 ): string {
   return `${prefix}_state_${position}_${present}`;
+}
+
+function usageEffectSchema(effect: UsageConstraintEffect): JsonObject {
+  const required = effect.require ?? [];
+  const forbidden = effect.forbid ?? [];
+  const hasRepeatedRequiredField = new Set(required).size < required.length;
+  return {
+    ...(required.length === 0
+      ? {}
+      : hasRepeatedRequiredField
+        ? { allOf: required.map((field) => ({ required: [field] })) }
+        : { required: [...required] }),
+    ...(forbidden.length === 0
+      ? {}
+      : {
+          not: {
+            anyOf: forbidden.map((field) => ({ required: [field] })),
+          },
+        }),
+  };
 }
 
 function compileFailures(
