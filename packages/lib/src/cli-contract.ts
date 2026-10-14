@@ -2199,13 +2199,22 @@ type CountRangeOrderIssue<
     : never
   : never;
 
+type StaticallyKnownCountTupleFields<Fields extends readonly unknown[]> =
+  Fields extends readonly [infer Field, ...infer Remaining]
+    ? string extends Field
+      ? StaticallyKnownCountTupleFields<Remaining>
+      : Field | StaticallyKnownCountTupleFields<Remaining>
+    : never;
+
 type CountUnknownFieldIssue<
   Command extends string,
   Fields extends FieldDefinitions,
   CountFields extends readonly unknown[],
-> = string extends CountFields[number]
-  ? never
-  : Exclude<CountFields[number], keyof Fields> extends infer UnknownField
+> =
+  Exclude<
+    StaticallyKnownCountTupleFields<CountFields>,
+    keyof Fields
+  > extends infer UnknownField
     ? [UnknownField] extends [never]
       ? never
       : ContractTypeError<

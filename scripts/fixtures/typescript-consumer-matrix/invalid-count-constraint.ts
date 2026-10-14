@@ -16,6 +16,11 @@ const countHelp = helpCapability({
 });
 const dynamicCountFields: readonly ["auth" | "quiet", ...("auth" | "quiet")[]] =
   ["auth", "quiet"];
+declare const missingFixedCountFields: readonly ["missing", string];
+declare const missingRestCountFields: readonly ["missing", ...string[]];
+declare const broadCountFields: string[];
+declare const broadCountTuple: readonly [string, string];
+declare const unionCountTuple: readonly ["auth" | "quiet", "auth" | "quiet"];
 
 const invalidChild = define.command("deploy")({
   kind: "command",
@@ -244,6 +249,100 @@ defineCli()({
           fields: ["auth", "quiet"],
           min: -1,
         },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+defineCli()({
+  root: "rootMissingCountField",
+  help: countHelp,
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    rootMissingCountField: {
+      kind: "rootCommand",
+      name: "根缺失字段",
+      description: "根命令中的混合数量字段组",
+      fields: {
+        auth: { kind: "flag", longOption: "--auth", description: "认证" },
+      },
+      input: z.object({ auth: z.boolean().optional() }),
+      usageConstraints: [
+        {
+          kind: "count",
+          fields: missingFixedCountFields,
+          min: 0,
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+const invalidMixedCountChild = define.command("missingCountChild")({
+  kind: "command",
+  parent: "workspace",
+  name: "子命令缺失字段",
+  description: "组合展开中的混合数量字段组",
+  fields: {
+    auth: { kind: "flag", longOption: "--auth", description: "认证" },
+  },
+  input: z.object({ auth: z.boolean().optional() }),
+  usageConstraints: [
+    {
+      kind: "count",
+      fields: missingRestCountFields,
+      min: 0,
+    },
+  ],
+  success: { kind: "completion" },
+  failures: {},
+  handler: ({ outcome }) => outcome.completion(),
+});
+
+define({
+  root: "workspace",
+  help: countHelp,
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    workspace: {
+      kind: "rootGroup",
+      name: "工作区",
+      description: "工作区",
+    },
+    ...invalidMixedCountChild,
+  },
+});
+
+defineCli()({
+  root: "validBroadCounts",
+  help: countHelp,
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    validBroadCounts: {
+      kind: "rootCommand",
+      name: "宽泛数量字段组",
+      description: "仍合法的宽泛字段组",
+      fields: {
+        auth: { kind: "flag", longOption: "--auth", description: "认证" },
+        quiet: { kind: "flag", longOption: "--quiet", description: "静默" },
+      },
+      input: z.object({
+        auth: z.boolean().optional(),
+        quiet: z.boolean().optional(),
+      }),
+      usageConstraints: [
+        { kind: "count", fields: broadCountFields, min: 0, max: 1 },
+        { kind: "count", fields: broadCountTuple, min: 0, max: 2 },
+        { kind: "count", fields: unionCountTuple, min: 0, max: 2 },
       ],
       success: { kind: "completion" },
       failures: {},
