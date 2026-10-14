@@ -45,6 +45,17 @@ const emptyInput = schema<EmptyCliInput, EmptyCliInput>();
 const inspectInput = schema<InspectInput, InspectInput>();
 const payload = schema<Payload, Payload>();
 
+const nonEmptyTextLines: readonly [string, ...string[]] = ["已知非空", ""];
+void text.lines(nonEmptyTextLines);
+
+const emptyTextLines: [] = [];
+// @ts-expect-error 空元组不能满足至少一行的公开声明。
+void text.lines(emptyTextLines);
+
+const dynamicTextLines: string[] = ["运行时才确定是否有行"];
+// @ts-expect-error 普通数组没有保留至少一行的静态事实。
+void text.lines(dynamicTextLines);
+
 const complete = define.command("complete")({
   kind: "command",
   parent: "consumer",
