@@ -34,6 +34,8 @@ async function readFixtures(): Promise<Readonly<Record<string, string>>> {
         "completion-missing.ts",
         "core-node.ts",
         "core-root.ts",
+        "exportable-contract.ts",
+        "exportable-contract-reconsumer.ts",
         "invalid-forbidden-combination.ts",
         "input-schema-raw-mismatch.ts",
         "named-variant-missing.ts",
@@ -163,6 +165,7 @@ async function verifyCoreOnly(
     );
 
     for (const resolution of resolutions) {
+      await verifyExportableDeclarations(project, resolution, fixtures);
       for (const fixture of [
         "core-root.ts",
         "core-node.ts",
@@ -651,6 +654,39 @@ async function verifyCoreAndTesting(
   }
 }
 
+async function verifyExportableDeclarations(
+  project: string,
+  resolution: (typeof resolutions)[number],
+  fixtures: Readonly<Record<string, string>>,
+): Promise<void> {
+  const producerFixture = "exportable-contract.ts";
+  const consumerFixture = "exportable-contract-reconsumer.ts";
+  const consumerSource = fixtures[consumerFixture];
+  if (consumerSource === undefined)
+    throw new Error("Missing exportable declaration consumer fixture");
+  await writeFixtures(project, fixtures, [producerFixture]);
+  await writeFile(
+    resolve(project, consumerFixture),
+    consumerSource.replaceAll(
+      "__DECLARATION_IMPORT__",
+      `./.declarations-${resolution}/exportable-contract.js`,
+    ),
+  );
+
+  const producerConfig = `tsconfig.${resolution}.exportable-contract.json`;
+  await writeFile(
+    resolve(project, producerConfig),
+    `${JSON.stringify(declarationTsconfigFor(resolution, producerFixture))}\n`,
+  );
+  runCommand(
+    resolve(project, "node_modules/.bin/tsc"),
+    ["--project", producerConfig, "--pretty", "false"],
+    project,
+  );
+
+  await compileFixture(project, resolution, consumerFixture);
+}
+
 async function writeFixtures(
   project: string,
   fixtures: Readonly<Record<string, string>>,
@@ -787,6 +823,26 @@ function tsconfigFor(
       module: resolution === "nodenext" ? "NodeNext" : "ESNext",
       moduleResolution: resolution === "nodenext" ? "NodeNext" : "Bundler",
       noEmit: true,
+      skipLibCheck: false,
+      strict: true,
+      target: "ES2023",
+      types: [],
+    },
+    files: [fixture],
+  };
+}
+
+function declarationTsconfigFor(
+  resolution: (typeof resolutions)[number],
+  fixture: string,
+): Readonly<Record<string, unknown>> {
+  return {
+    compilerOptions: {
+      module: resolution === "nodenext" ? "NodeNext" : "ESNext",
+      moduleResolution: resolution === "nodenext" ? "NodeNext" : "Bundler",
+      declaration: true,
+      emitDeclarationOnly: true,
+      outDir: `.declarations-${resolution}`,
       skipLibCheck: false,
       strict: true,
       target: "ES2023",

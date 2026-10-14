@@ -96,7 +96,6 @@ export type {
 } from "#/outcome-fact";
 
 const cliContractType = Symbol("CliContract.type");
-const executableCommandType = Symbol("ExecutableCommand.type");
 const helpCapabilities = new WeakSet<object>();
 const outputCapabilities = new WeakSet<object>();
 const versionCapabilities = new WeakSet<object>();
@@ -649,7 +648,7 @@ type ClosedSuccessDefinition<Success> =
 
 type ClosedCommandDefinition<Definition> = RejectUnknownProperties<
   Definition,
-  (typeof definitionPropertyKeys.command)[number] | typeof executableCommandType
+  (typeof definitionPropertyKeys.command)[number]
 > &
   (Definition extends Readonly<{ readonly success: infer Success }>
     ? Readonly<{ readonly success: ClosedSuccessDefinition<Success> }>
@@ -1184,13 +1183,26 @@ export interface CommandGroupDefinition<Parent extends string = string> {
   readonly handler?: never;
 }
 
-type HierarchyCommandFacts<Parent extends string = string> = Readonly<{
-  readonly kind: "command";
-  readonly parent: Parent;
-  readonly aliases?: readonly string[];
-  readonly helpSupplement?: TextLines;
-  readonly [executableCommandType]: true;
-}>;
+type HierarchyCommandFactsDefinition<Parent extends string = string> =
+  Readonly<{
+    readonly kind: "command";
+    readonly parent: Parent;
+    readonly aliases?: readonly string[];
+    readonly helpSupplement?: TextLines;
+  }>;
+
+type HierarchyCommandFacts<Parent extends string = string> =
+  HierarchyCommandFactsDefinition<Parent> & CommandCombinationBrand;
+
+export declare abstract class CommandCombinationBrand {
+  private readonly commandCombinationBrand: void;
+}
+
+export type CommandCombination<
+  Command extends string,
+  Definition extends object,
+  Parent extends string = string,
+> = Readonly<Record<Command, Definition & HierarchyCommandFacts<Parent>>>;
 
 export type ExecutableCommandDefinition<
   Command extends string = string,
@@ -2555,7 +2567,7 @@ export interface DefineCli<Dependencies> {
 /* oxlint-enable typescript/no-unnecessary-type-parameters */
 
 type HierarchyCommandInput<Definition> = Omit<Definition, "kind"> &
-  Omit<HierarchyCommandFacts, typeof executableCommandType>;
+  HierarchyCommandFactsDefinition;
 
 type HierarchyCompletionCommandDefinition<
   Command extends string,
@@ -2696,8 +2708,8 @@ export interface DefineCommand<Command extends string, Dependencies> {
         ActualFailureDefinitions<Failures>,
         Kind
       >["commands"][Command] &
-      Omit<HierarchyCommandFacts<Parent>, typeof executableCommandType>,
-  ): Readonly<Record<Command, Definition & HierarchyCommandFacts<Parent>>>;
+      HierarchyCommandFactsDefinition<Parent>,
+  ): CommandCombination<Command, Definition, Parent>;
 
   <
     const Definition extends object,
@@ -2720,23 +2732,21 @@ export interface DefineCommand<Command extends string, Dependencies> {
         readonly parent: Parent;
         readonly usageConstraints?: Constraints & readonly UsageConstraint[];
       }>,
-  ): Readonly<
-    Record<
-      Command,
-      Definition &
-        Omit<
-          HierarchyCompletionCommandDefinition<
-            Command,
-            Dependencies,
-            Failures,
-            Readonly<Record<never, never>>,
-            ContractSchema<EmptyCliInput>
-          >,
-          "kind" | "success" | "failures"
-        > &
-        UsageConstraintProperty<Constraints> &
-        HierarchyCommandFacts<Parent>
-    >
+  ): CommandCombination<
+    Command,
+    Definition &
+      Omit<
+        HierarchyCompletionCommandDefinition<
+          Command,
+          Dependencies,
+          Failures,
+          Readonly<Record<never, never>>,
+          ContractSchema<EmptyCliInput>
+        >,
+        "kind" | "success" | "failures"
+      > &
+      UsageConstraintProperty<Constraints>,
+    Parent
   >;
 
   <
@@ -2763,23 +2773,21 @@ export interface DefineCommand<Command extends string, Dependencies> {
         readonly parent: Parent;
         readonly usageConstraints?: Constraints & readonly UsageConstraint[];
       }>,
-  ): Readonly<
-    Record<
-      Command,
-      Definition &
-        Omit<
-          HierarchyCompletionCommandDefinition<
-            Command,
-            Dependencies,
-            Failures,
-            Fields,
-            InputSchema
-          >,
-          "kind" | "success" | "failures"
-        > &
-        UsageConstraintProperty<Constraints> &
-        HierarchyCommandFacts<Parent>
-    >
+  ): CommandCombination<
+    Command,
+    Definition &
+      Omit<
+        HierarchyCompletionCommandDefinition<
+          Command,
+          Dependencies,
+          Failures,
+          Fields,
+          InputSchema
+        >,
+        "kind" | "success" | "failures"
+      > &
+      UsageConstraintProperty<Constraints>,
+    Parent
   >;
 
   <
@@ -2807,24 +2815,22 @@ export interface DefineCommand<Command extends string, Dependencies> {
         readonly parent: Parent;
         readonly usageConstraints?: Constraints & readonly UsageConstraint[];
       }>,
-  ): Readonly<
-    Record<
-      Command,
-      Definition &
-        Omit<
-          HierarchyDataCommandDefinition<
-            Command,
-            Dependencies,
-            Fields,
-            InputSchema,
-            Variants,
-            Failures
-          >,
-          "kind" | "success" | "failures"
-        > &
-        UsageConstraintProperty<Constraints> &
-        HierarchyCommandFacts<Parent>
-    >
+  ): CommandCombination<
+    Command,
+    Definition &
+      Omit<
+        HierarchyDataCommandDefinition<
+          Command,
+          Dependencies,
+          Fields,
+          InputSchema,
+          Variants,
+          Failures
+        >,
+        "kind" | "success" | "failures"
+      > &
+      UsageConstraintProperty<Constraints>,
+    Parent
   >;
 
   <
@@ -2852,24 +2858,22 @@ export interface DefineCommand<Command extends string, Dependencies> {
         readonly parent: Parent;
         readonly usageConstraints?: Constraints & readonly UsageConstraint[];
       }>,
-  ): Readonly<
-    Record<
-      Command,
-      Definition &
-        Omit<
-          HierarchyStreamCommandDefinition<
-            Command,
-            Dependencies,
-            Fields,
-            InputSchema,
-            Records,
-            Failures
-          >,
-          "kind" | "success" | "failures"
-        > &
-        UsageConstraintProperty<Constraints> &
-        HierarchyCommandFacts<Parent>
-    >
+  ): CommandCombination<
+    Command,
+    Definition &
+      Omit<
+        HierarchyStreamCommandDefinition<
+          Command,
+          Dependencies,
+          Fields,
+          InputSchema,
+          Records,
+          Failures
+        >,
+        "kind" | "success" | "failures"
+      > &
+      UsageConstraintProperty<Constraints>,
+    Parent
   >;
 }
 /* oxlint-enable typescript/no-unnecessary-type-parameters */
@@ -3282,7 +3286,6 @@ export function defineCli<Dependencies = undefined>(): DefineCli<Dependencies> {
       Object.freeze({
         [command]: Object.freeze({
           ...definition,
-          [executableCommandType]: true,
         }),
       }),
   });
