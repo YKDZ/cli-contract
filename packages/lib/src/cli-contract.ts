@@ -1824,7 +1824,7 @@ type StaticallyKnownTupleSuffixItems<Items extends readonly unknown[]> = [
 ] extends [never]
   ? never
   : string extends LastRequiredTupleItem<Items>
-    ? never
+    ? StaticallyKnownTupleSuffixItems<PopRequiredTupleItem<Items>>
     :
         | LastRequiredTupleItem<Items>
         | StaticallyKnownTupleSuffixItems<PopRequiredTupleItem<Items>>;

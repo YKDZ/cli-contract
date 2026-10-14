@@ -488,6 +488,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
       "unknownUsageConstraintField",
       "unknownUsageConstraintField",
       "unknownUsageConstraintField",
+      "unknownUsageConstraintField",
     ],
     required: [
       'command: "deploy"',
@@ -499,6 +500,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
       'command: "rootMissingCountField"',
       'command: "missingCountChild"',
       'command: "missingSuffixCountField"',
+      'command: "missingSuffixBeforeWideCountField"',
       'command: "duplicateSuffixCountField"',
       'constraint: "count"',
       'member: "fields"',
@@ -948,7 +950,7 @@ function verifyAuthoringLanguageService(
     },
     {
       fixture: "invalid-count-constraint.ts",
-      count: 10,
+      count: 11,
       required: [
         "invalidCountConstraint",
         "unknownUsageConstraintField",
@@ -961,6 +963,7 @@ function verifyAuthoringLanguageService(
         'command: "rootMissingCountField"',
         'command: "missingCountChild"',
         'command: "missingSuffixCountField"',
+        'command: "missingSuffixBeforeWideCountField"',
         'command: "duplicateSuffixCountField"',
         'constraint: "count"',
         'member: "fields"',
