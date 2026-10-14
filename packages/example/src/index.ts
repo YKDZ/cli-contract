@@ -84,9 +84,23 @@ const validate = define.command("validate")({
   kind: "command",
   parent: "users",
   name: "validate",
-  description: "校验非空用户标识",
-  fields: { id: { kind: "positional", description: "用户标识" } },
-  input: z.object({ id: z.string().min(1) }),
+  description: "校验用户标识格式",
+  fields: {
+    id: { kind: "valueOption", longOption: "--id", description: "用户标识" },
+    email: {
+      kind: "valueOption",
+      longOption: "--email",
+      description: "电子邮箱",
+    },
+  },
+  input: z.object({
+    id: z.string().min(1).optional(),
+    email: z.string().email().optional(),
+  }),
+  // 模式分别校验各字段；数量约束要求两种标识恰好提供一种。
+  usageConstraints: [
+    { kind: "count", fields: ["id", "email"], min: 1, max: 1 },
+  ],
   success: { kind: "completion", text: () => text.silent },
   failures: {},
   handler({ outcome }) {
@@ -108,6 +122,7 @@ export const cli = define({
       commandPlaceholder: "命令",
       choices: "（候选：{choices}）",
       default: "（默认：{value}）",
+      countExactly: "{fields} 恰好出现 {count} 项",
     },
   }),
   // 启用 text 会要求每个结果变体都有呈现器，新增变体时也会检查。

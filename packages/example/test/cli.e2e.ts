@@ -112,11 +112,50 @@ void test("查询成功以文本行组写入 stdout 并退出零", () => {
   assert.equal(result.stderr, "");
 });
 
-void test("非空标识校验以完成结果正常退出", () => {
-  const result = invoke("validate", "alice");
+void test("标识校验以完成结果正常退出", () => {
+  const result = invoke("validate", "--id", "alice");
   assert.equal(result.status, 0);
   assert.equal(result.stdout, "");
   assert.equal(result.stderr, "");
+});
+
+void test("电子邮箱模式通过同一校验命令完成", () => {
+  const result = invoke("validate", "--email", "alice@example.com");
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout, "");
+  assert.equal(result.stderr, "");
+});
+
+void test("数量约束同时出现在帮助和进程用法问题中", () => {
+  const help = invoke("validate", "--help");
+  assert.equal(help.status, 0);
+  assert.ok(help.stdout.includes("id, email 恰好出现 1 项"));
+
+  const result = invoke(
+    "validate",
+    "--id",
+    "alice",
+    "--email",
+    "alice@example.com",
+  );
+  assert.equal(result.status, 64);
+  assert.equal(result.stdout, "");
+  assert.deepEqual(JSON.parse(result.stderr), {
+    schemaVersion: "2",
+    command: "validate",
+    kind: "usageFailure",
+    issues: [
+      {
+        code: "countConstraintViolation",
+        min: 1,
+        max: 1,
+        presentFields: ["id", "email"],
+        absentFields: [],
+      },
+    ],
+    usage: "user validate [--id <id>] [--email <email>]",
+    helpArgv: ["user", "validate", "--help"],
+  });
 });
 
 void test("结构化成功保留具名事实，stderr 为空", () => {

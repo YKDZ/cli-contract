@@ -19,7 +19,7 @@ const dependencies = {
 const commands = defineCommandScenarios(cli, {
   lookup: { argv: ["get", "alice", "--json"], dependencies },
   logs: { argv: ["logs", "--json"], dependencies },
-  validate: { argv: ["validate", "alice"], dependencies },
+  validate: { argv: ["validate", "--id", "alice"], dependencies },
 });
 const failures = defineFailureScenarios(cli, {
   lookup: {
@@ -65,7 +65,7 @@ for (const [command, scenario] of Object.entries(commands)) {
 void test("基础输入模式拒绝由执行阶段产生 inputRejected", async () => {
   const capture = await runCliScenario({
     cliContract: cli,
-    argv: ["validate", ""],
+    argv: ["validate", "--email", "not-an-email"],
     dependencies,
   });
   if (capture.termination.kind !== "usageFailure") {
@@ -78,6 +78,37 @@ void test("基础输入模式拒绝由执行阶段产生 inputRejected", async (
   );
   assert.equal(capture.stdout, "");
   assert.notEqual(capture.stderr, "");
+});
+
+void test("标识校验要求且仅要求一种输入字段", async () => {
+  for (const [argv, presentFields, absentFields] of [
+    [["validate"], [], ["id", "email"]],
+    [
+      ["validate", "--id", "alice", "--email", "alice@example.com"],
+      ["id", "email"],
+      [],
+    ],
+  ] as const) {
+    const capture = await runCliScenario({
+      cliContract: cli,
+      argv,
+      dependencies,
+    });
+    if (capture.termination.kind !== "usageFailure") {
+      assert.fail("预期用法约束在处理器前拒绝调用");
+    }
+    assert.equal(capture.termination.exitCode, 64);
+    assert.deepEqual(capture.termination.issues, [
+      {
+        code: "countConstraintViolation",
+        min: 1,
+        max: 1,
+        presentFields,
+        absentFields,
+      },
+    ]);
+    assert.equal(capture.stdout, "");
+  }
 });
 
 for (const [command, scenarios] of Object.entries(failures)) {
