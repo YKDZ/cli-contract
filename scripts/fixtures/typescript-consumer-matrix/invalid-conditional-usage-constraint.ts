@@ -72,3 +72,89 @@ define({
     }),
   },
 });
+
+const unionModeRequirement:
+  | readonly ["mode", "token"]
+  | readonly ["mode", "auth"] = ["mode", "token"];
+
+defineCli()({
+  root: "multiFieldConflict",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    multiFieldConflict: {
+      kind: "rootCommand",
+      name: "multi-field-conflict",
+      description: "多字段效果冲突",
+      fields: {
+        mode: {
+          kind: "valueOption",
+          longOption: "--mode",
+          description: "模式",
+        },
+        token: {
+          kind: "valueOption",
+          longOption: "--token",
+          description: "令牌",
+        },
+      },
+      input: z.object({
+        mode: z.string().optional(),
+        token: z.string().optional(),
+      }),
+      usageConstraints: [
+        {
+          kind: "when",
+          all: [{ kind: "present", field: "mode" }],
+          then: { require: ["mode", "token"], forbid: ["token"] },
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+defineCli()({
+  root: "unionFieldConflict",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    unionFieldConflict: {
+      kind: "rootCommand",
+      name: "union-field-conflict",
+      description: "分支共同字段冲突",
+      fields: {
+        mode: {
+          kind: "valueOption",
+          longOption: "--mode",
+          description: "模式",
+        },
+        token: {
+          kind: "valueOption",
+          longOption: "--token",
+          description: "令牌",
+        },
+        auth: { kind: "flag", longOption: "--auth", description: "认证" },
+      },
+      input: z.object({
+        mode: z.string().optional(),
+        token: z.string().optional(),
+        auth: z.boolean().optional(),
+      }),
+      usageConstraints: [
+        {
+          kind: "when",
+          all: [{ kind: "present", field: "mode" }],
+          then: { require: unionModeRequirement, forbid: ["mode"] },
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});

@@ -2492,7 +2492,9 @@ type UsageEffectFieldArrays<
   Member extends "require" | "forbid",
 > = Effect extends object
   ? Member extends keyof Effect
-    ? Extract<Effect[Member], readonly unknown[]>
+    ? {} extends Pick<Effect, Member>
+      ? never
+      : Extract<Effect[Member], readonly unknown[]>
     : never
   : never;
 
@@ -2507,22 +2509,32 @@ type StaticallyGuaranteedUsageTupleFields<Fields extends readonly unknown[]> =
           : StaticallyGuaranteedUsageTupleFields<Remaining>
     : never;
 
-type UnionToIntersection<Value> = (
-  Value extends unknown ? (argument: Value) => void : never
-) extends (argument: infer Intersection) => void
-  ? [Value] extends [never]
+type UsageArrayBranchesMissingGuaranteedField<
+  Arrays,
+  Field extends string,
+> = Arrays extends readonly unknown[]
+  ? Field extends StaticallyGuaranteedUsageTupleFields<Arrays>
     ? never
-    : Intersection
+    : Arrays
   : never;
 
-type GuaranteedUsageEffectFields<Effect, Member extends "require" | "forbid"> =
-  UsageEffectFieldArrays<Effect, Member> extends infer Fields
-    ? UnionToIntersection<
-        Fields extends readonly unknown[]
-          ? StaticallyGuaranteedUsageTupleFields<Fields>
-          : never
-      >
+type GuaranteedUsageFieldsAcrossArrays<Arrays> =
+  StaticallyKnownCountTupleFields<
+    Extract<Arrays, readonly unknown[]>
+  > extends infer Candidate
+    ? Candidate extends string
+      ? [UsageArrayBranchesMissingGuaranteedField<Arrays, Candidate>] extends [
+          never,
+        ]
+        ? Candidate
+        : never
+      : never
     : never;
+
+type GuaranteedUsageEffectFields<
+  Effect,
+  Member extends "require" | "forbid",
+> = GuaranteedUsageFieldsAcrossArrays<UsageEffectFieldArrays<Effect, Member>>;
 
 type UnknownUsageEffectFields<
   Command extends string,

@@ -299,13 +299,22 @@ async function verifyHierarchyTextCoverageDiagnostic(
 const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
   {
     fixture: "invalid-conditional-usage-constraint.ts",
-    expectedCodes: ["invalidUsageConstraint", "contradictoryUsageConstraint"],
+    expectedCodes: [
+      "invalidUsageConstraint",
+      "contradictoryUsageConstraint",
+      "contradictoryUsageConstraint",
+      "contradictoryUsageConstraint",
+    ],
     required: [
       'command: "missingWhenEffects"',
       'command: "branchConflict"',
+      'command: "multiFieldConflict"',
+      'command: "unionFieldConflict"',
       'constraint: "when"',
       'member: "effects"',
       'member: "then"',
+      'fields: "token"',
+      'fields: "mode"',
       'fields: "token"',
     ],
   },
@@ -595,14 +604,18 @@ function verifyAuthoringLanguageService(
   const cases: readonly LanguageServiceDiagnosticCase[] = [
     {
       fixture: "invalid-conditional-usage-constraint.ts",
-      count: 2,
+      count: 4,
       required: [
         "invalidUsageConstraint",
         "contradictoryUsageConstraint",
         'command: "missingWhenEffects"',
         'command: "branchConflict"',
+        'command: "multiFieldConflict"',
+        'command: "unionFieldConflict"',
         'member: "effects"',
         'member: "then"',
+        'fields: "token"',
+        'fields: "mode"',
         'fields: "token"',
       ],
     },
