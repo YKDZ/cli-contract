@@ -112,6 +112,13 @@ void test("查询成功以文本行组写入 stdout 并退出零", () => {
   assert.equal(result.stderr, "");
 });
 
+void test("完成操作以空文本正常退出", () => {
+  const result = invoke("refresh");
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout, "");
+  assert.equal(result.stderr, "");
+});
+
 void test("结构化成功保留具名事实，stderr 为空", () => {
   const result = invoke("get", "alice", "--json");
   assert.equal(result.status, 0);
@@ -168,7 +175,7 @@ void test("根帮助展示命令，日志帮助指向当前命令", () => {
   const root = invoke("--help");
   assert.equal(root.status, 0);
   assert.equal(root.stderr, "");
-  for (const fact of ["命令", "get", "logs"])
+  for (const fact of ["命令", "get", "logs", "refresh"])
     assert.ok(root.stdout.includes(fact));
   const logs = invoke("logs", "--help");
   assert.equal(logs.status, 0);

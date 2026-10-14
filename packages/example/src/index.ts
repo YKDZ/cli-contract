@@ -80,6 +80,20 @@ const logs = define.command("logs")({
   },
 });
 
+const refresh = define.command("refresh")({
+  kind: "command",
+  parent: "users",
+  name: "refresh",
+  description: "刷新用户索引",
+  fields: {},
+  input: z.object({}),
+  success: { kind: "completion", text: () => text.silent },
+  failures: {},
+  handler({ outcome }) {
+    return outcome.completion();
+  },
+});
+
 export const cli = define({
   root: "users",
   help: helpCapability({
@@ -103,8 +117,13 @@ export const cli = define({
   }),
   usageFailureExitCode: 64,
   commands: {
-    users: { kind: "rootGroup", name: "user", description: "用户查询与日志" },
+    users: {
+      kind: "rootGroup",
+      name: "user",
+      description: "用户查询、索引维护与日志",
+    },
     ...lookup,
     ...logs,
+    ...refresh,
   },
 });
