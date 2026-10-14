@@ -1,3 +1,4 @@
+/* oxlint-disable unicorn/no-thenable -- then 是 when 条件的公开分支名。 */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -197,6 +198,22 @@ void test("已声明帮助事实缺少模板时在定义期报告命令与槽位
             }),
             usageConstraints: [
               {
+                kind: "when",
+                all: [{ kind: "present", field: "mode" }],
+                then: { require: ["mode"] },
+              },
+              {
+                kind: "when",
+                all: [{ kind: "present", field: "mode" }],
+                otherwise: { forbid: ["mode"] },
+              },
+              {
+                kind: "when",
+                all: [{ kind: "equals", field: "mode", value: "force" }],
+                then: { require: ["mode"] },
+                otherwise: { forbid: ["mode"] },
+              },
+              {
                 kind: "forbiddenCombination",
                 all: [
                   { kind: "present", field: "mode" },
@@ -218,14 +235,85 @@ void test("已声明帮助事实缺少模板时在定义期报告命令与槽位
         {
           code: "missingHelpFactTemplate",
           command: "choose",
-          slot: "forbiddenCombination",
+          slot: "whenThen",
         },
         { code: "missingHelpFactTemplate", command: "choose", slot: "present" },
+        {
+          code: "missingHelpFactTemplate",
+          command: "choose",
+          slot: "require",
+        },
+        {
+          code: "missingHelpFactTemplate",
+          command: "choose",
+          slot: "whenOtherwise",
+        },
+        { code: "missingHelpFactTemplate", command: "choose", slot: "forbid" },
+        {
+          code: "missingHelpFactTemplate",
+          command: "choose",
+          slot: "whenThenOtherwise",
+        },
         { code: "missingHelpFactTemplate", command: "choose", slot: "equals" },
+        {
+          code: "missingHelpFactTemplate",
+          command: "choose",
+          slot: "forbiddenCombination",
+        },
       ]);
       return true;
     },
   );
+});
+
+void test("空效果分支不要求对应帮助槽位", async () => {
+  const cli = defineCli()({
+    root: "choose",
+    help: helpCapability({
+      wording: {
+        whenOtherwise: "当并非全部满足 {facts} 时，{otherwise}",
+        forbid: "不能提供 {fields}",
+        present: "存在 {field}",
+      },
+    }),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      choose: {
+        kind: "rootCommand",
+        name: "choose",
+        description: "选择模式",
+        fields: {
+          mode: {
+            kind: "valueOption",
+            longOption: "--mode",
+            description: "模式",
+          },
+        },
+        input: z.object({ mode: z.string().optional() }),
+        usageConstraints: [
+          {
+            kind: "when",
+            all: [{ kind: "present", field: "mode" }],
+            then: {},
+            otherwise: { forbid: ["mode"] },
+          },
+        ],
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      },
+    },
+  });
+  const writes: string[] = [];
+  await executeCli(cli, {
+    invocation: parseCliInvocation(cli, ["--help"]),
+    dependencies: undefined,
+    write: ({ chunk }) => {
+      writes.push(chunk);
+    },
+  });
+  assert.match(writes.join(""), /当并非全部满足 存在 mode 时，不能提供 mode/);
 });
 
 void test("动态帮助事实模板在根装配时聚合报告非法槽位", () => {
@@ -416,12 +504,16 @@ void test("命令组占位词贯穿帮助、用法失败和契约清单", async 
   assert.match(writes.join(""), /jobs <命令>/);
 });
 
-void test("用法约束模板保留关系并允许调整词序", async () => {
+void test("条件分支模板表达全称条件，并允许各槽位调整词序", async () => {
   const cli = defineCli()({
     root: "publish",
     help: helpCapability({
       wording: {
-        requires: "{requires} 是 {field} 的前提",
+        whenThen: "当全部满足 {facts} 时，{then}",
+        whenOtherwise: "当并非全部满足 {facts} 时，{otherwise}",
+        whenThenOtherwise: "当全部满足 {facts} 时，{then}；否则，{otherwise}",
+        require: "必须提供 {fields}",
+        forbid: "不能提供 {fields}",
         present: "存在 {field}",
         equals: "{field} 等于 {value}",
         forbiddenCombination: "禁止同时出现 {facts}",
@@ -450,8 +542,23 @@ void test("用法约束模板保留关系并允许调整词序", async () => {
           force: { kind: "flag", longOption: "--force", description: "强制" },
         },
         usageConstraints: [
-          { kind: "requires", field: "auth", requires: "token" },
           { kind: "count", fields: ["token", "quiet"], max: 1 },
+          {
+            kind: "when",
+            all: [{ kind: "present", field: "auth" }],
+            then: { require: ["token"] },
+          },
+          {
+            kind: "when",
+            all: [{ kind: "present", field: "quiet" }],
+            otherwise: { forbid: ["force"] },
+          },
+          {
+            kind: "when",
+            all: [{ kind: "equals", field: "quiet", value: true }],
+            then: { require: ["auth"] },
+            otherwise: { forbid: ["token"] },
+          },
           {
             kind: "forbiddenCombination",
             all: [
@@ -481,8 +588,13 @@ void test("用法约束模板保留关系并允许调整词序", async () => {
     },
   });
   const help = writes.join("");
-  assert.match(help, /token 是 auth 的前提/);
   assert.match(help, /token, quiet 的数量不超过 1/);
+  assert.match(help, /当全部满足 存在 auth 时，必须提供 token/);
+  assert.match(help, /当并非全部满足 存在 quiet 时，不能提供 force/);
+  assert.match(
+    help,
+    /当全部满足 quiet 等于 true 时，必须提供 auth；否则，不能提供 token/,
+  );
   assert.match(help, /禁止同时出现 quiet 等于 true, force 等于 true/);
 });
 

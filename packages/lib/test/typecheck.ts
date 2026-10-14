@@ -1,8 +1,11 @@
 import { toStandardJsonSchema } from "@valibot/to-json-schema";
+/* oxlint-disable unicorn/no-thenable -- then 是 when 条件的公开分支名。 */
 import {
   defineCli,
+  executeCli,
   helpCapability,
   outputCapability,
+  parseCliInvocation,
   text,
   versionCapability,
   type CliContract,
@@ -381,13 +384,13 @@ function exhaustivelyRecognizeUsageIssue(issue: UsageIssue): string {
     case "conflictingFlag":
     case "conflictingOutputFormat":
     case "countConstraintViolation":
+    case "conditionalConstraintViolation":
     case "forbiddenCombinationViolation":
     case "inputRejected":
     case "invalidOutputFormat":
     case "missingOptionValue":
     case "missingRequiredField":
     case "repeatedOption":
-    case "requiredByUsageConstraint":
     case "unexpectedOptionValue":
     case "unexpectedPositional":
     case "unknownCommand":
@@ -483,6 +486,298 @@ const validStaticUsageCli = defineCli()({
 });
 void validStaticUsageCli;
 
+const validWhenCli = defineCli()({
+  root: "validWhen",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    validWhen: {
+      kind: "rootCommand",
+      name: "valid-when",
+      description: "条件事实",
+      fields: {
+        mode: {
+          kind: "valueOption",
+          longOption: "--mode",
+          description: "模式",
+        },
+        token: {
+          kind: "valueOption",
+          longOption: "--token",
+          description: "令牌",
+        },
+        cursor: {
+          kind: "valueOption",
+          longOption: "--cursor",
+          description: "游标",
+        },
+      },
+      input: z.object({
+        mode: z.enum(["safe", "force"]).optional(),
+        token: z.string().optional(),
+        cursor: z.string().optional(),
+      }),
+      usageConstraints: [
+        {
+          kind: "when",
+          all: [
+            { kind: "equals", field: "mode", value: "safe" },
+            { kind: "equals", field: "mode", value: "safe" },
+            { kind: "present", field: "mode" },
+          ],
+          then: { require: ["token", "token"], forbid: ["cursor"] },
+          otherwise: { forbid: ["token", "token"] },
+        },
+        {
+          kind: "when",
+          all: [{ kind: "present", field: "token" }],
+          then: { require: ["token"] },
+        },
+        {
+          kind: "when",
+          all: [{ kind: "present", field: "cursor" }],
+          then: {},
+          otherwise: { forbid: ["token"] },
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+void validWhenCli;
+
+const dynamicRequiredEffectFields: readonly ("mode" | "token")[] = ["token"];
+const dynamicForbiddenEffectFields: readonly ("mode" | "token")[] = ["mode"];
+const dynamicEffectsWhenCli = defineCli()({
+  root: "dynamicEffectsWhen",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    dynamicEffectsWhen: {
+      kind: "rootCommand",
+      name: "dynamic-effects-when",
+      description: "运行期判定动态效果字段",
+      fields: {
+        mode: {
+          kind: "valueOption",
+          longOption: "--mode",
+          description: "模式",
+        },
+        token: {
+          kind: "valueOption",
+          longOption: "--token",
+          description: "令牌",
+        },
+      },
+      input: z.object({
+        mode: z.string().optional(),
+        token: z.string().optional(),
+      }),
+      usageConstraints: [
+        {
+          kind: "when",
+          all: [{ kind: "present", field: "mode" }],
+          then: {
+            require: dynamicRequiredEffectFields,
+            forbid: dynamicForbiddenEffectFields,
+          },
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+void dynamicEffectsWhenCli;
+
+// @ts-expect-error when.equals 使用字段对应的 raw Input 域。
+const invalidWhenValueCli = defineCli()({
+  root: "invalidWhenValue",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    invalidWhenValue: {
+      kind: "rootCommand",
+      name: "invalid-when-value",
+      description: "域外条件值",
+      fields: {
+        mode: {
+          kind: "valueOption",
+          longOption: "--mode",
+          description: "模式",
+        },
+      },
+      input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+      usageConstraints: [
+        {
+          kind: "when",
+          all: [{ kind: "equals", field: "mode", value: "toml" }],
+          then: { require: ["mode"] },
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+void invalidWhenValueCli;
+
+// @ts-expect-error 同一 when 分支不能同时 require 与 forbid 同一字段。
+const invalidWhenEffectsCli = defineCli()({
+  root: "invalidWhenEffects",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    invalidWhenEffects: {
+      kind: "rootCommand",
+      name: "invalid-when-effects",
+      description: "分支效果矛盾",
+      fields: {
+        mode: {
+          kind: "valueOption",
+          longOption: "--mode",
+          description: "模式",
+        },
+      },
+      input: z.object({ mode: z.string().optional() }),
+      usageConstraints: [
+        {
+          kind: "when",
+          all: [{ kind: "present", field: "mode" }],
+          then: { require: ["mode"], forbid: ["mode"] },
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+void invalidWhenEffectsCli;
+
+// @ts-expect-error 空效果分支不构成一条有效规则。
+const noEffectWhenCli = defineCli()({
+  root: "noEffectWhen",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    noEffectWhen: {
+      kind: "rootCommand",
+      name: "no-effect-when",
+      description: "空分支",
+      fields: {
+        mode: {
+          kind: "valueOption",
+          longOption: "--mode",
+          description: "模式",
+        },
+      },
+      input: z.object({ mode: z.string().optional() }),
+      usageConstraints: [
+        {
+          kind: "when",
+          all: [{ kind: "present", field: "mode" }],
+          then: { require: [] },
+          otherwise: { forbid: [] },
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+void noEffectWhenCli;
+
+// @ts-expect-error then 和 otherwise 都未声明时仍是无效果规则。
+defineCli()({
+  root: "missingWhenEffects",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    missingWhenEffects: {
+      kind: "rootCommand",
+      name: "missing-when-effects",
+      description: "缺少分支效果",
+      fields: {
+        mode: {
+          kind: "valueOption",
+          longOption: "--mode",
+          description: "模式",
+        },
+      },
+      input: z.object({ mode: z.string().optional() }),
+      usageConstraints: [
+        {
+          kind: "when",
+          all: [{ kind: "present", field: "mode" }],
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+const extractedWhenUnion =
+  Math.random() < 0.5
+    ? ({
+        kind: "when",
+        all: [{ kind: "present", field: "mode" }],
+        then: { require: ["token"], typo: true },
+      } as const)
+    : ({
+        kind: "when",
+        all: [{ kind: "present", field: "mode", typo: true }],
+        otherwise: { forbid: ["token"], typo: true },
+      } as const);
+const invalidExtractedWhenCli = defineCli()({
+  root: "invalidExtractedWhen",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    invalidExtractedWhen: {
+      kind: "rootCommand",
+      name: "invalid-extracted-when",
+      description: "提取的条件联合",
+      fields: {
+        mode: {
+          kind: "valueOption",
+          longOption: "--mode",
+          description: "模式",
+        },
+        token: {
+          kind: "valueOption",
+          longOption: "--token",
+          description: "令牌",
+        },
+      },
+      input: z.object({
+        mode: z.string().optional(),
+        token: z.string().optional(),
+      }),
+      // @ts-expect-error 提取联合中的每个 fact/effect 分支仍闭合检查未知属性。
+      usageConstraints: [extractedWhenUnion],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+void invalidExtractedWhenCli;
+
 type FormatFactDomain = UsageFactValue<
   UsageFixtureFields,
   UsageFixtureInput,
@@ -532,6 +827,264 @@ const transformedModeOutput: ContractSchemaOutput<
 void validRawModeFact;
 void invalidTransformedOutputFact;
 void transformedModeOutput;
+
+const defineObservationCli = defineCli();
+const replayCommand = defineObservationCli.command("replay")({
+  kind: "command",
+  parent: "tool",
+  name: "replay",
+  description: "回放",
+  fields: {
+    mode: {
+      kind: "valueOption",
+      longOption: "--mode",
+      description: "模式",
+    },
+    token: {
+      kind: "valueOption",
+      longOption: "--token",
+      description: "令牌",
+    },
+  },
+  input: z.object({
+    mode: z
+      .enum(["live", "after"])
+      .transform((value) => value.length)
+      .pipe(z.number()),
+    token: z.string().optional(),
+  }),
+  usageConstraints: [
+    {
+      kind: "when",
+      all: [
+        { kind: "equals", field: "mode", value: "after" },
+        { kind: "present", field: "token" },
+      ],
+      then: { require: ["token"] },
+      otherwise: { forbid: ["token"] },
+    },
+  ],
+  success: { kind: "completion" },
+  failures: {},
+  handler: ({ outcome }) => outcome.completion(),
+});
+const inspectCommand = defineObservationCli.command("inspect")({
+  kind: "command",
+  parent: "tool",
+  name: "inspect",
+  description: "检查",
+  fields: {
+    mode: {
+      kind: "valueOption",
+      longOption: "--mode",
+      description: "模式",
+    },
+    token: {
+      kind: "valueOption",
+      longOption: "--token",
+      description: "令牌",
+    },
+  },
+  input: z.object({
+    mode: z.enum(["json", "yaml"]).optional(),
+    token: z.string().optional(),
+  }),
+  usageConstraints: [
+    {
+      kind: "when",
+      all: [{ kind: "equals", field: "mode", value: "json" }],
+      then: { forbid: ["token"] },
+    },
+  ],
+  success: { kind: "completion" },
+  failures: {},
+  handler: ({ outcome }) => outcome.completion(),
+});
+const observationCli = defineObservationCli({
+  root: "tool",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    tool: { kind: "rootGroup", name: "tool", description: "工具" },
+    ...replayCommand,
+    ...inspectCommand,
+  },
+});
+const replayInvocation = parseCliInvocation(observationCli, [
+  "replay",
+  "--mode",
+  "after",
+]);
+if (
+  replayInvocation.kind === "usageFailure" &&
+  replayInvocation.command === "replay"
+) {
+  for (const issue of replayInvocation.issues) {
+    if (issue.code !== "conditionalConstraintViolation") continue;
+    const condition = issue.conditions[0];
+    if (condition.kind !== "equals") continue;
+    const replayExpected: "after" = condition.expected;
+    // @ts-expect-error equals expected 保留原始 Input 值域，不是经 transform 的 Output number。
+    const replayOutput: number = condition.expected;
+    if (condition.present) {
+      const rawActual: string | boolean = condition.actual;
+      void rawActual;
+    } else {
+      // @ts-expect-error 缺席的 equals 观察不含 actual 哨兵属性。
+      void condition.actual;
+    }
+    void replayExpected;
+    void replayOutput;
+  }
+}
+const inspectInvocation = parseCliInvocation(observationCli, [
+  "inspect",
+  "--mode",
+  "json",
+]);
+if (
+  inspectInvocation.kind === "usageFailure" &&
+  inspectInvocation.command === "inspect"
+) {
+  for (const issue of inspectInvocation.issues) {
+    if (issue.code !== "conditionalConstraintViolation") continue;
+    const condition = issue.conditions[0];
+    if (condition.kind !== "equals") continue;
+    const inspectExpected: "json" = condition.expected;
+    // @ts-expect-error 同名字段在另一个命令中仍保留各自 Input 域。
+    const replayExpected: "after" = condition.expected;
+    void inspectExpected;
+    void replayExpected;
+  }
+}
+const replayTermination = executeCli(observationCli, {
+  invocation: replayInvocation,
+  dependencies: undefined,
+  write: () => undefined,
+});
+void replayTermination.then((termination) => {
+  if (termination.kind !== "usageFailure" || termination.command !== "replay") {
+    return;
+  }
+  for (const issue of termination.issues) {
+    if (issue.code !== "conditionalConstraintViolation") continue;
+    const condition = issue.conditions[0];
+    if (condition.kind === "equals") {
+      const expectedReplay: "after" = condition.expected;
+      void expectedReplay;
+    }
+  }
+});
+
+const rootObservationCli = defineCli()({
+  root: "rootObservation",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    rootObservation: {
+      kind: "rootCommand",
+      name: "root-observation",
+      description: "根命令观察",
+      fields: {
+        mode: {
+          kind: "valueOption",
+          longOption: "--mode",
+          description: "模式",
+        },
+        token: {
+          kind: "valueOption",
+          longOption: "--token",
+          description: "令牌",
+        },
+      },
+      input: z.object({
+        mode: z
+          .enum(["safe", "force"])
+          .transform((value) => value.length)
+          .pipe(z.number()),
+        token: z.string().optional(),
+      }),
+      usageConstraints: [
+        {
+          kind: "when",
+          all: [{ kind: "equals", field: "mode", value: "safe" }],
+          then: { require: ["token"] },
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+const rootObservationInvocation = parseCliInvocation(rootObservationCli, [
+  "--mode",
+  "safe",
+]);
+if (rootObservationInvocation.kind === "usageFailure") {
+  const issue = rootObservationInvocation.issues[0];
+  if (issue.code === "conditionalConstraintViolation") {
+    const missingRootField: "token" = issue.missingRequiredFields[0]!;
+    const condition = issue.conditions[0];
+    if (condition.kind === "equals") {
+      const expectedRootInput: "safe" = condition.expected;
+      if (condition.present) {
+        const rootRawActual: string | boolean = condition.actual;
+        const outOfDomainActual: string | boolean = "outside";
+        // @ts-expect-error expected 来自 Input，而非转换后的 Output 或域外值。
+        const invalidRootExpected: "outside" = condition.expected;
+        void rootRawActual;
+        void outOfDomainActual;
+        void invalidRootExpected;
+      } else {
+        // @ts-expect-error 缺席时不携带 actual 哨兵。
+        void condition.actual;
+      }
+      void expectedRootInput;
+    }
+    void missingRootField;
+  }
+}
+void executeCli(rootObservationCli, {
+  invocation: rootObservationInvocation,
+  dependencies: undefined,
+  write: () => undefined,
+}).then((termination) => {
+  if (termination.kind !== "usageFailure") return;
+  const issue = termination.issues[0];
+  if (issue.code !== "conditionalConstraintViolation") return;
+  const condition = issue.conditions[0];
+  if (condition.kind === "equals") {
+    const expectedRootInput: "safe" = condition.expected;
+    void expectedRootInput;
+  }
+});
+
+const widenedObservationCli: CliContract = observationCli;
+const widenedObservationInvocation = parseCliInvocation(widenedObservationCli, [
+  "replay",
+]);
+if (widenedObservationInvocation.kind === "usageFailure") {
+  for (const issue of widenedObservationInvocation.issues) {
+    if (issue.code !== "conditionalConstraintViolation") continue;
+    const broadConditionalCode: "conditionalConstraintViolation" = issue.code;
+    void broadConditionalCode;
+  }
+}
+void executeCli(widenedObservationCli, {
+  invocation: widenedObservationInvocation,
+  dependencies: undefined,
+  write: () => undefined,
+}).then((termination) => {
+  if (termination.kind !== "usageFailure") return;
+  for (const issue of termination.issues) {
+    if (issue.code !== "conditionalConstraintViolation") continue;
+    const broadConditionalCode: "conditionalConstraintViolation" = issue.code;
+    void broadConditionalCode;
+  }
+});
 
 const invalidClosedFactCli = defineCli()({
   root: "closedFacts",

@@ -1,4 +1,5 @@
 import type {
+  CliContract,
   CliContractDependencies,
   CliContractRawInput,
   CliContractResult,
@@ -8,10 +9,12 @@ import type {
   StreamRecordFactUnion,
   UsageFactValue,
 } from "@ykdz/cli-contract";
+import { executeCli, parseCliInvocation } from "@ykdz/cli-contract";
 import {
   cli,
   inspectCombination,
   tailCombination,
+  wideConditionalContract,
 } from "__DECLARATION_IMPORT__";
 
 type Dependencies = CliContractDependencies<typeof cli>;
@@ -96,6 +99,51 @@ const dryRunValue: DryRunValue = true;
 // @ts-expect-error flag 值仍保留为布尔字面量。
 const invalidDryRunValue: DryRunValue = "true";
 
+const invocation = parseCliInvocation(cli, ["inspect", "--query", "alpha"]);
+if (invocation.kind === "usageFailure" && invocation.command === "inspect") {
+  for (const issue of invocation.issues) {
+    if (issue.code !== "conditionalConstraintViolation") continue;
+    const condition = issue.conditions[0];
+    if (condition.kind !== "equals") continue;
+    const expectedInput: "alpha" = condition.expected;
+    // @ts-expect-error expected 来源于 InspectInput，不是宽 Output 字符串。
+    const invalidExpected: "outside" = condition.expected;
+    if (condition.present) {
+      const rawActual: string | boolean = condition.actual;
+      const outsideExpectedDomain: typeof condition.actual = "outside";
+      void rawActual;
+      void outsideExpectedDomain;
+    } else {
+      // @ts-expect-error equals 缺席分支不声明 actual。
+      void condition.actual;
+    }
+    void expectedInput;
+    void invalidExpected;
+  }
+}
+
+const reconsumedWideContract: CliContract = wideConditionalContract;
+const wideInvocation = parseCliInvocation(reconsumedWideContract, ["inspect"]);
+if (wideInvocation.kind === "usageFailure") {
+  for (const issue of wideInvocation.issues) {
+    if (issue.code !== "conditionalConstraintViolation") continue;
+    const broadConditionalCode: "conditionalConstraintViolation" = issue.code;
+    void broadConditionalCode;
+  }
+}
+void executeCli(reconsumedWideContract, {
+  invocation: wideInvocation,
+  dependencies: undefined,
+  write: () => undefined,
+}).then((termination) => {
+  if (termination.kind !== "usageFailure") return;
+  for (const issue of termination.issues) {
+    if (issue.code !== "conditionalConstraintViolation") continue;
+    const broadConditionalCode: "conditionalConstraintViolation" = issue.code;
+    void broadConditionalCode;
+  }
+});
+
 declare const tailRecord: TailRecord;
 tailRecord.command satisfies "tail";
 tailRecord.variant satisfies "line";
@@ -164,6 +212,7 @@ void validQueryFactDomain;
 void invalidQueryFactDomain;
 void dryRunValue;
 void invalidDryRunValue;
+void invocation;
 void tailRecord;
 void tailSuccess;
 void tailFailure;

@@ -46,6 +46,7 @@ async function readFixtures(): Promise<Readonly<Record<string, string>>> {
         "exportable-contract.ts",
         "exportable-contract-reconsumer.ts",
         "invalid-count-constraint.ts",
+        "invalid-conditional-usage-constraint.ts",
         "invalid-command-combination.ts",
         "invalid-forbidden-combination.ts",
         "invalid-help-fact-templates.ts",
@@ -152,6 +153,7 @@ async function verifyCoreOnly(
       "core-node.ts",
       "core-root.ts",
       "invalid-count-constraint.ts",
+      "invalid-conditional-usage-constraint.ts",
       "invalid-command-combination.ts",
       "invalid-forbidden-combination.ts",
       "invalid-help-fact-templates.ts",
@@ -296,17 +298,32 @@ async function verifyHierarchyTextCoverageDiagnostic(
 
 const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
   {
+    fixture: "invalid-conditional-usage-constraint.ts",
+    expectedCodes: ["invalidUsageConstraint", "contradictoryUsageConstraint"],
+    required: [
+      'command: "missingWhenEffects"',
+      'command: "branchConflict"',
+      'constraint: "when"',
+      'member: "effects"',
+      'member: "then"',
+      'fields: "token"',
+    ],
+  },
+  {
     fixture: "unknown-usage-constraint-field.ts",
     expectedCodes: [
+      "unknownUsageConstraintField",
       "unknownUsageConstraintField",
       "unknownUsageConstraintField",
     ],
     required: [
       'command: "deploy"',
       'command: "rootDeploy"',
-      'constraint: "requires"',
-      'member: "requires"',
+      'command: "mixedRest"',
+      'constraint: "when"',
+      'member: "then.require"',
       'field: "token"',
+      'field: "missing"',
     ],
   },
   {
@@ -577,14 +594,29 @@ function verifyAuthoringLanguageService(
 ): void {
   const cases: readonly LanguageServiceDiagnosticCase[] = [
     {
-      fixture: "unknown-usage-constraint-field.ts",
+      fixture: "invalid-conditional-usage-constraint.ts",
       count: 2,
+      required: [
+        "invalidUsageConstraint",
+        "contradictoryUsageConstraint",
+        'command: "missingWhenEffects"',
+        'command: "branchConflict"',
+        'member: "effects"',
+        'member: "then"',
+        'fields: "token"',
+      ],
+    },
+    {
+      fixture: "unknown-usage-constraint-field.ts",
+      count: 3,
       required: [
         "unknownUsageConstraintField",
         'command: "deploy"',
         'command: "rootDeploy"',
-        'member: "requires"',
+        'command: "mixedRest"',
+        'member: "then.require"',
         'field: "token"',
+        'field: "missing"',
       ],
     },
     {

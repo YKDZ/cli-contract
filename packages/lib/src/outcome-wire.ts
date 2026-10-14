@@ -180,6 +180,37 @@ function usageIssueSchemas(): JsonObject[] {
       ),
     ],
   };
+  const usageObservation = {
+    oneOf: [
+      objectSchema(
+        {
+          field: string,
+          kind: { const: "present" },
+          present: { type: "boolean" },
+        },
+        ["kind", "field", "present"],
+      ),
+      objectSchema(
+        {
+          expected: { oneOf: [{ type: "boolean" }, string] },
+          field: string,
+          kind: { const: "equals" },
+          present: { const: false },
+        },
+        ["kind", "field", "expected", "present"],
+      ),
+      objectSchema(
+        {
+          actual: { oneOf: [{ type: "boolean" }, string] },
+          expected: { oneOf: [{ type: "boolean" }, string] },
+          field: string,
+          kind: { const: "equals" },
+          present: { const: true },
+        },
+        ["kind", "field", "expected", "present", "actual"],
+      ),
+    ],
+  };
   const outputOccurrence = objectSchema(
     {
       format: { enum: ["structured", "text"] },
@@ -213,6 +244,30 @@ function usageIssueSchemas(): JsonObject[] {
     issueSchema("forbiddenCombinationViolation", {
       facts: { items: usageFact, minItems: 1, type: "array" },
     }),
+    {
+      ...issueSchema("conditionalConstraintViolation", {
+        branch: { enum: ["then", "otherwise"] },
+        conditions: {
+          items: usageObservation,
+          minItems: 1,
+          type: "array",
+        },
+        missingRequiredFields: { items: string, type: "array" },
+        presentForbiddenFields: { items: string, type: "array" },
+      }),
+      anyOf: [
+        {
+          properties: {
+            missingRequiredFields: { minItems: 1 },
+          },
+        },
+        {
+          properties: {
+            presentForbiddenFields: { minItems: 1 },
+          },
+        },
+      ],
+    },
     issueSchema("inputRejected", {
       evidence: { items: evidence, type: "array" },
     }),
@@ -236,10 +291,6 @@ function usageIssueSchemas(): JsonObject[] {
     issueSchema("repeatedOption", {
       field: string,
       occurrences: occurrences(2),
-    }),
-    issueSchema("requiredByUsageConstraint", {
-      field: string,
-      requires: string,
     }),
     issueSchema("unexpectedOptionValue", {
       field: string,

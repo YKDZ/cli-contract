@@ -1,5 +1,6 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 
+/* oxlint-disable unicorn/no-thenable -- then 是 when 条件的公开分支名。 */
 import {
   createCompletionFact,
   createDataFact,
@@ -20,10 +21,13 @@ import {
   type HelpFactTemplateParameters,
   type HelpFactWording,
   type OutcomeFact,
+  type UsageConstraintEffect,
+  type UsageFact,
 } from "#/cli-contract";
 import {
   invocationBelongsTo,
   type CliInvocation,
+  type NonEmptyCliUsageIssues,
   type InputRejectedIssue,
   type NonEmptyUsageIssues,
   type SchemaIssueEvidence,
@@ -94,12 +98,16 @@ export type CliTermination<Contract extends CliContract = CliContract> =
       readonly command: CliContractRoot<Contract>;
       readonly exitCode: 0;
     }>
-  | Readonly<{
-      readonly kind: "usageFailure";
-      readonly command: CliContractRoot<Contract>;
-      readonly issues: NonEmptyUsageIssues;
-      readonly exitCode: number;
-    }>;
+  | UsageFailureTermination<Contract>;
+
+type UsageFailureTermination<Contract extends CliContract> = {
+  [Command in CliContractRoot<Contract>]: Readonly<{
+    readonly kind: "usageFailure";
+    readonly command: Command;
+    readonly issues: NonEmptyCliUsageIssues<Contract, Command>;
+    readonly exitCode: number;
+  }>;
+}[CliContractRoot<Contract>];
 
 export interface ExecuteCliOptions<Contract extends CliContract> {
   readonly invocation: CliInvocation<NoInfer<Contract>>;
@@ -400,33 +408,83 @@ function formatUsageConstraint(
   constraint: CompiledExecutable["usageConstraints"][number],
   wording: HelpFactWording | undefined,
 ): string {
-  if (constraint.kind === "requires")
-    return renderHelpFactTemplate("requires", wording?.requires, {
-      field: constraint.field,
-      requires: constraint.requires,
-    });
   if (constraint.kind === "count") {
     const { slot, values } = countHelpFactForConstraint(constraint);
     return renderHelpFactTemplate(slot, wording?.[slot], values);
   }
+  const facts = constraint.all
+    .map((fact) => formatUsageFact(fact, wording))
+    .join(", ");
+  if (constraint.kind === "when") {
+    const then =
+      constraint.then === undefined
+        ? ""
+        : formatUsageEffect(constraint.then, wording);
+    const otherwise =
+      constraint.otherwise === undefined
+        ? ""
+        : formatUsageEffect(constraint.otherwise, wording);
+    if (then.length > 0 && otherwise.length > 0) {
+      return renderHelpFactTemplate(
+        "whenThenOtherwise",
+        wording?.whenThenOtherwise,
+        { facts, then, otherwise },
+      );
+    }
+    if (then.length > 0) {
+      return renderHelpFactTemplate("whenThen", wording?.whenThen, {
+        facts,
+        then,
+      });
+    }
+    return renderHelpFactTemplate("whenOtherwise", wording?.whenOtherwise, {
+      facts,
+      otherwise,
+    });
+  }
   return renderHelpFactTemplate(
     "forbiddenCombination",
     wording?.forbiddenCombination,
-    {
-      facts: constraint.all
-        .map((fact) =>
-          fact.kind === "present"
-            ? renderHelpFactTemplate("present", wording?.present, {
-                field: fact.field,
-              })
-            : renderHelpFactTemplate("equals", wording?.equals, {
-                field: fact.field,
-                value: JSON.stringify(fact.value),
-              }),
-        )
-        .join(", "),
-    },
+    { facts },
   );
+}
+
+function formatUsageEffect(
+  effect: UsageConstraintEffect,
+  wording: HelpFactWording | undefined,
+): string {
+  const parts: string[] = [];
+  const required = effect.require ?? [];
+  const forbidden = effect.forbid ?? [];
+  if (required.length > 0) {
+    parts.push(
+      renderHelpFactTemplate("require", wording?.require, {
+        fields: required.join(", "),
+      }),
+    );
+  }
+  if (forbidden.length > 0) {
+    parts.push(
+      renderHelpFactTemplate("forbid", wording?.forbid, {
+        fields: forbidden.join(", "),
+      }),
+    );
+  }
+  return parts.join(", ");
+}
+
+function formatUsageFact(
+  fact: UsageFact,
+  wording: HelpFactWording | undefined,
+): string {
+  return fact.kind === "present"
+    ? renderHelpFactTemplate("present", wording?.present, {
+        field: fact.field,
+      })
+    : renderHelpFactTemplate("equals", wording?.equals, {
+        field: fact.field,
+        value: JSON.stringify(fact.value),
+      });
 }
 
 function renderHelpFactTemplate<

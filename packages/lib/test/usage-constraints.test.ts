@@ -1,3 +1,4 @@
+/* oxlint-disable unicorn/no-thenable -- then 是 when 条件的公开分支名。 */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -57,8 +58,12 @@ function createConstrainedCli(handler = () => undefined) {
           },
         },
         usageConstraints: [
-          { kind: "requires", field: "auth", requires: "token" },
           { kind: "count", fields: ["output", "quiet"], max: 1 },
+          {
+            kind: "when",
+            all: [{ kind: "present", field: "auth" }],
+            then: { require: ["token"], forbid: ["output", "quiet"] },
+          },
           {
             kind: "forbiddenCombination",
             all: [
@@ -1033,7 +1038,7 @@ void test("动态 count 数组聚合仍可独立判定的成员和端点问题",
   );
 });
 
-void test("数量和禁配关系在无歧义解析后按声明顺序聚合，失败不执行 handler", async () => {
+void test("条件规则与禁配规则按声明顺序聚合，失败不执行 handler", async () => {
   let executions = 0;
   const cli = createConstrainedCli(() => {
     executions += 1;
@@ -1051,13 +1056,19 @@ void test("数量和禁配关系在无歧义解析后按声明顺序聚合，失
     kind: "usageFailure",
     command: "publish",
     issues: [
-      { code: "requiredByUsageConstraint", field: "auth", requires: "token" },
       {
         code: "countConstraintViolation",
         min: 0,
         max: 1,
         presentFields: ["output", "quiet"],
         absentFields: [],
+      },
+      {
+        code: "conditionalConstraintViolation",
+        branch: "then",
+        conditions: [{ kind: "present", field: "auth", present: true }],
+        missingRequiredFields: ["token"],
+        presentForbiddenFields: ["output", "quiet"],
       },
       {
         code: "forbiddenCombinationViolation",
@@ -1085,8 +1096,39 @@ void test("数量和禁配关系在无歧义解析后按声明顺序聚合，失
   assert.equal(termination.kind, "usageFailure");
   assert.equal(executions, 0);
   assert.deepEqual(writes, [
-    '{"schemaVersion":"2","command":"publish","kind":"usageFailure","issues":[{"code":"requiredByUsageConstraint","field":"auth","requires":"token"},{"code":"countConstraintViolation","min":0,"max":1,"presentFields":["output","quiet"],"absentFields":[]},{"code":"forbiddenCombinationViolation","facts":[{"kind":"equals","field":"format","value":"json"},{"kind":"equals","field":"quiet","value":true}]}],"usage":"publish [--auth <auth>] [--token <token>] [--output <output>] [--quiet] [--format <format>]","helpArgv":["publish","--help"]}\n',
+    '{"schemaVersion":"2","command":"publish","kind":"usageFailure","issues":[{"code":"countConstraintViolation","min":0,"max":1,"presentFields":["output","quiet"],"absentFields":[]},{"code":"conditionalConstraintViolation","branch":"then","conditions":[{"kind":"present","field":"auth","present":true}],"missingRequiredFields":["token"],"presentForbiddenFields":["output","quiet"]},{"code":"forbiddenCombinationViolation","facts":[{"kind":"equals","field":"format","value":"json"},{"kind":"equals","field":"quiet","value":true}]}],"usage":"publish [--auth <auth>] [--token <token>] [--output <output>] [--quiet] [--format <format>]","helpArgv":["publish","--help"]}\n',
   ]);
+  const validateWire = new Ajv2020({ strict: false }).compile(
+    cli.manifest.usageFailure.wire,
+  );
+  assert.equal(validateWire(JSON.parse(writes[0]!)), true);
+  assert.equal(
+    validateWire({
+      schemaVersion: "2",
+      command: "publish",
+      kind: "usageFailure",
+      issues: [
+        {
+          code: "conditionalConstraintViolation",
+          branch: "then",
+          conditions: [
+            {
+              kind: "equals",
+              field: "mode",
+              expected: "replay",
+              present: false,
+              actual: "replay",
+            },
+          ],
+          missingRequiredFields: [],
+          presentForbiddenFields: [],
+        },
+      ],
+      usage: cli.grammar.root.usage.synopsis,
+      helpArgv: ["publish", "--help"],
+    }),
+    false,
+  );
 });
 
 void test("禁配字段事实同时观察出现与等值，并保留声明顺序", () => {
@@ -1355,11 +1397,223 @@ void test("JSON Schema 语义与 parser 一致并保留引用定义", () => {
   );
 });
 
+void test("when 的分支 schema 与 parser 对照保留根引用及空效果", () => {
+  const source = z.object({
+    mode: z.enum(["live", "replay"]).optional(),
+    cursor: z.string().optional(),
+    token: z.string().optional(),
+    feedback: z.boolean().optional(),
+  });
+  const inputSchema = {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    $id: "https://example.test/conditional-input",
+    $defs: {
+      mode: { enum: ["live", "replay"], type: "string" },
+    },
+    additionalProperties: false,
+    properties: {
+      mode: { $ref: "#/$defs/mode", type: "string" },
+      cursor: { type: "string" },
+      token: { type: "string" },
+      feedback: { type: "boolean" },
+    },
+    type: "object",
+  } as const;
+  const schema = {
+    "~standard": {
+      ...source["~standard"],
+      jsonSchema: {
+        input: () => inputSchema,
+        output: () => inputSchema,
+      },
+    },
+  };
+  const cli = defineCli()({
+    root: "conditional",
+    help: englishHelpCapability(),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      conditional: {
+        kind: "rootCommand",
+        name: "conditional",
+        description: "条件规则",
+        fields: {
+          mode: {
+            kind: "valueOption",
+            longOption: "--mode",
+            description: "模式",
+          },
+          cursor: {
+            kind: "valueOption",
+            longOption: "--cursor",
+            description: "游标",
+          },
+          token: {
+            kind: "valueOption",
+            longOption: "--token",
+            description: "令牌",
+          },
+          feedback: {
+            kind: "flag",
+            longOption: "--feedback",
+            description: "反馈",
+          },
+        },
+        input: schema,
+        usageConstraints: [
+          {
+            kind: "when",
+            all: [
+              { kind: "equals", field: "mode", value: "replay" },
+              { kind: "present", field: "cursor" },
+            ],
+            then: { require: ["token", "token"], forbid: ["feedback"] },
+            otherwise: { require: ["token"], forbid: ["feedback"] },
+          },
+          {
+            kind: "when",
+            all: [{ kind: "equals", field: "mode", value: "live" }],
+            then: { require: ["cursor"] },
+          },
+          {
+            kind: "when",
+            all: [{ kind: "present", field: "cursor" }],
+            otherwise: { require: ["token"] },
+          },
+          {
+            kind: "when",
+            all: [{ kind: "present", field: "token" }],
+            then: {},
+            otherwise: { forbid: ["cursor"] },
+          },
+        ],
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      },
+    },
+  });
+  const projectedSchema = cli.manifest.commands.conditional.input.inputSchema;
+  assert.equal(projectedSchema.$id, inputSchema.$id);
+  assert.deepEqual(projectedSchema.$defs, inputSchema.$defs);
+  const validate = new Ajv2020({ strict: false }).compile(projectedSchema);
+  const cases = [
+    {
+      argv: ["--mode", "replay", "--cursor", "c-7", "--token", "t"],
+      input: { mode: "replay", cursor: "c-7", token: "t" },
+    },
+    {
+      argv: ["--mode", "replay", "--token", "t"],
+      input: { mode: "replay", token: "t" },
+    },
+    {
+      argv: ["--mode", "live", "--cursor", "c-8", "--token", "t"],
+      input: { mode: "live", cursor: "c-8", token: "t" },
+    },
+  ] as const;
+  for (const scenario of cases) {
+    assert.equal(validate(scenario.input), true);
+    assert.equal(parseCliInvocation(cli, scenario.argv).kind, "parsed");
+  }
+
+  const invalidThen = parseCliInvocation(cli, [
+    "--mode",
+    "replay",
+    "--cursor",
+    "c-7",
+    "--feedback",
+  ]);
+  assert.equal(invalidThen.kind, "usageFailure");
+  assert.equal(
+    validate({ mode: "replay", cursor: "c-7", feedback: true }),
+    false,
+  );
+  if (invalidThen.kind === "usageFailure") {
+    assert.deepEqual(
+      invalidThen.issues.filter(
+        (issue) => issue.code === "conditionalConstraintViolation",
+      ),
+      [
+        {
+          code: "conditionalConstraintViolation",
+          branch: "then",
+          conditions: [
+            {
+              kind: "equals",
+              field: "mode",
+              expected: "replay",
+              present: true,
+              actual: "replay",
+            },
+            { kind: "present", field: "cursor", present: true },
+          ],
+          missingRequiredFields: ["token", "token"],
+          presentForbiddenFields: ["feedback"],
+        },
+        {
+          code: "conditionalConstraintViolation",
+          branch: "otherwise",
+          conditions: [{ kind: "present", field: "token", present: false }],
+          missingRequiredFields: [],
+          presentForbiddenFields: ["cursor"],
+        },
+      ],
+    );
+  }
+
+  const invalidOtherwise = parseCliInvocation(cli, [
+    "--mode",
+    "replay",
+    "--feedback",
+  ]);
+  assert.equal(invalidOtherwise.kind, "usageFailure");
+  assert.equal(validate({ mode: "replay", feedback: true }), false);
+  if (invalidOtherwise.kind === "usageFailure") {
+    assert.ok(
+      invalidOtherwise.issues.some(
+        (issue) =>
+          issue.code === "conditionalConstraintViolation" &&
+          issue.branch === "otherwise" &&
+          issue.conditions[0]?.kind === "present" &&
+          issue.conditions[0].present === false &&
+          issue.missingRequiredFields.includes("token"),
+      ),
+    );
+  }
+
+  const invalidDifferentActual = parseCliInvocation(cli, ["--mode", "live"]);
+  assert.equal(invalidDifferentActual.kind, "usageFailure");
+  assert.equal(validate({ mode: "live" }), false);
+  if (invalidDifferentActual.kind === "usageFailure") {
+    assert.deepEqual(invalidDifferentActual.issues[0], {
+      code: "conditionalConstraintViolation",
+      branch: "otherwise",
+      conditions: [
+        {
+          kind: "equals",
+          field: "mode",
+          expected: "replay",
+          present: true,
+          actual: "live",
+        },
+        { kind: "present", field: "cursor", present: false },
+      ],
+      missingRequiredFields: ["token"],
+      presentForbiddenFields: [],
+    });
+  }
+});
+
 void test("同一约束事实投影到 grammar、manifest、Draft 2020-12 与 help", async () => {
   const cli = createConstrainedCli();
   const constraints = [
-    { kind: "requires", field: "auth", requires: "token" },
     { kind: "count", fields: ["output", "quiet"], min: 0, max: 1 },
+    {
+      kind: "when",
+      all: [{ kind: "present", field: "auth" }],
+      then: { require: ["token"], forbid: ["output", "quiet"] },
+    },
     {
       kind: "forbiddenCombination",
       all: [
@@ -1379,6 +1633,30 @@ void test("同一约束事实投影到 grammar、manifest、Draft 2020-12 与 he
   const validate = new Ajv2020({ strict: false }).compile(projectedSchema);
   assert.equal(validate({ output: "result.txt" }), true);
   assert.equal(validate({ output: "result.txt", quiet: false }), false);
+  assert.equal(
+    typeof (projectedSchema.allOf[0] as { $ref?: unknown }).$ref,
+    "string",
+  );
+  assert.deepEqual(projectedSchema.allOf[1], {
+    if: { allOf: [{ required: ["auth"] }] },
+    then: {
+      required: ["token"],
+      not: {
+        anyOf: [{ required: ["output"] }, { required: ["quiet"] }],
+      },
+    },
+  });
+  assert.deepEqual(projectedSchema.allOf[2], {
+    not: {
+      allOf: [
+        {
+          properties: { format: { const: "json" } },
+          required: ["format"],
+        },
+        { properties: { quiet: { const: true } }, required: ["quiet"] },
+      ],
+    },
+  });
 
   const writes: string[] = [];
   await executeCli(cli, {
@@ -1390,11 +1668,11 @@ void test("同一约束事实投影到 grammar、manifest、Draft 2020-12 与 he
   });
   assert.match(
     writes.join(""),
-    /--help\n\n  auth requires token\n  output, quiet at most 1\n  forbidden combination of format="json", quiet=true\n$/,
+    /--help\n\n  output, quiet at most 1\n  when all of auth is present, require token, forbid output, quiet\n  forbidden combination of format="json", quiet=true\n$/,
   );
 });
 
-void test("defineCli 以局部身份拒绝无效约束引用和事实值", () => {
+void test("动态 when 校验复用事实和值域规则，并检查分支局部矛盾", () => {
   const definition = {
     root: "invalidConstraints",
     help: englishHelpCapability(),
@@ -1406,8 +1684,12 @@ void test("defineCli 以局部身份拒绝无效约束引用和事实值", () =>
         name: "invalid-constraints",
         description: "无效约束",
         fields: {
-          source: { kind: "positional", description: "源" },
-          tag: {
+          mode: {
+            kind: "valueOption",
+            longOption: "--mode",
+            description: "模式",
+          },
+          tags: {
             kind: "repeatableOption",
             longOption: "--tag",
             description: "标签",
@@ -1415,19 +1697,21 @@ void test("defineCli 以局部身份拒绝无效约束引用和事实值", () =>
           force: { kind: "flag", longOption: "--force", description: "强制" },
         },
         usageConstraints: [
-          { kind: "requires", field: "missing", requires: "force" },
           {
-            kind: "forbiddenCombination",
+            kind: "when",
             all: [
-              { kind: "equals", field: "tag", value: "nightly" },
+              { kind: "equals", field: "mode", value: "outside" },
               { kind: "equals", field: "force", value: "yes" },
+              { kind: "equals", field: "tags", value: "nightly" },
+              { kind: "present", field: "missing" },
             ],
+            then: { require: ["mode", "absent"], forbid: ["mode"] },
+            otherwise: { forbid: ["missing"] },
           },
-          { kind: "requires", field: "force", requires: "force" },
         ],
         input: z.object({
-          source: z.string().optional(),
-          tag: z.array(z.string()).optional(),
+          mode: z.enum(["safe", "force"]).optional(),
+          tags: z.array(z.string()).optional(),
           force: z.boolean().optional(),
         }),
         success: { kind: "completion" },
@@ -1437,33 +1721,51 @@ void test("defineCli 以局部身份拒绝无效约束引用和事实值", () =>
     },
   };
   assert.throws(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证用法约束拒绝。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 动态定义负例绕过静态限制，以验证定义期事实与分支检查。
     () => defineCli()(definition as never),
     (error: unknown) => {
-      assert(error instanceof ContractDefinitionError);
-      assert.deepEqual(error.issues[0], {
-        code: "unknownUsageConstraintField",
-        command: "invalidConstraints",
-        constraint: "requires",
-        index: 0,
-        member: "field",
-        field: "missing",
-      });
+      assert.ok(error instanceof ContractDefinitionError);
       assert.deepEqual(
         error.issues.map(({ code }) => code),
         [
-          "unknownUsageConstraintField",
-          "inapplicableUsageConstraintField",
           "invalidUsageConstraintValue",
+          "invalidUsageConstraintValue",
+          "inapplicableUsageConstraintField",
+          "unknownUsageConstraintField",
+          "unknownUsageConstraintField",
           "contradictoryUsageConstraint",
+          "unknownUsageConstraintField",
         ],
+      );
+      assert.deepEqual(error.issues[0], {
+        code: "invalidUsageConstraintValue",
+        command: "invalidConstraints",
+        constraint: "when",
+        index: 0,
+        member: "all.value",
+        field: "mode",
+        actual: "outside",
+        expected: ["safe", "force"],
+      });
+      assert.deepEqual(
+        error.issues.find(
+          (issue) => issue.code === "contradictoryUsageConstraint",
+        ),
+        {
+          code: "contradictoryUsageConstraint",
+          command: "invalidConstraints",
+          constraint: "when",
+          index: 0,
+          member: "then",
+          fields: ["mode"],
+        },
       );
       return true;
     },
   );
 });
 
-void test("defineCli 聚合拒绝无效成员形状与动态候选值", () => {
+void test("动态 when 聚合空分支、畸形成员及闭合属性诊断", () => {
   const definition = {
     root: "invalidShapes",
     help: englishHelpCapability(),
@@ -1494,36 +1796,28 @@ void test("defineCli 聚合拒绝无效成员形状与动态候选值", () => {
             all: [{ kind: "equals", field: "mode", value: "toml" }],
           },
           {
-            kind: "forbiddenCombination",
-            all: [{ kind: "equals", field: "force", value: false }],
+            kind: "when",
+            all: [],
+            then: { require: [] },
+            otherwise: { forbid: [] },
           },
           {
-            kind: "forbiddenCombination",
+            kind: "when",
+            typo: true,
             all: [
-              { kind: "present", field: "missing" },
               42,
-              { kind: "equals", field: "mode", value: "toml" },
+              { kind: "equals", field: "mode", value: 42 },
+              { kind: "present", field: "mode", typo: true },
+              { kind: "equals", field: "mode" },
             ],
+            then: { require: "mode", other: true },
+            otherwise: null,
           },
+          { kind: "predicate" },
+          { kind: "forbiddenCombination", all: [] },
           {
-            kind: "forbiddenCombination",
-            all: [{ kind: "equals", field: "mode", value: 42 }],
-          },
-          {
-            kind: "forbiddenCombination",
-            all: [{ kind: "equals", field: "mode", value: null }],
-          },
-          {
-            kind: "forbiddenCombination",
-            all: [{ kind: "equals", field: "mode", value: { nested: true } }],
-          },
-          {
-            kind: "forbiddenCombination",
-            all: [{ kind: "equals", field: "mode", value: undefined }],
-          },
-          {
-            kind: "forbiddenCombination",
-            all: [{ kind: "equals", field: "mode" }],
+            kind: "when",
+            all: [{ kind: "present", field: "mode" }],
           },
         ],
         input: z.object({
@@ -1537,129 +1831,106 @@ void test("defineCli 聚合拒绝无效成员形状与动态候选值", () => {
     },
   };
   assert.throws(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证用法约束拒绝。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 动态定义负例绕过静态限制，验证闭合检查完整聚合。
     () => defineCli()(definition as never),
     (error: unknown) => {
       assert(error instanceof ContractDefinitionError);
-      assert.deepEqual(error.issues, [
+      assert.deepEqual(
+        error.issues.map(({ code }) => code),
+        [
+          "unknownDefinitionProperty",
+          "unknownDefinitionProperty",
+          "unknownDefinitionProperty",
+          "invalidUsageConstraintValue",
+          "invalidUsageConstraint",
+          "invalidUsageConstraint",
+          "invalidUsageConstraintValue",
+          "invalidUsageConstraint",
+          "invalidUsageConstraint",
+          "invalidUsageConstraint",
+          "invalidUsageConstraint",
+          "invalidUsageConstraintValue",
+          "invalidUsageConstraint",
+          "invalidUsageConstraint",
+          "invalidUsageConstraint",
+          "invalidUsageConstraint",
+          "invalidUsageConstraint",
+        ],
+      );
+      const unknownProperties = error.issues.filter(
+        (issue) => issue.code === "unknownDefinitionProperty",
+      );
+      assert.deepEqual(
+        unknownProperties.map(({ path }) => path),
+        [
+          ["commands", "invalidShapes", "usageConstraints", "5", "typo"],
+          [
+            "commands",
+            "invalidShapes",
+            "usageConstraints",
+            "5",
+            "all",
+            "2",
+            "typo",
+          ],
+          [
+            "commands",
+            "invalidShapes",
+            "usageConstraints",
+            "5",
+            "then",
+            "other",
+          ],
+        ],
+      );
+      assert.deepEqual(
+        error.issues.find(
+          (issue) =>
+            issue.code === "invalidUsageConstraintValue" && issue.index === 0,
+        ),
         {
           code: "invalidUsageConstraintValue",
           command: "invalidShapes",
+          constraint: "forbiddenCombination",
           index: 0,
-          constraint: "forbiddenCombination",
           member: "all.value",
           field: "force",
           actual: 42,
           expected: true,
         },
-        {
-          code: "invalidUsageConstraint",
-          command: "invalidShapes",
-          index: 1,
-          aspect: "members",
-          received: "forbiddenCombination",
-        },
-        {
-          code: "invalidUsageConstraint",
-          command: "invalidShapes",
-          index: 2,
-          aspect: "kind",
-          received: "predicate",
-        },
-        {
-          code: "invalidUsageConstraintValue",
-          command: "invalidShapes",
-          constraint: "forbiddenCombination",
-          index: 3,
-          member: "all.value",
-          field: "mode",
-          actual: "toml",
-          expected: ["safe", "force"],
-        },
-        {
-          code: "invalidUsageConstraintValue",
-          command: "invalidShapes",
-          constraint: "forbiddenCombination",
-          index: 4,
-          member: "all.value",
-          field: "force",
-          actual: false,
-          expected: true,
-        },
-        {
-          code: "invalidUsageConstraint",
-          command: "invalidShapes",
-          index: 5,
-          aspect: "members",
-          received: "forbiddenCombination",
-        },
-        {
-          code: "unknownUsageConstraintField",
-          command: "invalidShapes",
-          constraint: "forbiddenCombination",
-          index: 5,
-          member: "all.field",
-          field: "missing",
-        },
-        {
-          code: "invalidUsageConstraintValue",
-          command: "invalidShapes",
-          constraint: "forbiddenCombination",
-          index: 5,
-          member: "all.value",
-          field: "mode",
-          actual: "toml",
-          expected: ["safe", "force"],
-        },
-        {
-          code: "invalidUsageConstraintValue",
-          command: "invalidShapes",
-          constraint: "forbiddenCombination",
-          index: 6,
-          member: "all.value",
-          field: "mode",
-          actual: 42,
-          expected: ["safe", "force"],
-        },
-        {
-          code: "invalidUsageConstraintValue",
-          command: "invalidShapes",
-          constraint: "forbiddenCombination",
-          index: 7,
-          member: "all.value",
-          field: "mode",
-          actual: null,
-          expected: ["safe", "force"],
-        },
-        {
-          code: "invalidUsageConstraintValue",
-          command: "invalidShapes",
-          constraint: "forbiddenCombination",
-          index: 8,
-          member: "all.value",
-          field: "mode",
-          actual: { nested: true },
-          expected: ["safe", "force"],
-        },
-        {
-          code: "invalidUsageConstraintValue",
-          command: "invalidShapes",
-          constraint: "forbiddenCombination",
-          index: 9,
-          member: "all.value",
-          field: "mode",
-          actual: undefined,
-          expected: ["safe", "force"],
-        },
-        {
-          code: "invalidUsageConstraint",
-          command: "invalidShapes",
-          index: 10,
-          aspect: "members",
-          received: "forbiddenCombination",
-        },
-      ]);
-      assert.match(error.message, /mode=undefined/);
+      );
+      assert.ok(
+        error.issues.some(
+          (issue) =>
+            issue.code === "invalidUsageConstraint" &&
+            issue.index === 4 &&
+            issue.member === "all",
+        ),
+      );
+      assert.ok(
+        error.issues.some(
+          (issue) =>
+            issue.code === "invalidUsageConstraint" &&
+            issue.index === 4 &&
+            issue.member === "effects",
+        ),
+      );
+      assert.ok(
+        error.issues.some(
+          (issue) =>
+            issue.code === "invalidUsageConstraint" &&
+            issue.index === 5 &&
+            issue.member === "then.require",
+        ),
+      );
+      assert.ok(
+        error.issues.some(
+          (issue) =>
+            issue.code === "invalidUsageConstraint" &&
+            issue.index === 8 &&
+            issue.member === "effects",
+        ),
+      );
       return true;
     },
   );
@@ -1790,6 +2061,7 @@ void test("defineCli 拒绝同字段上互相矛盾的等值事实", () => {
             code: "contradictoryUsageConstraint",
             command: "contradictoryFacts",
             constraint: "forbiddenCombination",
+            index: 0,
             member: "all",
             fields: ["mode"],
           },
@@ -1894,6 +2166,198 @@ void test("defineCli 将显式 null 交给 usage constraint collection 守卫", 
           index: null,
           aspect: "collection",
           received: null,
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("when 成立时按一条规则报告完整条件与全部失败效果", async () => {
+  let executions = 0;
+  const cli = defineCli()({
+    root: "replay",
+    help: englishHelpCapability(),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      replay: {
+        kind: "rootCommand",
+        name: "replay",
+        description: "重放",
+        fields: {
+          mode: {
+            kind: "valueOption",
+            longOption: "--mode",
+            description: "模式",
+          },
+          cursor: {
+            kind: "valueOption",
+            longOption: "--cursor",
+            description: "游标",
+          },
+          token: {
+            kind: "valueOption",
+            longOption: "--token",
+            description: "令牌",
+          },
+          feedback: {
+            kind: "flag",
+            longOption: "--feedback",
+            description: "反馈",
+          },
+        },
+        input: z.object({
+          mode: z.enum(["live", "replay"]).optional(),
+          cursor: z.string().optional(),
+          token: z.string().optional(),
+          feedback: z.boolean().optional(),
+        }),
+        usageConstraints: [
+          {
+            kind: "when",
+            all: [
+              { kind: "equals", field: "mode", value: "replay" },
+              { kind: "present", field: "cursor" },
+            ],
+            then: { require: ["token"], forbid: ["feedback"] },
+            otherwise: { forbid: ["token"] },
+          },
+        ],
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => {
+          executions += 1;
+          return outcome.completion();
+        },
+      },
+    },
+  });
+
+  const invocation = parseCliInvocation(cli, [
+    "--mode",
+    "replay",
+    "--cursor",
+    "c-7",
+    "--feedback",
+  ]);
+  assert.equal(invocation.kind, "usageFailure");
+  if (invocation.kind !== "usageFailure") assert.fail("应拒绝缺少令牌的调用");
+  assert.deepEqual(invocation.issues, [
+    {
+      code: "conditionalConstraintViolation",
+      branch: "then",
+      conditions: [
+        {
+          kind: "equals",
+          field: "mode",
+          expected: "replay",
+          present: true,
+          actual: "replay",
+        },
+        { kind: "present", field: "cursor", present: true },
+      ],
+      missingRequiredFields: ["token"],
+      presentForbiddenFields: ["feedback"],
+    },
+  ]);
+
+  const writes: string[] = [];
+  const termination = await executeCli(cli, {
+    invocation,
+    dependencies: undefined,
+    write: ({ chunk }) => {
+      writes.push(chunk);
+    },
+  });
+  assert.equal(termination.kind, "usageFailure");
+  assert.equal(executions, 0);
+  assert.deepEqual(termination.issues, invocation.issues);
+  assert.equal(writes.length, 1);
+});
+
+void test("动态效果字段数组只在运行值实际重叠时产生条件失败", () => {
+  const required: readonly ("mode" | "token")[] = ["token"];
+  const forbidden: readonly ("mode" | "token")[] = ["mode"];
+  const cli = defineCli()({
+    root: "dynamicEffects",
+    help: englishHelpCapability(),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      dynamicEffects: {
+        kind: "rootCommand",
+        name: "dynamic-effects",
+        description: "动态分支效果",
+        fields: {
+          mode: {
+            kind: "valueOption",
+            longOption: "--mode",
+            description: "模式",
+          },
+          token: {
+            kind: "valueOption",
+            longOption: "--token",
+            description: "令牌",
+          },
+        },
+        input: z.object({
+          mode: z.string().optional(),
+          token: z.string().optional(),
+        }),
+        usageConstraints: [
+          {
+            kind: "when",
+            all: [{ kind: "present", field: "mode" }],
+            then: { require: required, forbid: forbidden },
+          },
+        ],
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      },
+    },
+  });
+
+  assert.deepEqual(parseCliInvocation(cli, ["--mode", "live"]), {
+    kind: "usageFailure",
+    command: "dynamicEffects",
+    issues: [
+      {
+        code: "conditionalConstraintViolation",
+        branch: "then",
+        conditions: [{ kind: "present", field: "mode", present: true }],
+        missingRequiredFields: ["token"],
+        presentForbiddenFields: ["mode"],
+      },
+    ],
+    usage: {
+      command: "dynamicEffects",
+      synopsis: "dynamic-effects [--mode <mode>] [--token <token>]",
+    },
+  });
+});
+
+void test("动态 when 效果保留混合数组中可知的错字段定位", () => {
+  const constraints: readonly UsageConstraint[] = [
+    {
+      kind: "when",
+      all: [{ kind: "present", field: "auth" }],
+      then: { require: ["missing", "quiet"] },
+    },
+  ];
+  assert.throws(
+    () => defineCli()(countCliDefinition(constraints) as never),
+    (error: unknown) => {
+      assert(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "unknownUsageConstraintField",
+          command: "countInputs",
+          constraint: "when",
+          index: 0,
+          member: "then.require",
+          field: "missing",
         },
       ]);
       return true;
