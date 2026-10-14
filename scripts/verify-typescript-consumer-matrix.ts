@@ -373,6 +373,8 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
       "invalidHelpFactTemplate",
       "unknownDefinitionProperty",
       "invalidHelpFactTemplate",
+      "invalidHelpFactTemplate",
+      "unknownDefinitionProperty",
     ],
     required: [
       'slot: "commandPlaceholder"',
@@ -584,7 +586,7 @@ function verifyAuthoringLanguageService(
     },
     {
       fixture: "invalid-help-fact-templates.ts",
-      count: 9,
+      count: 11,
       required: [
         "invalidHelpFactTemplate",
         "unknownDefinitionProperty",

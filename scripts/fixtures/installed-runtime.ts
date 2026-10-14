@@ -667,7 +667,7 @@ assert.throws(
           "commands",
           "probe",
           "usageConstraints",
-          "2",
+          "6",
           "all",
           "0",
           "typo",

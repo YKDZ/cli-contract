@@ -952,15 +952,24 @@ type HelpFactWordingContract<Wording> = [
   ? unknown
   : HelpFactWordingIssues<Wording>;
 
-type HelpCapabilityTemplateContract<Definition> = [Definition] extends [
-  Readonly<{
-    readonly wording: infer Wording;
-  }>,
-]
-  ? [Extract<Wording, (...arguments_: never[]) => unknown>] extends [never]
-    ? HelpFactWordingContract<Wording>
+type HelpCapabilityWording<Definition> = Definition extends unknown
+  ? Definition extends Readonly<{ readonly wording?: infer Wording }>
+    ? Exclude<Wording, undefined>
     : never
-  : unknown;
+  : never;
+
+type HelpCapabilityTemplateContract<Definition> = [
+  HelpCapabilityWording<Definition>,
+] extends [never]
+  ? unknown
+  : [
+        Extract<
+          HelpCapabilityWording<Definition>,
+          (...arguments_: never[]) => unknown
+        >,
+      ] extends [never]
+    ? HelpFactWordingContract<HelpCapabilityWording<Definition>>
+    : never;
 
 type InputStringKeys<Input> = Extract<keyof Input, string>;
 

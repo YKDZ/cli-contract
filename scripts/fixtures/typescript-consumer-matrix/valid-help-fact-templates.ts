@@ -18,3 +18,13 @@ const validChoicesUnion: ValidChoicesUnion =
     ? { choices: "候选 {choices}" }
     : { choices: "可选 {choices}" };
 void helpCapability({ wording: validChoicesUnion });
+
+type OptionalValidWording = {
+  readonly shortAlias: "-h";
+  readonly wording?: { readonly choices: "候选 {choices}" };
+};
+const optionalValidWording: OptionalValidWording = {
+  shortAlias: "-h",
+  wording: { choices: "候选 {choices}" },
+};
+void helpCapability(optionalValidWording);
