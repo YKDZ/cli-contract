@@ -4892,7 +4892,13 @@ function compileCountUsageConstraint(
   index: number,
   issues: ContractDefinitionIssue[],
 ): CountUsageConstraintGrammar | undefined {
-  if (!Array.isArray(candidate.fields) || candidate.fields.length === 0) {
+  const fieldsCandidate = candidate.fields;
+  const hasFieldArray = Array.isArray(fieldsCandidate);
+  const rawFieldNames: readonly unknown[] = hasFieldArray
+    ? fieldsCandidate
+    : [];
+  let valid = true;
+  if (!hasFieldArray || rawFieldNames.length === 0) {
     issues.push({
       code: "invalidCountConstraint",
       command,
@@ -4900,10 +4906,19 @@ function compileCountUsageConstraint(
       member: "fields",
       reason: "nonEmpty",
     });
-    return undefined;
+    valid = false;
   }
-  const fieldNames = Array.from(candidate.fields);
-  if (!fieldNames.every((field) => typeof field === "string")) {
+
+  const stringFieldNames: string[] = [];
+  let hasInvalidFieldName = false;
+  for (const field of rawFieldNames) {
+    if (typeof field === "string") {
+      stringFieldNames.push(field);
+    } else {
+      hasInvalidFieldName = true;
+    }
+  }
+  if (hasInvalidFieldName) {
     issues.push({
       code: "invalidCountConstraint",
       command,
@@ -4911,13 +4926,10 @@ function compileCountUsageConstraint(
       member: "fields",
       reason: "fieldName",
     });
-    return undefined;
+    valid = false;
   }
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 前置检查已确认每项均为字符串。
-  const stringFieldNames = fieldNames as string[];
   const fieldsByKey = new Set(fields.map(({ key }) => key));
-  let valid = true;
   for (const field of stringFieldNames) {
     if (!fieldsByKey.has(field)) {
       issues.push({
@@ -4957,32 +4969,36 @@ function compileCountUsageConstraint(
       member: "min",
       reason: "endpointRequired",
     });
-    return undefined;
+    valid = false;
   }
 
   const min = hasMin ? candidate.min : 0;
-  const max = hasMax ? candidate.max : stringFieldNames.length;
+  const fieldCount = hasFieldArray ? rawFieldNames.length : undefined;
   const normalizedMin = normalizeCountEndpoint(
     min,
     "min",
-    stringFieldNames.length,
+    fieldCount,
     command,
     index,
     issues,
   );
-  const normalizedMax = normalizeCountEndpoint(
-    max,
-    "max",
-    stringFieldNames.length,
-    command,
-    index,
-    issues,
-  );
-  if (normalizedMin === undefined || normalizedMax === undefined) valid = false;
+  const normalizedMax = hasMax
+    ? normalizeCountEndpoint(
+        candidate.max,
+        "max",
+        fieldCount,
+        command,
+        index,
+        issues,
+      )
+    : fieldCount === undefined
+      ? undefined
+      : { value: fieldCount, valid: true };
+  if (!normalizedMin.valid || normalizedMax?.valid === false) valid = false;
   if (
-    normalizedMin !== undefined &&
-    normalizedMax !== undefined &&
-    normalizedMin > normalizedMax
+    normalizedMin.value !== undefined &&
+    normalizedMax?.value !== undefined &&
+    normalizedMin.value > normalizedMax.value
   ) {
     issues.push({
       code: "invalidCountConstraint",
@@ -4990,12 +5006,16 @@ function compileCountUsageConstraint(
       index,
       member: "min",
       reason: "ordered",
-      actual: normalizedMin,
-      maximum: normalizedMax,
+      actual: normalizedMin.value,
+      maximum: normalizedMax.value,
     });
     valid = false;
   }
-  if (!valid || normalizedMin === undefined || normalizedMax === undefined) {
+  if (
+    !valid ||
+    normalizedMin.value === undefined ||
+    normalizedMax?.value === undefined
+  ) {
     return undefined;
   }
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- fields 已检查非空且每项都是字符串。
@@ -5006,19 +5026,19 @@ function compileCountUsageConstraint(
   return deepFreeze({
     kind: "count" as const,
     fields: nonEmptyFields,
-    min: normalizedMin,
-    max: normalizedMax,
+    min: normalizedMin.value,
+    max: normalizedMax.value,
   });
 }
 
 function normalizeCountEndpoint(
   value: unknown,
   member: "min" | "max",
-  fieldCount: number,
+  fieldCount: number | undefined,
   command: string,
   index: number,
   issues: ContractDefinitionIssue[],
-): number | undefined {
+): { readonly value: number | undefined; readonly valid: boolean } {
   if (typeof value !== "number") {
     issues.push({
       code: "invalidCountConstraint",
@@ -5027,7 +5047,7 @@ function normalizeCountEndpoint(
       member,
       reason: "integer",
     });
-    return undefined;
+    return { value: undefined, valid: false };
   }
   if (value < 0) {
     issues.push({
@@ -5038,7 +5058,10 @@ function normalizeCountEndpoint(
       reason: "nonNegative",
       actual: value,
     });
-    return undefined;
+    return {
+      value: Number.isFinite(value) ? value : undefined,
+      valid: false,
+    };
   }
   if (!Number.isFinite(value)) {
     issues.push({
@@ -5049,7 +5072,7 @@ function normalizeCountEndpoint(
       reason: "finite",
       actual: value,
     });
-    return undefined;
+    return { value: undefined, valid: false };
   }
   if (!Number.isInteger(value)) {
     issues.push({
@@ -5060,9 +5083,9 @@ function normalizeCountEndpoint(
       reason: "integer",
       actual: value,
     });
-    return undefined;
+    return { value, valid: false };
   }
-  if (value > fieldCount) {
+  if (fieldCount !== undefined && value > fieldCount) {
     issues.push({
       code: "invalidCountConstraint",
       command,
@@ -5072,9 +5095,9 @@ function normalizeCountEndpoint(
       actual: value,
       maximum: fieldCount,
     });
-    return undefined;
+    return { value, valid: false };
   }
-  return value;
+  return { value, valid: true };
 }
 
 function projectUsageConstraints(

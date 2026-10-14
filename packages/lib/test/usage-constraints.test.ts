@@ -813,6 +813,130 @@ void test("动态 count 定义按端点和字段问题给出局部原因", () =>
   }
 });
 
+void test("动态 count 数组聚合仍可独立判定的成员和端点问题", () => {
+  const constraints: unknown = [
+    {
+      kind: "count",
+      fields: ["missing", "auth", 7],
+      min: -1,
+      max: 4,
+    },
+    { kind: "count", fields: [], min: 1, max: 1 },
+    { kind: "count", fields: null, min: -1, max: 0.5 },
+    { kind: "count", fields: "not-a-fields-array", min: 2, max: 1 },
+  ];
+  const definition = countCliDefinition(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 动态数组故意含非法成员，以验证定义期聚合。
+    constraints as readonly UsageConstraint[],
+  );
+  assert.throws(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 动态负例绕过静态契约，以验证定义期边界。
+    () => defineCli()(definition as never),
+    (error: unknown) => {
+      assert(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidCountConstraint",
+          command: "countInputs",
+          index: 0,
+          member: "fields",
+          reason: "fieldName",
+        },
+        {
+          code: "unknownUsageConstraintField",
+          command: "countInputs",
+          constraint: "count",
+          index: 0,
+          member: "fields",
+          field: "missing",
+        },
+        {
+          code: "invalidCountConstraint",
+          command: "countInputs",
+          index: 0,
+          member: "min",
+          reason: "nonNegative",
+          actual: -1,
+        },
+        {
+          code: "invalidCountConstraint",
+          command: "countInputs",
+          index: 0,
+          member: "max",
+          reason: "fieldCount",
+          actual: 4,
+          maximum: 3,
+        },
+        {
+          code: "invalidCountConstraint",
+          command: "countInputs",
+          index: 1,
+          member: "fields",
+          reason: "nonEmpty",
+        },
+        {
+          code: "invalidCountConstraint",
+          command: "countInputs",
+          index: 1,
+          member: "min",
+          reason: "fieldCount",
+          actual: 1,
+          maximum: 0,
+        },
+        {
+          code: "invalidCountConstraint",
+          command: "countInputs",
+          index: 1,
+          member: "max",
+          reason: "fieldCount",
+          actual: 1,
+          maximum: 0,
+        },
+        {
+          code: "invalidCountConstraint",
+          command: "countInputs",
+          index: 2,
+          member: "fields",
+          reason: "nonEmpty",
+        },
+        {
+          code: "invalidCountConstraint",
+          command: "countInputs",
+          index: 2,
+          member: "min",
+          reason: "nonNegative",
+          actual: -1,
+        },
+        {
+          code: "invalidCountConstraint",
+          command: "countInputs",
+          index: 2,
+          member: "max",
+          reason: "integer",
+          actual: 0.5,
+        },
+        {
+          code: "invalidCountConstraint",
+          command: "countInputs",
+          index: 3,
+          member: "fields",
+          reason: "nonEmpty",
+        },
+        {
+          code: "invalidCountConstraint",
+          command: "countInputs",
+          index: 3,
+          member: "min",
+          reason: "ordered",
+          actual: 2,
+          maximum: 1,
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
 void test("三类闭合关系在无歧义解析后按声明顺序聚合，失败不执行 handler", async () => {
   let executions = 0;
   const cli = createConstrainedCli(() => {
