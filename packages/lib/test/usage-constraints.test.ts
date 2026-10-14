@@ -1131,6 +1131,32 @@ void test("条件规则与禁配规则按声明顺序聚合，失败不执行 ha
   );
 });
 
+void test("跨规则的不可达条件分支不会触发全局可满足性拒绝", () => {
+  const cli = defineCli()({
+    ...countCliDefinition([
+      { kind: "count", fields: ["auth", "quiet"], max: 1 },
+      {
+        kind: "when",
+        all: [{ kind: "present", field: "auth" }],
+        then: { require: ["quiet"] },
+      },
+    ]),
+    help: englishHelpCapability(),
+  });
+  const invocation = parseCliInvocation(cli, ["--auth", "token", "--quiet"]);
+  assert.equal(invocation.kind, "usageFailure");
+  if (invocation.kind !== "usageFailure") return;
+  assert.deepEqual(invocation.issues, [
+    {
+      code: "countConstraintViolation",
+      min: 0,
+      max: 1,
+      presentFields: ["auth", "quiet"],
+      absentFields: [],
+    },
+  ]);
+});
+
 void test("禁配字段事实同时观察出现与等值，并保留声明顺序", () => {
   const cli = defineCli()({
     root: "publish",
