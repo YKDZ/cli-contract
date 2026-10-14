@@ -15,6 +15,8 @@ import {
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
+import { englishHelpCapability } from "./english-help.ts";
+
 function createCompletionCli(onRun: () => Promise<void> | void) {
   return defineCli()({
     root: "fixture",
@@ -173,6 +175,41 @@ void test("执行期文本值检查以稳定 code 拒绝而不写出", async () 
     },
   );
   assert.deepEqual(writes, []);
+});
+
+void test("文本呈现器抛出的异常保持原始身份", async () => {
+  const cause = new RangeError("consumer text presenter defect");
+  const cli = defineCli()({
+    root: "fixture",
+    help: englishHelpCapability(),
+    output: outputCapability({ defaultFormat: "text" }),
+    usageFailureExitCode: 64,
+    commands: {
+      fixture: {
+        kind: "rootCommand",
+        name: "fixture",
+        description: "fixture command",
+        input: z.object({}),
+        success: {
+          kind: "completion",
+          text: () => {
+            throw cause;
+          },
+        },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      },
+    },
+  });
+
+  await assert.rejects(
+    executeCli(cli, {
+      invocation: parseCliInvocation(cli, []),
+      dependencies: undefined,
+      write: () => undefined,
+    }),
+    (error) => error === cause,
+  );
 });
 
 void test("schema validate 抛出的开放异常保持原始身份", async () => {

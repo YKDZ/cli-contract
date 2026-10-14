@@ -65,6 +65,7 @@ export {
   createStreamRecordFact,
   createStreamSuccessFact,
   isIssuedOutcomeFact,
+  TextValueError,
   text,
 } from "#/outcome-fact";
 export type {
@@ -92,6 +93,7 @@ export type {
   SilentText,
   TextLine,
   TextLines,
+  TextValueErrorIssue,
   TextFragment,
 } from "#/outcome-fact";
 

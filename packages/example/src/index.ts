@@ -30,7 +30,7 @@ const lookup = define.command("lookup")({
         description: "找到用户",
         schema: z.object({ name: z.string() }),
         exitCode: 0,
-        text: (user) => text.line(user.name),
+        text: (user) => text.lines(["用户信息", user.name]),
       },
     },
   },
@@ -41,7 +41,7 @@ const lookup = define.command("lookup")({
       description: "用户不存在",
       schema: z.object({ id: z.string() }),
       exitCode: 1,
-      text: ({ id }) => text.line(`用户 ${id} 不存在`),
+      text: ({ id }) => text.lines([`用户 ${id} 不存在`, "", "请检查用户标识"]),
     },
   },
   handler({ input, outcome }) {

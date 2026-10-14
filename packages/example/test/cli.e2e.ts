@@ -17,66 +17,98 @@ function invoke(...argv: string[]) {
 }
 
 void test(
-  "日志到达后立即输出 NDJSON，结束前可读取记录",
+  "日志 NDJSON 与文本片段都在流结束前保持各自分帧",
   { timeout: 5000 },
   async (t) => {
-    const child = spawn(
-      process.execPath,
-      [
-        fileURLToPath(new URL("../src/main.ts", import.meta.url)),
-        "logs",
-        "--json",
-      ],
-      { stdio: ["pipe", "pipe", "pipe"] },
-    );
-    t.after(() => {
-      child.kill();
-    });
-    const finished = once(child, "close");
-    let stderr = "";
-    child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
-      stderr += chunk;
-    });
-    const lines = createInterface({ input: child.stdout });
-    t.after(() => lines.close());
-    const records = lines[Symbol.asyncIterator]();
-    async function nextRecord() {
-      const next = await records.next();
-      assert.ok(!next.done);
-      return JSON.parse(next.value);
+    async function verifyStream(mode: "structured" | "text") {
+      const child = spawn(
+        process.execPath,
+        [
+          fileURLToPath(new URL("../src/main.ts", import.meta.url)),
+          "logs",
+          ...(mode === "structured" ? ["--json"] : []),
+        ],
+        { stdio: ["pipe", "pipe", "pipe"] },
+      );
+      t.after(() => {
+        child.kill();
+      });
+      const finished = once(child, "close");
+      let stdout = "";
+      let stderr = "";
+      child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
+        stdout += chunk;
+      });
+      child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
+        stderr += chunk;
+      });
+      const lines = createInterface({ input: child.stdout });
+      t.after(() => lines.close());
+      const records = lines[Symbol.asyncIterator]();
+      async function nextLine() {
+        const next = await records.next();
+        assert.ok(!next.done);
+        return next.value;
+      }
+
+      child.stdin.write("started\n");
+      if (mode === "structured") {
+        assert.deepEqual(JSON.parse(await nextLine()), {
+          schemaVersion: "1",
+          command: "logs",
+          kind: "stream",
+        });
+        assert.deepEqual(JSON.parse(await nextLine()), {
+          kind: "record",
+          variant: "entry",
+          data: { message: "started" },
+        });
+        assert.equal(
+          stdout,
+          '{"schemaVersion":"1","command":"logs","kind":"stream"}\n{"kind":"record","variant":"entry","data":{"message":"started"}}\n',
+        );
+      } else {
+        assert.equal(await nextLine(), "started");
+        assert.equal(stdout, "started\n");
+      }
+      assert.equal(child.exitCode, null);
+
+      child.stdin.write("ready\n");
+      if (mode === "structured") {
+        assert.deepEqual(JSON.parse(await nextLine()), {
+          kind: "record",
+          variant: "entry",
+          data: { message: "ready" },
+        });
+      } else {
+        assert.equal(await nextLine(), "ready");
+      }
+      child.stdin.end();
+      if (mode === "structured") {
+        assert.deepEqual(JSON.parse(await nextLine()), {
+          kind: "streamSuccess",
+        });
+      }
+      assert.equal((await records.next()).done, true);
+      assert.deepEqual(await finished, [0, null]);
+      assert.equal(
+        stdout,
+        mode === "structured"
+          ? '{"schemaVersion":"1","command":"logs","kind":"stream"}\n{"kind":"record","variant":"entry","data":{"message":"started"}}\n{"kind":"record","variant":"entry","data":{"message":"ready"}}\n{"kind":"streamSuccess"}\n'
+          : "started\nready\n",
+      );
+      assert.equal(stderr, "");
     }
 
-    child.stdin.write("started\n");
-    assert.deepEqual(await nextRecord(), {
-      schemaVersion: "1",
-      command: "logs",
-      kind: "stream",
-    });
-    assert.deepEqual(await nextRecord(), {
-      kind: "record",
-      variant: "entry",
-      data: { message: "started" },
-    });
-    assert.equal(child.exitCode, null);
-
-    child.stdin.write("ready\n");
-    assert.deepEqual(await nextRecord(), {
-      kind: "record",
-      variant: "entry",
-      data: { message: "ready" },
-    });
-    child.stdin.end();
-    assert.deepEqual(await nextRecord(), { kind: "streamSuccess" });
-    assert.equal((await records.next()).done, true);
-    assert.deepEqual(await finished, [0, null]);
-    assert.equal(stderr, "");
+    await verifyStream("structured");
+    await verifyStream("text");
   },
 );
 
-void test("查询成功以文本写入 stdout 并退出零", () => {
+void test("查询成功以文本行组写入 stdout 并退出零", () => {
   const result = invoke("get", "alice");
   assert.equal(result.status, 0);
-  assert.equal(result.stdout, "Alice\n");
+  assert.equal(result.stdout, "用户信息\nAlice\n");
   assert.equal(result.stderr, "");
 });
 
@@ -93,7 +125,14 @@ void test("结构化成功保留具名事实，stderr 为空", () => {
   });
 });
 
-void test("业务失败写入 stderr，stdout 为空并返回非零退出码", () => {
+void test("业务失败保留文本空行，写入 stderr 并返回非零退出码", () => {
+  const result = invoke("get", "bob");
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, "");
+  assert.equal(result.stderr, "用户 bob 不存在\n\n请检查用户标识\n");
+});
+
+void test("结构化业务失败保留具名事实，stdout 为空并返回非零退出码", () => {
   const result = invoke("get", "bob", "--json");
   assert.equal(result.status, 1);
   assert.equal(result.stdout, "");
