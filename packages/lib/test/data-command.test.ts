@@ -184,6 +184,9 @@ void test("输入模式正常拒绝产生 inputRejected 且不执行 handler", a
     },
   });
 
+  if (termination.kind !== "usageFailure") {
+    assert.fail("预期返回 inputRejected 用法失败");
+  }
   assert.equal(runCount, 0);
   assert.deepEqual(writes, [
     {
@@ -204,6 +207,117 @@ void test("输入模式正常拒绝产生 inputRejected 且不执行 handler", a
     exitCode: 64,
   });
 });
+
+void test("原生 Zod 失败携带额外 value 仍产生 inputRejected", async () => {
+  let runCount = 0;
+  const vendor = greetingInputSchema["~standard"];
+  const inputSchema: ContractSchema<RawGreetingInput, GreetingInput> = {
+    "~standard": {
+      ...vendor,
+      validate(value, options) {
+        const result = vendor.validate(value, options);
+        if (result instanceof Promise) return result;
+        if ("issues" in result && result.issues !== undefined) {
+          const failureWithValue = {
+            issues: result.issues,
+            value: { name: "ignored" },
+          };
+          return failureWithValue;
+        }
+        return result;
+      },
+    },
+  };
+  const cli = createDataCli(
+    () => {
+      runCount += 1;
+    },
+    greetingDataSchema,
+    inputSchema,
+  );
+  const writes: Array<Readonly<{ destination: string; chunk: string }>> = [];
+
+  const termination = await executeCli(cli, {
+    invocation: parseCliInvocation(cli, ["--name="]),
+    dependencies: undefined,
+    write: (output) => {
+      writes.push(output);
+    },
+  });
+
+  if (termination.kind !== "usageFailure") {
+    assert.fail("预期返回 inputRejected 用法失败");
+  }
+  assert.equal(runCount, 0);
+  assert.deepEqual(writes, [
+    {
+      destination: "stderr",
+      chunk:
+        '{"schemaVersion":"1","command":"greet","kind":"usageFailure","issues":[{"code":"inputRejected","evidence":[{"message":"name 不能为空","path":["name"]}]}],"usage":"greet --name <name>","helpArgv":["greet","--help"]}\n',
+    },
+  ]);
+  assert.deepEqual(termination.issues, [
+    {
+      code: "inputRejected",
+      evidence: [{ message: "name 不能为空", path: ["name"] }],
+    },
+  ]);
+});
+
+for (const { label, withValue } of [
+  { label: "空 issues", withValue: false },
+  { label: "空 issues 与额外 value", withValue: true },
+] as const) {
+  void test(`${label} 仍产生空 evidence 的 inputRejected`, async () => {
+    let runCount = 0;
+    const inputSchema: ContractSchema<RawGreetingInput, GreetingInput> = {
+      "~standard": {
+        ...greetingInputSchema["~standard"],
+        validate() {
+          if (withValue) {
+            const failureWithValue = {
+              issues: [],
+              value: { name: "ignored" },
+            };
+            return failureWithValue;
+          }
+          return { issues: [] };
+        },
+      },
+    };
+    const cli = createDataCli(
+      () => {
+        runCount += 1;
+      },
+      greetingDataSchema,
+      inputSchema,
+    );
+    const writes: Array<Readonly<{ destination: string; chunk: string }>> = [];
+
+    const termination = await executeCli(cli, {
+      invocation: parseCliInvocation(cli, ["--name=Ada"]),
+      dependencies: undefined,
+      write: (output) => {
+        writes.push(output);
+      },
+    });
+
+    assert.equal(runCount, 0);
+    assert.deepEqual(writes, [
+      {
+        destination: "stderr",
+        chunk:
+          '{"schemaVersion":"1","command":"greet","kind":"usageFailure","issues":[{"code":"inputRejected","evidence":[]}],"usage":"greet --name <name>","helpArgv":["greet","--help"]}\n',
+      },
+    ]);
+    assert.deepEqual(termination, {
+      kind: "usageFailure",
+      command: "greet",
+      issues: [{ code: "inputRejected", evidence: [] }],
+      exitCode: 64,
+    });
+  });
+}
 
 void test("输出模式产生非 JSON 值时拒绝且不写出字节", async () => {
   const invalidOutputSchema: ContractSchema<GreetingData> = {
@@ -236,6 +350,48 @@ void test("输出模式产生非 JSON 值时拒绝且不写出字节", async () 
           variant: "greeting",
           expected: "jsonValue",
           received: "nonJsonValue",
+        },
+      ]);
+      return true;
+    },
+  );
+  assert.deepEqual(writes, []);
+});
+
+void test("data 输出模式的空 issues 仍产生 outputSchemaRejected", async () => {
+  const rejectedDataSchema: ContractSchema<GreetingData> = {
+    "~standard": {
+      ...greetingDataSchema["~standard"],
+      validate() {
+        const failureWithValue = {
+          issues: [],
+          value: { message: "ignored" },
+        };
+        return failureWithValue;
+      },
+    },
+  };
+  const cli = createDataCli(() => undefined, rejectedDataSchema);
+  const writes: string[] = [];
+
+  await assert.rejects(
+    executeCli(cli, {
+      invocation: parseCliInvocation(cli, ["--name=Ada"]),
+      dependencies: undefined,
+      write: ({ chunk }) => {
+        writes.push(chunk);
+      },
+    }),
+    (error) => {
+      assert.ok(error instanceof ContractExecutionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "outputSchemaRejected",
+          command: "greet",
+          location: "data",
+          variant: "greeting",
+          expected: "schemaAccepted",
+          received: "schemaRejected",
         },
       ]);
       return true;

@@ -8,6 +8,7 @@ import {
   outputCapability,
   parseCliInvocation,
   text,
+  type ContractSchema,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
@@ -168,6 +169,74 @@ void test("structured stream 按 header、record、终态写出紧凑 NDJSON", a
     "line",
     "records",
     "terminal",
+  ]);
+});
+
+void test("record 输出模式的空 issues 仍产生 outputSchemaRejected", async () => {
+  const rejectedRecordSchema: ContractSchema<Readonly<{ value: string }>> = {
+    "~standard": {
+      ...item["~standard"],
+      validate() {
+        const failureWithValue = {
+          issues: [],
+          value: { value: "ignored" },
+        };
+        return failureWithValue;
+      },
+    },
+  };
+  const cli = defineCli()({
+    root: "list",
+    help: englishHelpCapability(),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      list: {
+        kind: "rootCommand",
+        name: "list",
+        description: "列出项目",
+        input: emptyInput,
+        success: {
+          kind: "stream",
+          records: {
+            item: { description: "一个项目", schema: rejectedRecordSchema },
+          },
+        },
+        failures: {},
+        async *handler({ outcome }) {
+          yield outcome.record.item({ value: "first" });
+          return outcome.streamSuccess();
+        },
+      },
+    },
+  });
+  const writes: string[] = [];
+
+  await assert.rejects(
+    executeCli(cli, {
+      invocation: parseCliInvocation(cli, []),
+      dependencies: undefined,
+      write: ({ chunk }) => {
+        writes.push(chunk);
+      },
+    }),
+    (error) => {
+      assert.ok(error instanceof ContractExecutionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "outputSchemaRejected",
+          command: "list",
+          location: "record",
+          variant: "item",
+          expected: "schemaAccepted",
+          received: "schemaRejected",
+        },
+      ]);
+      return true;
+    },
+  );
+  assert.deepEqual(writes, [
+    '{"schemaVersion":"1","command":"list","kind":"stream"}\n',
   ]);
 });
 

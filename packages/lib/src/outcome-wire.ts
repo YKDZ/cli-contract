@@ -196,7 +196,7 @@ function usageIssueSchemas(): JsonObject[] {
       values: { items: constraintValue, minItems: 2, type: "array" },
     }),
     issueSchema("inputRejected", {
-      evidence: { items: evidence, minItems: 1, type: "array" },
+      evidence: { items: evidence, type: "array" },
     }),
     issueSchema("invalidFieldChoice", {
       choices: { items: string, minItems: 1, type: "array" },
