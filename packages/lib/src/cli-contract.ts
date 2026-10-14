@@ -100,7 +100,10 @@ export type {
 
 const cliContractType = Symbol("CliContract.type");
 const helpCapabilities = new WeakSet<object>();
-const invalidHelpFactWordingValues = new WeakMap<object, ReadonlyMap<string, unknown>>();
+const invalidHelpFactWordingValues = new WeakMap<
+  object,
+  ReadonlyMap<string, unknown>
+>();
 const outputCapabilities = new WeakSet<object>();
 const versionCapabilities = new WeakSet<object>();
 const compiledCliContracts = new WeakMap<object, RuntimeCompiledCli>();
@@ -623,54 +626,49 @@ type InvalidCanonicalLongOptionIssue<
   Command extends string,
   Key,
   LongOption extends `--${string}`,
-> = LongOption extends CanonicalLongOption<LongOption>
-  ? never
-  : ContractTypeError<
-      "invalidFieldLongOption",
-      Readonly<{
-        readonly command: Command;
-        readonly field: Extract<Key, string>;
-        readonly received: LongOption;
-      }>
-    >;
-
-type InvalidShortOptionAliasIssue<
-  Field,
-  Command extends string,
-  Key,
-> = Field extends Readonly<{
-  readonly shortAlias: infer ShortAlias extends `-${string}`;
-}>
-  ? ShortAlias extends ShortOptionAlias<ShortAlias>
-    ? never
-    : ContractTypeError<
-        "invalidFieldShortAlias",
-        Readonly<{
-          readonly command: Command;
-          readonly field: Extract<Key, string>;
-          readonly received: ShortAlias;
-        }>
-      >
-  : never;
-
-type InvalidNegatedLongOptionIssue<
-  Field,
-  Key,
-  Command extends string,
-> = Field extends Readonly<{
-  readonly negatedLongOption: infer NegatedLongOption extends `--${string}`;
-}>
-  ? NegatedLongOption extends CanonicalLongOption<NegatedLongOption>
+> =
+  LongOption extends CanonicalLongOption<LongOption>
     ? never
     : ContractTypeError<
         "invalidFieldLongOption",
         Readonly<{
           readonly command: Command;
           readonly field: Extract<Key, string>;
-          readonly received: NegatedLongOption;
+          readonly received: LongOption;
         }>
-      >
-  : never;
+      >;
+
+type InvalidShortOptionAliasIssue<Field, Command extends string, Key> =
+  Field extends Readonly<{
+    readonly shortAlias: infer ShortAlias extends `-${string}`;
+  }>
+    ? ShortAlias extends ShortOptionAlias<ShortAlias>
+      ? never
+      : ContractTypeError<
+          "invalidFieldShortAlias",
+          Readonly<{
+            readonly command: Command;
+            readonly field: Extract<Key, string>;
+            readonly received: ShortAlias;
+          }>
+        >
+    : never;
+
+type InvalidNegatedLongOptionIssue<Field, Key, Command extends string> =
+  Field extends Readonly<{
+    readonly negatedLongOption: infer NegatedLongOption extends `--${string}`;
+  }>
+    ? NegatedLongOption extends CanonicalLongOption<NegatedLongOption>
+      ? never
+      : ContractTypeError<
+          "invalidFieldLongOption",
+          Readonly<{
+            readonly command: Command;
+            readonly field: Extract<Key, string>;
+            readonly received: NegatedLongOption;
+          }>
+        >
+    : never;
 
 type CheckedFieldDefinition<
   Field extends FieldDefinition,
@@ -681,28 +679,11 @@ type CheckedFieldDefinition<
   : Field extends VariadicPositionalDefinition
     ? Field
     : Field extends FlagDefinition<infer LongOption>
-      ? CheckedNegatedFlagDefinition<
-          Field,
-          Key,
-          LongOption,
-          Command
-        >
-      : Field extends RepeatableOptionDefinition<
-            infer LongOption
-          >
-        ? CheckedOptionDefinition<
-            Field,
-            Key,
-            LongOption,
-            Command
-          >
+      ? CheckedNegatedFlagDefinition<Field, Key, LongOption, Command>
+      : Field extends RepeatableOptionDefinition<infer LongOption>
+        ? CheckedOptionDefinition<Field, Key, LongOption, Command>
         : Field extends ValueOptionDefinition<infer LongOption>
-          ? CheckedOptionDefinition<
-              Field,
-              Key,
-              LongOption,
-              Command
-            >
+          ? CheckedOptionDefinition<Field, Key, LongOption, Command>
           : never;
 
 type CheckedNegatedFlagDefinition<
@@ -710,9 +691,7 @@ type CheckedNegatedFlagDefinition<
   Key,
   LongOption extends `--${string}`,
   Command extends string,
-> = [
-  InvalidCanonicalLongOptionIssue<Command, Key, LongOption>,
-] extends [never]
+> = [InvalidCanonicalLongOptionIssue<Command, Key, LongOption>] extends [never]
   ? [InvalidShortOptionAliasIssue<Field, Command, Key>] extends [never]
     ? [InvalidNegatedLongOptionIssue<Field, Key, Command>] extends [never]
       ? Field
@@ -725,9 +704,7 @@ type CheckedOptionDefinition<
   Key,
   LongOption extends `--${string}`,
   Command extends string,
-> = [
-  InvalidCanonicalLongOptionIssue<Command, Key, LongOption>,
-] extends [never]
+> = [InvalidCanonicalLongOptionIssue<Command, Key, LongOption>] extends [never]
   ? [InvalidShortOptionAliasIssue<Field, Command, Key>] extends [never]
     ? Field
     : InvalidShortOptionAliasIssue<Field, Command, Key>
@@ -934,19 +911,18 @@ type InvalidFieldIdentities<Fields extends FieldDefinitions> = {
 type FieldIdentityContract<
   Command extends string,
   Fields extends FieldDefinitions,
-> =
-  string extends keyof Fields
+> = string extends keyof Fields
+  ? unknown
+  : InvalidFieldIdentities<Fields> extends never
     ? unknown
-    : InvalidFieldIdentities<Fields> extends never
-      ? unknown
-      : ContractTypeError<
-          "invalidFieldIdentity",
-          Readonly<{
-            readonly command: Command;
-            readonly field: InvalidFieldIdentities<Fields>;
-            readonly reason: "lowerCamelCase";
-          }>
-        >;
+    : ContractTypeError<
+        "invalidFieldIdentity",
+        Readonly<{
+          readonly command: Command;
+          readonly field: InvalidFieldIdentities<Fields>;
+          readonly reason: "lowerCamelCase";
+        }>
+      >;
 
 export type RawValueOptionInputForSchema<InputSchema extends ContractSchema> =
   Readonly<{
@@ -1835,33 +1811,34 @@ type UsageConstraintFactFields<Facts> = Facts extends readonly (infer Fact)[]
     : never
   : never;
 
-type LastRequiredTupleItem<Items extends readonly unknown[]> = Items extends
-  readonly [...unknown[], infer Last]
-  ? Last
-  : never;
+type LastRequiredTupleItem<Items extends readonly unknown[]> =
+  Items extends readonly [...unknown[], infer Last] ? Last : never;
 
-type PopRequiredTupleItem<Items extends readonly unknown[]> = Items extends
-  readonly [...infer Prefix, unknown]
-  ? readonly [...Prefix]
-  : never;
+type PopRequiredTupleItem<Items extends readonly unknown[]> =
+  Items extends readonly [...infer Prefix, unknown]
+    ? readonly [...Prefix]
+    : never;
 
-type StaticallyKnownTupleSuffixItems<Items extends readonly unknown[]> =
-  [LastRequiredTupleItem<Items>] extends [never]
+type StaticallyKnownTupleSuffixItems<Items extends readonly unknown[]> = [
+  LastRequiredTupleItem<Items>,
+] extends [never]
+  ? never
+  : string extends LastRequiredTupleItem<Items>
     ? never
-    : string extends LastRequiredTupleItem<Items>
-      ? never
-      : LastRequiredTupleItem<Items> |
-        StaticallyKnownTupleSuffixItems<PopRequiredTupleItem<Items>>;
+    :
+        | LastRequiredTupleItem<Items>
+        | StaticallyKnownTupleSuffixItems<PopRequiredTupleItem<Items>>;
 
-type StaticallyKnownUsageFact<Fact> = Fact extends Readonly<{
-  readonly field: infer Field extends string;
-}>
-  ? string extends Field
-    ? never
-    : IsUnion<Field> extends true
+type StaticallyKnownUsageFact<Fact> =
+  Fact extends Readonly<{
+    readonly field: infer Field extends string;
+  }>
+    ? string extends Field
       ? never
-      : Fact
-  : never;
+      : IsUnion<Field> extends true
+        ? never
+        : Fact
+    : never;
 
 type StaticallyKnownUsageTupleFacts<Facts extends readonly unknown[]> =
   Facts extends readonly [infer Fact, ...infer Remaining]
@@ -1908,7 +1885,10 @@ type ConflictingEqualsUsageFactFields<First, Others> =
       : never
     : never;
 
-type ContradictoryUsageFactUnionFields<Fact, Facts = Fact> = Fact extends unknown
+type ContradictoryUsageFactUnionFields<
+  Fact,
+  Facts = Fact,
+> = Fact extends unknown
   ? ConflictingEqualsUsageFactFields<Fact, Exclude<Facts, Fact>>
   : never;
 
@@ -2388,10 +2368,9 @@ type CountFieldDuplicates<
         : CountFieldDuplicates<Remaining, Seen | Field>
   : CountFieldSuffixDuplicates<Fields, Seen>;
 
-type CountFieldSuffixDuplicates<
-  Fields extends readonly unknown[],
-  Seen,
-> = [LastRequiredTupleItem<Fields>] extends [never]
+type CountFieldSuffixDuplicates<Fields extends readonly unknown[], Seen> = [
+  LastRequiredTupleItem<Fields>,
+] extends [never]
   ? never
   : LastRequiredTupleItem<Fields> extends infer Field
     ? string extends Field
@@ -2399,11 +2378,16 @@ type CountFieldSuffixDuplicates<
       : IsUnion<Field> extends true
         ? CountFieldSuffixDuplicates<PopRequiredTupleItem<Fields>, Seen>
         : Field extends Seen
-          ? Field | CountFieldSuffixDuplicates<
+          ?
+              | Field
+              | CountFieldSuffixDuplicates<
+                  PopRequiredTupleItem<Fields>,
+                  Seen | Field
+                >
+          : CountFieldSuffixDuplicates<
               PopRequiredTupleItem<Fields>,
               Seen | Field
             >
-          : CountFieldSuffixDuplicates<PopRequiredTupleItem<Fields>, Seen | Field>
     : never;
 
 type CountEndpoint<
@@ -2646,17 +2630,17 @@ type StaticallyGuaranteedUsageTupleSuffixFields<
   ? never
   : LastRequiredTupleItem<Fields> extends infer Field
     ? string extends Field
-      ? StaticallyGuaranteedUsageTupleSuffixFields<
-          PopRequiredTupleItem<Fields>
-        >
+      ? StaticallyGuaranteedUsageTupleSuffixFields<PopRequiredTupleItem<Fields>>
       : IsUnion<Field> extends true
         ? StaticallyGuaranteedUsageTupleSuffixFields<
             PopRequiredTupleItem<Fields>
           >
         : Field extends string
-          ? Field | StaticallyGuaranteedUsageTupleSuffixFields<
-              PopRequiredTupleItem<Fields>
-            >
+          ?
+              | Field
+              | StaticallyGuaranteedUsageTupleSuffixFields<
+                  PopRequiredTupleItem<Fields>
+                >
           : StaticallyGuaranteedUsageTupleSuffixFields<
               PopRequiredTupleItem<Fields>
             >
@@ -4305,9 +4289,7 @@ function copyHelpHeadings(value: unknown): HelpHeadings {
   return Object.freeze(headings);
 }
 
-function copyHelpFactWording(
-  value: unknown,
-): Readonly<{
+function copyHelpFactWording(value: unknown): Readonly<{
   readonly wording: HelpFactWording;
   readonly invalidValues: ReadonlyMap<string, unknown>;
 }> {

@@ -387,8 +387,11 @@ void test("帮助模板错误保留非法原值并继续聚合定义期问题", 
         input: z.object({}),
         success: { kind: "completion" },
         failures: {},
-        handler: ({ outcome }: { readonly outcome: { completion(): unknown } }) =>
-          outcome.completion(),
+        handler: ({
+          outcome,
+        }: {
+          readonly outcome: { completion(): unknown };
+        }) => outcome.completion(),
       },
     },
   };
