@@ -9,6 +9,7 @@ import {
   helpCapability,
   outputCapability,
   parseCliInvocation,
+  type ContractSchema,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
@@ -137,6 +138,71 @@ void test("非法失败 payload 在任何写出前被拒绝", async () => {
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意注入错误类型，以验证结果边界。
             service: 1 as unknown as string,
           }),
+      },
+    },
+  });
+  const writes: string[] = [];
+
+  await assert.rejects(
+    executeCli(cli, {
+      invocation: parseCliInvocation(cli, []),
+      dependencies: undefined,
+      write: ({ chunk }) => {
+        writes.push(chunk);
+      },
+    }),
+    (error) => {
+      assert.ok(error instanceof ContractExecutionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "outputSchemaRejected",
+          command: "check",
+          location: "failure",
+          variant: "unavailable",
+          expected: "schemaAccepted",
+          received: "schemaRejected",
+        },
+      ]);
+      return true;
+    },
+  );
+  assert.deepEqual(writes, []);
+});
+
+void test("failure 输出模式的空 issues 仍产生 outputSchemaRejected", async () => {
+  const rejectedFailureSchema: ContractSchema<Readonly<{ service: string }>> = {
+    "~standard": {
+      ...unavailableData["~standard"],
+      validate() {
+        const failureWithValue = {
+          issues: [],
+          value: { service: "ignored" },
+        };
+        return failureWithValue;
+      },
+    },
+  };
+  const cli = defineCli()({
+    root: "check",
+    help: helpCapability(),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      check: {
+        kind: "rootCommand",
+        name: "check",
+        description: "检查服务",
+        input: emptyInput,
+        success: { kind: "completion" },
+        failures: {
+          unavailable: {
+            description: "服务暂不可用",
+            schema: rejectedFailureSchema,
+            exitCode: 9,
+          },
+        },
+        handler: ({ outcome }) =>
+          outcome.failure.unavailable({ service: "billing" }),
       },
     },
   });
