@@ -9,3 +9,12 @@ const help = helpCapability({
 });
 
 void help;
+
+type ValidChoicesUnion =
+  | { readonly choices: "候选 {choices}" }
+  | { readonly choices: "可选 {choices}" };
+const validChoicesUnion: ValidChoicesUnion =
+  Math.random() < 0.5
+    ? { choices: "候选 {choices}" }
+    : { choices: "可选 {choices}" };
+void helpCapability({ wording: validChoicesUnion });

@@ -922,13 +922,17 @@ type HelpFactTemplateValueContract<
         }>
       >;
 
-type HelpFactWordingIssues<Wording> =
+type HelpFactWordingMemberIssues<Wording> =
   | {
       [
         Slot in keyof Wording & keyof HelpFactWording
       ]: HelpFactTemplateValueContract<Slot, Wording[Slot]>;
     }[keyof Wording & keyof HelpFactWording]
   | HelpFactWordingUnknownPropertyIssues<Wording>;
+
+type HelpFactWordingIssues<Wording> = Wording extends unknown
+  ? HelpFactWordingMemberIssues<Wording>
+  : never;
 
 type HelpFactWordingUnknownPropertyIssues<Wording> = {
   [
@@ -948,14 +952,15 @@ type HelpFactWordingContract<Wording> = [
   ? unknown
   : HelpFactWordingIssues<Wording>;
 
-type HelpCapabilityTemplateContract<Definition> =
-  Definition extends Readonly<{
+type HelpCapabilityTemplateContract<Definition> = [Definition] extends [
+  Readonly<{
     readonly wording: infer Wording;
-  }>
-    ? Wording extends (...arguments_: never[]) => unknown
-      ? never
-      : HelpFactWordingContract<Wording>
-    : unknown;
+  }>,
+]
+  ? [Extract<Wording, (...arguments_: never[]) => unknown>] extends [never]
+    ? HelpFactWordingContract<Wording>
+    : never
+  : unknown;
 
 type InputStringKeys<Input> = Extract<keyof Input, string>;
 
@@ -2982,84 +2987,6 @@ export interface DefineCli<Dependencies> {
 }
 /* oxlint-enable typescript/no-unnecessary-type-parameters */
 
-type HierarchyCommandInput<Definition> = Omit<Definition, "kind"> &
-  HierarchyCommandFactsDefinition;
-
-type HierarchyCompletionCommandDefinition<
-  Command extends string,
-  Dependencies,
-  Failures extends FailureVariantDefinitions,
-  Fields extends FieldDefinitions,
-  InputSchema extends ContractSchema,
-> = Omit<
-  CompletionRootCommandDefinition<
-    Command,
-    Dependencies,
-    Failures,
-    Fields,
-    InputSchema
-  >,
-  "fields" | "input" | "usageConstraints"
-> &
-  Readonly<{
-    readonly fields?: CheckedFieldDefinitions<Fields> &
-      FieldIdentityContract<Fields>;
-    readonly input: InputSchema;
-  }>;
-
-type HierarchyDataCommandDefinition<
-  Command extends string,
-  Dependencies,
-  Fields extends FieldDefinitions,
-  InputSchema extends ContractSchema,
-  Variants extends DataVariantDefinitions,
-  Failures extends FailureVariantDefinitions,
-> = Omit<
-  DataRootCommandDefinition<
-    Command,
-    Dependencies,
-    Fields,
-    InputSchema,
-    Variants,
-    Failures
-  >,
-  "fields" | "input" | "usageConstraints"
-> &
-  Readonly<{
-    readonly fields: CheckedFieldDefinitions<Fields> &
-      FieldIdentityContract<Fields>;
-    readonly input: InputSchema;
-  }>;
-
-type HierarchyStreamCommandDefinition<
-  Command extends string,
-  Dependencies,
-  Fields extends FieldDefinitions,
-  InputSchema extends ContractSchema,
-  Records extends StreamRecordDefinitions,
-  Failures extends FailureVariantDefinitions,
-> = Omit<
-  StreamRootCommandDefinition<
-    Command,
-    Dependencies,
-    Fields,
-    InputSchema,
-    Records,
-    Failures
-  >,
-  "fields" | "input" | "usageConstraints"
-> &
-  Readonly<{
-    readonly fields: CheckedFieldDefinitions<Fields> &
-      FieldIdentityContract<Fields>;
-    readonly input: InputSchema;
-  }>;
-
-type UsageConstraintProperty<Constraints> =
-  Constraints extends readonly unknown[]
-    ? Readonly<{ readonly usageConstraints: Constraints }>
-    : unknown;
-
 type ActualFailureDefinitions<Failures> =
   Failures extends FailureVariantDefinitions ? Failures : never;
 
@@ -3080,7 +3007,7 @@ type RootFallbackFieldsProperty<
       readonly success: Readonly<{ readonly kind: "completion" }>;
     }>;
 
-/* oxlint-disable typescript/no-unnecessary-type-parameters -- 公共命令重载用泛型连接字段、模式、结果与 handler。 */
+/* oxlint-disable typescript/no-unnecessary-type-parameters -- 公共命令签名用泛型连接字段、模式、结果与 handler。 */
 /** 为具名叶命令生成可展开到根契约 `commands` 的定义。 */
 export interface DefineCommand<Command extends string, Dependencies> {
   <
@@ -3119,178 +3046,13 @@ export interface DefineCommand<Command extends string, Dependencies> {
         Command,
         Dependencies,
         InputSchema,
-        DataVariantDefinitionsForSchemas<VariantSchemas, boolean>,
-        StreamRecordDefinitionsForSchemas<RecordSchemas, boolean>,
+        Variants extends DataVariantDefinitions ? Variants : never,
+        Records extends StreamRecordDefinitions ? Records : never,
         ActualFailureDefinitions<Failures>,
         Kind
       >["commands"][Command] &
       HierarchyCommandFactsDefinition<Parent>,
   ): CommandCombination<Command, Definition, Parent>;
-
-  <
-    const Definition extends object,
-    const Parent extends string,
-    const Failures extends FailureVariantDefinitions,
-    const Constraints extends readonly unknown[] | undefined = undefined,
-  >(
-    definition: Definition &
-      ClosedCommandDefinition<Definition, Command> &
-      HierarchyCommandInput<
-        HierarchyCompletionCommandDefinition<
-          Command,
-          Dependencies,
-          Failures,
-          Readonly<Record<never, never>>,
-          ContractSchema<EmptyCliInput>
-        >
-      > &
-      Readonly<{
-        readonly parent: Parent;
-        readonly usageConstraints?: Constraints;
-      }>,
-  ): CommandCombination<
-    Command,
-    Definition &
-      Omit<
-        HierarchyCompletionCommandDefinition<
-          Command,
-          Dependencies,
-          Failures,
-          Readonly<Record<never, never>>,
-          ContractSchema<EmptyCliInput>
-        >,
-        "kind" | "success" | "failures"
-      > &
-      UsageConstraintProperty<Constraints>,
-    Parent
-  >;
-
-  <
-    const Definition extends object,
-    const Fields extends FieldDefinitions,
-    InputSchema extends ContractSchema,
-    const Parent extends string,
-    const Failures extends FailureVariantDefinitions,
-    const Constraints extends readonly unknown[] | undefined = undefined,
-  >(
-    definition: Definition &
-      ClosedCommandDefinition<Definition, Command> &
-      HierarchyCommandInput<
-        HierarchyCompletionCommandDefinition<
-          Command,
-          Dependencies,
-          Failures,
-          Fields,
-          InputSchema
-        >
-      > &
-      Readonly<{
-        readonly fields: Fields;
-        readonly parent: Parent;
-        readonly usageConstraints?: Constraints;
-      }>,
-  ): CommandCombination<
-    Command,
-    Definition &
-      Omit<
-        HierarchyCompletionCommandDefinition<
-          Command,
-          Dependencies,
-          Failures,
-          Fields,
-          InputSchema
-        >,
-        "kind" | "success" | "failures"
-      > &
-      UsageConstraintProperty<Constraints>,
-    Parent
-  >;
-
-  <
-    const Definition extends object,
-    const Fields extends FieldDefinitions,
-    InputSchema extends ContractSchema,
-    const Parent extends string,
-    const Variants extends DataVariantDefinitions,
-    const Failures extends FailureVariantDefinitions,
-    const Constraints extends readonly unknown[] | undefined = undefined,
-  >(
-    definition: Definition &
-      ClosedCommandDefinition<Definition, Command> &
-      HierarchyCommandInput<
-        HierarchyDataCommandDefinition<
-          Command,
-          Dependencies,
-          Fields,
-          InputSchema,
-          Variants,
-          Failures
-        >
-      > &
-      Readonly<{
-        readonly parent: Parent;
-        readonly usageConstraints?: Constraints;
-      }>,
-  ): CommandCombination<
-    Command,
-    Definition &
-      Omit<
-        HierarchyDataCommandDefinition<
-          Command,
-          Dependencies,
-          Fields,
-          InputSchema,
-          Variants,
-          Failures
-        >,
-        "kind" | "success" | "failures"
-      > &
-      UsageConstraintProperty<Constraints>,
-    Parent
-  >;
-
-  <
-    const Definition extends object,
-    const Fields extends FieldDefinitions,
-    InputSchema extends ContractSchema,
-    const Parent extends string,
-    const Records extends StreamRecordDefinitions,
-    const Failures extends FailureVariantDefinitions,
-    const Constraints extends readonly unknown[] | undefined = undefined,
-  >(
-    definition: Definition &
-      ClosedCommandDefinition<Definition> &
-      HierarchyCommandInput<
-        HierarchyStreamCommandDefinition<
-          Command,
-          Dependencies,
-          Fields,
-          InputSchema,
-          Records,
-          Failures
-        >
-      > &
-      Readonly<{
-        readonly parent: Parent;
-        readonly usageConstraints?: Constraints;
-      }>,
-  ): CommandCombination<
-    Command,
-    Definition &
-      Omit<
-        HierarchyStreamCommandDefinition<
-          Command,
-          Dependencies,
-          Fields,
-          InputSchema,
-          Records,
-          Failures
-        >,
-        "kind" | "success" | "failures"
-      > &
-      UsageConstraintProperty<Constraints>,
-    Parent
-  >;
 }
 /* oxlint-enable typescript/no-unnecessary-type-parameters */
 
@@ -3478,9 +3240,12 @@ function copyHelpFactWording(value: unknown): HelpFactWording {
   }
   const [firstUnknownSlotIssue, ...otherUnknownSlotIssues] = unknownSlotIssues;
   if (firstUnknownSlotIssue !== undefined) {
+    const templateIssues: ContractDefinitionIssue[] = [];
+    collectHelpFactTemplateIssues(wording, templateIssues);
     throw new ContractDefinitionError([
       firstUnknownSlotIssue,
       ...otherUnknownSlotIssues,
+      ...templateIssues,
     ]);
   }
   return Object.freeze(wording);
@@ -4725,9 +4490,9 @@ function compileUsageConstraints(
       const factsForValidation: (
         | UsageFact
         | Readonly<{
-            readonly kind: "invalidNumericEquals";
+            readonly kind: "invalidEqualsValue";
             readonly field: string;
-            readonly value: number;
+            readonly value: unknown;
           }>
       )[] = [];
       let malformedFact = false;
@@ -4748,28 +4513,26 @@ function compileUsageConstraints(
         if (
           candidateFact.kind === "equals" &&
           typeof candidateFact.field === "string" &&
-          (typeof candidateFact.value === "boolean" ||
-            typeof candidateFact.value === "string")
+          Object.hasOwn(candidateFact, "value")
         ) {
-          const fact = {
-            kind: "equals",
-            field: candidateFact.field,
-            value: candidateFact.value,
-          } as const;
-          facts.push(fact);
-          factsForValidation.push(fact);
-          continue;
-        }
-        if (
-          candidateFact.kind === "equals" &&
-          typeof candidateFact.field === "string" &&
-          typeof candidateFact.value === "number"
-        ) {
-          factsForValidation.push({
-            kind: "invalidNumericEquals",
-            field: candidateFact.field,
-            value: candidateFact.value,
-          });
+          if (
+            typeof candidateFact.value === "boolean" ||
+            typeof candidateFact.value === "string"
+          ) {
+            const fact = {
+              kind: "equals",
+              field: candidateFact.field,
+              value: candidateFact.value,
+            } as const;
+            facts.push(fact);
+            factsForValidation.push(fact);
+          } else {
+            factsForValidation.push({
+              kind: "invalidEqualsValue",
+              field: candidateFact.field,
+              value: candidateFact.value,
+            });
+          }
           continue;
         }
         malformedFact = true;
@@ -4785,7 +4548,7 @@ function compileUsageConstraints(
       }
       let invalidFactCount = 0;
       for (const fact of factsForValidation) {
-        if (fact.kind === "invalidNumericEquals") {
+        if (fact.kind === "invalidEqualsValue") {
           const field = fieldsByKey.get(fact.field);
           if (field === undefined) {
             invalidFactCount += 1;

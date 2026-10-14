@@ -81,6 +81,97 @@ void test("提取的帮助事实未知槽位报告闭合定义问题", () => {
   );
 });
 
+void test("帮助文案中未知槽位与已知模板问题同次聚合", () => {
+  assert.throws(
+    () =>
+      helpCapability({
+        wording: {
+          choises: "候选 {choices}",
+          choices: "候选 {choises}",
+        } as never,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "unknownDefinitionProperty",
+          path: ["help", "wording", "choises"],
+        },
+        {
+          code: "invalidHelpFactTemplate",
+          path: ["help", "wording", "choices"],
+          slot: "choices",
+          received: "候选 {choises}",
+          reason: "placeholder",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("仅已知模板错误仍在根装配时与叶约束问题聚合", () => {
+  const helpDefinition: HelpCapabilityDefinition = JSON.parse(
+    '{"wording":{"choices":"候选 {choises}"}}',
+  );
+  const definition = {
+    root: "choose",
+    help: helpCapability(helpDefinition),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      choose: {
+        kind: "rootCommand",
+        name: "choose",
+        description: "选择模式",
+        fields: {
+          mode: {
+            kind: "valueOption",
+            longOption: "--mode",
+            description: "模式",
+          },
+        },
+        input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+        usageConstraints: [
+          {
+            kind: "forbiddenCombination",
+            all: [{ kind: "present", field: "missing" }],
+          },
+        ],
+        success: { kind: "completion" },
+        failures: {},
+        handler() {},
+      },
+    },
+  };
+
+  assert.throws(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 动态闭合负例验证根级问题仍与叶约束问题聚合。
+    () => defineCli()(definition as never),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidHelpFactTemplate",
+          path: ["help", "wording", "choices"],
+          slot: "choices",
+          received: "候选 {choises}",
+          reason: "placeholder",
+        },
+        {
+          code: "unknownUsageConstraintField",
+          command: "choose",
+          constraint: "forbiddenCombination",
+          index: 0,
+          member: "all.field",
+          field: "missing",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
 void test("已声明帮助事实缺少模板时在定义期报告命令与槽位", () => {
   assert.throws(
     () =>

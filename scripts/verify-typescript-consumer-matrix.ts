@@ -16,6 +16,14 @@ interface CandidateTarballs {
   readonly testing: string;
 }
 
+interface AuthoringDiagnosticCase {
+  readonly fixture: string;
+  readonly expectedCodes: readonly string[];
+  readonly required: readonly string[];
+  readonly allowAdditionalDiagnostics?: boolean;
+  readonly forbidden?: readonly string[];
+}
+
 async function main(): Promise<void> {
   const candidate = await parseCandidateTarballs(process.argv.slice(2));
   const fixtures = await readFixtures();
@@ -36,6 +44,7 @@ async function readFixtures(): Promise<Readonly<Record<string, string>>> {
         "core-root.ts",
         "exportable-contract.ts",
         "exportable-contract-reconsumer.ts",
+        "invalid-command-combination.ts",
         "invalid-forbidden-combination.ts",
         "invalid-help-fact-templates.ts",
         "input-schema-raw-mismatch.ts",
@@ -281,7 +290,7 @@ async function verifyHierarchyTextCoverageDiagnostic(
   }
 }
 
-const authoringDiagnosticCases = [
+const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
   {
     fixture: "unknown-usage-constraint-field.ts",
     expectedCodes: [
@@ -297,6 +306,13 @@ const authoringDiagnosticCases = [
     ],
   },
   {
+    fixture: "invalid-command-combination.ts",
+    expectedCodes: ["unknownDefinitionProperty"],
+    required: ['command: "inspect"', 'member: "all"', 'property: "typo"'],
+    allowAdditionalDiagnostics: true,
+    forbidden: ["No overload matches this call", "StreamHandlerContext"],
+  },
+  {
     fixture: "invalid-forbidden-combination.ts",
     expectedCodes: [
       "invalidUsageConstraintValue",
@@ -307,8 +323,10 @@ const authoringDiagnosticCases = [
       "unknownDefinitionProperty",
       "unknownDefinitionProperty",
       "invalidUsageConstraintValue",
+      "invalidUsageConstraintValue",
       "unknownDefinitionProperty",
       "unknownDefinitionProperty",
+      "invalidUsageConstraintValue",
     ],
     required: [
       'command: "invalidValue"',
@@ -321,6 +339,8 @@ const authoringDiagnosticCases = [
       'command: "invalidClosedFactUnion"',
       'command: "invalidClosedFactUnionHierarchy"',
       'command: "invalidNumericValue"',
+      'command: "invalidNullValue"',
+      'command: "invalidObjectValue"',
       'constraint: "forbiddenCombination"',
       'member: "all.value"',
       'member: "all.field"',
@@ -330,6 +350,8 @@ const authoringDiagnosticCases = [
       'actual: "yes"',
       'actual: "staging"',
       "actual: 42",
+      "actual: null",
+      "actual: { readonly nested: true; }",
       "expected: true",
       'expected: "safe" | "force"',
       'kind: "repeatableOption"',
@@ -349,6 +371,8 @@ const authoringDiagnosticCases = [
       "invalidHelpFactTemplate",
       "invalidHelpFactTemplate",
       "invalidHelpFactTemplate",
+      "unknownDefinitionProperty",
+      "invalidHelpFactTemplate",
     ],
     required: [
       'slot: "commandPlaceholder"',
@@ -360,6 +384,7 @@ const authoringDiagnosticCases = [
       'received: "候选 {choises}"',
       'property: "choises"',
       'path: readonly ["help", "wording", "choises"]',
+      'reason: "placeholder"',
       'slot: "present"',
       'received: "字段"',
       'slot: "equals"',
@@ -403,7 +428,7 @@ const authoringDiagnosticCases = [
       'unexpected: "text"',
     ],
   },
-] as const;
+];
 
 function firstLevelCompilerMessages(
   output: string,
@@ -433,7 +458,13 @@ async function verifyAuthoringDiagnostic(
   resolution: (typeof resolutions)[number],
   diagnostic: (typeof authoringDiagnosticCases)[number],
 ): Promise<void> {
-  const { fixture, expectedCodes, required } = diagnostic;
+  const {
+    fixture,
+    expectedCodes,
+    required,
+    allowAdditionalDiagnostics = false,
+    forbidden = [],
+  } = diagnostic;
   const tsconfig = `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`;
   await writeFile(
     resolve(project, tsconfig),
@@ -459,7 +490,9 @@ async function verifyAuthoringDiagnostic(
   });
   if (
     result.status === 0 ||
-    headers.length !== expectedCodes.length ||
+    (allowAdditionalDiagnostics
+      ? headers.length < expectedCodes.length
+      : headers.length !== expectedCodes.length) ||
     firstLevelCodes.length !== expectedCodes.length ||
     firstLevelCodes
       .sort((left, right) => left.localeCompare(right))
@@ -467,7 +500,8 @@ async function verifyAuthoringDiagnostic(
       [...expectedCodes]
         .sort((left, right) => left.localeCompare(right))
         .join(",") ||
-    required.some((fragment) => !firstLevel.includes(fragment))
+    required.some((fragment) => !firstLevel.includes(fragment)) ||
+    forbidden.some((fragment) => firstLevel.includes(fragment))
   ) {
     throw new Error(
       [
@@ -501,8 +535,18 @@ function verifyAuthoringLanguageService(
       ],
     },
     {
+      fixture: "invalid-command-combination.ts",
+      count: 2,
+      required: [
+        "unknownDefinitionProperty",
+        'command: "inspect"',
+        'member: "all"',
+        'property: "typo"',
+      ],
+    },
+    {
       fixture: "invalid-forbidden-combination.ts",
-      count: 10,
+      count: 12,
       required: [
         "invalidUsageConstraintValue",
         "unknownDefinitionProperty",
@@ -517,6 +561,8 @@ function verifyAuthoringLanguageService(
         'command: "invalidClosedFactUnion"',
         'command: "invalidClosedFactUnionHierarchy"',
         'command: "invalidNumericValue"',
+        'command: "invalidNullValue"',
+        'command: "invalidObjectValue"',
         'member: "all.value"',
         'member: "all.field"',
         'field: "auth"',
@@ -525,6 +571,8 @@ function verifyAuthoringLanguageService(
         'actual: "yes"',
         'actual: "staging"',
         "actual: 42",
+        "actual: null",
+        "actual: { readonly nested: true; }",
         "expected: true",
         'expected: "safe" | "force"',
         'kind: "repeatableOption"',
@@ -536,7 +584,7 @@ function verifyAuthoringLanguageService(
     },
     {
       fixture: "invalid-help-fact-templates.ts",
-      count: 7,
+      count: 9,
       required: [
         "invalidHelpFactTemplate",
         "unknownDefinitionProperty",
@@ -546,6 +594,8 @@ function verifyAuthoringLanguageService(
         'received: "<命令组>"',
         'slot: "choices"',
         'property: "choises"',
+        'received: "候选 {choises}"',
+        'reason: "placeholder"',
         'slot: "present"',
         'slot: "equals"',
         'slot: "forbiddenCombination"',

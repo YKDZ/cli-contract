@@ -622,6 +622,22 @@ const invalidConstraintDefinition: unknown = {
         },
         {
           kind: "forbiddenCombination",
+          all: [{ kind: "equals", field: "format", value: null }],
+        },
+        {
+          kind: "forbiddenCombination",
+          all: [{ kind: "equals", field: "format", value: { nested: true } }],
+        },
+        {
+          kind: "forbiddenCombination",
+          all: [{ kind: "equals", field: "format", value: undefined }],
+        },
+        {
+          kind: "forbiddenCombination",
+          all: [{ kind: "equals", field: "format" }],
+        },
+        {
+          kind: "forbiddenCombination",
           all: [{ kind: "present", field: "format", typo: true }],
         },
       ],
@@ -691,6 +707,43 @@ assert.throws(
         field: "format",
         actual: 42,
         expected: ["json", "yaml"],
+      },
+      {
+        code: "invalidUsageConstraintValue",
+        command: "probe",
+        constraint: "forbiddenCombination",
+        index: 2,
+        member: "all.value",
+        field: "format",
+        actual: null,
+        expected: ["json", "yaml"],
+      },
+      {
+        code: "invalidUsageConstraintValue",
+        command: "probe",
+        constraint: "forbiddenCombination",
+        index: 3,
+        member: "all.value",
+        field: "format",
+        actual: { nested: true },
+        expected: ["json", "yaml"],
+      },
+      {
+        code: "invalidUsageConstraintValue",
+        command: "probe",
+        constraint: "forbiddenCombination",
+        index: 4,
+        member: "all.value",
+        field: "format",
+        actual: undefined,
+        expected: ["json", "yaml"],
+      },
+      {
+        code: "invalidUsageConstraint",
+        command: "probe",
+        index: 5,
+        aspect: "members",
+        received: "forbiddenCombination",
       },
     ]);
     return true;

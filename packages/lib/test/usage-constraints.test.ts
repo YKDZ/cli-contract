@@ -572,6 +572,22 @@ void test("defineCli 聚合拒绝无效成员形状与动态候选值", () => {
             kind: "forbiddenCombination",
             all: [{ kind: "equals", field: "mode", value: 42 }],
           },
+          {
+            kind: "forbiddenCombination",
+            all: [{ kind: "equals", field: "mode", value: null }],
+          },
+          {
+            kind: "forbiddenCombination",
+            all: [{ kind: "equals", field: "mode", value: { nested: true } }],
+          },
+          {
+            kind: "forbiddenCombination",
+            all: [{ kind: "equals", field: "mode", value: undefined }],
+          },
+          {
+            kind: "forbiddenCombination",
+            all: [{ kind: "equals", field: "mode" }],
+          },
         ],
         input: z.object({
           force: z.boolean().optional(),
@@ -689,7 +705,45 @@ void test("defineCli 聚合拒绝无效成员形状与动态候选值", () => {
           actual: 42,
           expected: ["safe", "force"],
         },
+        {
+          code: "invalidUsageConstraintValue",
+          command: "invalidShapes",
+          constraint: "forbiddenCombination",
+          index: 10,
+          member: "all.value",
+          field: "mode",
+          actual: null,
+          expected: ["safe", "force"],
+        },
+        {
+          code: "invalidUsageConstraintValue",
+          command: "invalidShapes",
+          constraint: "forbiddenCombination",
+          index: 11,
+          member: "all.value",
+          field: "mode",
+          actual: { nested: true },
+          expected: ["safe", "force"],
+        },
+        {
+          code: "invalidUsageConstraintValue",
+          command: "invalidShapes",
+          constraint: "forbiddenCombination",
+          index: 12,
+          member: "all.value",
+          field: "mode",
+          actual: undefined,
+          expected: ["safe", "force"],
+        },
+        {
+          code: "invalidUsageConstraint",
+          command: "invalidShapes",
+          index: 13,
+          aspect: "members",
+          received: "forbiddenCombination",
+        },
       ]);
+      assert.match(error.message, /mode=undefined/);
       return true;
     },
   );

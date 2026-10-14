@@ -249,6 +249,64 @@ defineCli()({
 });
 
 defineCli()({
+  root: "invalidNullValue",
+  ...base,
+  commands: {
+    invalidNullValue: {
+      kind: "rootCommand",
+      name: "invalid-null-value",
+      description: "非法空值等值",
+      fields: {
+        mode: {
+          kind: "valueOption",
+          longOption: "--mode",
+          description: "模式",
+        },
+      },
+      input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+      usageConstraints: [
+        {
+          kind: "forbiddenCombination",
+          all: [{ kind: "equals", field: "mode", value: null }],
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+defineCli()({
+  root: "invalidObjectValue",
+  ...base,
+  commands: {
+    invalidObjectValue: {
+      kind: "rootCommand",
+      name: "invalid-object-value",
+      description: "非法对象等值",
+      fields: {
+        mode: {
+          kind: "valueOption",
+          longOption: "--mode",
+          description: "模式",
+        },
+      },
+      input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+      usageConstraints: [
+        {
+          kind: "forbiddenCombination",
+          all: [{ kind: "equals", field: "mode", value: { nested: true } }],
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+defineCli()({
   root: "invalidValue",
   ...base,
   commands: {

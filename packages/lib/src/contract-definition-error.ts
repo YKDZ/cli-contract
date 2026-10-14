@@ -331,7 +331,7 @@ export type ContractDefinitionIssue =
       readonly index: number;
       readonly member: "all.value";
       readonly field: string;
-      readonly actual: boolean | number | string;
+      readonly actual: unknown;
       readonly expected: boolean | string | readonly string[];
     }>
   | Readonly<{
@@ -478,9 +478,24 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
     case "inapplicableUsageConstraintField":
       return `命令 ${issue.command} 的 ${issue.constraint} usage constraint 不适用于字段 ${issue.field}（${issue.kind}）`;
     case "invalidUsageConstraintValue":
-      return `命令 ${issue.command} 的禁配事实 ${issue.field}=${JSON.stringify(issue.actual)} 不属于可接受值 ${JSON.stringify(issue.expected)}`;
+      return `命令 ${issue.command} 的禁配事实 ${issue.field}=${formatIssueValue(issue.actual)} 不属于可接受值 ${JSON.stringify(issue.expected)}`;
     case "contradictoryUsageConstraint":
       return `命令 ${issue.command} 的 ${issue.constraint} usage constraint 内部矛盾：${issue.fields.join(", ")}`;
+  }
+}
+
+function formatIssueValue(value: unknown): string {
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    return String(value);
+  }
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    try {
+      return String(value);
+    } catch {
+      return "<无法显示>";
+    }
   }
 }
 
