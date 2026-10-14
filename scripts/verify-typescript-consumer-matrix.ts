@@ -690,6 +690,18 @@ function verifyAuthoringLanguageService(
     },
     {
       fixture: "authoring-example.ts",
+      marker: "usageConstraints: [",
+      token: "usageConstraints",
+      requiredType: [
+        'kind: "count"',
+        'kind: "when"',
+        'kind: "present"',
+        'field: "domain"',
+        'require: ["email"]',
+      ],
+    },
+    {
+      fixture: "authoring-example.ts",
       marker: "lines([",
       token: "lines",
       requiredType: ["TextLines"],
@@ -713,14 +725,17 @@ function verifyAuthoringLanguageService(
     },
     {
       fixture: "exportable-contract.ts",
-      marker: "usageConstraints: [",
-      token: "usageConstraints",
+      marker: 'kind: "forbiddenCombination"',
+      token: "kind",
+      requiredType: ['"forbiddenCombination"'],
+    },
+    {
+      fixture: "exportable-contract.ts",
+      marker: 'kind: "forbiddenCombination",\n      all: [',
+      token: "all",
       requiredType: [
-        'kind: "forbiddenCombination"',
-        'field: "query"',
-        'value: "alpha"',
-        'field: "dryRun"',
-        "value: true",
+        '{ kind: "equals"; field: "query"; value: "alpha"; }',
+        '{ kind: "equals"; field: "dryRun"; value: true; }',
       ],
     },
     {
@@ -729,7 +744,13 @@ function verifyAuthoringLanguageService(
       token: "ContractSchema",
       declaredType: true,
       requiredType: ["ContractSchema<Input, Output>"],
-      requiredDocumentation: ["运行时验证", "JSON Schema 投影", "输入字段"],
+      requiredDocumentation: [
+        "运行时验证",
+        "JSON Schema 投影",
+        "输入字段的必填",
+        "候选值",
+        "格式",
+      ],
     },
     {
       fixture: "exportable-contract.ts",
@@ -740,7 +761,7 @@ function verifyAuthoringLanguageService(
       requiredDocumentation: [
         "parser",
         "Draft 2020-12",
-        "禁配事实",
+        "forbiddenCombination",
         "具名失败",
       ],
     },

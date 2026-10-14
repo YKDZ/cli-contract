@@ -130,6 +130,9 @@ void test("数量约束同时出现在帮助和进程用法问题中", () => {
   const help = invoke("validate", "--help");
   assert.equal(help.status, 0);
   assert.ok(help.stdout.includes("id, email 恰好出现 1 项"));
+  assert.ok(
+    help.stdout.includes("当全部满足 domain 已提供 时，必须提供 email"),
+  );
 
   const result = invoke(
     "validate",
@@ -153,8 +156,50 @@ void test("数量约束同时出现在帮助和进程用法问题中", () => {
         absentFields: [],
       },
     ],
-    usage: "user validate [--id <id>] [--email <email>]",
+    usage: "user validate [--id <id>] [--email <email>] [--domain <domain>]",
     helpArgv: ["user", "validate", "--help"],
+  });
+});
+
+void test("邮箱域条件在子进程中返回准确的条件失败", () => {
+  const result = invoke("validate", "--id", "alice", "--domain", "example.com");
+  assert.equal(result.status, 64);
+  assert.equal(result.stdout, "");
+  assert.deepEqual(JSON.parse(result.stderr), {
+    schemaVersion: "2",
+    command: "validate",
+    kind: "usageFailure",
+    issues: [
+      {
+        code: "conditionalConstraintViolation",
+        branch: "then",
+        conditions: [{ kind: "present", field: "domain", present: true }],
+        missingRequiredFields: ["email"],
+        presentForbiddenFields: [],
+      },
+    ],
+    usage: "user validate [--id <id>] [--email <email>] [--domain <domain>]",
+    helpArgv: ["user", "validate", "--help"],
+  });
+});
+
+void test("指定域不匹配保留具名应用失败与退出状态", () => {
+  const result = invoke(
+    "validate",
+    "--email",
+    "alice@elsewhere.com",
+    "--domain",
+    "example.com",
+    "--json",
+  );
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, "");
+  assert.deepEqual(JSON.parse(result.stderr), {
+    schemaVersion: "2",
+    command: "validate",
+    kind: "failure",
+    variant: "emailDomainMismatch",
+    data: { email: "alice@elsewhere.com", domain: "example.com" },
   });
 });
 
