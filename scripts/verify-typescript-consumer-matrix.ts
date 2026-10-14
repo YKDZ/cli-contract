@@ -311,13 +311,23 @@ const authoringDiagnosticCases = [
     expectedCodes: [
       "fieldInputMustAcceptRawValue",
       "fieldInputMustAcceptRawValue",
+      "fieldInputMustAcceptRawValue",
+      "fieldInputMustAcceptRawValue",
     ],
     required: [
       'command: "inspect"',
       'command: "rootInspect"',
+      'command: "rootEnabled"',
+      'command: "rootTags"',
       'field: "count"',
+      'field: "enabled"',
+      'field: "tags"',
       "rawValue: string",
+      "rawValue: true",
+      "rawValue: [string, ...string[]]",
       "schemaInput: number",
+      "schemaInput: string",
+      "schemaInput: number[]",
     ],
   },
   {
@@ -331,6 +341,29 @@ const authoringDiagnosticCases = [
     ],
   },
 ] as const;
+
+function firstLevelCompilerMessages(
+  output: string,
+  fixture: string,
+): readonly string[] {
+  const firstLevel: string[] = [];
+  let inFixtureDiagnostic = false;
+  for (const line of output.split(/\r?\n/)) {
+    if (line.startsWith(`${fixture}(`) && line.includes(": error TS")) {
+      inFixtureDiagnostic = true;
+      firstLevel.push(line);
+    } else if (!inFixtureDiagnostic) {
+      continue;
+    } else if (/^  [^ ]/.test(line)) {
+      firstLevel.push(line);
+    } else if (line.startsWith("    ")) {
+      continue;
+    } else {
+      inFixtureDiagnostic = false;
+    }
+  }
+  return firstLevel;
+}
 
 async function verifyAuthoringDiagnostic(
   project: string,
@@ -350,11 +383,13 @@ async function verifyAuthoringDiagnostic(
   );
   if (result.error !== undefined) throw result.error;
   const diagnostics = `${result.stderr}\n${result.stdout}`;
+  const firstLevelMessages = firstLevelCompilerMessages(diagnostics, fixture);
+  const firstLevel = firstLevelMessages.join("\n");
   const lines = diagnostics.split("\n");
   const headers = lines.filter(
     (line) => line.startsWith(`${fixture}(`) && line.includes(": error TS"),
   );
-  const firstLevelCodes = lines.flatMap((line) => {
+  const firstLevelCodes = firstLevelMessages.flatMap((line) => {
     const match = /^  [^ ].*ContractTypeError<"([^"]+)"/.exec(line);
     const code = match?.[1];
     return code === undefined ? [] : [code];
@@ -369,10 +404,10 @@ async function verifyAuthoringDiagnostic(
       [...expectedCodes]
         .sort((left, right) => left.localeCompare(right))
         .join(",") ||
-    required.some((fragment) => !diagnostics.includes(fragment))
+    required.some((fragment) => !firstLevel.includes(fragment))
   ) {
     throw new Error(
-      `Published authoring diagnostic is incomplete for ${fixture}\n${diagnostics}`,
+      `Published authoring diagnostic first level is incomplete for ${fixture}\n${firstLevel}\nFull diagnostics:\n${diagnostics}`,
     );
   }
 }
@@ -413,14 +448,22 @@ function verifyAuthoringLanguageService(
     },
     {
       fixture: "input-schema-raw-mismatch.ts",
-      count: 2,
+      count: 4,
       required: [
         "fieldInputMustAcceptRawValue",
         'command: "inspect"',
         'command: "rootInspect"',
+        'command: "rootEnabled"',
+        'command: "rootTags"',
         'field: "count"',
+        'field: "enabled"',
+        'field: "tags"',
         "rawValue: string",
+        "rawValue: true",
+        "rawValue: [string, ...string[]]",
         "schemaInput: number",
+        "schemaInput: string",
+        "schemaInput: number[]",
       ],
     },
     {

@@ -62,3 +62,53 @@ defineCli()({
     },
   },
 });
+
+defineCli()({
+  root: "rootEnabled",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    rootEnabled: {
+      kind: "rootCommand",
+      name: "root-enabled",
+      description: "根启用",
+      fields: {
+        enabled: {
+          kind: "flag",
+          longOption: "--enabled",
+          description: "启用",
+        },
+      },
+      input: z.object({ enabled: z.string() }),
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+defineCli()({
+  root: "rootTags",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    rootTags: {
+      kind: "rootCommand",
+      name: "root-tags",
+      description: "根标签",
+      fields: {
+        tags: {
+          kind: "repeatableOption",
+          longOption: "--tag",
+          description: "标签",
+        },
+      },
+      input: z.object({ tags: z.array(z.number()) }),
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});

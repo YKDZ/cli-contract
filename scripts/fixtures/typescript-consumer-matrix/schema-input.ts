@@ -15,6 +15,10 @@ const zodInput = z.object({
     .readonly()
     .optional(),
   defaultMode: z.enum(["fast", "slow"]).default("fast"),
+  limit: z.codec(z.string(), z.number(), {
+    decode: (value) => Number(value),
+    encode: (value) => String(value),
+  }),
 });
 
 const zodCli = defineCli()({
@@ -48,6 +52,11 @@ const zodCli = defineCli()({
           longOption: "--default-mode",
           description: "默认模式",
         },
+        limit: {
+          kind: "valueOption",
+          longOption: "--limit",
+          description: "上限",
+        },
       },
       input: zodInput,
       success: { kind: "completion" },
@@ -57,6 +66,7 @@ const zodCli = defineCli()({
         input.tags satisfies ("red" | "green")[] | undefined;
         input.readonlyTags satisfies readonly ("small" | "large")[] | undefined;
         input.defaultMode satisfies "fast" | "slow";
+        input.limit satisfies number;
         // @ts-expect-error enum Output 不得扩宽为任意字符串。
         const invalidMode: "other" = input.mode;
         // @ts-expect-error array enum Output 不得扩宽为任意元素。
@@ -65,6 +75,8 @@ const zodCli = defineCli()({
         input.readonlyTags?.push("small");
         // @ts-expect-error default 的 Output 不得扩宽为任意字符串。
         const invalidDefault: "other" = input.defaultMode;
+        // @ts-expect-error handler 使用 schema Output，不能回退成原始字符串。
+        input.limit satisfies string;
         void invalidMode;
         void invalidTag;
         void invalidDefault;

@@ -4,6 +4,8 @@ import { createRequire } from "node:module";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { ContractDefinitionError } from "@ykdz/cli-contract";
+
 const project = import.meta.dirname;
 const repository = process.env.CANDIDATE_REPOSITORY_ROOT;
 if (!repository) throw new Error("缺少仓库位置");
@@ -93,6 +95,91 @@ const emptyJsonSchema = {
   properties: {},
   type: "object",
 };
+
+const incompatibleInputSchema = {
+  "~standard": {
+    version: 1,
+    vendor: "installed-consumer",
+    validate(value: unknown) {
+      return { value };
+    },
+    jsonSchema: {
+      input() {
+        return {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          properties: { count: { type: "number" } },
+          required: ["count"],
+          type: "object",
+        };
+      },
+      output() {
+        return {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          properties: { count: { type: "number" } },
+          required: ["count"],
+          type: "object",
+        };
+      },
+    },
+  },
+};
+
+assert.throws(
+  () =>
+    coreModule.defineCli()({
+      root: "rawMismatch",
+      help: coreModule.helpCapability(),
+      output: coreModule.outputCapability({ defaultFormat: "structured" }),
+      usageFailureExitCode: 64,
+      commands: {
+        rawMismatch: {
+          kind: "rootCommand",
+          name: "raw-mismatch",
+          description: "Raw mismatch",
+          fields: {
+            count: {
+              kind: "valueOption",
+              longOption: "--count",
+              description: "Count",
+            },
+          },
+          input: incompatibleInputSchema,
+          success: { kind: "completion" },
+          failures: {},
+          handler({
+            outcome,
+          }: {
+            readonly outcome: { completion(): unknown };
+          }) {
+            return outcome.completion();
+          },
+        },
+      },
+    }),
+  (error: unknown) => {
+    assert.ok(error instanceof ContractDefinitionError);
+    assert.deepEqual(error.issues, [
+      {
+        code: "schemaFieldDoesNotAcceptRawValue",
+        command: "rawMismatch",
+        location: "input",
+        fields: [
+          {
+            field: "count",
+            path: ["commands", "rawMismatch", "input", "properties", "count"],
+            expected: "string",
+            received: { type: "number" },
+          },
+        ],
+      },
+    ]);
+    assert.match(
+      error.message,
+      /命令 rawMismatch 的输入字段 count（commands\.rawMismatch\.input\.properties\.count）需要 raw string，实际输入模式属性为 \{"type":"number"\}/,
+    );
+    return true;
+  },
+);
 
 for (const withValue of [false, true]) {
   let handlerCalled = false;

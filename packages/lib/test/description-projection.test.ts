@@ -401,7 +401,20 @@ void test("字段 description 在 schema 兼容性和 kind 早退前独立聚合
         code: "schemaFieldDoesNotAcceptRawValue",
         command: "invalidField",
         location: "input",
-        fields: [{ field: "enabled", expected: "boolean" }],
+        fields: [
+          {
+            field: "enabled",
+            path: [
+              "commands",
+              "invalidField",
+              "input",
+              "properties",
+              "enabled",
+            ],
+            expected: "boolean",
+            received: { type: "string" },
+          },
+        ],
       },
     },
     {

@@ -157,7 +157,14 @@ export function compileInputFields(
           : "string";
     return schemaPropertyAcceptsRawValue(schemaProperties[field], expected)
       ? []
-      : [{ field, expected }];
+      : [
+          {
+            field,
+            path: ["commands", command, "input", "properties", field],
+            expected,
+            received: schemaProperties[field] ?? null,
+          },
+        ];
   });
   if (incompatibleFields.length > 0) {
     issues.push({

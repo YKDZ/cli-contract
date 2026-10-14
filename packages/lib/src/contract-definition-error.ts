@@ -1,3 +1,5 @@
+import type { JsonValue } from "#/contract-schema";
+
 export type SchemaDefinitionTarget =
   | Readonly<{ readonly command: string; readonly location: "input" }>
   | Readonly<{
@@ -65,7 +67,12 @@ export type ContractDefinitionIssue =
       readonly location: "input";
       readonly fields: readonly Readonly<{
         readonly field: string;
+        /** 指向命令声明中对应输入模式属性的位置。 */
+        readonly path: readonly string[];
+        /** CLI 字段解析器产生的 raw 值形态。 */
         readonly expected: "boolean" | "string" | "stringArray";
+        /** 实际 JSON Schema Input 投影，不代表 Standard Schema 的 TypeScript Input。 */
+        readonly received: JsonValue;
       }>[];
     }>
   | Readonly<{
@@ -369,7 +376,7 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
     case "schemaFieldSetMismatch":
       return `命令 ${issue.command} 的字段与输入模式属性不一致`;
     case "schemaFieldDoesNotAcceptRawValue":
-      return `命令 ${issue.command} 的输入字段 ${issue.fields.map(({ field, expected }) => `${field} 不接受 raw ${expected}`).join(", ")}`;
+      return `命令 ${issue.command} 的输入字段 ${issue.fields.map(({ field, path, expected, received }) => `${field}（${path.join(".")}）需要 raw ${expected}，实际输入模式属性为 ${JSON.stringify(received)}`).join(", ")}`;
     case "invalidInputSchemaShape":
       return `命令 ${issue.command} 的输入模式 ${issue.aspect} 无效`;
     case "missingInputDefault":
