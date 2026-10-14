@@ -62,6 +62,24 @@ for (const [command, scenario] of Object.entries(commands)) {
   });
 }
 
+void test("基础输入模式拒绝由执行阶段产生 inputRejected", async () => {
+  const capture = await runCliScenario({
+    cliContract: cli,
+    argv: ["validate", ""],
+    dependencies,
+  });
+  if (capture.termination.kind !== "usageFailure") {
+    assert.fail("预期执行内核返回输入用法失败");
+  }
+  assert.equal(capture.termination.exitCode, 64);
+  assert.deepEqual(
+    capture.termination.issues.map(({ code }) => code),
+    ["inputRejected"],
+  );
+  assert.equal(capture.stdout, "");
+  assert.notEqual(capture.stderr, "");
+});
+
 for (const [command, scenarios] of Object.entries(failures)) {
   for (const [failure, scenario] of Object.entries(scenarios)) {
     void test(`${command} 的 ${failure} 失败场景`, async () => {
