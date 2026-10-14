@@ -560,6 +560,18 @@ void test("defineCli 聚合拒绝无效成员形状与动态候选值", () => {
             kind: "forbiddenCombination",
             all: [{ kind: "equals", field: "force", value: false }],
           },
+          {
+            kind: "forbiddenCombination",
+            all: [
+              { kind: "present", field: "missing" },
+              42,
+              { kind: "equals", field: "mode", value: "toml" },
+            ],
+          },
+          {
+            kind: "forbiddenCombination",
+            all: [{ kind: "equals", field: "mode", value: 42 }],
+          },
         ],
         input: z.object({
           force: z.boolean().optional(),
@@ -592,11 +604,14 @@ void test("defineCli 聚合拒绝无效成员形状与动态候选值", () => {
           received: "exclusive",
         },
         {
-          code: "invalidUsageConstraint",
+          code: "invalidUsageConstraintValue",
           command: "invalidShapes",
           index: 2,
-          aspect: "members",
-          received: "forbiddenCombination",
+          constraint: "forbiddenCombination",
+          member: "all.value",
+          field: "force",
+          actual: 42,
+          expected: true,
         },
         {
           code: "invalidUsageConstraint",
@@ -638,6 +653,118 @@ void test("defineCli 聚合拒绝无效成员形状与动态候选值", () => {
           field: "force",
           actual: false,
           expected: true,
+        },
+        {
+          code: "invalidUsageConstraint",
+          command: "invalidShapes",
+          index: 8,
+          aspect: "members",
+          received: "forbiddenCombination",
+        },
+        {
+          code: "unknownUsageConstraintField",
+          command: "invalidShapes",
+          constraint: "forbiddenCombination",
+          index: 8,
+          member: "all.field",
+          field: "missing",
+        },
+        {
+          code: "invalidUsageConstraintValue",
+          command: "invalidShapes",
+          constraint: "forbiddenCombination",
+          index: 8,
+          member: "all.value",
+          field: "mode",
+          actual: "toml",
+          expected: ["safe", "force"],
+        },
+        {
+          code: "invalidUsageConstraintValue",
+          command: "invalidShapes",
+          constraint: "forbiddenCombination",
+          index: 9,
+          member: "all.value",
+          field: "mode",
+          actual: 42,
+          expected: ["safe", "force"],
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("层级定义继续聚合叶命令中的独立约束错误", () => {
+  const define = defineCli();
+  const definition = {
+    root: "workspace",
+    help: englishHelpCapability(),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      workspace: {
+        kind: "rootGroup",
+        name: "workspace",
+        description: "工作区",
+      },
+      probe: {
+        kind: "command",
+        parent: "workspace",
+        name: "probe",
+        description: "检查约束",
+        fields: {
+          mode: {
+            kind: "valueOption",
+            longOption: "--mode",
+            description: "模式",
+          },
+        },
+        input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+        usageConstraints: [
+          {
+            kind: "forbiddenCombination",
+            all: [{ kind: "present", field: "mode", typo: true }],
+          },
+          {
+            kind: "forbiddenCombination",
+            all: [{ kind: "equals", field: "mode", value: "outside" }],
+          },
+        ],
+        success: { kind: "completion" },
+        failures: {},
+        handler() {},
+      },
+    },
+  };
+
+  assert.throws(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 动态边界负例绕过静态检查，验证层级定义仍聚合叶约束错误。
+    () => define(definition as never),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "unknownDefinitionProperty",
+          path: [
+            "commands",
+            "probe",
+            "usageConstraints",
+            "0",
+            "all",
+            "0",
+            "typo",
+          ],
+        },
+        {
+          code: "invalidUsageConstraintValue",
+          command: "probe",
+          constraint: "forbiddenCombination",
+          index: 1,
+          member: "all.value",
+          field: "mode",
+          actual: "outside",
+          expected: ["safe", "force"],
         },
       ]);
       return true;

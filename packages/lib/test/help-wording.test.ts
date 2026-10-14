@@ -9,6 +9,7 @@ import {
   outputCapability,
   parseCliInvocation,
   text,
+  type HelpCapabilityDefinition,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
@@ -53,6 +54,30 @@ void test("帮助事实模板表达候选值和默认值，保留 schema 中的�
   assert.match(
     writes.join(""),
     /\[--mode <mode>\] （可选："safe", "force"） （预设："safe"）/,
+  );
+});
+
+void test("提取的帮助事实未知槽位报告闭合定义问题", () => {
+  const definition: HelpCapabilityDefinition = JSON.parse(
+    '{"wording":{"choises":"候选 {choices}","defalt":"默认 {value}"}}',
+  );
+
+  assert.throws(
+    () => helpCapability(definition),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "unknownDefinitionProperty",
+          path: ["help", "wording", "choises"],
+        },
+        {
+          code: "unknownDefinitionProperty",
+          path: ["help", "wording", "defalt"],
+        },
+      ]);
+      return true;
+    },
   );
 });
 

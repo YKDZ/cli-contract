@@ -243,6 +243,14 @@ export interface HelpCapabilityDefinition {
   readonly wording?: HelpFactWording;
 }
 
+type HelpCapabilityDefinitionForTypeCheck = Omit<
+  HelpCapabilityDefinition,
+  "wording"
+> & {
+  /** 保留未知槽位的字面键，让局部闭合诊断提供可行动身份。 */
+  readonly wording?: object;
+};
+
 export interface VersionCapability {
   readonly kind: "versionCapability";
   readonly value: string;
@@ -914,11 +922,25 @@ type HelpFactTemplateValueContract<
         }>
       >;
 
-type HelpFactWordingIssues<Wording> = {
+type HelpFactWordingIssues<Wording> =
+  | {
+      [
+        Slot in keyof Wording & keyof HelpFactWording
+      ]: HelpFactTemplateValueContract<Slot, Wording[Slot]>;
+    }[keyof Wording & keyof HelpFactWording]
+  | HelpFactWordingUnknownPropertyIssues<Wording>;
+
+type HelpFactWordingUnknownPropertyIssues<Wording> = {
   [
-    Slot in keyof Wording & keyof HelpFactWording
-  ]: HelpFactTemplateValueContract<Slot, Wording[Slot]>;
-}[keyof Wording & keyof HelpFactWording];
+    Property in Exclude<Extract<keyof Wording, string>, keyof HelpFactWording>
+  ]: ContractTypeError<
+    "unknownDefinitionProperty",
+    Readonly<{
+      readonly path: readonly ["help", "wording", Property];
+      readonly property: Property;
+    }>
+  >;
+}[Exclude<Extract<keyof Wording, string>, keyof HelpFactWording>];
 
 type HelpFactWordingContract<Wording> = [
   HelpFactWordingIssues<Wording>,
@@ -930,7 +952,9 @@ type HelpCapabilityTemplateContract<Definition> =
   Definition extends Readonly<{
     readonly wording: infer Wording;
   }>
-    ? HelpFactWordingContract<Wording>
+    ? Wording extends (...arguments_: never[]) => unknown
+      ? never
+      : HelpFactWordingContract<Wording>
     : unknown;
 
 type InputStringKeys<Input> = Extract<keyof Input, string>;
@@ -1746,21 +1770,23 @@ type InvalidForbiddenCombinationFacts<
     ? never
     : InvalidUsageFactForFields<Command, Facts[number], Fields, Input>;
 
-type UnknownUsageFactProperties<Facts extends readonly unknown[]> = {
-  [Index in keyof Facts]: Facts[Index] extends Readonly<{
+type UnknownUsageFactProperty<Fact> =
+  Fact extends Readonly<{
     readonly kind: "present";
   }>
     ? Exclude<
-        keyof Facts[Index],
+        keyof Fact,
         (typeof definitionPropertyKeys.usage.fact.present)[number]
       >
-    : Facts[Index] extends Readonly<{ readonly kind: "equals" }>
+    : Fact extends Readonly<{ readonly kind: "equals" }>
       ? Exclude<
-          keyof Facts[Index],
+          keyof Fact,
           (typeof definitionPropertyKeys.usage.fact.equals)[number]
         >
       : never;
-}[number];
+
+type UnknownUsageFactProperties<Facts extends readonly unknown[]> =
+  UnknownUsageFactProperty<Facts[number]>;
 
 type UnknownForbiddenCombinationConstraintProperties<Constraint> = Exclude<
   keyof Constraint,
@@ -3367,7 +3393,8 @@ type RuntimeCliDefinition = RootCliDefinitionBase<string> &
  * 提供必要模板，由 defineCli 检查完整性；核心不生成默认自然语言。
  */
 export function helpCapability<
-  const Definition extends HelpCapabilityDefinition = HelpCapabilityDefinition,
+  const Definition extends HelpCapabilityDefinitionForTypeCheck =
+    HelpCapabilityDefinition,
 >(
   definition?: Definition &
     RejectUnknownProperties<
@@ -3379,14 +3406,6 @@ export function helpCapability<
           readonly headings: RejectUnknownProperties<
             Headings,
             keyof HelpHeadings
-          >;
-        }>
-      : unknown) &
-    (Definition extends Readonly<{ readonly wording: infer Wording }>
-      ? Readonly<{
-          readonly wording: RejectUnknownProperties<
-            Wording,
-            keyof HelpFactWording
           >;
         }>
       : unknown) &
@@ -3446,11 +3465,23 @@ function copyHelpFactWording(value: unknown): HelpFactWording {
     throw new TypeError("帮助事实文案必须是对象");
   }
   const wording: Record<string, string> = {};
+  const unknownSlotIssues: ContractDefinitionIssue[] = [];
   for (const [slot, raw] of Object.entries(value)) {
     if (!isHelpTemplateSlot(slot)) {
-      throw new TypeError(`帮助事实文案包含未知槽位 ${slot}`);
+      unknownSlotIssues.push({
+        code: "unknownDefinitionProperty",
+        path: ["help", "wording", slot],
+      });
+      continue;
     }
     wording[slot] = typeof raw === "string" ? raw : "";
+  }
+  const [firstUnknownSlotIssue, ...otherUnknownSlotIssues] = unknownSlotIssues;
+  if (firstUnknownSlotIssue !== undefined) {
+    throw new ContractDefinitionError([
+      firstUnknownSlotIssue,
+      ...otherUnknownSlotIssues,
+    ]);
   }
   return Object.freeze(wording);
 }
@@ -3729,7 +3760,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
         ? []
         : [definition.root];
   }
-  if (isHierarchy && issues.length > 0) {
+  if (isHierarchy && hasUnsafeCommandHierarchyIssue(issues)) {
     throw new ContractDefinitionError(
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- issues.length 已检查为正数，动态数组在此恢复非空元组类型。
       issues as [ContractDefinitionIssue, ...ContractDefinitionIssue[]],
@@ -4035,6 +4066,18 @@ function reportMissingHelpFactTemplate(
     return;
   }
   issues.push({ code: "missingHelpFactTemplate", command, slot });
+}
+
+function hasUnsafeCommandHierarchyIssue(
+  issues: readonly ContractDefinitionIssue[],
+): boolean {
+  return issues.some(
+    (issue) =>
+      issue.code === "invalidCommandParent" ||
+      issue.code === "invalidRootCommandKind" ||
+      issue.code === "invalidCommandNodeKind" ||
+      issue.code === "commandHierarchyCycle",
+  );
 }
 
 function collectUnknownProperties(
@@ -4679,17 +4722,27 @@ function compileUsageConstraints(
         continue;
       }
       const facts: UsageFact[] = [];
+      const factsForValidation: (
+        | UsageFact
+        | Readonly<{
+            readonly kind: "invalidNumericEquals";
+            readonly field: string;
+            readonly value: number;
+          }>
+      )[] = [];
       let malformedFact = false;
       for (const candidateFact of candidate.all) {
         if (!isPlainRecord(candidateFact)) {
           malformedFact = true;
-          break;
+          continue;
         }
         if (
           candidateFact.kind === "present" &&
           typeof candidateFact.field === "string"
         ) {
-          facts.push({ kind: "present", field: candidateFact.field });
+          const fact = { kind: "present", field: candidateFact.field } as const;
+          facts.push(fact);
+          factsForValidation.push(fact);
           continue;
         }
         if (
@@ -4698,15 +4751,28 @@ function compileUsageConstraints(
           (typeof candidateFact.value === "boolean" ||
             typeof candidateFact.value === "string")
         ) {
-          facts.push({
+          const fact = {
             kind: "equals",
+            field: candidateFact.field,
+            value: candidateFact.value,
+          } as const;
+          facts.push(fact);
+          factsForValidation.push(fact);
+          continue;
+        }
+        if (
+          candidateFact.kind === "equals" &&
+          typeof candidateFact.field === "string" &&
+          typeof candidateFact.value === "number"
+        ) {
+          factsForValidation.push({
+            kind: "invalidNumericEquals",
             field: candidateFact.field,
             value: candidateFact.value,
           });
           continue;
         }
         malformedFact = true;
-        break;
       }
       if (malformedFact) {
         issues.push({
@@ -4716,10 +4782,59 @@ function compileUsageConstraints(
           aspect: "members",
           received: "forbiddenCombination",
         });
-        continue;
       }
       let invalidFactCount = 0;
-      for (const fact of facts) {
+      for (const fact of factsForValidation) {
+        if (fact.kind === "invalidNumericEquals") {
+          const field = fieldsByKey.get(fact.field);
+          if (field === undefined) {
+            invalidFactCount += 1;
+            issues.push({
+              code: "unknownUsageConstraintField",
+              command,
+              constraint: "forbiddenCombination",
+              index,
+              member: "all.field",
+              field: fact.field,
+            });
+            continue;
+          }
+          if (
+            field.kind !== "flag" &&
+            field.kind !== "valueOption" &&
+            field.kind !== "positional"
+          ) {
+            invalidFactCount += 1;
+            issues.push({
+              code: "inapplicableUsageConstraintField",
+              command,
+              constraint: "forbiddenCombination",
+              field: field.key,
+              kind: field.kind,
+            });
+            continue;
+          }
+          invalidFactCount += 1;
+          const expected =
+            field.kind === "flag"
+              ? field.negatedLongOption === undefined
+                ? true
+                : "boolean"
+              : field.choices === undefined
+                ? "string"
+                : Object.freeze([...field.choices]);
+          issues.push({
+            code: "invalidUsageConstraintValue",
+            command,
+            constraint: "forbiddenCombination",
+            index,
+            member: "all.value",
+            field: field.key,
+            actual: fact.value,
+            expected,
+          });
+          continue;
+        }
         const field = fieldsByKey.get(fact.field);
         if (field === undefined) {
           invalidFactCount += 1;
@@ -4809,6 +4924,7 @@ function compileUsageConstraints(
         });
       if (
         invalidFactCount === 0 &&
+        !malformedFact &&
         conflictingFields.size === 0 &&
         facts.length === candidate.all.length
       )

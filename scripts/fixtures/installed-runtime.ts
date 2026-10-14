@@ -63,6 +63,33 @@ if (
   throw new Error("公共入口缺少预期导出");
 }
 
+assert.throws(
+  () =>
+    Reflect.apply(coreModule.helpCapability, coreModule, [
+      {
+        wording: {
+          choises: "候选 {choices}",
+          defalt: "默认 {value}",
+        },
+      },
+    ]),
+  (error: unknown) => {
+    if (typeof error !== "object" || error === null) return false;
+    assert.ok(error instanceof coreModule.ContractDefinitionError);
+    assert.deepEqual(Reflect.get(error, "issues"), [
+      {
+        code: "unknownDefinitionProperty",
+        path: ["help", "wording", "choises"],
+      },
+      {
+        code: "unknownDefinitionProperty",
+        path: ["help", "wording", "defalt"],
+      },
+    ]);
+    return true;
+  },
+);
+
 const privateText = "安装消费者私有文本";
 assert.throws(
   () =>
@@ -537,6 +564,138 @@ const constrainedCli = coreModule.defineCli()({
     },
   },
 });
+
+const invalidConstraintDefinition: unknown = {
+  root: "workspace",
+  help: coreModule.helpCapability({
+    wording: {
+      commandPlaceholder: "命令",
+      choices: "候选 {choices}",
+      present: "字段 {field} 已出现",
+      equals: "字段 {field}={value}",
+      forbiddenCombination: "禁配事实：{facts}",
+    },
+  }),
+  output: coreModule.outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    workspace: {
+      kind: "rootGroup",
+      name: "workspace",
+      description: "工作区",
+    },
+    probe: {
+      kind: "command",
+      parent: "workspace",
+      name: "probe",
+      description: "检查约束",
+      fields: {
+        format: {
+          kind: "valueOption",
+          longOption: "--format",
+          description: "格式",
+        },
+        quiet: {
+          kind: "flag",
+          longOption: "--quiet",
+          description: "静默",
+        },
+        reference: {
+          kind: "valueOption",
+          longOption: "--reference",
+          description: "引用值",
+        },
+      },
+      input: constrainedStandardSchema,
+      usageConstraints: [
+        {
+          kind: "forbiddenCombination",
+          all: [
+            { kind: "equals", field: "missing", value: "json" },
+            42,
+            { kind: "equals", field: "format", value: "toml" },
+          ],
+        },
+        {
+          kind: "forbiddenCombination",
+          all: [{ kind: "equals", field: "format", value: 42 }],
+        },
+        {
+          kind: "forbiddenCombination",
+          all: [{ kind: "present", field: "format", typo: true }],
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler() {},
+    },
+  },
+};
+assert.throws(
+  () =>
+    Reflect.apply(coreModule.defineCli(), undefined, [
+      invalidConstraintDefinition,
+    ]),
+  (error: unknown) => {
+    if (
+      typeof error !== "object" ||
+      error === null ||
+      !(error instanceof coreModule.ContractDefinitionError)
+    ) {
+      return false;
+    }
+    assert.deepEqual(Reflect.get(error, "issues"), [
+      {
+        code: "unknownDefinitionProperty",
+        path: [
+          "commands",
+          "probe",
+          "usageConstraints",
+          "2",
+          "all",
+          "0",
+          "typo",
+        ],
+      },
+      {
+        code: "invalidUsageConstraint",
+        command: "probe",
+        index: 0,
+        aspect: "members",
+        received: "forbiddenCombination",
+      },
+      {
+        code: "unknownUsageConstraintField",
+        command: "probe",
+        constraint: "forbiddenCombination",
+        index: 0,
+        member: "all.field",
+        field: "missing",
+      },
+      {
+        code: "invalidUsageConstraintValue",
+        command: "probe",
+        constraint: "forbiddenCombination",
+        index: 0,
+        member: "all.value",
+        field: "format",
+        actual: "toml",
+        expected: ["json", "yaml"],
+      },
+      {
+        code: "invalidUsageConstraintValue",
+        command: "probe",
+        constraint: "forbiddenCombination",
+        index: 1,
+        member: "all.value",
+        field: "format",
+        actual: 42,
+        expected: ["json", "yaml"],
+      },
+    ]);
+    return true;
+  },
+);
 
 assert.equal(constrainedCli.manifest.schemaVersion, "4");
 const projectedInput =

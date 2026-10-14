@@ -11,6 +11,29 @@ const base = {
   usageFailureExitCode: 64,
 } as const;
 
+type ValidExtractedFact =
+  | { readonly kind: "present"; readonly field: "mode" }
+  | {
+      readonly kind: "equals";
+      readonly field: "mode";
+      readonly value: "safe";
+    };
+declare const validExtractedFact: ValidExtractedFact;
+
+type ExtractedFactWithUnknownProperty =
+  | {
+      readonly kind: "present";
+      readonly field: "mode";
+      readonly typo: true;
+    }
+  | {
+      readonly kind: "equals";
+      readonly field: "mode";
+      readonly value: "safe";
+      readonly typo: true;
+    };
+declare const extractedFactWithUnknownProperty: ExtractedFactWithUnknownProperty;
+
 const define = defineCli();
 define({
   root: "workspace",
@@ -38,6 +61,96 @@ define({
         {
           kind: "forbiddenCombination",
           all: [{ kind: "equals", field: "mode", value: "staging" }],
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    }),
+  },
+});
+
+defineCli()({
+  root: "validExtractedFactUnion",
+  ...base,
+  commands: {
+    validExtractedFactUnion: {
+      kind: "rootCommand",
+      name: "valid-extracted-fact-union",
+      description: "合法提取事实联合",
+      fields: {
+        mode: {
+          kind: "valueOption",
+          longOption: "--mode",
+          description: "模式",
+        },
+      },
+      input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+      usageConstraints: [
+        { kind: "forbiddenCombination", all: [validExtractedFact] },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+defineCli()({
+  root: "invalidClosedFactUnion",
+  ...base,
+  commands: {
+    invalidClosedFactUnion: {
+      kind: "rootCommand",
+      name: "invalid-closed-fact-union",
+      description: "闭合提取事实联合",
+      fields: {
+        mode: {
+          kind: "valueOption",
+          longOption: "--mode",
+          description: "模式",
+        },
+      },
+      input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+      usageConstraints: [
+        {
+          kind: "forbiddenCombination",
+          all: [extractedFactWithUnknownProperty],
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+define({
+  root: "workspace",
+  ...base,
+  commands: {
+    workspace: {
+      kind: "rootGroup",
+      name: "workspace",
+      description: "工作区",
+    },
+    ...define.command("invalidClosedFactUnionHierarchy")({
+      kind: "command",
+      parent: "workspace",
+      name: "invalid-closed-fact-union-hierarchy",
+      description: "层级闭合提取事实联合",
+      fields: {
+        mode: {
+          kind: "valueOption",
+          longOption: "--mode",
+          description: "模式",
+        },
+      },
+      input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+      usageConstraints: [
+        {
+          kind: "forbiddenCombination",
+          all: [extractedFactWithUnknownProperty],
         },
       ],
       success: { kind: "completion" },
@@ -97,6 +210,35 @@ defineCli()({
         {
           kind: "forbiddenCombination",
           all: [{ kind: "present", field: "mode", typo: true }],
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+defineCli()({
+  root: "invalidNumericValue",
+  ...base,
+  commands: {
+    invalidNumericValue: {
+      kind: "rootCommand",
+      name: "invalid-numeric-value",
+      description: "非法数字等值",
+      fields: {
+        mode: {
+          kind: "valueOption",
+          longOption: "--mode",
+          description: "模式",
+        },
+      },
+      input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+      usageConstraints: [
+        {
+          kind: "forbiddenCombination",
+          all: [{ kind: "equals", field: "mode", value: 42 }],
         },
       ],
       success: { kind: "completion" },

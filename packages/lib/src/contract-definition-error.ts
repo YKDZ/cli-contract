@@ -331,7 +331,7 @@ export type ContractDefinitionIssue =
       readonly index: number;
       readonly member: "all.value";
       readonly field: string;
-      readonly actual: boolean | string;
+      readonly actual: boolean | number | string;
       readonly expected: boolean | string | readonly string[];
     }>
   | Readonly<{

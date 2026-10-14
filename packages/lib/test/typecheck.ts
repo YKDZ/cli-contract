@@ -612,6 +612,8 @@ helpCapability({ shortAlias: "-x" });
 
 // @ts-expect-error 帮助事实文案只能使用闭合槽位。
 helpCapability({ wording: { choices: "候选 {choices}", typo: "额外" } });
+// @ts-expect-error 帮助事实文案仍必须是非函数对象。
+helpCapability({ wording: () => "候选 {choices}" });
 
 // @ts-expect-error 静态模板必须出现全部必需占位符。
 helpCapability({ wording: { choices: "候选值" } });
