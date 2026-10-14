@@ -26,10 +26,13 @@ export type ContractDefinitionIssue =
         | "choices"
         | "default"
         | "requires"
-        | "exclusive"
+        | "forbiddenCombination"
+        | "countExactly"
+        | "countAtLeast"
+        | "countAtMost"
+        | "countBetween"
         | "present"
-        | "equals"
-        | "forbiddenCombination";
+        | "equals";
     }>
   | Readonly<{
       readonly code: "invalidHelpFactTemplate";
@@ -310,9 +313,28 @@ export type ContractDefinitionIssue =
       readonly received: string | null;
     }>
   | Readonly<{
+      readonly code: "invalidCountConstraint";
+      readonly command: string;
+      readonly index: number;
+      readonly member: "fields" | "min" | "max";
+      readonly reason:
+        | "nonEmpty"
+        | "fieldName"
+        | "duplicateFields"
+        | "endpointRequired"
+        | "finite"
+        | "integer"
+        | "nonNegative"
+        | "fieldCount"
+        | "ordered";
+      readonly actual?: number;
+      readonly maximum?: number;
+      readonly fields?: readonly string[];
+    }>
+  | Readonly<{
       readonly code: "unknownUsageConstraintField";
       readonly command: string;
-      readonly constraint: "requires" | "exclusive" | "forbiddenCombination";
+      readonly constraint: "requires" | "count" | "forbiddenCombination";
       readonly index: number;
       readonly member: "field" | "requires" | "fields" | "all.field";
       readonly field: string;
@@ -320,7 +342,7 @@ export type ContractDefinitionIssue =
   | Readonly<{
       readonly code: "inapplicableUsageConstraintField";
       readonly command: string;
-      readonly constraint: "requires" | "exclusive" | "forbiddenCombination";
+      readonly constraint: "requires" | "forbiddenCombination";
       readonly field: string;
       readonly kind: FieldKind;
     }>
@@ -337,7 +359,7 @@ export type ContractDefinitionIssue =
   | Readonly<{
       readonly code: "contradictoryUsageConstraint";
       readonly command: string;
-      readonly constraint: "requires" | "exclusive" | "forbiddenCombination";
+      readonly constraint: "requires" | "forbiddenCombination";
       readonly member?: "all";
       readonly fields: readonly string[];
     }>;
@@ -473,6 +495,8 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `命令 ${issue.command} 必须声明至少一个 data 变体`;
     case "invalidUsageConstraint":
       return `命令 ${issue.command} 的 usage constraint ${issue.received ?? "非字符串"} 无效`;
+    case "invalidCountConstraint":
+      return `命令 ${issue.command} 的 count ${issue.member} 无效（${issue.reason}）`;
     case "unknownUsageConstraintField":
       return `命令 ${issue.command} 的 usage constraint[${issue.index}] ${issue.constraint}.${issue.member} 引用了不存在字段 ${issue.field}`;
     case "inapplicableUsageConstraintField":

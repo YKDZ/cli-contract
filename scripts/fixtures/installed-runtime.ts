@@ -522,6 +522,7 @@ const constrainedCli = coreModule.defineCli()({
       present: "字段 {field} 已出现",
       equals: "字段 {field}={value}",
       forbiddenCombination: "禁配事实：{facts}",
+      countAtMost: "字段数 {fields} 至多 {max} 项",
     },
   }),
   output: coreModule.outputCapability({ defaultFormat: "structured" }),
@@ -550,6 +551,11 @@ const constrainedCli = coreModule.defineCli()({
       },
       input: constrainedStandardSchema,
       usageConstraints: [
+        {
+          kind: "count",
+          fields: ["format", "quiet"],
+          max: 1,
+        },
         {
           kind: "forbiddenCombination",
           all: [
@@ -754,9 +760,18 @@ assert.equal(constrainedCli.manifest.schemaVersion, "4");
 const projectedInput =
   constrainedCli.manifest.commands.installedFacts.input.inputSchema;
 assert.equal(readProperty(projectedInput, "$id"), constrainedInputSchema.$id);
+const projectedDefinitions = readProperty(projectedInput, "$defs");
 assert.deepEqual(
-  readProperty(projectedInput, "$defs"),
-  constrainedInputSchema.$defs,
+  readProperty(projectedDefinitions, "reference"),
+  constrainedInputSchema.$defs.reference,
+);
+if (typeof projectedDefinitions !== "object" || projectedDefinitions === null) {
+  throw new TypeError("count 投影缺少模式定义");
+}
+assert.ok(
+  Object.keys(projectedDefinitions).some((name) =>
+    name.startsWith("__cliContract_count_"),
+  ),
 );
 assert.equal(
   readProperty(
@@ -780,6 +795,31 @@ const rawForbiddenInput = {
 assert.equal(validateBaseInput(rawForbiddenInput), true);
 assert.equal(validateProjectedInput(rawForbiddenInput), false);
 
+const countOnlyInput = {
+  format: "yaml",
+  quiet: true,
+  reference: "stable",
+};
+assert.equal(validateBaseInput(countOnlyInput), true);
+assert.equal(validateProjectedInput(countOnlyInput), false);
+
+const countOnlyInvocation = coreModule.parseCliInvocation(constrainedCli, [
+  "--format",
+  "yaml",
+  "--quiet",
+  "--reference",
+  "stable",
+]);
+assert.deepEqual(countOnlyInvocation.issues, [
+  {
+    code: "countConstraintViolation",
+    min: 0,
+    max: 1,
+    presentFields: ["format", "quiet"],
+    absentFields: [],
+  },
+]);
+
 const allowedInvocation = coreModule.parseCliInvocation(constrainedCli, [
   "--format",
   "json",
@@ -802,6 +842,13 @@ const expectedFacts = [
 ];
 assert.equal(forbiddenInvocation.kind, "usageFailure");
 assert.deepEqual(forbiddenInvocation.issues, [
+  {
+    code: "countConstraintViolation",
+    min: 0,
+    max: 1,
+    presentFields: ["format", "quiet"],
+    absentFields: [],
+  },
   { code: "forbiddenCombinationViolation", facts: expectedFacts },
 ]);
 
@@ -816,13 +863,29 @@ const usageTermination = await coreModule.executeCli(constrainedCli, {
 assert.deepEqual(usageTermination, {
   kind: "usageFailure",
   command: "installedFacts",
-  issues: [{ code: "forbiddenCombinationViolation", facts: expectedFacts }],
+  issues: [
+    {
+      code: "countConstraintViolation",
+      min: 0,
+      max: 1,
+      presentFields: ["format", "quiet"],
+      absentFields: [],
+    },
+    { code: "forbiddenCombinationViolation", facts: expectedFacts },
+  ],
   exitCode: 64,
 });
 assert.equal(usageWrites.length, 1);
 const usageEnvelope: unknown = JSON.parse(usageWrites[0]!.chunk);
 assert.equal(readProperty(usageEnvelope, "schemaVersion"), "2");
 assert.deepEqual(readProperty(usageEnvelope, "issues"), [
+  {
+    code: "countConstraintViolation",
+    min: 0,
+    max: 1,
+    presentFields: ["format", "quiet"],
+    absentFields: [],
+  },
   { code: "forbiddenCombinationViolation", facts: expectedFacts },
 ]);
 const validateUsageWire = new Ajv2020({ strict: false }).compile(
@@ -844,6 +907,7 @@ assert.deepEqual(helpTermination, {
   exitCode: 0,
 });
 assert.equal(helpWrites.length, 1);
+assert.match(helpWrites[0]!.chunk, /字段数 format, quiet 至多 1 项/u);
 assert.match(
   helpWrites[0]!.chunk,
   /禁配事实：字段 format="json", 字段 quiet 已出现/u,

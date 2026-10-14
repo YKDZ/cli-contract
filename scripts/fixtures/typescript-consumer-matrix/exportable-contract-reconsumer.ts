@@ -60,6 +60,8 @@ const tailOutput: TailOutput = { target: "normalized", follow: true };
 const invalidTailOutput: TailOutput = { topic: "source" };
 
 type Constraints = (typeof inspectCombination.inspect.usageConstraints)[number];
+type CountConstraint = Extract<Constraints, { readonly kind: "count" }>;
+type CountField = CountConstraint["fields"][number];
 type ForbiddenFacts = Extract<
   Constraints,
   { readonly kind: "forbiddenCombination" }
@@ -81,6 +83,12 @@ type QueryFactDomain = UsageFactValue<
 const queryValue: QueryValue = "alpha";
 // @ts-expect-error 生成的声明仍保留字段值字面量。
 const invalidQueryValue: QueryValue = "beta";
+const countField: CountField = "query";
+// @ts-expect-error 生成的声明仍将数量字段限制在当前命令字段中。
+const invalidCountField: CountField = "missing";
+const countMinimum: CountConstraint["min"] = 1;
+// @ts-expect-error 生成的声明仍保留数量端点字面量。
+const invalidCountMinimum: CountConstraint["min"] = 2;
 const validQueryFactDomain: QueryFactDomain = "beta";
 // @ts-expect-error 禁配 fact 的 Input 关联值域应在声明再消费后保留。
 const invalidQueryFactDomain: QueryFactDomain = "gamma";
@@ -142,6 +150,10 @@ void inspectInput;
 void invalidInspectInput;
 void inspectOutput;
 void invalidInspectOutput;
+void countField;
+void invalidCountField;
+void countMinimum;
+void invalidCountMinimum;
 void tailInput;
 void invalidTailInput;
 void tailOutput;

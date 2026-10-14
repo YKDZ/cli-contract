@@ -107,9 +107,13 @@ export interface RequiredByUsageConstraintIssue {
   readonly requires: string;
 }
 
-export interface ExclusiveUsageConstraintIssue {
-  readonly code: "exclusiveUsageConstraint";
-  readonly fields: readonly [string, string, ...string[]];
+/** 一条数量规则失败，按字段声明顺序划分 raw 输入中出现与缺席的字段。 */
+export interface CountConstraintViolationIssue {
+  readonly code: "countConstraintViolation";
+  readonly min: number;
+  readonly max: number;
+  readonly presentFields: readonly string[];
+  readonly absentFields: readonly string[];
 }
 
 /** 禁配事实组全部在 raw argv 中成立时发出的单条用法问题。 */
@@ -167,7 +171,7 @@ export interface ConflictingOutputFormatIssue {
 export type UsageIssue =
   | ConflictingFlagIssue
   | ConflictingOutputFormatIssue
-  | ExclusiveUsageConstraintIssue
+  | CountConstraintViolationIssue
   | ForbiddenCombinationViolationIssue
   | InputRejectedIssue
   | InvalidFieldChoiceIssue
@@ -786,19 +790,28 @@ function collectStructuralIssues(
             ]
           : [];
       }
-      if (constraint.kind === "exclusive") {
-        const present = constraint.fields.filter((field) =>
+      if (constraint.kind === "count") {
+        const presentFields = constraint.fields.filter((field) =>
           Object.hasOwn(input, field),
         );
-        return present.length > 1
-          ? [
-              {
-                code: "exclusiveUsageConstraint",
-                // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- present.length 已检查大于一。
-                fields: Object.freeze(present) as [string, string, ...string[]],
-              },
-            ]
-          : [];
+        if (
+          presentFields.length >= constraint.min &&
+          presentFields.length <= constraint.max
+        ) {
+          return [];
+        }
+        const present = new Set(presentFields);
+        return [
+          {
+            code: "countConstraintViolation",
+            min: constraint.min,
+            max: constraint.max,
+            presentFields: Object.freeze(presentFields),
+            absentFields: Object.freeze(
+              constraint.fields.filter((field) => !present.has(field)),
+            ),
+          },
+        ];
       }
       return constraint.all.every((fact) =>
         fact.kind === "present"

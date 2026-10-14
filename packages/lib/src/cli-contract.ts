@@ -149,7 +149,7 @@ const definitionPropertyKeys = {
   },
   usage: {
     requires: ["kind", "field", "requires"],
-    exclusive: ["kind", "fields"],
+    count: ["kind", "fields", "min", "max"],
     forbiddenCombination: ["kind", "all"],
     fact: {
       present: ["kind", "field"],
@@ -201,14 +201,20 @@ export interface HelpFactWording {
   readonly default?: string;
   /** 字段依赖关系，必须包含 `{field}` 与 `{requires}`。 */
   readonly requires?: string;
-  /** 互斥字段集合，必须包含 `{fields}`。 */
-  readonly exclusive?: string;
   /** 字段出现事实，必须包含 `{field}`。 */
   readonly present?: string;
   /** 字段等值事实，必须包含 `{field}` 与 `{value}`。 */
   readonly equals?: string;
   /** 禁止同时成立的字段事实组，必须包含 `{facts}`。 */
   readonly forbiddenCombination?: string;
+  /** 字段数必须恰好为 `{count}`，包含 `{fields}`。 */
+  readonly countExactly?: string;
+  /** 字段数至少为 `{min}`，包含 `{fields}`。 */
+  readonly countAtLeast?: string;
+  /** 字段数至多为 `{max}`，包含 `{fields}`。 */
+  readonly countAtMost?: string;
+  /** 字段数位于 `{min}` 到 `{max}`，包含 `{fields}`。 */
+  readonly countBetween?: string;
 }
 
 /** 帮助事实槽位及其必需替换参数的唯一规格。 */
@@ -217,10 +223,13 @@ export const helpTemplateSpecifications = {
   choices: { placeholders: ["choices"] },
   default: { placeholders: ["value"] },
   requires: { placeholders: ["field", "requires"] },
-  exclusive: { placeholders: ["fields"] },
   present: { placeholders: ["field"] },
   equals: { placeholders: ["field", "value"] },
   forbiddenCombination: { placeholders: ["facts"] },
+  countExactly: { placeholders: ["fields", "count"] },
+  countAtLeast: { placeholders: ["fields", "min"] },
+  countAtMost: { placeholders: ["fields", "max"] },
+  countBetween: { placeholders: ["fields", "min", "max"] },
 } as const satisfies Record<
   keyof HelpFactWording,
   Readonly<{ readonly placeholders: readonly string[] }>
@@ -425,15 +434,15 @@ export type FieldDefinitions = Readonly<Record<string, FieldDefinition>>;
 
 /**
  * 由调用语法拥有、可同时投影到 parser 和 Draft 2020-12 的字段关系。
- * `requires` 与 `exclusive` 作用于可选 option；禁配事实可检查所有输入字段的
- * 出现状态，以及单值 flag、value option、positional 的等值状态。动态声明在定义期检查可观察的模式候选值。
+ * 禁配事实可检查所有输入字段的出现状态，以及单值 flag、value option、positional
+ * 的等值状态。动态声明在定义期检查可观察的模式候选值。
  */
 export type UsageConstraint<
   Fields extends FieldDefinitions = FieldDefinitions,
   Input = unknown,
 > =
   | RequiresUsageConstraint<Extract<keyof Fields, string>>
-  | ExclusiveUsageConstraint<Extract<keyof Fields, string>>
+  | CountUsageConstraint<Fields>
   | ForbiddenCombinationUsageConstraint<Fields, Input>;
 
 export interface RequiresUsageConstraint<Field extends string = string> {
@@ -442,9 +451,24 @@ export interface RequiresUsageConstraint<Field extends string = string> {
   readonly requires: Field;
 }
 
-export interface ExclusiveUsageConstraint<Field extends string = string> {
-  readonly kind: "exclusive";
-  readonly fields: readonly [Field, Field, ...Field[]];
+/**
+ * 限制当前命令中 `fields` 所列 raw 输入字段的出现数量；字段组必须非空且无重复。
+ * 规范化端点必须是有限整数，且满足 `0 <= min <= max <= fields.length`。每个 raw 自有属性只计一次，
+ * 因而 `false` 也算出现，repeatable 或 variadic 字段的多个值仍只计一项；
+ * 缺席的 variadic 字段没有属性，schema 默认值和转换结果也不会增加计数。
+ * 缺省 `min` 为 0，缺省 `max` 为字段组长度，至少显式提供一个端点。
+ * TypeScript 会拒绝静态可判定的错误；动态端点或字段成员在 CLI 定义时校验。
+ */
+export interface CountUsageConstraint<
+  Fields extends FieldDefinitions = FieldDefinitions,
+> {
+  readonly kind: "count";
+  readonly fields: readonly [
+    Extract<keyof Fields, string>,
+    ...Extract<keyof Fields, string>[],
+  ];
+  readonly min?: number;
+  readonly max?: number;
 }
 
 /** 表示一个输入字段在 raw argv 解析结果中出现。 */
@@ -685,10 +709,10 @@ type ClosedUsageConstraint<Constraint> =
         Constraint,
         (typeof definitionPropertyKeys.usage.requires)[number]
       >
-    : Constraint extends Readonly<{ readonly kind: "exclusive" }>
+    : Constraint extends Readonly<{ readonly kind: "count" }>
       ? RejectUnknownProperties<
           Constraint,
-          (typeof definitionPropertyKeys.usage.exclusive)[number]
+          (typeof definitionPropertyKeys.usage.count)[number]
         >
       : Constraint extends Readonly<{
             readonly kind: "forbiddenCombination";
@@ -1849,7 +1873,443 @@ type InvalidClosedUsageConstraintProperties<
     readonly all: infer Facts;
   }>
     ? InvalidForbiddenCombinationShape<Command, Constraint, Facts>
+    : Constraint extends Readonly<{ readonly kind: "count" }>
+      ? [
+          Exclude<
+            keyof Constraint,
+            (typeof definitionPropertyKeys.usage.count)[number]
+          >,
+        ] extends [never]
+        ? never
+        : ContractTypeError<
+            "unknownDefinitionProperty",
+            Readonly<{
+              readonly command: Command;
+              readonly constraint: "count";
+              readonly member: "count";
+              readonly property: Exclude<
+                keyof Constraint,
+                (typeof definitionPropertyKeys.usage.count)[number]
+              >;
+            }>
+          >
+      : never;
+
+type CountDigit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";
+
+type CountDigitTuple = {
+  readonly "0": readonly [];
+  readonly "1": readonly [unknown];
+  readonly "2": readonly [unknown, unknown];
+  readonly "3": readonly [unknown, unknown, unknown];
+  readonly "4": readonly [unknown, unknown, unknown, unknown];
+  readonly "5": readonly [unknown, unknown, unknown, unknown, unknown];
+  readonly "6": readonly [unknown, unknown, unknown, unknown, unknown, unknown];
+  readonly "7": readonly [
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+  ];
+  readonly "8": readonly [
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+  ];
+  readonly "9": readonly [
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+  ];
+};
+
+type CountStringLength<
+  Value extends string,
+  Cursor extends readonly unknown[] = [],
+> = Value extends `${infer _Character}${infer Remaining}`
+  ? CountStringLength<Remaining, [...Cursor, unknown]>
+  : Cursor;
+
+type CompareCountDigit<
+  Left extends CountDigit,
+  Right extends CountDigit,
+> = Left extends Right
+  ? "equal"
+  : CountDigitTuple[Left] extends readonly [
+        ...CountDigitTuple[Right],
+        unknown,
+        ...unknown[],
+      ]
+    ? "greater"
+    : "less";
+
+type CompareCountDigitStrings<
+  Left extends string,
+  Right extends string,
+> = Left extends `${infer LeftDigit extends CountDigit}${infer LeftRest}`
+  ? Right extends `${infer RightDigit extends CountDigit}${infer RightRest}`
+    ? CompareCountDigit<LeftDigit, RightDigit> extends infer Comparison
+      ? Comparison extends "equal"
+        ? CompareCountDigitStrings<LeftRest, RightRest>
+        : Comparison
+      : never
+    : "greater"
+  : Right extends ""
+    ? "equal"
+    : "less";
+
+type CompareCountStringLengths<Left extends string, Right extends string> =
+  CountStringLength<Left> extends readonly [
+    ...CountStringLength<Right>,
+    ...infer Remaining,
+  ]
+    ? Remaining extends readonly []
+      ? "equal"
+      : "greater"
+    : "less";
+
+type CompareCountUnsignedIntegers<Left extends string, Right extends string> =
+  CompareCountStringLengths<Left, Right> extends infer LengthOrder
+    ? LengthOrder extends "equal"
+      ? CompareCountDigitStrings<Left, Right>
+      : LengthOrder
     : never;
+
+type CompareCountFractions<
+  Left extends string,
+  Right extends string,
+> = Left extends `${infer LeftDigit extends CountDigit}${infer LeftRest}`
+  ? Right extends `${infer RightDigit extends CountDigit}${infer RightRest}`
+    ? CompareCountDigit<LeftDigit, RightDigit> extends infer Comparison
+      ? Comparison extends "equal"
+        ? CompareCountFractions<LeftRest, RightRest>
+        : Comparison
+      : never
+    : CompareCountDigit<LeftDigit, "0"> extends infer Comparison
+      ? Comparison extends "equal"
+        ? CompareCountFractions<LeftRest, "">
+        : Comparison
+      : never
+  : Right extends `${infer RightDigit extends CountDigit}${infer RightRest}`
+    ? CompareCountDigit<"0", RightDigit> extends infer Comparison
+      ? Comparison extends "equal"
+        ? CompareCountFractions<"", RightRest>
+        : Comparison
+      : never
+    : "equal";
+
+type CompareCountCoefficients<
+  Left extends string,
+  Right extends string,
+> = Left extends `${infer LeftWhole extends CountDigit}.${infer LeftFraction}`
+  ? Right extends `${infer RightWhole extends CountDigit}.${infer RightFraction}`
+    ? CompareCountDigit<LeftWhole, RightWhole> extends infer Comparison
+      ? Comparison extends "equal"
+        ? CompareCountFractions<LeftFraction, RightFraction>
+        : Comparison
+      : never
+    : never
+  : never;
+
+type NormalizeCountCoefficient<Coefficient extends string> =
+  Coefficient extends `${string}.${string}` ? Coefficient : `${Coefficient}.0`;
+
+type CountScientificParts<Value extends number> =
+  `${Value}` extends `${infer Coefficient}e+${infer Exponent}`
+    ? Readonly<{
+        readonly exponent: Exponent;
+        readonly coefficient: NormalizeCountCoefficient<Coefficient>;
+      }>
+    : `${Value}` extends `${infer First extends CountDigit}${infer Remaining}`
+      ? Readonly<{
+          readonly exponent: CountStringLength<`${Value}`> extends readonly [
+            ...infer RemainingDigits,
+            unknown,
+          ]
+            ? `${RemainingDigits["length"]}`
+            : "0";
+          readonly coefficient: `${First}.${Remaining extends "" ? "0" : Remaining}`;
+        }>
+      : never;
+
+type CompareCountNumbers<Left extends number, Right extends number> =
+  CountScientificParts<Left> extends Readonly<{
+    readonly exponent: infer LeftExponent extends string;
+    readonly coefficient: infer LeftCoefficient extends string;
+  }>
+    ? CountScientificParts<Right> extends Readonly<{
+        readonly exponent: infer RightExponent extends string;
+        readonly coefficient: infer RightCoefficient extends string;
+      }>
+      ? CompareCountUnsignedIntegers<
+          LeftExponent,
+          RightExponent
+        > extends infer ExponentOrder
+        ? ExponentOrder extends "equal"
+          ? CompareCountCoefficients<LeftCoefficient, RightCoefficient>
+          : ExponentOrder
+        : never
+      : never
+    : never;
+
+type IsCountIntegerLiteral<Value extends number> =
+  `${Value}` extends `${bigint}`
+    ? true
+    : `${Value}` extends `${infer Coefficient}e+${infer Exponent}`
+      ? Coefficient extends `${bigint}`
+        ? true
+        : Coefficient extends `${string}.${infer Fraction}`
+          ? CompareCountUnsignedIntegers<
+              Exponent,
+              `${CountStringLength<Fraction>["length"]}`
+            > extends "less"
+            ? false
+            : true
+          : false
+      : false;
+
+type CountFieldRange<
+  Fields extends readonly unknown[],
+  Cursor extends readonly unknown[] = [],
+> = number extends Fields["length"]
+  ? number
+  : Cursor["length"] extends Fields["length"]
+    ? Cursor["length"]
+    : Cursor["length"] | CountFieldRange<Fields, [...Cursor, unknown]>;
+
+type CountFieldMaximum<Fields extends readonly unknown[]> = Fields["length"];
+
+type CountFieldDuplicates<
+  Fields extends readonly unknown[],
+  Seen = never,
+> = Fields extends readonly [infer Field, ...infer Remaining]
+  ? string extends Field
+    ? CountFieldDuplicates<Remaining, Seen>
+    : IsUnion<Field> extends true
+      ? CountFieldDuplicates<Remaining, Seen>
+      : Field extends Seen
+        ? Field
+        : CountFieldDuplicates<Remaining, Seen | Field>
+  : never;
+
+type CountEndpoint<
+  Constraint,
+  Member extends "min" | "max",
+> = Member extends keyof Constraint
+  ? Exclude<Constraint[Member], undefined>
+  : never;
+
+type CountEndpointIssue<
+  Command extends string,
+  Member extends "min" | "max",
+  Value,
+  Allowed extends number,
+  Maximum extends number,
+> =
+  IsAny<Value> extends true
+    ? never
+    : number extends Value
+      ? never
+      : Value extends number
+        ? `${Value}` extends `-${string}`
+          ? ContractTypeError<
+              "invalidCountConstraint",
+              Readonly<{
+                readonly command: Command;
+                readonly constraint: "count";
+                readonly member: Member;
+                readonly reason: "nonNegative";
+                readonly actual: Value;
+              }>
+            >
+          : IsCountIntegerLiteral<Value> extends true
+            ? Exclude<Value, Allowed> extends infer Outside extends number
+              ? [Outside] extends [never]
+                ? never
+                : ContractTypeError<
+                    "invalidCountConstraint",
+                    Readonly<{
+                      readonly command: Command;
+                      readonly constraint: "count";
+                      readonly member: Member;
+                      readonly reason: "fieldCount";
+                      readonly actual: Outside;
+                      readonly maximum: Maximum;
+                    }>
+                  >
+              : never
+            : ContractTypeError<
+                "invalidCountConstraint",
+                Readonly<{
+                  readonly command: Command;
+                  readonly constraint: "count";
+                  readonly member: Member;
+                  readonly reason: "integer";
+                  readonly actual: Value;
+                }>
+              >
+        : never;
+
+type CountEndpointValidationIssue<
+  Command extends string,
+  Constraint,
+  Fields extends readonly unknown[],
+  Member extends "min" | "max",
+> = CountEndpointIssue<
+  Command,
+  Member,
+  CountEndpoint<Constraint, Member>,
+  CountFieldRange<Fields>,
+  CountFieldMaximum<Fields>
+>;
+
+type CountRangeOrderIssue<
+  Command extends string,
+  Minimum,
+  Maximum,
+> = Minimum extends number
+  ? Maximum extends number
+    ? CompareCountNumbers<Minimum, Maximum> extends "greater"
+      ? ContractTypeError<
+          "invalidCountConstraint",
+          Readonly<{
+            readonly command: Command;
+            readonly constraint: "count";
+            readonly member: "min";
+            readonly reason: "ordered";
+            readonly actual: Minimum;
+            readonly maximum: Maximum;
+          }>
+        >
+      : never
+    : never
+  : never;
+
+type StaticallyKnownCountTupleFields<Fields extends readonly unknown[]> =
+  Fields extends readonly [infer Field, ...infer Remaining]
+    ? string extends Field
+      ? StaticallyKnownCountTupleFields<Remaining>
+      : Field | StaticallyKnownCountTupleFields<Remaining>
+    : never;
+
+type CountUnknownFieldIssue<
+  Command extends string,
+  Fields extends FieldDefinitions,
+  CountFields extends readonly unknown[],
+> =
+  Exclude<
+    StaticallyKnownCountTupleFields<CountFields>,
+    keyof Fields
+  > extends infer UnknownField
+    ? [UnknownField] extends [never]
+      ? never
+      : ContractTypeError<
+          "unknownUsageConstraintField",
+          Readonly<{
+            readonly command: Command;
+            readonly constraint: "count";
+            readonly member: "fields";
+            readonly field: Extract<UnknownField, string>;
+          }>
+        >
+    : never;
+
+type CountDuplicateFieldIssue<
+  Command extends string,
+  CountFields extends readonly unknown[],
+> = [CountFieldDuplicates<CountFields>] extends [never]
+  ? never
+  : ContractTypeError<
+      "invalidCountConstraint",
+      Readonly<{
+        readonly command: Command;
+        readonly constraint: "count";
+        readonly member: "fields";
+        readonly reason: "duplicateFields";
+        readonly fields: CountFieldDuplicates<CountFields>;
+      }>
+    >;
+
+type CountEndpointRangeIssue<
+  Command extends string,
+  Constraint,
+  CountFields extends readonly unknown[],
+> = [
+  CountEndpoint<Constraint, "min"> | CountEndpoint<Constraint, "max">,
+] extends [never]
+  ? ContractTypeError<
+      "invalidCountConstraint",
+      Readonly<{
+        readonly command: Command;
+        readonly constraint: "count";
+        readonly member: "min";
+        readonly reason: "endpointRequired";
+      }>
+    >
+  : [
+        CountEndpointValidationIssue<Command, Constraint, CountFields, "min">,
+      ] extends [never]
+    ? [
+        CountEndpointValidationIssue<Command, Constraint, CountFields, "max">,
+      ] extends [never]
+      ? number extends
+          | CountEndpoint<Constraint, "min">
+          | CountEndpoint<Constraint, "max">
+        ? never
+        : CountRangeOrderIssue<
+            Command,
+            CountEndpoint<Constraint, "min">,
+            CountEndpoint<Constraint, "max">
+          >
+      : CountEndpointValidationIssue<Command, Constraint, CountFields, "max">
+    : CountEndpointValidationIssue<Command, Constraint, CountFields, "min">;
+
+type InvalidCountConstraintForFields<
+  Command extends string,
+  Constraint,
+  Fields extends FieldDefinitions,
+> =
+  Constraint extends Readonly<{
+    readonly fields: infer CountFields extends readonly unknown[];
+  }>
+    ? [CountUnknownFieldIssue<Command, Fields, CountFields>] extends [never]
+      ? [CountFields["length"]] extends [0]
+        ? ContractTypeError<
+            "invalidCountConstraint",
+            Readonly<{
+              readonly command: Command;
+              readonly constraint: "count";
+              readonly member: "fields";
+              readonly reason: "nonEmpty";
+            }>
+          >
+        : [CountDuplicateFieldIssue<Command, CountFields>] extends [never]
+          ? CountEndpointRangeIssue<Command, Constraint, CountFields>
+          : CountDuplicateFieldIssue<Command, CountFields>
+      : CountUnknownFieldIssue<Command, Fields, CountFields>
+    : ContractTypeError<
+        "invalidCountConstraint",
+        Readonly<{
+          readonly command: Command;
+          readonly constraint: "count";
+          readonly member: "fields";
+          readonly reason: "nonEmpty";
+        }>
+      >;
 
 type InvalidUsageConstraintForFields<
   Command extends string,
@@ -1883,21 +2343,8 @@ type InvalidUsageConstraintForFields<
             readonly field: Exclude<Field, keyof Fields>;
           }>
         >
-    : Constraint extends Readonly<{
-          readonly kind: "exclusive";
-          readonly fields: readonly (infer Field extends string)[];
-        }>
-      ? Exclude<Field, keyof Fields> extends never
-        ? never
-        : ContractTypeError<
-            "unknownUsageConstraintField",
-            Readonly<{
-              readonly command: Command;
-              readonly constraint: "exclusive";
-              readonly member: "fields";
-              readonly field: Exclude<Field, keyof Fields>;
-            }>
-          >
+    : Constraint extends Readonly<{ readonly kind: "count" }>
+      ? InvalidCountConstraintForFields<Command, Constraint, Fields>
       : Constraint extends Readonly<{
             readonly kind: "forbiddenCombination";
             readonly all: infer Facts extends readonly unknown[];
@@ -2293,8 +2740,58 @@ export interface ExecutableCommandManifest extends Omit<
 
 export type UsageConstraintGrammar =
   | RequiresUsageConstraint
-  | ExclusiveUsageConstraint
+  | CountUsageConstraintGrammar
   | ForbiddenCombinationUsageConstraint;
+
+/** 已校验并补全默认端点的数量约束。 */
+export interface CountUsageConstraintGrammar {
+  readonly kind: "count";
+  readonly fields: readonly [string, ...string[]];
+  readonly min: number;
+  readonly max: number;
+}
+
+type CountHelpFact = Readonly<{
+  readonly slot:
+    | "countExactly"
+    | "countAtLeast"
+    | "countAtMost"
+    | "countBetween";
+  readonly values: Readonly<Record<string, string>>;
+}>;
+
+/** 选择 count 事实实际使用的帮助模板及其占位符值。 */
+export function countHelpFactForConstraint(
+  constraint: CountUsageConstraintGrammar,
+): CountHelpFact {
+  const fields = constraint.fields.join(", ");
+  if (constraint.min === constraint.max) {
+    return {
+      slot: "countExactly",
+      values: { fields, count: String(constraint.min) },
+    };
+  }
+  if (constraint.max === constraint.fields.length) {
+    return {
+      slot: "countAtLeast",
+      values: { fields, min: String(constraint.min) },
+    };
+  }
+  if (constraint.min === 0) {
+    return {
+      slot: "countAtMost",
+      values: { fields, max: String(constraint.max) },
+    };
+  }
+  return {
+    slot: "countBetween",
+    values: {
+      fields,
+      min: String(constraint.min),
+      max: String(constraint.max),
+    },
+  };
+}
 
 export interface CliManifest<
   Root extends string,
@@ -3664,7 +4161,11 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
       >["slot"]
     >();
     for (const constraint of usageConstraints) {
-      requiredUsageTemplates.add(constraint.kind);
+      if (constraint.kind === "count") {
+        requiredUsageTemplates.add(countHelpFactForConstraint(constraint).slot);
+      } else {
+        requiredUsageTemplates.add(constraint.kind);
+      }
       if (constraint.kind === "forbiddenCombination") {
         for (const fact of constraint.all)
           requiredUsageTemplates.add(fact.kind);
@@ -3934,8 +4435,8 @@ function collectUnknownDefinitionProperties(
         const allowed =
           constraint.kind === "requires"
             ? definitionPropertyKeys.usage.requires
-            : constraint.kind === "exclusive"
-              ? definitionPropertyKeys.usage.exclusive
+            : constraint.kind === "count"
+              ? definitionPropertyKeys.usage.count
               : constraint.kind === "forbiddenCombination"
                 ? definitionPropertyKeys.usage.forbiddenCombination
                 : undefined;
@@ -4350,7 +4851,7 @@ function compileUsageConstraints(
     const candidate = definition as Readonly<Record<string, unknown>>;
     if (
       candidate.kind !== "requires" &&
-      candidate.kind !== "exclusive" &&
+      candidate.kind !== "count" &&
       candidate.kind !== "forbiddenCombination"
     ) {
       issues.push({
@@ -4360,6 +4861,17 @@ function compileUsageConstraints(
         aspect: "kind",
         received: typeof candidate.kind === "string" ? candidate.kind : null,
       });
+      continue;
+    }
+    if (candidate.kind === "count") {
+      const compiledCount = compileCountUsageConstraint(
+        candidate,
+        fields,
+        command,
+        index,
+        issues,
+      );
+      if (compiledCount !== undefined) compiled.push(compiledCount);
       continue;
     }
     if (candidate.kind === "requires") {
@@ -4423,65 +4935,6 @@ function compileUsageConstraints(
           }),
         );
       }
-      continue;
-    }
-    if (candidate.kind === "exclusive") {
-      if (
-        !Array.isArray(candidate.fields) ||
-        candidate.fields.length < 2 ||
-        !candidate.fields.every((field) => typeof field === "string")
-      ) {
-        issues.push({
-          code: "invalidUsageConstraint",
-          command,
-          index,
-          aspect: "members",
-          received: "exclusive",
-        });
-        continue;
-      }
-      const selected = candidate.fields.map((key) => fieldsByKey.get(key));
-      for (const [fieldIndex, field] of selected.entries()) {
-        if (field === undefined) {
-          issues.push({
-            code: "unknownUsageConstraintField",
-            command,
-            constraint: "exclusive",
-            index,
-            member: "fields",
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- fields 已逐项检查为字符串，索引来自对应 selected 数组。
-            field: candidate.fields[fieldIndex] as string,
-          });
-        } else if (!isOptionalOption(field)) {
-          issues.push({
-            code: "inapplicableUsageConstraintField",
-            command,
-            constraint: "exclusive",
-            field: field.key,
-            kind: field.kind,
-          });
-        }
-      }
-      const fieldsInConstraint = candidate.fields;
-      if (new Set(fieldsInConstraint).size !== fieldsInConstraint.length)
-        issues.push({
-          code: "contradictoryUsageConstraint",
-          command,
-          constraint: "exclusive",
-          fields: Object.freeze([...fieldsInConstraint]),
-        });
-      if (selected.every((field) => field !== undefined))
-        compiled.push(
-          deepFreeze({
-            kind: "exclusive" as const,
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- fields 已检查至少两个字符串，冻结后保留非空元组长度。
-            fields: Object.freeze([...fieldsInConstraint]) as [
-              string,
-              string,
-              ...string[],
-            ],
-          }),
-        );
       continue;
     }
     if (candidate.kind === "forbiddenCombination") {
@@ -4717,23 +5170,6 @@ function compileUsageConstraints(
       received: null,
     });
   }
-  for (const constraint of compiled) {
-    if (constraint.kind !== "requires") continue;
-    if (constraint.field === constraint.requires) continue;
-    const exclusive = compiled.find(
-      (candidate): candidate is ExclusiveUsageConstraint =>
-        candidate.kind === "exclusive" &&
-        candidate.fields.includes(constraint.field) &&
-        candidate.fields.includes(constraint.requires),
-    );
-    if (exclusive !== undefined)
-      issues.push({
-        code: "contradictoryUsageConstraint",
-        command,
-        constraint: "requires",
-        fields: Object.freeze([constraint.field, constraint.requires]),
-      });
-  }
   return deepFreeze(compiled);
 }
 
@@ -4745,13 +5181,241 @@ function isOptionalOption(field: FieldGrammar): boolean {
   );
 }
 
+function compileCountUsageConstraint(
+  candidate: Readonly<Record<string, unknown>>,
+  fields: readonly FieldGrammar[],
+  command: string,
+  index: number,
+  issues: ContractDefinitionIssue[],
+): CountUsageConstraintGrammar | undefined {
+  const fieldsCandidate = candidate.fields;
+  const hasFieldArray = Array.isArray(fieldsCandidate);
+  const rawFieldNames: readonly unknown[] = hasFieldArray
+    ? fieldsCandidate
+    : [];
+  let valid = true;
+  if (!hasFieldArray || rawFieldNames.length === 0) {
+    issues.push({
+      code: "invalidCountConstraint",
+      command,
+      index,
+      member: "fields",
+      reason: "nonEmpty",
+    });
+    valid = false;
+  }
+
+  const stringFieldNames: string[] = [];
+  let hasInvalidFieldName = false;
+  for (const field of rawFieldNames) {
+    if (typeof field === "string") {
+      stringFieldNames.push(field);
+    } else {
+      hasInvalidFieldName = true;
+    }
+  }
+  if (hasInvalidFieldName) {
+    issues.push({
+      code: "invalidCountConstraint",
+      command,
+      index,
+      member: "fields",
+      reason: "fieldName",
+    });
+    valid = false;
+  }
+
+  const fieldsByKey = new Set(fields.map(({ key }) => key));
+  for (const field of stringFieldNames) {
+    if (!fieldsByKey.has(field)) {
+      issues.push({
+        code: "unknownUsageConstraintField",
+        command,
+        constraint: "count",
+        index,
+        member: "fields",
+        field,
+      });
+      valid = false;
+    }
+  }
+
+  const duplicateFields = stringFieldNames.filter(
+    (field, fieldIndex) => stringFieldNames.indexOf(field) !== fieldIndex,
+  );
+  if (duplicateFields.length > 0) {
+    issues.push({
+      code: "invalidCountConstraint",
+      command,
+      index,
+      member: "fields",
+      reason: "duplicateFields",
+      fields: Object.freeze([...new Set(duplicateFields)]),
+    });
+    valid = false;
+  }
+
+  const hasMin = Object.hasOwn(candidate, "min");
+  const hasMax = Object.hasOwn(candidate, "max");
+  if (!hasMin && !hasMax) {
+    issues.push({
+      code: "invalidCountConstraint",
+      command,
+      index,
+      member: "min",
+      reason: "endpointRequired",
+    });
+    valid = false;
+  }
+
+  const min = hasMin ? candidate.min : 0;
+  const fieldCount = hasFieldArray ? rawFieldNames.length : undefined;
+  const normalizedMin = normalizeCountEndpoint(
+    min,
+    "min",
+    fieldCount,
+    command,
+    index,
+    issues,
+  );
+  const normalizedMax = hasMax
+    ? normalizeCountEndpoint(
+        candidate.max,
+        "max",
+        fieldCount,
+        command,
+        index,
+        issues,
+      )
+    : fieldCount === undefined
+      ? undefined
+      : { value: fieldCount, valid: true };
+  if (!normalizedMin.valid || normalizedMax?.valid === false) valid = false;
+  if (
+    normalizedMin.value !== undefined &&
+    normalizedMax?.value !== undefined &&
+    normalizedMin.value > normalizedMax.value
+  ) {
+    issues.push({
+      code: "invalidCountConstraint",
+      command,
+      index,
+      member: "min",
+      reason: "ordered",
+      actual: normalizedMin.value,
+      maximum: normalizedMax.value,
+    });
+    valid = false;
+  }
+  if (
+    !valid ||
+    normalizedMin.value === undefined ||
+    normalizedMax?.value === undefined
+  ) {
+    return undefined;
+  }
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- fields 已检查非空且每项都是字符串。
+  const nonEmptyFields = Object.freeze([...stringFieldNames]) as [
+    string,
+    ...string[],
+  ];
+  return deepFreeze({
+    kind: "count" as const,
+    fields: nonEmptyFields,
+    min: normalizedMin.value,
+    max: normalizedMax.value,
+  });
+}
+
+function normalizeCountEndpoint(
+  value: unknown,
+  member: "min" | "max",
+  fieldCount: number | undefined,
+  command: string,
+  index: number,
+  issues: ContractDefinitionIssue[],
+): { readonly value: number | undefined; readonly valid: boolean } {
+  if (typeof value !== "number") {
+    issues.push({
+      code: "invalidCountConstraint",
+      command,
+      index,
+      member,
+      reason: "integer",
+    });
+    return { value: undefined, valid: false };
+  }
+  if (value < 0) {
+    issues.push({
+      code: "invalidCountConstraint",
+      command,
+      index,
+      member,
+      reason: "nonNegative",
+      actual: value,
+    });
+    return {
+      value: Number.isFinite(value) ? value : undefined,
+      valid: false,
+    };
+  }
+  if (!Number.isFinite(value)) {
+    issues.push({
+      code: "invalidCountConstraint",
+      command,
+      index,
+      member,
+      reason: "finite",
+      actual: value,
+    });
+    return { value: undefined, valid: false };
+  }
+  if (!Number.isInteger(value)) {
+    issues.push({
+      code: "invalidCountConstraint",
+      command,
+      index,
+      member,
+      reason: "integer",
+      actual: value,
+    });
+    return { value, valid: false };
+  }
+  if (fieldCount !== undefined && value > fieldCount) {
+    issues.push({
+      code: "invalidCountConstraint",
+      command,
+      index,
+      member,
+      reason: "fieldCount",
+      actual: value,
+      maximum: fieldCount,
+    });
+    return { value, valid: false };
+  }
+  return { value, valid: true };
+}
+
 function projectUsageConstraints(
   schema: SchemaManifest,
   constraints: readonly UsageConstraintGrammar[],
 ): SchemaManifest {
-  if (constraints.length === 0) return schema;
+  const projectedConstraints = constraints.filter(
+    (constraint) =>
+      constraint.kind !== "count" ||
+      constraint.min !== 0 ||
+      constraint.max !== constraint.fields.length,
+  );
+  if (projectedConstraints.length === 0) return schema;
   const constraintSchemas: JsonObject[] = [];
-  for (const constraint of constraints) {
+  const countDefinitions: Record<string, JsonValue> = isPlainRecord(
+    schema.inputSchema.$defs,
+  )
+    ? // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- inputSchema 的 $defs 是已验证 JSON Schema 对象。
+      { ...(schema.inputSchema.$defs as JsonObject) }
+    : {};
+  let countConstraintIndex = 0;
+  for (const constraint of projectedConstraints) {
     if (constraint.kind === "requires") {
       constraintSchemas.push(
         Object.fromEntries([
@@ -4762,16 +5426,15 @@ function projectUsageConstraints(
       );
       continue;
     }
-    if (constraint.kind === "exclusive") {
-      constraintSchemas.push({
-        not: {
-          anyOf: constraint.fields.flatMap((field, index) =>
-            constraint.fields.slice(index + 1).map((other) => ({
-              required: [field, other],
-            })),
-          ),
-        },
-      });
+    if (constraint.kind === "count") {
+      constraintSchemas.push(
+        projectCountConstraint(
+          constraint,
+          countDefinitions,
+          countConstraintIndex,
+        ),
+      );
+      countConstraintIndex += 1;
       continue;
     }
     constraintSchemas.push({
@@ -4790,6 +5453,7 @@ function projectUsageConstraints(
   return deepFreeze({
     inputSchema: {
       ...schema.inputSchema,
+      ...(countConstraintIndex === 0 ? {} : { $defs: countDefinitions }),
       allOf: [
         ...(Array.isArray(schema.inputSchema.allOf)
           ? schema.inputSchema.allOf
@@ -4799,6 +5463,80 @@ function projectUsageConstraints(
     },
     outputSchema: schema.outputSchema,
   });
+}
+
+function projectCountConstraint(
+  constraint: CountUsageConstraintGrammar,
+  definitions: Record<string, JsonValue>,
+  index: number,
+): JsonObject {
+  const prefix = uniqueCountDefinitionPrefix(
+    definitions,
+    index,
+    constraint.fields.length,
+  );
+  const fieldCount = constraint.fields.length;
+  for (let position = 0; position <= fieldCount; position += 1) {
+    for (let present = 0; present <= position; present += 1) {
+      const definitionName = countStateDefinitionName(
+        prefix,
+        position,
+        present,
+      );
+      const remaining = fieldCount - position;
+      if (present > constraint.max || present + remaining < constraint.min) {
+        definitions[definitionName] = { not: {} };
+        continue;
+      }
+      if (position === fieldCount) {
+        definitions[definitionName] = {};
+        continue;
+      }
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- position < fieldCount，索引来自已校验的非空元组。
+      const field = constraint.fields[position] as string;
+      definitions[definitionName] = {
+        if: { required: [field] },
+        // oxlint-disable-next-line unicorn/no-thenable -- Draft 2020-12 固定关键字。
+        then: {
+          $ref: `#/$defs/${countStateDefinitionName(prefix, position + 1, present + 1)}`,
+        },
+        else: {
+          $ref: `#/$defs/${countStateDefinitionName(prefix, position + 1, present)}`,
+        },
+      };
+    }
+  }
+  return {
+    $ref: `#/$defs/${countStateDefinitionName(prefix, 0, 0)}`,
+  };
+}
+
+function uniqueCountDefinitionPrefix(
+  definitions: Readonly<Record<string, JsonValue>>,
+  index: number,
+  fieldCount: number,
+): string {
+  let prefix = `__cliContract_count_${index}`;
+  while (
+    Array.from({ length: fieldCount + 1 }, (_, position) =>
+      Array.from({ length: position + 1 }, (_unused, present) =>
+        countStateDefinitionName(prefix, position, present),
+      ),
+    )
+      .flat()
+      .some((name) => Object.hasOwn(definitions, name))
+  ) {
+    prefix += "_";
+  }
+  return prefix;
+}
+
+function countStateDefinitionName(
+  prefix: string,
+  position: number,
+  present: number,
+): string {
+  return `${prefix}_state_${position}_${present}`;
 }
 
 function compileFailures(

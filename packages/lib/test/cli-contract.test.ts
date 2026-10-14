@@ -196,7 +196,7 @@ void test("usage failure manifest 闭合全部问题 wire 形状", () => {
   for (const code of [
     "conflictingFlag",
     "conflictingOutputFormat",
-    "exclusiveUsageConstraint",
+    "countConstraintViolation",
     "forbiddenCombinationViolation",
     "inputRejected",
     "invalidFieldChoice",

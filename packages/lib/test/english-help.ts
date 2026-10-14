@@ -5,10 +5,13 @@ export const englishHelpWording = {
   choices: "(choices: {choices})",
   default: "(default: {value})",
   requires: "{field} requires {requires}",
-  exclusive: "exclusive {fields}",
   present: "{field} is present",
   equals: "{field}={value}",
   forbiddenCombination: "forbidden combination of {facts}",
+  countExactly: "{fields} exactly {count}",
+  countAtLeast: "{fields} at least {min}",
+  countAtMost: "{fields} at most {max}",
+  countBetween: "{fields} between {min} and {max}",
 } as const;
 
 export function englishHelpCapability() {
