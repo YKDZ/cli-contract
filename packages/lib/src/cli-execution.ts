@@ -6,6 +6,7 @@ import {
   createFailureFact,
   createStreamRecordFact,
   createStreamSuccessFact,
+  countHelpFactForConstraint,
   formatFieldUsage,
   getCompiledCli,
   isCompiledExecutable,
@@ -406,6 +407,10 @@ function formatUsageConstraint(
     return renderHelpFactTemplate(wording?.exclusive, {
       fields: constraint.fields.join(", "),
     });
+  if (constraint.kind === "count") {
+    const { slot, values } = countHelpFactForConstraint(constraint);
+    return renderHelpFactTemplate(wording?.[slot], values);
+  }
   return renderHelpFactTemplate(wording?.forbiddenCombination, {
     values: constraint.values
       .map(({ field, value }) => `${field}=${JSON.stringify(value)}`)

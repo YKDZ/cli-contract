@@ -27,7 +27,11 @@ export type ContractDefinitionIssue =
         | "default"
         | "requires"
         | "exclusive"
-        | "forbiddenCombination";
+        | "forbiddenCombination"
+        | "countExactly"
+        | "countAtLeast"
+        | "countAtMost"
+        | "countBetween";
     }>
   | Readonly<
       SchemaDefinitionTarget & {
@@ -301,9 +305,32 @@ export type ContractDefinitionIssue =
       readonly received: string | null;
     }>
   | Readonly<{
+      readonly code: "invalidCountConstraint";
+      readonly command: string;
+      readonly index: number;
+      readonly member: "fields" | "min" | "max";
+      readonly reason:
+        | "nonEmpty"
+        | "fieldName"
+        | "duplicateFields"
+        | "endpointRequired"
+        | "finite"
+        | "integer"
+        | "nonNegative"
+        | "fieldCount"
+        | "ordered";
+      readonly actual?: number;
+      readonly maximum?: number;
+      readonly fields?: readonly string[];
+    }>
+  | Readonly<{
       readonly code: "unknownUsageConstraintField";
       readonly command: string;
-      readonly constraint: "requires" | "exclusive" | "forbiddenCombination";
+      readonly constraint:
+        | "requires"
+        | "exclusive"
+        | "count"
+        | "forbiddenCombination";
       readonly index: number;
       readonly member: "field" | "requires" | "fields" | "values.field";
       readonly field: string;
@@ -457,6 +484,8 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `命令 ${issue.command} 必须声明至少一个 data 变体`;
     case "invalidUsageConstraint":
       return `命令 ${issue.command} 的 usage constraint ${issue.received ?? "非字符串"} 无效`;
+    case "invalidCountConstraint":
+      return `命令 ${issue.command} 的 count ${issue.member} 无效（${issue.reason}）`;
     case "unknownUsageConstraintField":
       return `命令 ${issue.command} 的 usage constraint[${issue.index}] ${issue.constraint}.${issue.member} 引用了不存在字段 ${issue.field}`;
     case "inapplicableUsageConstraintField":

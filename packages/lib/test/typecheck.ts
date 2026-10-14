@@ -11,6 +11,7 @@ import {
   type CanonicalLongOption,
   type CompletionRootCliDefinition,
   type CompletionRootCommandDefinition,
+  type CountConstraintViolationIssue,
   type ContractSchema,
   type ContractSchemaInput,
   type ContractSchemaOutput,
@@ -28,6 +29,15 @@ import {
 } from "@ykdz/cli-contract";
 import * as v from "valibot";
 import { z } from "zod";
+
+const countConstraintIssue: CountConstraintViolationIssue = {
+  code: "countConstraintViolation",
+  min: 1,
+  max: 2,
+  presentFields: ["auth"],
+  absentFields: ["quiet"],
+};
+void countConstraintIssue;
 
 const realZodSchema = z
   .object({ name: z.string() })
@@ -369,6 +379,7 @@ function exhaustivelyRecognizeUsageIssue(issue: UsageIssue): string {
   switch (issue.code) {
     case "conflictingFlag":
     case "conflictingOutputFormat":
+    case "countConstraintViolation":
     case "exclusiveUsageConstraint":
     case "forbiddenUsageCombination":
     case "inputRejected":
@@ -857,6 +868,162 @@ function verifyTypeErrors() {
     ],
   };
   void invalidUsageConstraint;
+
+  const countAuthoringDefinition = {
+    root: "countAuthoring",
+    help: helpCapability(),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      countAuthoring: {
+        kind: "rootCommand",
+        name: "count-authoring",
+        description: "数量约束",
+        fields: {
+          auth: {
+            kind: "valueOption",
+            longOption: "--auth",
+            description: "认证方式",
+          },
+          quiet: {
+            kind: "flag",
+            longOption: "--quiet",
+            description: "静默输出",
+          },
+        },
+        input: z.object({
+          auth: z.string().optional(),
+          quiet: z.boolean().optional(),
+        }),
+        usageConstraints: [
+          { kind: "count", fields: ["auth", "quiet"], min: 0, max: 2 },
+        ],
+        success: { kind: "completion" },
+        failures: {},
+        handler: () => {
+          throw new Error("类型夹具不会执行");
+        },
+      },
+    },
+  } as const;
+  const countAuthoringCli = defineCli()(countAuthoringDefinition);
+  void countAuthoringCli;
+
+  const countDefinitionWith = <const Constraint extends object>(
+    constraint: Constraint,
+  ) => ({
+    ...countAuthoringDefinition,
+    commands: {
+      ...countAuthoringDefinition.commands,
+      countAuthoring: {
+        ...countAuthoringDefinition.commands.countAuthoring,
+        usageConstraints: [constraint],
+      },
+    },
+  });
+  const negativeCountDefinition = countDefinitionWith({
+    kind: "count",
+    fields: ["auth", "quiet"],
+    min: -1,
+  });
+  const fractionalCountDefinition = countDefinitionWith({
+    kind: "count",
+    fields: ["auth", "quiet"],
+    min: 0.5,
+  });
+  const reversedCountDefinition = countDefinitionWith({
+    kind: "count",
+    fields: ["auth", "quiet"],
+    min: 2,
+    max: 1,
+  });
+  const excessiveCountDefinition = countDefinitionWith({
+    kind: "count",
+    fields: ["auth", "quiet"],
+    max: 3,
+  });
+  const endpointlessCountDefinition = countDefinitionWith({
+    kind: "count",
+    fields: ["auth", "quiet"],
+  });
+  const duplicateCountFieldsDefinition = countDefinitionWith({
+    kind: "count",
+    fields: ["auth", "auth"],
+    min: 1,
+  });
+  const unknownCountFieldDefinition = countDefinitionWith({
+    kind: "count",
+    fields: ["missing"],
+    min: 1,
+  });
+  const emptyCountFieldsDefinition = countDefinitionWith({
+    kind: "count",
+    fields: [],
+    min: 0,
+  });
+  const unknownCountPropertyDefinition = countDefinitionWith({
+    kind: "count",
+    fields: ["auth"],
+    min: 1,
+    maximum: 1,
+  });
+  const dynamicCountFields: readonly [string, ...string[]] = ["auth", "quiet"];
+  const reversedDynamicCountDefinition = countDefinitionWith({
+    kind: "count",
+    fields: dynamicCountFields,
+    min: 2,
+    max: 1,
+  });
+  const negativeDynamicCountDefinition = countDefinitionWith({
+    kind: "count",
+    fields: dynamicCountFields,
+    min: -1,
+    max: 1,
+  });
+  const orderedLargeDynamicCountDefinition = countDefinitionWith({
+    kind: "count",
+    fields: dynamicCountFields,
+    min: 1e100,
+    max: 1e101,
+  });
+  const reversedLargeDynamicCountDefinition = countDefinitionWith({
+    kind: "count",
+    fields: dynamicCountFields,
+    min: 1e100,
+    max: 1e99,
+  });
+  const excessiveLargeCountDefinition = countDefinitionWith({
+    kind: "count",
+    fields: ["auth", "quiet"],
+    max: 1e100,
+  });
+  // @ts-expect-error 已知负数端点在作者期拒绝。
+  defineCli()(negativeCountDefinition);
+  // @ts-expect-error 已知小数端点在作者期拒绝。
+  defineCli()(fractionalCountDefinition);
+  // @ts-expect-error 已知颠倒端点在作者期拒绝。
+  defineCli()(reversedCountDefinition);
+  // @ts-expect-error 最大值不能超过字段组长度。
+  defineCli()(excessiveCountDefinition);
+  // @ts-expect-error 数量约束至少显式提供一端。
+  defineCli()(endpointlessCountDefinition);
+  // @ts-expect-error 字段组不能重复同一字段。
+  defineCli()(duplicateCountFieldsDefinition);
+  // @ts-expect-error 数量约束只能引用本命令字段。
+  defineCli()(unknownCountFieldDefinition);
+  // @ts-expect-error 数量约束字段组不能为空。
+  defineCli()(emptyCountFieldsDefinition);
+  // @ts-expect-error 数量约束不接受未声明属性。
+  defineCli()(unknownCountPropertyDefinition);
+  // @ts-expect-error 字段组长度动态时仍在作者期拒绝已知颠倒端点。
+  defineCli()(reversedDynamicCountDefinition);
+  // @ts-expect-error 字段组长度动态时仍在作者期拒绝已知负数端点。
+  defineCli()(negativeDynamicCountDefinition);
+  defineCli()(orderedLargeDynamicCountDefinition);
+  // @ts-expect-error 大整数端点比较不能依赖按端点大小展开的递归元组。
+  defineCli()(reversedLargeDynamicCountDefinition);
+  // @ts-expect-error 固定字段组应将大整数报告为超出字段数量上限。
+  defineCli()(excessiveLargeCountDefinition);
 
   const variadicValueOption: FieldDefinition = {
     // @ts-expect-error 核心不提供单次 occurrence 消费多个值的 variadic option。

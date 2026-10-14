@@ -17,6 +17,7 @@ export {
   type CommandGroupGrammar,
   type CommandGroupManifest,
   type CommandWireManifest,
+  type CountUsageConstraint,
   type CanonicalLongOption,
   type CompletionFact,
   type CompletionHandlerContext,
@@ -101,6 +102,7 @@ export {
   type VariadicPositionalGrammar,
   type UsageConstraint,
   type UsageConstraintGrammar,
+  type CountUsageConstraintGrammar,
   type ExclusiveUsageConstraint,
 } from "#/cli-contract";
 export type { AtomicTextPresenter } from "#/outcome-fact";
@@ -119,6 +121,7 @@ export {
   type CommandUsage,
   type ConflictingFlagIssue,
   type ConflictingOutputFormatIssue,
+  type CountConstraintViolationIssue,
   type ExclusiveUsageConstraintIssue,
   type ForbiddenUsageCombinationIssue,
   type HelpRequest,

@@ -111,6 +111,15 @@ export interface ExclusiveUsageConstraintIssue {
   readonly fields: readonly [string, string, ...string[]];
 }
 
+/** 一条数量规则失败，按字段声明顺序划分 raw 输入中出现与缺席的字段。 */
+export interface CountConstraintViolationIssue {
+  readonly code: "countConstraintViolation";
+  readonly min: number;
+  readonly max: number;
+  readonly presentFields: readonly string[];
+  readonly absentFields: readonly string[];
+}
+
 export interface ForbiddenUsageCombinationIssue {
   readonly code: "forbiddenUsageCombination";
   readonly values: readonly [
@@ -169,6 +178,7 @@ export interface ConflictingOutputFormatIssue {
 export type UsageIssue =
   | ConflictingFlagIssue
   | ConflictingOutputFormatIssue
+  | CountConstraintViolationIssue
   | ExclusiveUsageConstraintIssue
   | ForbiddenUsageCombinationIssue
   | InputRejectedIssue
@@ -801,6 +811,29 @@ function collectStructuralIssues(
               },
             ]
           : [];
+      }
+      if (constraint.kind === "count") {
+        const presentFields = constraint.fields.filter((field) =>
+          Object.hasOwn(input, field),
+        );
+        if (
+          presentFields.length >= constraint.min &&
+          presentFields.length <= constraint.max
+        ) {
+          return [];
+        }
+        const present = new Set(presentFields);
+        return [
+          {
+            code: "countConstraintViolation",
+            min: constraint.min,
+            max: constraint.max,
+            presentFields: Object.freeze(presentFields),
+            absentFields: Object.freeze(
+              constraint.fields.filter((field) => !present.has(field)),
+            ),
+          },
+        ];
       }
       return constraint.values.every(
         ({ field, value }) => input[field] === value,

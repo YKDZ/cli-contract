@@ -36,6 +36,7 @@ async function readFixtures(): Promise<Readonly<Record<string, string>>> {
         "core-root.ts",
         "exportable-contract.ts",
         "exportable-contract-reconsumer.ts",
+        "invalid-count-constraint.ts",
         "invalid-forbidden-combination.ts",
         "input-schema-raw-mismatch.ts",
         "named-variant-missing.ts",
@@ -138,6 +139,7 @@ async function verifyCoreOnly(
     await writeFixtures(project, fixtures, [
       "core-node.ts",
       "core-root.ts",
+      "invalid-count-constraint.ts",
       "invalid-forbidden-combination.ts",
       "input-schema-raw-mismatch.ts",
       "completion-missing.ts",
@@ -311,6 +313,26 @@ const authoringDiagnosticCases = [
     ],
   },
   {
+    fixture: "invalid-count-constraint.ts",
+    expectedCodes: [
+      "invalidCountConstraint",
+      "invalidCountConstraint",
+      "invalidCountConstraint",
+      "invalidCountConstraint",
+    ],
+    required: [
+      'command: "deploy"',
+      'command: "stage"',
+      'command: "quota"',
+      'command: "rootDeploy"',
+      'constraint: "count"',
+      'member: "min"',
+      'reason: "ordered"',
+      'reason: "nonNegative"',
+      'reason: "fieldCount"',
+    ],
+  },
+  {
     fixture: "input-schema-raw-mismatch.ts",
     expectedCodes: [
       "fieldInputMustAcceptRawValue",
@@ -449,6 +471,22 @@ function verifyAuthoringLanguageService(
         'actual: "yes"',
         "expected: boolean",
         'kind: "positional"',
+      ],
+    },
+    {
+      fixture: "invalid-count-constraint.ts",
+      count: 4,
+      required: [
+        "invalidCountConstraint",
+        'command: "deploy"',
+        'command: "stage"',
+        'command: "quota"',
+        'command: "rootDeploy"',
+        'constraint: "count"',
+        'member: "min"',
+        'reason: "ordered"',
+        'reason: "nonNegative"',
+        'reason: "fieldCount"',
       ],
     },
     {

@@ -192,6 +192,18 @@ function usageIssueSchemas(): JsonObject[] {
     issueSchema("exclusiveUsageConstraint", {
       fields: { items: string, minItems: 2, type: "array" },
     }),
+    {
+      ...issueSchema("countConstraintViolation", {
+        min: { minimum: 0, type: "integer" },
+        max: { minimum: 0, type: "integer" },
+        presentFields: { items: string, type: "array" },
+        absentFields: { items: string, type: "array" },
+      }),
+      anyOf: [
+        { properties: { presentFields: { minItems: 1 } } },
+        { properties: { absentFields: { minItems: 1 } } },
+      ],
+    },
     issueSchema("forbiddenUsageCombination", {
       values: { items: constraintValue, minItems: 2, type: "array" },
     }),

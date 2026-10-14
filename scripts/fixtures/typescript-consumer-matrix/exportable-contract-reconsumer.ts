@@ -41,6 +41,8 @@ const inspectOutput: InspectOutput = {
 const invalidInspectOutput: InspectOutput = { query: "alpha" };
 
 type Constraints = (typeof inspectCombination.inspect.usageConstraints)[number];
+type CountConstraint = Extract<Constraints, { readonly kind: "count" }>;
+type CountField = CountConstraint["fields"][number];
 type ForbiddenValues = Extract<
   Constraints,
   { readonly kind: "forbiddenCombination" }
@@ -57,6 +59,12 @@ type DryRunValue = Extract<
 const queryValue: QueryValue = "alpha";
 // @ts-expect-error 生成的声明仍保留字段值字面量。
 const invalidQueryValue: QueryValue = "beta";
+const countField: CountField = "query";
+// @ts-expect-error 生成的声明仍将数量字段限制在当前命令字段中。
+const invalidCountField: CountField = "missing";
+const countMinimum: CountConstraint["min"] = 1;
+// @ts-expect-error 生成的声明仍保留数量端点字面量。
+const invalidCountMinimum: CountConstraint["min"] = 2;
 const dryRunValue: DryRunValue = true;
 // @ts-expect-error flag 值仍保留为布尔字面量。
 const invalidDryRunValue: DryRunValue = "true";
@@ -94,6 +102,10 @@ void inspectInput;
 void invalidInspectInput;
 void inspectOutput;
 void invalidInspectOutput;
+void countField;
+void invalidCountField;
+void countMinimum;
+void invalidCountMinimum;
 void queryValue;
 void invalidQueryValue;
 void dryRunValue;
