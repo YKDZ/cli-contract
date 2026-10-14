@@ -3275,6 +3275,8 @@ function assertKnownCapabilityOptions(
 
 /**
  * 定义一个闭合 CLI 契约。根级 help 与 output 能力在此处一次装配，并据此约束根命令的结果投影；
+ * 最终根装配会逐个检查整棵命令树的 completion、data/failure variant、stream record 与 stream success
+ * 是否满足 text 能力要求的同位 presenter；structured-only 禁止 presenter，`define.command()` 组合也在此检查。
  * 动态声明仍会在定义期报告 `ContractDefinitionError`，不能以它替代静态可判定声明的类型检查。
  * @see {@link https://github.com/YKDZ/cli-contract/tree/main/packages/example | 端到端示例}
  */

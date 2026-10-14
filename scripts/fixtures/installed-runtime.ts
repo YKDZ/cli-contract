@@ -87,6 +87,163 @@ assert.throws(
   },
 );
 
+const installedTextSchema = {
+  "~standard": {
+    version: 1,
+    vendor: "installed-consumer-text-diagnostics",
+    validate() {
+      return { value: {} };
+    },
+    jsonSchema: {
+      input() {
+        return {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          additionalProperties: false,
+          properties: {},
+          type: "object",
+        };
+      },
+      output() {
+        return {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          additionalProperties: false,
+          properties: {},
+          type: "object",
+        };
+      },
+    },
+  },
+};
+const define = coreModule.defineCli();
+const installedHelp = coreModule.helpCapability({
+  wording: {
+    commandPlaceholder: "command",
+    choices: "(choices: {choices})",
+    default: "(default: {value})",
+    requires: "{field} requires {requires}",
+    exclusive: "exclusive {fields}",
+    forbiddenCombination: "forbidden {values}",
+  },
+});
+let handlerCalled = false;
+assert.throws(
+  () =>
+    define({
+      root: "workspace",
+      help: installedHelp,
+      output: coreModule.outputCapability({ defaultFormat: "text" }),
+      usageFailureExitCode: 64,
+      commands: {
+        workspace: {
+          kind: "rootGroup",
+          name: "workspace",
+          description: "工作区",
+        },
+        ...define.command("inspect")({
+          kind: "command",
+          parent: "workspace",
+          name: "inspect",
+          description: "检查",
+          input: installedTextSchema,
+          success: { kind: "completion" },
+          failures: {},
+          handler() {
+            handlerCalled = true;
+          },
+        }),
+        ...define.command("show")({
+          kind: "command",
+          parent: "workspace",
+          name: "show",
+          description: "显示",
+          input: installedTextSchema,
+          success: { kind: "completion" },
+          failures: {},
+          handler() {
+            handlerCalled = true;
+          },
+        }),
+      },
+    }),
+  (error) => {
+    if (typeof error !== "object" || error === null) return false;
+    assert.ok(error instanceof coreModule.ContractDefinitionError);
+    assert.deepEqual(Reflect.get(error, "issues"), [
+      {
+        code: "missingTextPresenter",
+        command: "inspect",
+        location: "completion",
+      },
+      {
+        code: "missingTextPresenter",
+        command: "show",
+        location: "completion",
+      },
+    ]);
+    return true;
+  },
+);
+assert.equal(handlerCalled, false);
+
+handlerCalled = false;
+assert.throws(
+  () =>
+    define({
+      root: "workspace",
+      help: installedHelp,
+      output: coreModule.outputCapability({ defaultFormat: "structured" }),
+      usageFailureExitCode: 64,
+      commands: {
+        workspace: {
+          kind: "rootGroup",
+          name: "workspace",
+          description: "工作区",
+        },
+        ...define.command("inspect")({
+          kind: "command",
+          parent: "workspace",
+          name: "inspect",
+          description: "检查",
+          input: installedTextSchema,
+          success: {
+            kind: "completion",
+            text: () => coreModule.text.silent,
+          },
+          failures: {
+            permissionDenied: {
+              description: "无权限",
+              schema: installedTextSchema,
+              exitCode: 13,
+              text: () => coreModule.text.line("无权限"),
+            },
+          },
+          handler() {
+            handlerCalled = true;
+          },
+        }),
+      },
+    }),
+  (error) => {
+    if (typeof error !== "object" || error === null) return false;
+    assert.ok(error instanceof coreModule.ContractDefinitionError);
+    assert.deepEqual(Reflect.get(error, "issues"), [
+      {
+        code: "unexpectedTextPresenter",
+        command: "inspect",
+        location: "completion",
+      },
+      {
+        code: "unexpectedTextPresenter",
+        command: "inspect",
+        location: "failure",
+        variant: "permissionDenied",
+      },
+    ]);
+    return true;
+  },
+);
+assert.equal(handlerCalled, false);
+
 const emptyJsonSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   additionalProperties: false,
