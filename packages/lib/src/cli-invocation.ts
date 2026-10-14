@@ -4,7 +4,10 @@ import {
   type CliContract,
   type CliContractRawInput,
   type CliContractRoot,
+  type CliContractUsageFacts,
+  type FieldDefinitions,
   type RuntimeCompiledExecutable,
+  type WhenUsageConstraint,
   type UsageFact,
 } from "#/cli-contract";
 import { ContractExecutionError } from "#/contract-execution-error";
@@ -101,12 +104,6 @@ export interface ConflictingFlagIssue {
   ];
 }
 
-export interface RequiredByUsageConstraintIssue {
-  readonly code: "requiredByUsageConstraint";
-  readonly field: string;
-  readonly requires: string;
-}
-
 /** 一条数量规则失败，按字段声明顺序划分 raw 输入中出现与缺席的字段。 */
 export interface CountConstraintViolationIssue {
   readonly code: "countConstraintViolation";
@@ -121,6 +118,153 @@ export interface ForbiddenCombinationViolationIssue {
   readonly code: "forbiddenCombinationViolation";
   readonly facts: readonly [UsageFact, ...UsageFact[]];
 }
+
+/** present 事实的 raw argv 观察只报告字段和是否出现。 */
+export interface PresentUsageObservation<Field extends string = string> {
+  readonly kind: "present";
+  readonly field: Field;
+  readonly present: boolean;
+}
+
+/** equals 观察在字段缺席时省略 actual；出现时 actual 保持 raw 基础标量域。 */
+export type EqualsUsageObservation<
+  Field extends string = string,
+  Expected extends boolean | string = boolean | string,
+> =
+  | Readonly<{
+      readonly kind: "equals";
+      readonly field: Field;
+      readonly expected: Expected;
+      readonly present: false;
+    }>
+  | Readonly<{
+      readonly kind: "equals";
+      readonly field: Field;
+      readonly expected: Expected;
+      readonly present: true;
+      readonly actual: boolean | string;
+    }>;
+
+export type UsageConstraintObservation<Fact = UsageFact> =
+  Fact extends Readonly<{
+    readonly kind: "present";
+    readonly field: infer Field extends string;
+  }>
+    ? PresentUsageObservation<Field>
+    : Fact extends Readonly<{
+          readonly kind: "equals";
+          readonly field: infer Field extends string;
+          readonly value: infer Expected extends boolean | string;
+        }>
+      ? EqualsUsageObservation<Field, Expected>
+      : never;
+
+type UsageConstraintObservationTuple<Facts extends readonly unknown[]> = {
+  readonly [Index in keyof Facts]: UsageConstraintObservation<Facts[Index]>;
+};
+
+type EffectFields<
+  Effect,
+  Member extends "require" | "forbid",
+> = Effect extends object
+  ? Member extends keyof Effect
+    ? Exclude<Effect[Member], undefined> extends readonly (infer Field extends
+        string)[]
+      ? Field
+      : never
+    : never
+  : never;
+
+/** 一条条件规则的完整 raw 观察和分支效果；每条失败规则只产生这一条问题。 */
+export interface ConditionalConstraintViolationIssue<
+  Conditions extends readonly unknown[] = readonly UsageConstraintObservation[],
+  Branch extends "then" | "otherwise" = "then" | "otherwise",
+  MissingField extends string = string,
+  ForbiddenField extends string = string,
+> {
+  readonly code: "conditionalConstraintViolation";
+  readonly branch: Branch;
+  readonly conditions: Conditions;
+  readonly missingRequiredFields: readonly MissingField[];
+  readonly presentForbiddenFields: readonly ForbiddenField[];
+}
+
+type WhenConstraintUnion<Constraints> =
+  Constraints extends readonly (infer Constraint)[]
+    ? Extract<Constraint, Readonly<{ readonly kind: "when" }>>
+    : Extract<Constraints, Readonly<{ readonly kind: "when" }>>;
+
+type ConditionalConstraintEffectFields<
+  Constraints,
+  Member extends "require" | "forbid",
+> =
+  WhenConstraintUnion<Constraints> extends infer Constraint
+    ? Constraint extends Readonly<{
+        readonly kind: "when";
+        readonly then?: infer Then;
+        readonly otherwise?: infer Otherwise;
+      }>
+      ? EffectFields<Then, Member> | EffectFields<Otherwise, Member>
+      : never
+    : never;
+
+type ConditionalConstraintIssueFor<
+  Constraint,
+  MissingField extends string,
+  ForbiddenField extends string,
+> =
+  Constraint extends WhenUsageConstraint<FieldDefinitions, unknown>
+    ? ConditionalConstraintViolationIssue<
+        UsageConstraintObservationTuple<Constraint["all"]>,
+        "then" | "otherwise",
+        MissingField,
+        ForbiddenField
+      >
+    : never;
+
+type ConditionalConstraintIssues<Constraints> =
+  WhenConstraintUnion<Constraints> extends infer Constraint
+    ? Constraint extends unknown
+      ? ConditionalConstraintIssueFor<
+          Constraint,
+          ConditionalConstraintEffectFields<Constraints, "require">,
+          ConditionalConstraintEffectFields<Constraints, "forbid">
+        >
+      : never
+    : never;
+
+type ContractConditionalUsageIssue<
+  Contract,
+  Command extends string,
+> = string extends keyof CliContractUsageFacts<Contract>
+  ? ConditionalConstraintViolationIssue
+  : CliContractUsageFacts<Contract> extends Readonly<
+        Record<Command, infer Constraints>
+      >
+    ? ConditionalConstraintIssues<Constraints>
+    : never;
+
+export type CliUsageIssue<
+  Contract extends CliContract = CliContract,
+  Command extends string = CliContractRoot<Contract>,
+> =
+  | Exclude<UsageIssue, { readonly code: "conditionalConstraintViolation" }>
+  | ContractConditionalUsageIssue<Contract, Command>;
+
+export type NonEmptyCliUsageIssues<
+  Contract extends CliContract = CliContract,
+  Command extends string = CliContractRoot<Contract>,
+> = readonly [
+  CliUsageIssue<Contract, Command>,
+  ...CliUsageIssue<Contract, Command>[],
+];
+
+type UsageFailuresForContract<Contract extends CliContract> = {
+  [Command in CliContractRoot<Contract>]: UsageFailure<
+    Command,
+    NonEmptyCliUsageIssues<Contract, Command>
+  >;
+}[CliContractRoot<Contract>];
 
 export interface SchemaIssueEvidence {
   readonly message: string;
@@ -173,13 +317,13 @@ export type UsageIssue =
   | ConflictingOutputFormatIssue
   | CountConstraintViolationIssue
   | ForbiddenCombinationViolationIssue
+  | ConditionalConstraintViolationIssue
   | InputRejectedIssue
   | InvalidFieldChoiceIssue
   | InvalidOutputFormatIssue
   | MissingOptionValueIssue
   | MissingRequiredFieldIssue
   | RepeatedOptionIssue
-  | RequiredByUsageConstraintIssue
   | UnexpectedOptionValueIssue
   | UnexpectedPositionalIssue
   | UnknownCommandIssue
@@ -191,10 +335,13 @@ export interface CommandUsage<Command extends string> {
   readonly synopsis: string;
 }
 
-export interface UsageFailure<Command extends string> {
+export interface UsageFailure<
+  Command extends string,
+  Issues extends NonEmptyUsageIssues = NonEmptyUsageIssues,
+> {
   readonly kind: "usageFailure";
   readonly command: Command;
-  readonly issues: NonEmptyUsageIssues;
+  readonly issues: Issues;
   readonly usage: CommandUsage<Command>;
 }
 
@@ -208,7 +355,7 @@ type UnboundCliInvocation<Contract extends CliContract> =
   | ParsedInvocation<CliContractRoot<Contract>, CliContractRawInput<Contract>>
   | HelpRequest<CliContractRoot<Contract>>
   | VersionRequest<CliContractRoot<Contract>>
-  | UsageFailure<CliContractRoot<Contract>>;
+  | UsageFailuresForContract<Contract>;
 
 /**
  * 将宿主提供的参数 token 同步、无副作用地解析为同一契约的调用事实。
@@ -778,18 +925,6 @@ function collectStructuralIssues(
   });
   const constraintIssues = usageConstraints.flatMap(
     (constraint): UsageIssue[] => {
-      if (constraint.kind === "requires") {
-        return Object.hasOwn(input, constraint.field) &&
-          !Object.hasOwn(input, constraint.requires)
-          ? [
-              {
-                code: "requiredByUsageConstraint",
-                field: constraint.field,
-                requires: constraint.requires,
-              },
-            ]
-          : [];
-      }
       if (constraint.kind === "count") {
         const presentFields = constraint.fields.filter((field) =>
           Object.hasOwn(input, field),
@@ -813,6 +948,39 @@ function collectStructuralIssues(
           },
         ];
       }
+      if (constraint.kind === "when") {
+        const observed = constraint.all.map((fact) =>
+          observeUsageFact(fact, input),
+        );
+        const branch = observed.every(({ matches }) => matches)
+          ? "then"
+          : "otherwise";
+        const effect = constraint[branch];
+        if (effect === undefined) return [];
+        const missingRequiredFields = (effect.require ?? []).filter(
+          (field) => !Object.hasOwn(input, field),
+        );
+        const presentForbiddenFields = (effect.forbid ?? []).filter((field) =>
+          Object.hasOwn(input, field),
+        );
+        if (
+          missingRequiredFields.length === 0 &&
+          presentForbiddenFields.length === 0
+        ) {
+          return [];
+        }
+        return [
+          {
+            code: "conditionalConstraintViolation",
+            branch,
+            conditions: Object.freeze(
+              observed.map(({ observation }) => observation),
+            ),
+            missingRequiredFields: Object.freeze(missingRequiredFields),
+            presentForbiddenFields: Object.freeze(presentForbiddenFields),
+          },
+        ];
+      }
       return constraint.all.every((fact) =>
         fact.kind === "present"
           ? Object.hasOwn(input, fact.field)
@@ -829,6 +997,51 @@ function collectStructuralIssues(
     },
   );
   return [...fieldIssues, ...constraintIssues];
+}
+
+function observeUsageFact(
+  fact: UsageFact,
+  input: Readonly<Record<string, boolean | string | string[]>>,
+): Readonly<{
+  readonly matches: boolean;
+  readonly observation: UsageConstraintObservation;
+}> {
+  const present = Object.hasOwn(input, fact.field);
+  if (fact.kind === "present") {
+    return {
+      matches: present,
+      observation: Object.freeze({
+        kind: "present",
+        field: fact.field,
+        present,
+      }),
+    };
+  }
+  if (!present) {
+    return {
+      matches: false,
+      observation: Object.freeze({
+        kind: "equals",
+        field: fact.field,
+        expected: fact.value,
+        present: false,
+      }),
+    };
+  }
+  const actual = input[fact.field];
+  if (typeof actual !== "boolean" && typeof actual !== "string") {
+    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+  }
+  return {
+    matches: actual === fact.value,
+    observation: Object.freeze({
+      kind: "equals",
+      field: fact.field,
+      expected: fact.value,
+      present: true,
+      actual,
+    }),
+  };
 }
 
 function freezeOccurrenceEvidence(
@@ -1009,12 +1222,12 @@ function usageFailureFromIssues<Contract extends CliContract>(
   return bindInvocation(contract, {
     kind: "usageFailure",
     command,
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 输入参数是非空元组，映射后长度不变。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 每个条件问题都由同一已编译契约的 raw 字段事实生成。
     issues: Object.freeze(
       issues.map((issue) => Object.freeze(issue)),
-    ) as NonEmptyUsageIssues,
+    ) as NonEmptyCliUsageIssues<Contract>,
     usage,
-  });
+  } as unknown as UnboundCliInvocation<Contract>);
 }
 
 export function invocationBelongsTo(

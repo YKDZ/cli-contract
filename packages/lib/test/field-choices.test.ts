@@ -222,7 +222,6 @@ void test("每个显式字段候选值在 parser 聚合并在 validation 与 han
     files: z.array(z.enum(["keep", "drop"])).optional(),
     option: z.enum(["fast", "slow"]).optional(),
     tag: z.array(z.enum(["red", "green"])).optional(),
-    requires: z.string().optional(),
   });
   let validationCalls = 0;
   let handlerCalls = 0;
@@ -260,15 +259,7 @@ void test("每个显式字段候选值在 parser 聚合并在 validation 与 han
             shortAlias: "-t",
             description: "标签",
           },
-          requires: {
-            kind: "valueOption",
-            longOption: "--requires",
-            description: "前置字段",
-          },
         },
-        usageConstraints: [
-          { kind: "requires", field: "option", requires: "requires" },
-        ],
         input,
         success: { kind: "completion" },
         failures: {},
@@ -345,11 +336,6 @@ void test("每个显式字段候选值在 parser 聚合并在 validation 与 han
       field: "tag",
       value: "outside-separated",
       choices: ["red", "green"],
-    },
-    {
-      code: "requiredByUsageConstraint",
-      field: "option",
-      requires: "requires",
     },
   ]);
   for (const issue of invocation.issues) {
