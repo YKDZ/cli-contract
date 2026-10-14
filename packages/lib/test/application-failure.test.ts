@@ -68,7 +68,7 @@ void test("具名应用失败写入 stderr 并返回显式失败状态", async (
     $schema: "https://json-schema.org/draft/2020-12/schema",
     additionalProperties: false,
     properties: {
-      schemaVersion: { const: "1" },
+      schemaVersion: { const: "2" },
       command: { const: "check" },
       kind: { const: "failure" },
       variant: { const: "unavailable" },
@@ -97,7 +97,7 @@ void test("具名应用失败写入 stderr 并返回显式失败状态", async (
     {
       destination: "stderr",
       chunk:
-        '{"schemaVersion":"1","command":"check","kind":"failure","variant":"unavailable","data":{"service":"billing"}}\n',
+        '{"schemaVersion":"2","command":"check","kind":"failure","variant":"unavailable","data":{"service":"billing"}}\n',
     },
   ]);
   assert.deepEqual(termination, {

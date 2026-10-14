@@ -123,7 +123,7 @@ void test("value option 经模式变换后产生具名 data 结果", async () =>
     $schema: "https://json-schema.org/draft/2020-12/schema",
     additionalProperties: false,
     properties: {
-      schemaVersion: { const: "1" },
+      schemaVersion: { const: "2" },
       command: { const: "greet" },
       kind: { const: "data" },
       variant: { const: "greeting" },
@@ -153,7 +153,7 @@ void test("value option 经模式变换后产生具名 data 结果", async () =>
     {
       destination: "stdout",
       chunk:
-        '{"schemaVersion":"1","command":"greet","kind":"data","variant":"greeting","data":{"message":"Hello, ADA!"}}\n',
+        '{"schemaVersion":"2","command":"greet","kind":"data","variant":"greeting","data":{"message":"Hello, ADA!"}}\n',
     },
   ]);
   assert.deepEqual(termination, {
@@ -192,7 +192,7 @@ void test("输入模式正常拒绝产生 inputRejected 且不执行 handler", a
     {
       destination: "stderr",
       chunk:
-        '{"schemaVersion":"1","command":"greet","kind":"usageFailure","issues":[{"code":"inputRejected","evidence":[{"message":"name 不能为空","path":["name"]}]}],"usage":"greet --name <name>","helpArgv":["greet","--help"]}\n',
+        '{"schemaVersion":"2","command":"greet","kind":"usageFailure","issues":[{"code":"inputRejected","evidence":[{"message":"name 不能为空","path":["name"]}]}],"usage":"greet --name <name>","helpArgv":["greet","--help"]}\n',
     },
   ]);
   assert.deepEqual(termination, {
@@ -253,7 +253,7 @@ void test("原生 Zod 失败携带额外 value 仍产生 inputRejected", async (
     {
       destination: "stderr",
       chunk:
-        '{"schemaVersion":"1","command":"greet","kind":"usageFailure","issues":[{"code":"inputRejected","evidence":[{"message":"name 不能为空","path":["name"]}]}],"usage":"greet --name <name>","helpArgv":["greet","--help"]}\n',
+        '{"schemaVersion":"2","command":"greet","kind":"usageFailure","issues":[{"code":"inputRejected","evidence":[{"message":"name 不能为空","path":["name"]}]}],"usage":"greet --name <name>","helpArgv":["greet","--help"]}\n',
     },
   ]);
   assert.deepEqual(termination.issues, [
@@ -307,7 +307,7 @@ for (const { label, withValue } of [
       {
         destination: "stderr",
         chunk:
-          '{"schemaVersion":"1","command":"greet","kind":"usageFailure","issues":[{"code":"inputRejected","evidence":[]}],"usage":"greet --name <name>","helpArgv":["greet","--help"]}\n',
+          '{"schemaVersion":"2","command":"greet","kind":"usageFailure","issues":[{"code":"inputRejected","evidence":[]}],"usage":"greet --name <name>","helpArgv":["greet","--help"]}\n',
       },
     ]);
     assert.deepEqual(termination, {

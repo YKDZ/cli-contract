@@ -1,6 +1,6 @@
 import type { JsonObject, JsonValue } from "#/contract-schema";
 
-const schemaVersion = "1" as const;
+const schemaVersion = "2" as const;
 
 export function createCompletionEnvelope<Command extends string>(
   command: Command,
@@ -164,13 +164,22 @@ function usageIssueSchemas(): JsonObject[] {
     },
     ["message"],
   );
-  const constraintValue = objectSchema(
-    {
-      field: string,
-      value: { oneOf: [{ type: "boolean" }, string] },
-    },
-    ["field", "value"],
-  );
+  const usageFact = {
+    oneOf: [
+      objectSchema({ field: string, kind: { const: "present" } }, [
+        "kind",
+        "field",
+      ]),
+      objectSchema(
+        {
+          field: string,
+          kind: { const: "equals" },
+          value: { oneOf: [{ type: "boolean" }, string] },
+        },
+        ["kind", "field", "value"],
+      ),
+    ],
+  };
   const outputOccurrence = objectSchema(
     {
       format: { enum: ["structured", "text"] },
@@ -204,8 +213,8 @@ function usageIssueSchemas(): JsonObject[] {
         { properties: { absentFields: { minItems: 1 } } },
       ],
     },
-    issueSchema("forbiddenUsageCombination", {
-      values: { items: constraintValue, minItems: 2, type: "array" },
+    issueSchema("forbiddenCombinationViolation", {
+      facts: { items: usageFact, minItems: 1, type: "array" },
     }),
     issueSchema("inputRejected", {
       evidence: { items: evidence, type: "array" },

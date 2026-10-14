@@ -54,7 +54,7 @@ void test(
       child.stdin.write("started\n");
       if (mode === "structured") {
         assert.deepEqual(JSON.parse(await nextLine()), {
-          schemaVersion: "1",
+          schemaVersion: "2",
           command: "logs",
           kind: "stream",
         });
@@ -65,7 +65,7 @@ void test(
         });
         assert.equal(
           stdout,
-          '{"schemaVersion":"1","command":"logs","kind":"stream"}\n{"kind":"record","variant":"entry","data":{"message":"started"}}\n',
+          '{"schemaVersion":"2","command":"logs","kind":"stream"}\n{"kind":"record","variant":"entry","data":{"message":"started"}}\n',
         );
       } else {
         assert.equal(await nextLine(), "started");
@@ -94,7 +94,7 @@ void test(
       assert.equal(
         stdout,
         mode === "structured"
-          ? '{"schemaVersion":"1","command":"logs","kind":"stream"}\n{"kind":"record","variant":"entry","data":{"message":"started"}}\n{"kind":"record","variant":"entry","data":{"message":"ready"}}\n{"kind":"streamSuccess"}\n'
+          ? '{"schemaVersion":"2","command":"logs","kind":"stream"}\n{"kind":"record","variant":"entry","data":{"message":"started"}}\n{"kind":"record","variant":"entry","data":{"message":"ready"}}\n{"kind":"streamSuccess"}\n'
           : "started\nready\n",
       );
       assert.equal(stderr, "");
@@ -117,7 +117,7 @@ void test("结构化成功保留具名事实，stderr 为空", () => {
   assert.equal(result.status, 0);
   assert.equal(result.stderr, "");
   assert.deepEqual(JSON.parse(result.stdout), {
-    schemaVersion: "1",
+    schemaVersion: "2",
     command: "lookup",
     kind: "data",
     variant: "found",
@@ -137,7 +137,7 @@ void test("结构化业务失败保留具名事实，stdout 为空并返回非�
   assert.equal(result.status, 1);
   assert.equal(result.stdout, "");
   assert.deepEqual(JSON.parse(result.stderr), {
-    schemaVersion: "1",
+    schemaVersion: "2",
     command: "lookup",
     kind: "failure",
     variant: "notFound",
@@ -181,7 +181,7 @@ void test("缺少参数返回结构化用法失败和准确的帮助调用", () 
   assert.equal(result.status, 64);
   assert.equal(result.stdout, "");
   assert.deepEqual(JSON.parse(result.stderr), {
-    schemaVersion: "1",
+    schemaVersion: "2",
     command: "lookup",
     kind: "usageFailure",
     issues: [{ code: "missingRequiredField", field: "id" }],

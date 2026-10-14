@@ -103,7 +103,7 @@ void test("空调用执行 completion 契约并写出规范 JSON", async () => {
   assert.deepEqual(writes, [
     {
       destination: "stdout",
-      chunk: '{"schemaVersion":"1","command":"fixture","kind":"completion"}\n',
+      chunk: '{"schemaVersion":"2","command":"fixture","kind":"completion"}\n',
     },
   ]);
   assert.deepEqual(termination, {
@@ -180,7 +180,7 @@ void test("多余 positional 产生结构化用法失败和简短 usage", async 
     {
       destination: "stderr",
       chunk:
-        '{"schemaVersion":"1","command":"fixture","kind":"usageFailure","issues":[{"code":"unexpectedPositional","position":0,"value":"extra"}],"usage":"fixture","helpArgv":["fixture","--help"]}\n',
+        '{"schemaVersion":"2","command":"fixture","kind":"usageFailure","issues":[{"code":"unexpectedPositional","position":0,"value":"extra"}],"usage":"fixture","helpArgv":["fixture","--help"]}\n',
     },
   ]);
   assert.deepEqual(termination, {
@@ -197,7 +197,7 @@ void test("usage failure manifest 闭合全部问题 wire 形状", () => {
     "conflictingFlag",
     "conflictingOutputFormat",
     "exclusiveUsageConstraint",
-    "forbiddenUsageCombination",
+    "forbiddenCombinationViolation",
     "inputRejected",
     "invalidFieldChoice",
     "invalidOutputFormat",
@@ -283,7 +283,7 @@ void test("定义期请求两侧 Draft 2020-12 并公开不可变投影", () => 
     },
   });
   assert.equal(cli.manifest.root, "fixture");
-  assert.equal(cli.manifest.schemaVersion, "3");
+  assert.equal(cli.manifest.schemaVersion, "4");
   assert.deepEqual(cli.manifest.commands.fixture.input, {
     inputSchema: emptyJsonSchema,
     outputSchema: emptyJsonSchema,

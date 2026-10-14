@@ -9,6 +9,7 @@ import {
   countHelpFactForConstraint,
   formatFieldUsage,
   getCompiledCli,
+  helpTemplateSpecifications,
   isCompiledExecutable,
   isIssuedOutcomeFact,
   usageFailureHelpArgv,
@@ -16,6 +17,7 @@ import {
   type CliContractDependencies,
   type CliContractResult,
   type CliContractRoot,
+  type HelpFactTemplateParameters,
   type HelpFactWording,
   type OutcomeFact,
 } from "#/cli-contract";
@@ -359,7 +361,7 @@ function formatCoreControls(
       ? []
       : [
           helpLine(
-            `${output.selector} <${output.formats.join("|")}> ${renderHelpFactTemplate(help.wording?.choices, { choices: output.formats.map((format) => JSON.stringify(format)).join(", ") })} ${renderHelpFactTemplate(help.wording?.default, { value: JSON.stringify(output.defaultFormat) })}`,
+            `${output.selector} <${output.formats.join("|")}> ${renderHelpFactTemplate("choices", help.wording?.choices, { choices: output.formats.map((format) => JSON.stringify(format)).join(", ") })} ${renderHelpFactTemplate("default", help.wording?.default, { value: JSON.stringify(output.defaultFormat) })}`,
           ),
         ]),
     ...Object.entries(output.compatibilityFlags ?? {}).map(([flag, format]) =>
@@ -399,34 +401,62 @@ function formatUsageConstraint(
   wording: HelpFactWording | undefined,
 ): string {
   if (constraint.kind === "requires")
-    return renderHelpFactTemplate(wording?.requires, {
+    return renderHelpFactTemplate("requires", wording?.requires, {
       field: constraint.field,
       requires: constraint.requires,
     });
   if (constraint.kind === "exclusive")
-    return renderHelpFactTemplate(wording?.exclusive, {
+    return renderHelpFactTemplate("exclusive", wording?.exclusive, {
       fields: constraint.fields.join(", "),
     });
   if (constraint.kind === "count") {
     const { slot, values } = countHelpFactForConstraint(constraint);
-    return renderHelpFactTemplate(wording?.[slot], values);
+    return renderHelpFactTemplate(slot, wording?.[slot], values);
   }
-  return renderHelpFactTemplate(wording?.forbiddenCombination, {
-    values: constraint.values
-      .map(({ field, value }) => `${field}=${JSON.stringify(value)}`)
-      .join(", "),
-  });
+  return renderHelpFactTemplate(
+    "forbiddenCombination",
+    wording?.forbiddenCombination,
+    {
+      facts: constraint.all
+        .map((fact) =>
+          fact.kind === "present"
+            ? renderHelpFactTemplate("present", wording?.present, {
+                field: fact.field,
+              })
+            : renderHelpFactTemplate("equals", wording?.equals, {
+                field: fact.field,
+                value: JSON.stringify(fact.value),
+              }),
+        )
+        .join(", "),
+    },
+  );
 }
 
-function renderHelpFactTemplate(
+function renderHelpFactTemplate<
+  Slot extends Exclude<keyof HelpFactTemplateParameters, "commandPlaceholder">,
+>(
+  slot: Slot,
   template: string | undefined,
-  values: Readonly<Record<string, string>>,
+  values: HelpFactTemplateParameters[Slot],
 ): string {
   const factTemplate = requireHelpFactWording(template);
+  const replacements = new Map<string, string>();
+  for (const key of Object.keys(values)) {
+    const value: unknown = Reflect.get(values, key);
+    if (typeof value === "string") replacements.set(key, value);
+  }
+  if (
+    helpTemplateSpecifications[slot].placeholders.some(
+      (placeholder) => !replacements.has(placeholder),
+    )
+  ) {
+    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+  }
   return factTemplate.replace(
     /\{([A-Za-z][A-Za-z0-9]*)\}/g,
     (_match, key: string) => {
-      const value = values[key];
+      const value = replacements.get(key);
       if (value === undefined) {
         throw new ContractExecutionError([{ code: "invalidCliContract" }]);
       }
@@ -450,11 +480,11 @@ function formatHelpField(
   const choices =
     field.choices === undefined
       ? ""
-      : ` ${renderHelpFactTemplate(wording?.choices, { choices: field.choices.map((choice) => JSON.stringify(choice)).join(", ") })}`;
+      : ` ${renderHelpFactTemplate("choices", wording?.choices, { choices: field.choices.map((choice) => JSON.stringify(choice)).join(", ") })}`;
   const defaultValue =
     field.default === undefined
       ? ""
-      : ` ${renderHelpFactTemplate(wording?.default, { value: JSON.stringify(field.default) })}`;
+      : ` ${renderHelpFactTemplate("default", wording?.default, { value: JSON.stringify(field.default) })}`;
   return helpDetail(
     `${cardinality}${choices}${defaultValue}`,
     field.description,
