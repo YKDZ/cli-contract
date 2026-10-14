@@ -9,6 +9,7 @@ import {
   outputCapability,
   parseCliInvocation,
   text,
+  type HelpCapabilityDefinition,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
@@ -56,6 +57,121 @@ void test("帮助事实模板表达候选值和默认值，保留 schema 中的�
   );
 });
 
+void test("提取的帮助事实未知槽位报告闭合定义问题", () => {
+  const definition: HelpCapabilityDefinition = JSON.parse(
+    '{"wording":{"choises":"候选 {choices}","defalt":"默认 {value}"}}',
+  );
+
+  assert.throws(
+    () => helpCapability(definition),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "unknownDefinitionProperty",
+          path: ["help", "wording", "choises"],
+        },
+        {
+          code: "unknownDefinitionProperty",
+          path: ["help", "wording", "defalt"],
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("帮助文案中未知槽位与已知模板问题同次聚合", () => {
+  assert.throws(
+    () =>
+      helpCapability({
+        wording: {
+          choises: "候选 {choices}",
+          choices: "候选 {choises}",
+        } as never,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "unknownDefinitionProperty",
+          path: ["help", "wording", "choises"],
+        },
+        {
+          code: "invalidHelpFactTemplate",
+          path: ["help", "wording", "choices"],
+          slot: "choices",
+          received: "候选 {choises}",
+          reason: "placeholder",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("仅已知模板错误仍在根装配时与叶约束问题聚合", () => {
+  const helpDefinition: HelpCapabilityDefinition = JSON.parse(
+    '{"wording":{"choices":"候选 {choises}"}}',
+  );
+  const definition = {
+    root: "choose",
+    help: helpCapability(helpDefinition),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      choose: {
+        kind: "rootCommand",
+        name: "choose",
+        description: "选择模式",
+        fields: {
+          mode: {
+            kind: "valueOption",
+            longOption: "--mode",
+            description: "模式",
+          },
+        },
+        input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+        usageConstraints: [
+          {
+            kind: "forbiddenCombination",
+            all: [{ kind: "present", field: "missing" }],
+          },
+        ],
+        success: { kind: "completion" },
+        failures: {},
+        handler() {},
+      },
+    },
+  };
+
+  assert.throws(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 动态闭合负例验证根级问题仍与叶约束问题聚合。
+    () => defineCli()(definition as never),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidHelpFactTemplate",
+          path: ["help", "wording", "choices"],
+          slot: "choices",
+          received: "候选 {choises}",
+          reason: "placeholder",
+        },
+        {
+          code: "unknownUsageConstraintField",
+          command: "choose",
+          constraint: "forbiddenCombination",
+          index: 0,
+          member: "all.field",
+          field: "missing",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
 void test("已声明帮助事实缺少模板时在定义期报告命令与槽位", () => {
   assert.throws(
     () =>
@@ -79,6 +195,15 @@ void test("已声明帮助事实缺少模板时在定义期报告命令与槽位
             input: z.object({
               mode: z.enum(["safe", "force"]).default("safe"),
             }),
+            usageConstraints: [
+              {
+                kind: "forbiddenCombination",
+                all: [
+                  { kind: "present", field: "mode" },
+                  { kind: "equals", field: "mode", value: "force" },
+                ],
+              },
+            ],
             success: { kind: "completion" },
             failures: {},
             handler: ({ outcome }) => outcome.completion(),
@@ -90,20 +215,116 @@ void test("已声明帮助事实缺少模板时在定义期报告命令与槽位
       assert.deepEqual(error.issues, [
         { code: "missingHelpFactTemplate", command: "choose", slot: "choices" },
         { code: "missingHelpFactTemplate", command: "choose", slot: "default" },
+        {
+          code: "missingHelpFactTemplate",
+          command: "choose",
+          slot: "forbiddenCombination",
+        },
+        { code: "missingHelpFactTemplate", command: "choose", slot: "present" },
+        { code: "missingHelpFactTemplate", command: "choose", slot: "equals" },
       ]);
       return true;
     },
   );
 });
 
-void test("帮助事实模板拒绝缺失或未知占位符及非法单行文本", () => {
-  for (const wording of [
-    { choices: "（可选值）" },
-    { choices: "（{choices}、{other}）" },
-    { requires: "{field} 是前提" },
-    { default: "默认\n{value}" },
-  ]) {
-    assert.throws(() => helpCapability({ wording }), TypeError);
+void test("动态帮助事实模板在根装配时聚合报告非法槽位", () => {
+  const wording: { readonly choices: string; readonly default: string } = {
+    choices: "（可选值：{unknown}）",
+    default: "默认值\n{value}",
+  };
+  assert.throws(
+    () =>
+      defineCli()({
+        root: "choose",
+        help: helpCapability({ wording }),
+        output: outputCapability({ defaultFormat: "structured" }),
+        usageFailureExitCode: 64,
+        commands: {
+          choose: {
+            kind: "rootCommand",
+            name: "choose",
+            description: "选择模式",
+            fields: {
+              mode: {
+                kind: "valueOption",
+                longOption: "--mode",
+                description: "模式",
+              },
+            },
+            input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          },
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidHelpFactTemplate",
+          path: ["help", "wording", "choices"],
+          slot: "choices",
+          received: "（可选值：{unknown}）",
+          reason: "placeholder",
+        },
+        {
+          code: "invalidHelpFactTemplate",
+          path: ["help", "wording", "default"],
+          slot: "default",
+          received: "默认值\n{value}",
+          reason: "singleLine",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("命令组占位词静态与动态判断同界", () => {
+  const invalidTemplates = [
+    { received: "   ", reason: "empty" },
+    { received: "<命令组>", reason: "placeholder" },
+  ] as const;
+
+  for (const { received, reason } of invalidTemplates) {
+    const wording: { readonly commandPlaceholder: string } = {
+      commandPlaceholder: received,
+    };
+    assert.throws(
+      () =>
+        defineCli()({
+          root: "choose",
+          help: helpCapability({ wording }),
+          output: outputCapability({ defaultFormat: "structured" }),
+          usageFailureExitCode: 64,
+          commands: {
+            choose: {
+              kind: "rootCommand",
+              name: "choose",
+              description: "选择模式",
+              input: z.object({}),
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            },
+          },
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof ContractDefinitionError);
+        assert.deepEqual(error.issues, [
+          {
+            code: "invalidHelpFactTemplate",
+            path: ["help", "wording", "commandPlaceholder"],
+            slot: "commandPlaceholder",
+            received,
+            reason,
+          },
+        ]);
+        return true;
+      },
+    );
   }
 });
 
@@ -173,7 +394,7 @@ void test("命令组占位词贯穿帮助、用法失败和契约清单", async 
   });
 
   assert.equal(cli.grammar.root.usage.synopsis, "tool <命令>");
-  assert.equal(cli.manifest.schemaVersion, "3");
+  assert.equal(cli.manifest.schemaVersion, "4");
   assert.ok(
     JSON.stringify(cli.manifest.usageFailure.wire).includes("tool <命令>"),
   );
@@ -202,7 +423,9 @@ void test("三类用法约束模板保留关系并允许调整词序", async () 
       wording: {
         requires: "{requires} 是 {field} 的前提",
         exclusive: "不能同时使用 {fields}",
-        forbiddenCombination: "禁止组合 {values}",
+        present: "存在 {field}",
+        equals: "{field} 等于 {value}",
+        forbiddenCombination: "禁止同时出现 {facts}",
       },
     }),
     output: outputCapability({ defaultFormat: "structured" }),
@@ -231,9 +454,9 @@ void test("三类用法约束模板保留关系并允许调整词序", async () 
           { kind: "exclusive", fields: ["token", "quiet"] },
           {
             kind: "forbiddenCombination",
-            values: [
-              { field: "quiet", value: true },
-              { field: "force", value: true },
+            all: [
+              { kind: "equals", field: "quiet", value: true },
+              { kind: "equals", field: "force", value: true },
             ],
           },
         ],
@@ -260,7 +483,7 @@ void test("三类用法约束模板保留关系并允许调整词序", async () 
   const help = writes.join("");
   assert.match(help, /token 是 auth 的前提/);
   assert.match(help, /不能同时使用 token, quiet/);
-  assert.match(help, /禁止组合 quiet=true, force=true/);
+  assert.match(help, /禁止同时出现 quiet 等于 true, force 等于 true/);
 });
 
 void test("输出格式控制复用候选值和默认值模板", async () => {

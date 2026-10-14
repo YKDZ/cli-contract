@@ -44,7 +44,7 @@ for (const [command, scenario] of Object.entries(commands)) {
           .split("\n")
           .map((line) => JSON.parse(line)),
         [
-          { schemaVersion: "1", command: "logs", kind: "stream" },
+          { schemaVersion: "2", command: "logs", kind: "stream" },
           { kind: "record", variant: "entry", data: { message: "started" } },
           { kind: "record", variant: "entry", data: { message: "ready" } },
           { kind: "streamSuccess" },
@@ -53,7 +53,7 @@ for (const [command, scenario] of Object.entries(commands)) {
       return;
     }
     assert.deepEqual(JSON.parse(capture.stdout), {
-      schemaVersion: "1",
+      schemaVersion: "2",
       command: "lookup",
       kind: "data",
       variant: "found",
@@ -87,7 +87,7 @@ for (const [command, scenarios] of Object.entries(failures)) {
       assert.equal(capture.termination.exitCode, 1);
       assert.equal(capture.stdout, "");
       assert.deepEqual(JSON.parse(capture.stderr), {
-        schemaVersion: "1",
+        schemaVersion: "2",
         command: "lookup",
         kind: "failure",
         variant: "notFound",

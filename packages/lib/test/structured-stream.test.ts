@@ -115,7 +115,7 @@ void test("structured stream 按 header、record、终态写出紧凑 NDJSON", a
   assert.deepEqual(writes, [
     {
       destination: "stdout",
-      chunk: '{"schemaVersion":"1","command":"list","kind":"stream"}\n',
+      chunk: '{"schemaVersion":"2","command":"list","kind":"stream"}\n',
     },
     {
       destination: "stdout",
@@ -236,7 +236,7 @@ void test("record 输出模式的空 issues 仍产生 outputSchemaRejected", asy
     },
   );
   assert.deepEqual(writes, [
-    '{"schemaVersion":"1","command":"list","kind":"stream"}\n',
+    '{"schemaVersion":"2","command":"list","kind":"stream"}\n',
   ]);
 });
 
@@ -273,7 +273,7 @@ void test("stream 可在首帧后直接显式成功", async () => {
     },
   });
   assert.deepEqual(writes, [
-    '{"schemaVersion":"1","command":"list","kind":"stream"}\n',
+    '{"schemaVersion":"2","command":"list","kind":"stream"}\n',
     '{"kind":"streamSuccess"}\n',
   ]);
 });
@@ -318,7 +318,7 @@ void test("stream 失败保留 stdout 前缀且不写成功终态", async () => 
   );
   assert.equal(
     writes.at(-1)?.chunk,
-    '{"schemaVersion":"1","command":"list","kind":"failure","variant":"stopped","data":{"value":"quota"}}\n',
+    '{"schemaVersion":"2","command":"list","kind":"failure","variant":"stopped","data":{"value":"quota"}}\n',
   );
   assert.equal(termination.kind, "applicationResult");
   assert.deepEqual(termination.result, {
@@ -373,7 +373,7 @@ void test("record 验证拒绝与写入拒绝均停止拉取并清理 generator"
     ContractExecutionError,
   );
   assert.deepEqual(invalidWrites, [
-    '{"schemaVersion":"1","command":"list","kind":"stream"}\n',
+    '{"schemaVersion":"2","command":"list","kind":"stream"}\n',
   ]);
   assert.equal(invalidCleanup, true);
 
@@ -484,7 +484,7 @@ void test("同一 stream handler 可投影为 structured NDJSON 或 text line、
 
   assert.equal(executions, 2);
   assert.deepEqual(structured, [
-    '{"schemaVersion":"1","command":"list","kind":"stream"}\n',
+    '{"schemaVersion":"2","command":"list","kind":"stream"}\n',
     '{"kind":"record","variant":"item","data":{"value":"one"}}\n',
     '{"kind":"record","variant":"delta","data":{"value":"two\\nthree"}}\n',
     '{"kind":"streamSuccess"}\n',

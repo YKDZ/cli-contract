@@ -3,6 +3,7 @@ import { cp, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import {
+  installedRuntimeDevDependencies,
   repositoryRoot,
   runCommand,
   verifyInstalledRuntime,
@@ -75,10 +76,10 @@ export async function verifyExample(
       example.dependencies,
       replacements,
     ),
-    devDependencies: await installedDependencies(
-      example.devDependencies,
-      replacements,
-    ),
+    devDependencies: {
+      ...(await installedDependencies(example.devDependencies, replacements)),
+      ...installedRuntimeDevDependencies,
+    },
   };
   await withInstalledConsumer(manifest, async (project) => {
     for (const directory of ["src", "test"]) {

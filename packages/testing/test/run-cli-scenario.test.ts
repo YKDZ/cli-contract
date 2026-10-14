@@ -331,7 +331,7 @@ void test("唯一 consumer fixture 贯通 argv、输入、success、failure 与 
   assert.equal(structuredSuccess.termination.exitCode, 0);
   assert.equal(
     structuredSuccess.stdout,
-    '{"schemaVersion":"1","command":"inspect","kind":"data","variant":"found","data":{"message":"public"}}\n',
+    '{"schemaVersion":"2","command":"inspect","kind":"data","variant":"found","data":{"message":"public"}}\n',
   );
   assert.equal(structuredSuccess.stderr, "");
 
@@ -344,7 +344,7 @@ void test("唯一 consumer fixture 贯通 argv、输入、success、failure 与 
   assert.equal(structuredFailure.stdout, "");
   assert.equal(
     structuredFailure.stderr,
-    '{"schemaVersion":"1","command":"inspect","kind":"failure","variant":"unavailable","data":{"message":"remote"}}\n',
+    '{"schemaVersion":"2","command":"inspect","kind":"failure","variant":"unavailable","data":{"message":"remote"}}\n',
   );
 
   const textSuccess = await runCliScenario({
@@ -372,7 +372,7 @@ void test("capture 保留 structured 与 text stream 的生产事件顺序和终
   assert.deepEqual(structured.writes, [
     {
       destination: "stdout",
-      chunk: '{"schemaVersion":"1","command":"watch","kind":"stream"}\n',
+      chunk: '{"schemaVersion":"2","command":"watch","kind":"stream"}\n',
     },
     {
       destination: "stdout",

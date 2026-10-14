@@ -2,6 +2,7 @@ import { lstat, mkdir, readFile, readdir, stat } from "node:fs/promises";
 import { basename, dirname, relative, resolve, sep } from "node:path";
 
 import {
+  installedRuntimeDevDependencies,
   runCommand,
   verifyInstalledRuntime,
   withInstalledConsumer,
@@ -53,6 +54,7 @@ async function main(): Promise<void> {
         [corePackage]: `file:${core.tarball}`,
         [testingPackage]: `file:${testing.tarball}`,
       },
+      devDependencies: installedRuntimeDevDependencies,
     },
     verifyInstalledRuntime,
   );

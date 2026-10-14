@@ -5,6 +5,7 @@ import {
   type CliContractRawInput,
   type CliContractRoot,
   type RuntimeCompiledExecutable,
+  type UsageFact,
 } from "#/cli-contract";
 import { ContractExecutionError } from "#/contract-execution-error";
 
@@ -111,13 +112,10 @@ export interface ExclusiveUsageConstraintIssue {
   readonly fields: readonly [string, string, ...string[]];
 }
 
-export interface ForbiddenUsageCombinationIssue {
-  readonly code: "forbiddenUsageCombination";
-  readonly values: readonly [
-    Readonly<{ readonly field: string; readonly value: boolean | string }>,
-    Readonly<{ readonly field: string; readonly value: boolean | string }>,
-    ...Readonly<{ readonly field: string; readonly value: boolean | string }>[],
-  ];
+/** 禁配事实组全部在 raw argv 中成立时发出的单条用法问题。 */
+export interface ForbiddenCombinationViolationIssue {
+  readonly code: "forbiddenCombinationViolation";
+  readonly facts: readonly [UsageFact, ...UsageFact[]];
 }
 
 export interface SchemaIssueEvidence {
@@ -170,7 +168,7 @@ export type UsageIssue =
   | ConflictingFlagIssue
   | ConflictingOutputFormatIssue
   | ExclusiveUsageConstraintIssue
-  | ForbiddenUsageCombinationIssue
+  | ForbiddenCombinationViolationIssue
   | InputRejectedIssue
   | InvalidFieldChoiceIssue
   | InvalidOutputFormatIssue
@@ -802,13 +800,16 @@ function collectStructuralIssues(
             ]
           : [];
       }
-      return constraint.values.every(
-        ({ field, value }) => input[field] === value,
+      return constraint.all.every((fact) =>
+        fact.kind === "present"
+          ? Object.hasOwn(input, fact.field)
+          : Object.hasOwn(input, fact.field) &&
+            input[fact.field] === fact.value,
       )
         ? [
             {
-              code: "forbiddenUsageCombination",
-              values: constraint.values,
+              code: "forbiddenCombinationViolation",
+              facts: constraint.all,
             },
           ]
         : [];
