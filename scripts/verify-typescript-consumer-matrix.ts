@@ -45,6 +45,7 @@ async function readFixtures(): Promise<Readonly<Record<string, string>>> {
         "core-root.ts",
         "exportable-contract.ts",
         "exportable-contract-reconsumer.ts",
+        "invalid-authoring-identities.ts",
         "invalid-count-constraint.ts",
         "invalid-conditional-usage-constraint.ts",
         "invalid-command-combination.ts",
@@ -157,6 +158,7 @@ async function verifyCoreOnly(
       "core-node.ts",
       "core-root.ts",
       "authoring-example.ts",
+      "invalid-authoring-identities.ts",
       "invalid-count-constraint.ts",
       "invalid-conditional-usage-constraint.ts",
       "invalid-command-combination.ts",
@@ -304,9 +306,43 @@ async function verifyHierarchyTextCoverageDiagnostic(
 
 const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
   {
+    fixture: "invalid-authoring-identities.ts",
+    expectedCodes: [
+      "invalidCommandIdentity",
+      "invalidFieldLongOption",
+      "invalidFieldLongOption",
+      "invalidFieldLongOption",
+      "invalidFieldShortAlias",
+      "invalidFieldIdentity",
+      "invalidVariantName",
+      "invalidVariantName",
+    ],
+    required: [
+      'command: "bad_root"',
+      'reason: "lowerCamelCase"',
+      'command: "negatedRoot"',
+      'received: "--no-Bad"',
+      'command: "longOptionIdentity"',
+      'received: "--Bad"',
+      'command: "shortAliasIdentity"',
+      "invalidFieldShortAlias",
+      'received: "-bad"',
+      'command: "fieldIdentity"',
+      'field: "bad_field"',
+      'command: "dataVariantIdentity"',
+      'location: "data"',
+      'command: "failureVariantIdentity"',
+      'location: "failure"',
+      'variant: "bad_name"',
+      'command: "deploy"',
+    ],
+  },
+  {
     fixture: "invalid-conditional-usage-constraint.ts",
     expectedCodes: [
       "invalidUsageConstraint",
+      "contradictoryUsageConstraint",
+      "contradictoryUsageConstraint",
       "contradictoryUsageConstraint",
       "contradictoryUsageConstraint",
       "contradictoryUsageConstraint",
@@ -316,6 +352,8 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
       'command: "branchConflict"',
       'command: "multiFieldConflict"',
       'command: "unionFieldConflict"',
+      'command: "effectSuffixConflict"',
+      'command: "factSuffixConflict"',
       'constraint: "when"',
       'member: "effects"',
       'member: "then"',
@@ -330,11 +368,13 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
       "unknownUsageConstraintField",
       "unknownUsageConstraintField",
       "unknownUsageConstraintField",
+      "unknownUsageConstraintField",
     ],
     required: [
       'command: "deploy"',
       'command: "rootDeploy"',
       'command: "mixedRest"',
+      'command: "suffixMissingEffect"',
       'constraint: "when"',
       'member: "then.require"',
       'field: "token"',
@@ -352,6 +392,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
     fixture: "invalid-forbidden-combination.ts",
     expectedCodes: [
       "invalidUsageConstraintValue",
+      "contradictoryUsageConstraint",
       "invalidUsageConstraintValue",
       "inapplicableUsageConstraintField",
       "contradictoryUsageConstraint",
@@ -377,6 +418,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
       'command: "invalidNumericValue"',
       'command: "invalidNullValue"',
       'command: "invalidObjectValue"',
+      'command: "factSuffixConflict"',
       'constraint: "forbiddenCombination"',
       'member: "all.value"',
       'member: "all.field"',
@@ -391,6 +433,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
       "expected: true",
       'kind: "repeatableOption"',
       'member: "all"',
+      'fields: "token"',
       'fields: "mode"',
       'property: "typo"',
       'member: "forbiddenCombination"',
@@ -441,6 +484,9 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
       "invalidCountConstraint",
       "invalidCountConstraint",
       "invalidCountConstraint",
+      "invalidCountConstraint",
+      "unknownUsageConstraintField",
+      "unknownUsageConstraintField",
       "unknownUsageConstraintField",
       "unknownUsageConstraintField",
     ],
@@ -453,6 +499,9 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
       'command: "rootDeploy"',
       'command: "rootMissingCountField"',
       'command: "missingCountChild"',
+      'command: "missingSuffixCountField"',
+      'command: "missingSuffixBeforeWideCountField"',
+      'command: "duplicateSuffixCountField"',
       'constraint: "count"',
       'member: "fields"',
       'field: "missing"',
@@ -460,6 +509,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
       'reason: "ordered"',
       'reason: "nonNegative"',
       'reason: "fieldCount"',
+      'reason: "duplicateFields"',
       'reason: "integer"',
     ],
   },
@@ -579,16 +629,16 @@ async function verifyAuthoringDiagnostic(
   ) {
     throw new Error(
       [
-        `Published authoring diagnostic first level is incomplete for ${fixture}`,
-        `Expected codes: ${expectedCodes.join(", ")}`,
-        `Observed codes: ${firstLevelCodes.join(", ")}`,
-        `Missing first-level evidence: ${required
+        `已发布作者诊断的首层信息不完整：${fixture}`,
+        `预期错误码：${expectedCodes.join(", ")}`,
+        `实际错误码：${firstLevelCodes.join(", ")}`,
+        `缺少首层证据：${required
           .filter((fragment) => !firstLevel.includes(fragment))
           .join(", ")}`,
         requiredAny.length === 0 ||
         requiredAny.some((fragment) => firstLevel.includes(fragment))
           ? ""
-          : `Missing one of first-level evidence: ${requiredAny.join(" OR ")}`,
+          : `缺少以下任一首层证据：${requiredAny.join(" 或 ")}`,
         firstLevel,
       ].join("\n"),
     );
@@ -768,8 +818,36 @@ function verifyAuthoringLanguageService(
   ];
   const cases: readonly LanguageServiceDiagnosticCase[] = [
     {
+      fixture: "invalid-authoring-identities.ts",
+      count: 8,
+      required: [
+        "invalidCommandIdentity",
+        "invalidFieldLongOption",
+        "invalidFieldShortAlias",
+        "invalidFieldIdentity",
+        "invalidVariantName",
+        'command: "bad_root"',
+        'command: "negatedRoot"',
+        'command: "longOptionIdentity"',
+        'command: "shortAliasIdentity"',
+        'command: "fieldIdentity"',
+        'command: "dataVariantIdentity"',
+        'command: "failureVariantIdentity"',
+        'command: "deploy"',
+        'field: "token"',
+        'field: "bad_field"',
+        'received: "--no-Bad"',
+        'received: "--Bad"',
+        'received: "-bad"',
+        'location: "data"',
+        'location: "failure"',
+        'variant: "bad_name"',
+        'reason: "lowerCamelCase"',
+      ],
+    },
+    {
       fixture: "invalid-conditional-usage-constraint.ts",
-      count: 4,
+      count: 6,
       required: [
         "invalidUsageConstraint",
         "contradictoryUsageConstraint",
@@ -777,6 +855,8 @@ function verifyAuthoringLanguageService(
         'command: "branchConflict"',
         'command: "multiFieldConflict"',
         'command: "unionFieldConflict"',
+        'command: "effectSuffixConflict"',
+        'command: "factSuffixConflict"',
         'member: "effects"',
         'member: "then"',
         'fields: "token"',
@@ -786,12 +866,13 @@ function verifyAuthoringLanguageService(
     },
     {
       fixture: "unknown-usage-constraint-field.ts",
-      count: 3,
+      count: 4,
       required: [
         "unknownUsageConstraintField",
         'command: "deploy"',
         'command: "rootDeploy"',
         'command: "mixedRest"',
+        'command: "suffixMissingEffect"',
         'member: "then.require"',
         'field: "token"',
         'field: "missing"',
@@ -809,7 +890,7 @@ function verifyAuthoringLanguageService(
     },
     {
       fixture: "invalid-forbidden-combination.ts",
-      count: 13,
+      count: 14,
       required: [
         "invalidUsageConstraintValue",
         "unknownDefinitionProperty",
@@ -826,6 +907,7 @@ function verifyAuthoringLanguageService(
         'command: "invalidNumericValue"',
         'command: "invalidNullValue"',
         'command: "invalidObjectValue"',
+        'command: "factSuffixConflict"',
         'member: "all.value"',
         'member: "all.field"',
         'field: "auth"',
@@ -842,6 +924,7 @@ function verifyAuthoringLanguageService(
         'fields: "mode"',
         'property: "typo"',
         'member: "forbiddenCombination"',
+        'fields: "token"',
       ],
       requiredAny: ['expected: "safe" | "force"', 'expected: "force" | "safe"'],
     },
@@ -867,7 +950,7 @@ function verifyAuthoringLanguageService(
     },
     {
       fixture: "invalid-count-constraint.ts",
-      count: 8,
+      count: 11,
       required: [
         "invalidCountConstraint",
         "unknownUsageConstraintField",
@@ -879,6 +962,9 @@ function verifyAuthoringLanguageService(
         'command: "rootDeploy"',
         'command: "rootMissingCountField"',
         'command: "missingCountChild"',
+        'command: "missingSuffixCountField"',
+        'command: "missingSuffixBeforeWideCountField"',
+        'command: "duplicateSuffixCountField"',
         'constraint: "count"',
         'member: "fields"',
         'field: "missing"',
@@ -887,6 +973,7 @@ function verifyAuthoringLanguageService(
         'reason: "nonNegative"',
         'reason: "fieldCount"',
         'reason: "integer"',
+        'reason: "duplicateFields"',
       ],
     },
     {
@@ -944,12 +1031,12 @@ function verifyAuthoringLanguageService(
     for (const authoringCase of authoringCases) {
       const source = fixtures[authoringCase.fixture];
       if (source === undefined)
-        throw new Error(`Missing authoring fixture: ${authoringCase.fixture}`);
+        throw new Error(`缺少作者夹具：${authoringCase.fixture}`);
       const markerPosition = source.indexOf(authoringCase.marker);
       const tokenOffset = authoringCase.marker.indexOf(authoringCase.token);
       if (markerPosition < 0 || tokenOffset < 0) {
         throw new Error(
-          `Authoring marker unavailable: ${authoringCase.fixture} ${authoringCase.marker}`,
+          `找不到作者标记：${authoringCase.fixture} ${authoringCase.marker}`,
         );
       }
       const position = markerPosition + tokenOffset;
@@ -960,8 +1047,7 @@ function verifyAuthoringLanguageService(
       const snapshot = api.updateSnapshot({ openProject: config });
       try {
         const target = snapshot.getProject(config);
-        if (target === undefined)
-          throw new Error(`Project unavailable: ${config}`);
+        if (target === undefined) throw new Error(`无法加载项目：${config}`);
         const file = resolve(project, authoringCase.fixture);
         const installedDeclaration = resolve(
           project,
@@ -973,13 +1059,13 @@ function verifyAuthoringLanguageService(
             .some((name) => resolve(name) === installedDeclaration)
         ) {
           throw new Error(
-            `Installed public declaration was not loaded for ${authoringCase.fixture}`,
+            `作者夹具未加载已安装的公开声明：${authoringCase.fixture}`,
           );
         }
         const diagnostics = target.program.getSemanticDiagnostics(file);
         if (diagnostics.length > 0) {
           throw new Error(
-            `Authoring fixture has diagnostics: ${authoringCase.fixture}\n${diagnostics
+            `作者夹具仍有类型诊断：${authoringCase.fixture}\n${diagnostics
               .map((diagnostic) => diagnostic.text)
               .join("\n")}`,
           );
@@ -988,7 +1074,7 @@ function verifyAuthoringLanguageService(
         const symbol = target.checker.getSymbolAtPosition(file, position);
         if (valueType === undefined || symbol === undefined) {
           throw new Error(
-            `Authoring hover unavailable: ${authoringCase.fixture} ${authoringCase.marker}`,
+            `无法获取作者位置的悬停信息：${authoringCase.fixture} ${authoringCase.marker}`,
           );
         }
         const resolvedSymbol =
@@ -1037,13 +1123,13 @@ function verifyAuthoringLanguageService(
         ) {
           throw new Error(
             [
-              `Installed authoring discovery is incomplete for ${authoringCase.fixture} at ${authoringCase.marker}`,
-              `Missing type evidence: ${requiredType.join(", ")}`,
-              `Missing documentation evidence: ${requiredDocumentation.join(", ")}`,
-              `Missing signature evidence: ${requiredSignature.join(", ")}`,
-              `Type: ${typeText}`,
-              `Documentation: ${documentation}`,
-              `Signature: ${signatureHelp}`,
+              `作者夹具的已安装接口提示信息不完整：${authoringCase.fixture}，位置 ${authoringCase.marker}`,
+              `缺少类型证据：${requiredType.join(", ")}`,
+              `缺少文档证据：${requiredDocumentation.join(", ")}`,
+              `缺少签名证据：${requiredSignature.join(", ")}`,
+              `类型：${typeText}`,
+              `文档：${documentation}`,
+              `签名：${signatureHelp}`,
             ].join("\n"),
           );
         }
@@ -1059,8 +1145,7 @@ function verifyAuthoringLanguageService(
       const snapshot = api.updateSnapshot({ openProject: config });
       try {
         const target = snapshot.getProject(config);
-        if (target === undefined)
-          throw new Error(`Project unavailable: ${config}`);
+        if (target === undefined) throw new Error(`无法加载项目：${config}`);
         const diagnostics = target.program.getSemanticDiagnostics(
           resolve(project, fixture),
         );
@@ -1135,7 +1220,7 @@ async function verifyMissingStreamDiagnostic(
     allHeaders?.length !== headers.length
   ) {
     throw new Error(
-      `Missing-stream diagnostic first level did not expose only local contract evidence\n${firstLevel}\nFull diagnostics:\n${diagnostics}`,
+      `流记录诊断首层没有只暴露局部契约证据\n首层诊断：\n${firstLevel}\n完整诊断：\n${diagnostics}`,
     );
   }
 }
@@ -1165,19 +1250,28 @@ async function verifyInvalidStreamRecordNameDiagnostic(
   );
   if (result.error !== undefined) throw result.error;
   const diagnostics = `${result.stderr}\n${result.stdout}`;
-  const required = ["streamRecordMustBeLowerCamelCase", 'records: "bad_name"'];
+  const firstLevel = firstLevelCompilerMessages(diagnostics, fixture).join(
+    "\n",
+  );
+  const required = [
+    "invalidVariantName",
+    'command: "invalidRecordName"',
+    'location: "record"',
+    'variant: "bad_name"',
+    'reason: "lowerCamelCase"',
+  ];
   const headers = diagnostics.match(
     /^stream-record-name-unchecked\.ts\(\d+,\d+\): error TS\d+:/gm,
   );
   const allHeaders = diagnostics.match(/^.+\(\d+,\d+\): error TS\d+:/gm);
   if (
     result.status === 0 ||
-    required.some((fragment) => !diagnostics.includes(fragment)) ||
+    required.some((fragment) => !firstLevel.includes(fragment)) ||
     headers?.length !== 1 ||
     allHeaders?.length !== headers.length
   ) {
     throw new Error(
-      `Invalid-stream-record-name diagnostic did not expose only local contract evidence\n${diagnostics}`,
+      `流记录名称诊断首层没有暴露局部契约证据\n首层诊断：\n${firstLevel}\n完整诊断：\n${diagnostics}`,
     );
   }
 }
@@ -1240,7 +1334,7 @@ async function verifyExportableDeclarations(
   const consumerFixture = "exportable-contract-reconsumer.ts";
   const consumerSource = fixtures[consumerFixture];
   if (consumerSource === undefined)
-    throw new Error("Missing exportable declaration consumer fixture");
+    throw new Error("缺少可导出声明的消费者夹具");
   await writeFixtures(project, fixtures, [producerFixture]);
   await writeFile(
     resolve(project, consumerFixture),
@@ -1327,7 +1421,7 @@ async function verifyMissingCompletionDiagnostic(
     requiredFragments.some((fragment) => !firstLevel.includes(fragment))
   ) {
     throw new Error(
-      `Missing-completion diagnostic first level did not expose its local contract evidence\n${firstLevel}\nFull diagnostics:\n${diagnostics}`,
+      `补全诊断首层没有暴露局部契约证据\n首层诊断：\n${firstLevel}\n完整诊断：\n${diagnostics}`,
     );
   }
   const unrelatedFragments = [
@@ -1379,7 +1473,7 @@ async function verifyMissingNamedVariantDiagnostic(
     requiredFragments.some((fragment) => !firstLevel.includes(fragment))
   ) {
     throw new Error(
-      `Named-variant diagnostic first level did not expose its local contract evidence\n${firstLevel}\nFull diagnostics:\n${diagnostics}`,
+      `具名变体诊断首层没有暴露局部契约证据\n首层诊断：\n${firstLevel}\n完整诊断：\n${diagnostics}`,
     );
   }
   const diagnosticHeaders = diagnostics.match(

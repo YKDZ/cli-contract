@@ -370,6 +370,77 @@ void test("动态帮助事实模板在根装配时聚合报告非法槽位", () 
   );
 });
 
+void test("帮助模板错误保留非法原值并继续聚合定义期问题", () => {
+  const helpDefinition: HelpCapabilityDefinition = JSON.parse(
+    '{"wording":{"choices":42,"default":null,"countExactly":{},"whenThen":"满足 {unknown}"}}',
+  );
+  const definition = {
+    root: "choose",
+    help: helpCapability(helpDefinition),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 0,
+    commands: {
+      choose: {
+        kind: "rootCommand",
+        name: "选择模式",
+        description: "选择模式",
+        input: z.object({}),
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({
+          outcome,
+        }: {
+          readonly outcome: { completion(): unknown };
+        }) => outcome.completion(),
+      },
+    },
+  };
+
+  assert.throws(
+    () => defineCli()(definition as never),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidHelpFactTemplate",
+          path: ["help", "wording", "choices"],
+          slot: "choices",
+          received: 42,
+          reason: "singleLine",
+        },
+        {
+          code: "invalidHelpFactTemplate",
+          path: ["help", "wording", "default"],
+          slot: "default",
+          received: null,
+          reason: "singleLine",
+        },
+        {
+          code: "invalidHelpFactTemplate",
+          path: ["help", "wording", "countExactly"],
+          slot: "countExactly",
+          received: {},
+          reason: "singleLine",
+        },
+        {
+          code: "invalidHelpFactTemplate",
+          path: ["help", "wording", "whenThen"],
+          slot: "whenThen",
+          received: "满足 {unknown}",
+          reason: "placeholder",
+        },
+        {
+          code: "invalidUsageFailureExitCode",
+          received: 0,
+          minimum: 1,
+          maximum: 255,
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
 void test("命令组占位词静态与动态判断同界", () => {
   const invalidTemplates = [
     { received: "   ", reason: "empty" },

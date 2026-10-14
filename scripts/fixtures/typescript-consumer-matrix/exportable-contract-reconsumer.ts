@@ -156,14 +156,14 @@ if (result.kind === "data") {
   result.command satisfies "inspect";
   result.variant satisfies "found";
   result.data.count satisfies number;
-  // @ts-expect-error result variants remain associated with their branch.
+  // @ts-expect-error 结果变体仍与所属分支保持关联。
   result.variant satisfies "unavailable";
 }
 if (result.kind === "failure") {
   result.command satisfies "inspect" | "tail";
   result.variant satisfies "unavailable";
   result.data.reason satisfies "offline" | "denied";
-  // @ts-expect-error failure variants remain a closed set.
+  // @ts-expect-error 失败变体仍保持闭合集合。
   result.variant satisfies "found";
 }
 type TailResult = Extract<CliContractResult<typeof cli>, { command: "tail" }>;
