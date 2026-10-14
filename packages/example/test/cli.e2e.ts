@@ -112,6 +112,97 @@ void test("查询成功以文本行组写入 stdout 并退出零", () => {
   assert.equal(result.stderr, "");
 });
 
+void test("标识校验以完成结果正常退出", () => {
+  const result = invoke("validate", "--id", "alice");
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout, "");
+  assert.equal(result.stderr, "");
+});
+
+void test("电子邮箱模式通过同一校验命令完成", () => {
+  const result = invoke("validate", "--email", "alice@example.com");
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout, "");
+  assert.equal(result.stderr, "");
+});
+
+void test("数量约束同时出现在帮助和进程用法问题中", () => {
+  const help = invoke("validate", "--help");
+  assert.equal(help.status, 0);
+  assert.ok(help.stdout.includes("id, email 恰好出现 1 项"));
+  assert.ok(
+    help.stdout.includes("当全部满足 domain 已提供 时，必须提供 email"),
+  );
+
+  const result = invoke(
+    "validate",
+    "--id",
+    "alice",
+    "--email",
+    "alice@example.com",
+  );
+  assert.equal(result.status, 64);
+  assert.equal(result.stdout, "");
+  assert.deepEqual(JSON.parse(result.stderr), {
+    schemaVersion: "2",
+    command: "validate",
+    kind: "usageFailure",
+    issues: [
+      {
+        code: "countConstraintViolation",
+        min: 1,
+        max: 1,
+        presentFields: ["id", "email"],
+        absentFields: [],
+      },
+    ],
+    usage: "user validate [--id <id>] [--email <email>] [--domain <domain>]",
+    helpArgv: ["user", "validate", "--help"],
+  });
+});
+
+void test("邮箱域条件在子进程中返回准确的条件失败", () => {
+  const result = invoke("validate", "--id", "alice", "--domain", "example.com");
+  assert.equal(result.status, 64);
+  assert.equal(result.stdout, "");
+  assert.deepEqual(JSON.parse(result.stderr), {
+    schemaVersion: "2",
+    command: "validate",
+    kind: "usageFailure",
+    issues: [
+      {
+        code: "conditionalConstraintViolation",
+        branch: "then",
+        conditions: [{ kind: "present", field: "domain", present: true }],
+        missingRequiredFields: ["email"],
+        presentForbiddenFields: [],
+      },
+    ],
+    usage: "user validate [--id <id>] [--email <email>] [--domain <domain>]",
+    helpArgv: ["user", "validate", "--help"],
+  });
+});
+
+void test("指定域不匹配保留具名应用失败与退出状态", () => {
+  const result = invoke(
+    "validate",
+    "--email",
+    "alice@elsewhere.com",
+    "--domain",
+    "example.com",
+    "--json",
+  );
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, "");
+  assert.deepEqual(JSON.parse(result.stderr), {
+    schemaVersion: "2",
+    command: "validate",
+    kind: "failure",
+    variant: "emailDomainMismatch",
+    data: { email: "alice@elsewhere.com", domain: "example.com" },
+  });
+});
+
 void test("结构化成功保留具名事实，stderr 为空", () => {
   const result = invoke("get", "alice", "--json");
   assert.equal(result.status, 0);
@@ -168,7 +259,7 @@ void test("根帮助展示命令，日志帮助指向当前命令", () => {
   const root = invoke("--help");
   assert.equal(root.status, 0);
   assert.equal(root.stderr, "");
-  for (const fact of ["命令", "get", "logs"])
+  for (const fact of ["命令", "get", "logs", "validate"])
     assert.ok(root.stdout.includes(fact));
   const logs = invoke("logs", "--help");
   assert.equal(logs.status, 0);

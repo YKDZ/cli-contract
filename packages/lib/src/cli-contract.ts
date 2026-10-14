@@ -447,11 +447,9 @@ export type FieldDefinition =
 export type FieldDefinitions = Readonly<Record<string, FieldDefinition>>;
 
 /**
- * 由调用语法拥有、可同时投影到 parser 和 Draft 2020-12 的字段关系。
- * 禁配事实可检查所有输入字段的出现状态，以及单值 flag、value option、positional
- * 的等值状态。动态声明在定义期检查可观察的模式候选值。
+ * 可投影到 parser 和 Draft 2020-12 的有限字段关系：`count` 限制 raw 字段出现数，`when` 根据 raw 事实选择必需或禁止效果，
+ * `forbiddenCombination` 拒绝指定事实组合。字段必填、候选值与格式由输入模式表达；依赖实际值计算、时间或业务状态的规则由 handler 返回具名失败。
  */
-/** 由调用语法拥有、可同时投影到 parser 和 Draft 2020-12 的字段关系。 */
 export type UsageConstraint<
   Fields extends FieldDefinitions = FieldDefinitions,
   Input = unknown,

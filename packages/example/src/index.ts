@@ -80,6 +80,66 @@ const logs = define.command("logs")({
   },
 });
 
+const validate = define.command("validate")({
+  kind: "command",
+  parent: "users",
+  name: "validate",
+  description: "校验用户标识格式与邮箱域",
+  fields: {
+    id: { kind: "valueOption", longOption: "--id", description: "用户标识" },
+    email: {
+      kind: "valueOption",
+      longOption: "--email",
+      description: "电子邮箱",
+    },
+    domain: {
+      kind: "valueOption",
+      longOption: "--domain",
+      description: "邮箱域名",
+    },
+  },
+  input: z.object({
+    id: z.string().min(1).optional(),
+    email: z.string().email().optional(),
+    domain: z.string().min(1).optional(),
+  }),
+  // 模式分别校验字段格式；数量约束选择一种标识，域名条件只允许用于邮箱。
+  usageConstraints: [
+    { kind: "count", fields: ["id", "email"], min: 1, max: 1 },
+    {
+      kind: "when",
+      all: [{ kind: "present", field: "domain" }],
+      // oxlint-disable-next-line unicorn/no-thenable -- then 是 when 条件的公开分支名。
+      then: { require: ["email"] },
+    },
+  ],
+  success: { kind: "completion", text: () => text.silent },
+  failures: {
+    emailDomainMismatch: {
+      description: "邮箱不属于指定域",
+      schema: z.object({
+        email: z.string().email(),
+        domain: z.string().min(1),
+      }),
+      exitCode: 1,
+      text: ({ email, domain }) =>
+        text.lines([`邮箱 ${email} 不属于指定域 ${domain}`]),
+    },
+  },
+  handler({ input, outcome }) {
+    if (input.email !== undefined && input.domain !== undefined) {
+      const emailDomain = input.email.slice(input.email.lastIndexOf("@") + 1);
+      if (emailDomain.toLowerCase() !== input.domain.toLowerCase()) {
+        return outcome.failure.emailDomainMismatch({
+          email: input.email,
+          domain: input.domain,
+        });
+      }
+    }
+    return outcome.completion();
+  },
+});
+
 export const cli = define({
   root: "users",
   help: helpCapability({
@@ -94,6 +154,10 @@ export const cli = define({
       commandPlaceholder: "命令",
       choices: "（候选：{choices}）",
       default: "（默认：{value}）",
+      countExactly: "{fields} 恰好出现 {count} 项",
+      whenThen: "当全部满足 {facts} 时，{then}",
+      require: "必须提供 {fields}",
+      present: "{field} 已提供",
     },
   }),
   // 启用 text 会要求每个结果变体都有呈现器，新增变体时也会检查。
@@ -103,8 +167,13 @@ export const cli = define({
   }),
   usageFailureExitCode: 64,
   commands: {
-    users: { kind: "rootGroup", name: "user", description: "用户查询与日志" },
+    users: {
+      kind: "rootGroup",
+      name: "user",
+      description: "用户查询、标识校验与日志",
+    },
     ...lookup,
     ...logs,
+    ...validate,
   },
 });

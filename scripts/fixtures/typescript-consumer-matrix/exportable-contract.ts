@@ -5,6 +5,7 @@ import {
   outputCapability,
   type CliContract,
   type ContractSchema,
+  type UsageConstraint,
 } from "@ykdz/cli-contract";
 
 type Dependencies = Readonly<{
@@ -172,6 +173,23 @@ export const tailCombination = define.command("tail")({
     return outcome.streamSuccess();
   },
 });
+
+type InspectUsageConstraint = UsageConstraint<
+  {
+    readonly query: {
+      readonly kind: "valueOption";
+      readonly longOption: "--query";
+      readonly description: "查询";
+    };
+    readonly dryRun: {
+      readonly kind: "flag";
+      readonly longOption: "--dry-run";
+      readonly description: "仅演练";
+    };
+  },
+  InspectInput
+>;
+void (0 as unknown as InspectUsageConstraint);
 
 export const cli = define({
   root: "tool",

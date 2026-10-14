@@ -3,7 +3,7 @@ import { lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 
-import { API } from "typescript-7/unstable/sync";
+import { API, SignatureKind, SymbolFlags } from "typescript-7/unstable/sync";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const corePackage = "@ykdz/cli-contract";
@@ -73,6 +73,10 @@ async function readFixtures(): Promise<Readonly<Record<string, string>>> {
         resolve(repositoryRoot, "packages/lib/test", hierarchyFixture),
         "utf8",
       ).then((source) => [hierarchyFixture, source]),
+      readFile(
+        resolve(repositoryRoot, "packages/example/src/index.ts"),
+        "utf8",
+      ).then((source) => ["authoring-example.ts", source]),
     ]),
   );
 }
@@ -152,6 +156,7 @@ async function verifyCoreOnly(
     await writeFixtures(project, fixtures, [
       "core-node.ts",
       "core-root.ts",
+      "authoring-example.ts",
       "invalid-count-constraint.ts",
       "invalid-conditional-usage-constraint.ts",
       "invalid-command-combination.ts",
@@ -188,6 +193,7 @@ async function verifyCoreOnly(
       for (const fixture of [
         "core-root.ts",
         "core-node.ts",
+        "authoring-example.ts",
         "schema-input.ts",
         "valid-help-fact-templates.ts",
       ]) {
@@ -596,11 +602,170 @@ interface LanguageServiceDiagnosticCase {
   readonly requiredAny?: readonly string[];
 }
 
+interface AuthoringLanguageServiceCase {
+  readonly fixture: string;
+  readonly marker: string;
+  readonly token: string;
+  readonly declaredType?: boolean;
+  readonly requiredType: readonly string[];
+  readonly requiredDocumentation?: readonly string[];
+  readonly requiredSignature?: readonly string[];
+}
+
 function verifyAuthoringLanguageService(
   project: string,
   resolution: (typeof resolutions)[number],
   fixtures: Readonly<Record<string, string>>,
 ): void {
+  const authoringCases: readonly AuthoringLanguageServiceCase[] = [
+    {
+      fixture: "authoring-example.ts",
+      marker: "defineCli<Dependencies>",
+      token: "defineCli",
+      requiredType: ["DefineCli<Dependencies>"],
+      requiredDocumentation: ["闭合 CLI 契约", "结果投影"],
+      requiredSignature: ["DefineCli<Dependencies>"],
+    },
+    {
+      fixture: "authoring-example.ts",
+      marker: 'define.command("lookup")',
+      token: "command",
+      requiredType: ["DefineCommand<Command, Dependencies>"],
+      requiredDocumentation: ["创建可执行后代", "最终", "装配"],
+      requiredSignature: [
+        "command: Command",
+        "DefineCommand<Command, Dependencies>",
+      ],
+    },
+    {
+      fixture: "authoring-example.ts",
+      marker: "help: helpCapability(",
+      token: "helpCapability",
+      requiredType: ["HelpCapability"],
+      requiredDocumentation: ["装配全树帮助", "wording"],
+      requiredSignature: ["definition"],
+    },
+    {
+      fixture: "authoring-example.ts",
+      marker: "output: outputCapability(",
+      token: "outputCapability",
+      requiredType: ["OutputCapability"],
+      requiredDocumentation: ["根契约", "整棵命令树"],
+      requiredSignature: ["definition"],
+    },
+    {
+      fixture: "authoring-example.ts",
+      marker: "outcome.completion()",
+      token: "completion",
+      requiredType: ['CompletionFact<"validate">'],
+      requiredSignature: ["completion(): CompletionFact<Command>"],
+    },
+    {
+      fixture: "authoring-example.ts",
+      marker: "outcome.data.found",
+      token: "found",
+      requiredType: ['DataFact<"lookup", "found", { name: string; }>'],
+      requiredSignature: ["payload: { name: string; }"],
+    },
+    {
+      fixture: "authoring-example.ts",
+      marker: "outcome.failure.notFound",
+      token: "notFound",
+      requiredType: ['FailureFact<"lookup", "notFound", { id: string; }>'],
+      requiredSignature: ["payload: { id: string; }"],
+    },
+    {
+      fixture: "authoring-example.ts",
+      marker: "outcome.record.entry",
+      token: "entry",
+      requiredType: ['StreamRecordFact<"logs", "entry", { message: string; }>'],
+      requiredSignature: ["payload: { message: string; }"],
+    },
+    {
+      fixture: "authoring-example.ts",
+      marker: "outcome.streamSuccess()",
+      token: "streamSuccess",
+      requiredType: ['StreamSuccessFact<"logs">'],
+      requiredSignature: ["streamSuccess(): StreamSuccessFact<Command>"],
+    },
+    {
+      fixture: "authoring-example.ts",
+      marker: "usageConstraints: [",
+      token: "usageConstraints",
+      requiredType: [
+        'kind: "count"',
+        'kind: "when"',
+        'kind: "present"',
+        'field: "domain"',
+        'require: ["email"]',
+      ],
+    },
+    {
+      fixture: "authoring-example.ts",
+      marker: "lines([",
+      token: "lines",
+      requiredType: ["TextLines"],
+      requiredDocumentation: ["非空元组行组", "completion", "stream record"],
+      requiredSignature: ["readonly [string, ...string[]]"],
+    },
+    {
+      fixture: "authoring-example.ts",
+      marker: "fragment(`",
+      token: "fragment",
+      requiredType: ["TextFragment"],
+      requiredDocumentation: ["stream record", "增量文本"],
+      requiredSignature: ["value: string"],
+    },
+    {
+      fixture: "authoring-example.ts",
+      marker: "text.silent",
+      token: "silent",
+      requiredType: ["SilentText"],
+      requiredDocumentation: ["completion 成功", "呈现器"],
+    },
+    {
+      fixture: "exportable-contract.ts",
+      marker: 'kind: "forbiddenCombination"',
+      token: "kind",
+      requiredType: ['"forbiddenCombination"'],
+    },
+    {
+      fixture: "exportable-contract.ts",
+      marker: 'kind: "forbiddenCombination",\n      all: [',
+      token: "all",
+      requiredType: [
+        '{ kind: "equals"; field: "query"; value: "alpha"; }',
+        '{ kind: "equals"; field: "dryRun"; value: true; }',
+      ],
+    },
+    {
+      fixture: "exportable-contract.ts",
+      marker: "ContractSchema<InspectInput",
+      token: "ContractSchema",
+      declaredType: true,
+      requiredType: ["ContractSchema<Input, Output>"],
+      requiredDocumentation: [
+        "运行时验证",
+        "JSON Schema 投影",
+        "输入字段的必填",
+        "候选值",
+        "格式",
+      ],
+    },
+    {
+      fixture: "exportable-contract.ts",
+      marker: "UsageConstraint<",
+      token: "UsageConstraint",
+      declaredType: true,
+      requiredType: ["UsageConstraint<Fields, Input>"],
+      requiredDocumentation: [
+        "parser",
+        "Draft 2020-12",
+        "forbiddenCombination",
+        "具名失败",
+      ],
+    },
+  ];
   const cases: readonly LanguageServiceDiagnosticCase[] = [
     {
       fixture: "invalid-conditional-usage-constraint.ts",
@@ -776,35 +941,115 @@ function verifyAuthoringLanguageService(
   ] as const;
   const api = new API({ cwd: project });
   try {
-    const coreSource = fixtures["core-root.ts"];
-    if (coreSource === undefined) throw new Error("Missing core root fixture");
-    const coreConfig = resolve(
-      project,
-      `tsconfig.${resolution}.core-root.json`,
-    );
-    const coreSnapshot = api.updateSnapshot({ openProject: coreConfig });
-    try {
-      const coreProject = coreSnapshot.getProject(coreConfig);
-      if (coreProject === undefined)
-        throw new Error(`Project unavailable: ${coreConfig}`);
-      for (const name of ["defineCli", "helpCapability", "outputCapability"]) {
-        const position = coreSource.indexOf(name);
-        const symbol = coreProject.checker.getSymbolAtPosition(
-          resolve(project, "core-root.ts"),
-          position,
+    for (const authoringCase of authoringCases) {
+      const source = fixtures[authoringCase.fixture];
+      if (source === undefined)
+        throw new Error(`Missing authoring fixture: ${authoringCase.fixture}`);
+      const markerPosition = source.indexOf(authoringCase.marker);
+      const tokenOffset = authoringCase.marker.indexOf(authoringCase.token);
+      if (markerPosition < 0 || tokenOffset < 0) {
+        throw new Error(
+          `Authoring marker unavailable: ${authoringCase.fixture} ${authoringCase.marker}`,
         );
-        const documentation =
-          symbol === undefined
-            ? ""
-            : coreProject.checker.getDocumentationCommentOfSymbol(
-                coreProject.checker.getAliasedSymbol(symbol),
-              );
-        if (position < 0 || documentation.trim() === "") {
-          throw new Error(`Published authoring hint unavailable: ${name}`);
-        }
       }
-    } finally {
-      coreSnapshot.dispose();
+      const position = markerPosition + tokenOffset;
+      const config = resolve(
+        project,
+        `tsconfig.${resolution}.${authoringCase.fixture.replace(".ts", "")}.json`,
+      );
+      const snapshot = api.updateSnapshot({ openProject: config });
+      try {
+        const target = snapshot.getProject(config);
+        if (target === undefined)
+          throw new Error(`Project unavailable: ${config}`);
+        const file = resolve(project, authoringCase.fixture);
+        const installedDeclaration = resolve(
+          project,
+          "node_modules/@ykdz/cli-contract/dist/index.d.ts",
+        );
+        if (
+          !target.program
+            .getSourceFileNames()
+            .some((name) => resolve(name) === installedDeclaration)
+        ) {
+          throw new Error(
+            `Installed public declaration was not loaded for ${authoringCase.fixture}`,
+          );
+        }
+        const diagnostics = target.program.getSemanticDiagnostics(file);
+        if (diagnostics.length > 0) {
+          throw new Error(
+            `Authoring fixture has diagnostics: ${authoringCase.fixture}\n${diagnostics
+              .map((diagnostic) => diagnostic.text)
+              .join("\n")}`,
+          );
+        }
+        const valueType = target.checker.getTypeAtPosition(file, position);
+        const symbol = target.checker.getSymbolAtPosition(file, position);
+        if (valueType === undefined || symbol === undefined) {
+          throw new Error(
+            `Authoring hover unavailable: ${authoringCase.fixture} ${authoringCase.marker}`,
+          );
+        }
+        const resolvedSymbol =
+          (symbol.flags & SymbolFlags.Alias) !== 0
+            ? target.checker.getAliasedSymbol(symbol)
+            : symbol;
+        const type = authoringCase.declaredType
+          ? target.checker.getDeclaredTypeOfSymbol(resolvedSymbol)
+          : valueType;
+        const typeText = target.checker.typeToString(type);
+        const documentation = resolvedSymbol.getDocumentationComment(
+          target.checker,
+        );
+        const signatures = target.checker.getSignaturesOfType(
+          type,
+          SignatureKind.Call,
+        );
+        const signatureHelp = signatures
+          .map((signature) => {
+            const declaration = signature.declaration?.resolve(target);
+            if (declaration === undefined) return typeText;
+            const printed = target.emitter.printNode(declaration);
+            const parameters = signature.getParameters().map((parameter) => {
+              const parameterType = target.checker.getTypeOfSymbolAtLocation(
+                parameter,
+                declaration,
+              );
+              return `${parameter.name}: ${target.checker.typeToString(parameterType, declaration)}`;
+            });
+            return `${printed}\n${parameters.join("; ")}`;
+          })
+          .join("\n");
+        const requiredType = authoringCase.requiredType.filter(
+          (fragment) => !typeText.includes(fragment),
+        );
+        const requiredDocumentation = (
+          authoringCase.requiredDocumentation ?? []
+        ).filter((fragment) => !documentation.includes(fragment));
+        const requiredSignature = (
+          authoringCase.requiredSignature ?? []
+        ).filter((fragment) => !signatureHelp.includes(fragment));
+        if (
+          requiredType.length > 0 ||
+          requiredDocumentation.length > 0 ||
+          requiredSignature.length > 0
+        ) {
+          throw new Error(
+            [
+              `Installed authoring discovery is incomplete for ${authoringCase.fixture} at ${authoringCase.marker}`,
+              `Missing type evidence: ${requiredType.join(", ")}`,
+              `Missing documentation evidence: ${requiredDocumentation.join(", ")}`,
+              `Missing signature evidence: ${requiredSignature.join(", ")}`,
+              `Type: ${typeText}`,
+              `Documentation: ${documentation}`,
+              `Signature: ${signatureHelp}`,
+            ].join("\n"),
+          );
+        }
+      } finally {
+        snapshot.dispose();
+      }
     }
     for (const { fixture, count, required, requiredAny } of cases) {
       const config = resolve(
