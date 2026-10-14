@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
 export const repositoryRoot = resolve(import.meta.dirname, "..");
+export const installedRuntimeDevDependencies = { ajv: "8.20.0" } as const;
 
 export function runCommand(
   command: string,

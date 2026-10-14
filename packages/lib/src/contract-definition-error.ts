@@ -27,7 +27,16 @@ export type ContractDefinitionIssue =
         | "default"
         | "requires"
         | "exclusive"
+        | "present"
+        | "equals"
         | "forbiddenCombination";
+    }>
+  | Readonly<{
+      readonly code: "invalidHelpFactTemplate";
+      readonly path: readonly string[];
+      readonly slot: string;
+      readonly received: string | null;
+      readonly reason: "singleLine" | "empty" | "placeholder";
     }>
   | Readonly<
       SchemaDefinitionTarget & {
@@ -305,7 +314,7 @@ export type ContractDefinitionIssue =
       readonly command: string;
       readonly constraint: "requires" | "exclusive" | "forbiddenCombination";
       readonly index: number;
-      readonly member: "field" | "requires" | "fields" | "values.field";
+      readonly member: "field" | "requires" | "fields" | "all.field";
       readonly field: string;
     }>
   | Readonly<{
@@ -318,13 +327,18 @@ export type ContractDefinitionIssue =
   | Readonly<{
       readonly code: "invalidUsageConstraintValue";
       readonly command: string;
+      readonly constraint: "forbiddenCombination";
+      readonly index: number;
+      readonly member: "all.value";
       readonly field: string;
-      readonly expected: "boolean" | "string";
+      readonly actual: unknown;
+      readonly expected: boolean | string | readonly string[];
     }>
   | Readonly<{
       readonly code: "contradictoryUsageConstraint";
       readonly command: string;
       readonly constraint: "requires" | "exclusive" | "forbiddenCombination";
+      readonly member?: "all";
       readonly fields: readonly string[];
     }>;
 
@@ -365,6 +379,8 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `CLI 声明包含未知属性 ${issue.path.join(".")}`;
     case "missingHelpFactTemplate":
       return `命令 ${issue.command} 的帮助事实缺少 ${issue.slot} 模板`;
+    case "invalidHelpFactTemplate":
+      return `帮助事实模板 ${issue.slot} 无效：${issue.reason}`;
     case "missingSchemaCapability":
       return `${formatSchemaTarget(issue)} 缺少 ${issue.capability} 能力`;
     case "schemaDialectMismatch":
@@ -462,9 +478,24 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
     case "inapplicableUsageConstraintField":
       return `命令 ${issue.command} 的 ${issue.constraint} usage constraint 不适用于字段 ${issue.field}（${issue.kind}）`;
     case "invalidUsageConstraintValue":
-      return `命令 ${issue.command} 的 usage constraint 字段 ${issue.field} 必须使用 ${issue.expected} 离散值`;
+      return `命令 ${issue.command} 的禁配事实 ${issue.field}=${formatIssueValue(issue.actual)} 不属于可接受值 ${JSON.stringify(issue.expected)}`;
     case "contradictoryUsageConstraint":
       return `命令 ${issue.command} 的 ${issue.constraint} usage constraint 内部矛盾：${issue.fields.join(", ")}`;
+  }
+}
+
+function formatIssueValue(value: unknown): string {
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    return String(value);
+  }
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    try {
+      return String(value);
+    } catch {
+      return "<无法显示>";
+    }
   }
 }
 

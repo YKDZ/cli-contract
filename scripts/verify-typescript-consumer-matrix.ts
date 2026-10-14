@@ -16,6 +16,15 @@ interface CandidateTarballs {
   readonly testing: string;
 }
 
+interface AuthoringDiagnosticCase {
+  readonly fixture: string;
+  readonly expectedCodes: readonly string[];
+  readonly required: readonly string[];
+  readonly requiredAny?: readonly string[];
+  readonly allowAdditionalDiagnostics?: boolean;
+  readonly forbidden?: readonly string[];
+}
+
 async function main(): Promise<void> {
   const candidate = await parseCandidateTarballs(process.argv.slice(2));
   const fixtures = await readFixtures();
@@ -36,7 +45,9 @@ async function readFixtures(): Promise<Readonly<Record<string, string>>> {
         "core-root.ts",
         "exportable-contract.ts",
         "exportable-contract-reconsumer.ts",
+        "invalid-command-combination.ts",
         "invalid-forbidden-combination.ts",
+        "invalid-help-fact-templates.ts",
         "input-schema-raw-mismatch.ts",
         "named-variant-missing.ts",
         "schema-input.ts",
@@ -44,6 +55,7 @@ async function readFixtures(): Promise<Readonly<Record<string, string>>> {
         "stream-text-coverage.ts",
         "unknown-usage-constraint-field.ts",
         "unexpected-text-presenter.ts",
+        "valid-help-fact-templates.ts",
       ].map(async (name) => [
         name,
         await readFile(
@@ -138,7 +150,9 @@ async function verifyCoreOnly(
     await writeFixtures(project, fixtures, [
       "core-node.ts",
       "core-root.ts",
+      "invalid-command-combination.ts",
       "invalid-forbidden-combination.ts",
+      "invalid-help-fact-templates.ts",
       "input-schema-raw-mismatch.ts",
       "completion-missing.ts",
       "named-variant-missing.ts",
@@ -147,6 +161,7 @@ async function verifyCoreOnly(
       "stream-text-coverage.ts",
       "unknown-usage-constraint-field.ts",
       "unexpected-text-presenter.ts",
+      "valid-help-fact-templates.ts",
       "hierarchy-text-coverage.typecheck.ts",
     ]);
     runCommand(
@@ -170,6 +185,7 @@ async function verifyCoreOnly(
         "core-root.ts",
         "core-node.ts",
         "schema-input.ts",
+        "valid-help-fact-templates.ts",
       ]) {
         await compileFixture(project, resolution, fixture);
       }
@@ -276,7 +292,7 @@ async function verifyHierarchyTextCoverageDiagnostic(
   }
 }
 
-const authoringDiagnosticCases = [
+const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
   {
     fixture: "unknown-usage-constraint-field.ts",
     expectedCodes: [
@@ -292,22 +308,94 @@ const authoringDiagnosticCases = [
     ],
   },
   {
+    fixture: "invalid-command-combination.ts",
+    expectedCodes: ["unknownDefinitionProperty"],
+    required: ['command: "inspect"', 'member: "all"', 'property: "typo"'],
+    allowAdditionalDiagnostics: true,
+    forbidden: ["No overload matches this call", "StreamHandlerContext"],
+  },
+  {
     fixture: "invalid-forbidden-combination.ts",
     expectedCodes: [
       "invalidUsageConstraintValue",
+      "invalidUsageConstraintValue",
       "inapplicableUsageConstraintField",
+      "contradictoryUsageConstraint",
+      "contradictoryUsageConstraint",
+      "unknownDefinitionProperty",
+      "unknownDefinitionProperty",
+      "invalidUsageConstraintValue",
+      "invalidUsageConstraintValue",
+      "unknownDefinitionProperty",
+      "unknownDefinitionProperty",
+      "invalidUsageConstraintValue",
     ],
     required: [
       'command: "invalidValue"',
       'command: "invalidKind"',
+      'command: "invalidHierarchy"',
+      'command: "invalidContradiction"',
+      'command: "contradictoryHierarchy"',
+      'command: "invalidClosedConstraint"',
+      'command: "invalidClosedFact"',
+      'command: "invalidClosedFactUnion"',
+      'command: "invalidClosedFactUnionHierarchy"',
+      'command: "invalidNumericValue"',
+      'command: "invalidNullValue"',
+      'command: "invalidObjectValue"',
       'constraint: "forbiddenCombination"',
-      'member: "values.value"',
-      'member: "values.field"',
+      'member: "all.value"',
+      'member: "all.field"',
       'field: "auth"',
+      'field: "mode"',
       'field: "target"',
       'actual: "yes"',
-      "expected: boolean",
-      'kind: "positional"',
+      'actual: "staging"',
+      "actual: 42",
+      "actual: null",
+      "readonly actual: {",
+      "expected: true",
+      'kind: "repeatableOption"',
+      'member: "all"',
+      'fields: "mode"',
+      'property: "typo"',
+      'member: "forbiddenCombination"',
+    ],
+    requiredAny: ['expected: "safe" | "force"', 'expected: "force" | "safe"'],
+    allowAdditionalDiagnostics: true,
+  },
+  {
+    fixture: "invalid-help-fact-templates.ts",
+    expectedCodes: [
+      "invalidHelpFactTemplate",
+      "invalidHelpFactTemplate",
+      "invalidHelpFactTemplate",
+      "unknownDefinitionProperty",
+      "invalidHelpFactTemplate",
+      "invalidHelpFactTemplate",
+      "invalidHelpFactTemplate",
+      "unknownDefinitionProperty",
+      "invalidHelpFactTemplate",
+      "invalidHelpFactTemplate",
+      "unknownDefinitionProperty",
+    ],
+    required: [
+      'slot: "commandPlaceholder"',
+      'received: "   "',
+      'reason: "empty"',
+      'received: "<命令组>"',
+      'reason: "placeholder"',
+      'slot: "choices"',
+      'received: "候选 {choises}"',
+      'property: "choises"',
+      'path: readonly ["help", "wording", "choises"]',
+      'reason: "placeholder"',
+      'slot: "present"',
+      'received: "字段"',
+      'slot: "equals"',
+      'received: "字段 {field}"',
+      'slot: "forbiddenCombination"',
+      'reason: "singleLine"',
     ],
   },
   {
@@ -333,6 +421,7 @@ const authoringDiagnosticCases = [
       "schemaInput: string",
       "schemaInput: number[]",
     ],
+    allowAdditionalDiagnostics: true,
   },
   {
     fixture: "unexpected-text-presenter.ts",
@@ -345,7 +434,7 @@ const authoringDiagnosticCases = [
       'unexpected: "text"',
     ],
   },
-] as const;
+];
 
 function firstLevelCompilerMessages(
   output: string,
@@ -375,7 +464,14 @@ async function verifyAuthoringDiagnostic(
   resolution: (typeof resolutions)[number],
   diagnostic: (typeof authoringDiagnosticCases)[number],
 ): Promise<void> {
-  const { fixture, expectedCodes, required } = diagnostic;
+  const {
+    fixture,
+    expectedCodes,
+    required,
+    requiredAny = [],
+    allowAdditionalDiagnostics = false,
+    forbidden = [],
+  } = diagnostic;
   const tsconfig = `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`;
   await writeFile(
     resolve(project, tsconfig),
@@ -401,7 +497,9 @@ async function verifyAuthoringDiagnostic(
   });
   if (
     result.status === 0 ||
-    headers.length !== expectedCodes.length ||
+    (allowAdditionalDiagnostics
+      ? headers.length < expectedCodes.length
+      : headers.length !== expectedCodes.length) ||
     firstLevelCodes.length !== expectedCodes.length ||
     firstLevelCodes
       .sort((left, right) => left.localeCompare(right))
@@ -409,12 +507,34 @@ async function verifyAuthoringDiagnostic(
       [...expectedCodes]
         .sort((left, right) => left.localeCompare(right))
         .join(",") ||
-    required.some((fragment) => !firstLevel.includes(fragment))
+    required.some((fragment) => !firstLevel.includes(fragment)) ||
+    (requiredAny.length > 0 &&
+      !requiredAny.some((fragment) => firstLevel.includes(fragment))) ||
+    forbidden.some((fragment) => firstLevel.includes(fragment))
   ) {
     throw new Error(
-      `Published authoring diagnostic first level is incomplete for ${fixture}\n${firstLevel}\nFull diagnostics:\n${diagnostics}`,
+      [
+        `Published authoring diagnostic first level is incomplete for ${fixture}`,
+        `Expected codes: ${expectedCodes.join(", ")}`,
+        `Observed codes: ${firstLevelCodes.join(", ")}`,
+        `Missing first-level evidence: ${required
+          .filter((fragment) => !firstLevel.includes(fragment))
+          .join(", ")}`,
+        requiredAny.length === 0 ||
+        requiredAny.some((fragment) => firstLevel.includes(fragment))
+          ? ""
+          : `Missing one of first-level evidence: ${requiredAny.join(" OR ")}`,
+        firstLevel,
+      ].join("\n"),
     );
   }
+}
+
+interface LanguageServiceDiagnosticCase {
+  readonly fixture: string;
+  readonly count: number;
+  readonly required: readonly string[];
+  readonly requiredAny?: readonly string[];
 }
 
 function verifyAuthoringLanguageService(
@@ -422,7 +542,7 @@ function verifyAuthoringLanguageService(
   resolution: (typeof resolutions)[number],
   fixtures: Readonly<Record<string, string>>,
 ): void {
-  const cases = [
+  const cases: readonly LanguageServiceDiagnosticCase[] = [
     {
       fixture: "unknown-usage-constraint-field.ts",
       count: 2,
@@ -435,25 +555,76 @@ function verifyAuthoringLanguageService(
       ],
     },
     {
-      fixture: "invalid-forbidden-combination.ts",
+      fixture: "invalid-command-combination.ts",
       count: 2,
       required: [
+        "unknownDefinitionProperty",
+        'command: "inspect"',
+        'member: "all"',
+        'property: "typo"',
+      ],
+    },
+    {
+      fixture: "invalid-forbidden-combination.ts",
+      count: 13,
+      required: [
         "invalidUsageConstraintValue",
+        "unknownDefinitionProperty",
         "inapplicableUsageConstraintField",
         'command: "invalidValue"',
         'command: "invalidKind"',
-        'member: "values.value"',
-        'member: "values.field"',
+        'command: "invalidHierarchy"',
+        'command: "invalidContradiction"',
+        'command: "contradictoryHierarchy"',
+        'command: "invalidClosedConstraint"',
+        'command: "invalidClosedFact"',
+        'command: "invalidClosedFactUnion"',
+        'command: "invalidClosedFactUnionHierarchy"',
+        'command: "invalidNumericValue"',
+        'command: "invalidNullValue"',
+        'command: "invalidObjectValue"',
+        'member: "all.value"',
+        'member: "all.field"',
         'field: "auth"',
+        'field: "mode"',
         'field: "target"',
         'actual: "yes"',
-        "expected: boolean",
-        'kind: "positional"',
+        'actual: "staging"',
+        "actual: 42",
+        "actual: null",
+        "actual: {",
+        "expected: true",
+        'kind: "repeatableOption"',
+        'member: "all"',
+        'fields: "mode"',
+        'property: "typo"',
+        'member: "forbiddenCombination"',
+      ],
+      requiredAny: ['expected: "safe" | "force"', 'expected: "force" | "safe"'],
+    },
+    {
+      fixture: "invalid-help-fact-templates.ts",
+      count: 11,
+      required: [
+        "invalidHelpFactTemplate",
+        "unknownDefinitionProperty",
+        'slot: "commandPlaceholder"',
+        'received: "   "',
+        'reason: "empty"',
+        'received: "<命令组>"',
+        'slot: "choices"',
+        'property: "choises"',
+        'received: "候选 {choises}"',
+        'reason: "placeholder"',
+        'slot: "present"',
+        'slot: "equals"',
+        'slot: "forbiddenCombination"',
+        'reason: "singleLine"',
       ],
     },
     {
       fixture: "input-schema-raw-mismatch.ts",
-      count: 4,
+      count: 5,
       required: [
         "fieldInputMustAcceptRawValue",
         'command: "inspect"',
@@ -533,7 +704,7 @@ function verifyAuthoringLanguageService(
     } finally {
       coreSnapshot.dispose();
     }
-    for (const { fixture, count, required } of cases) {
+    for (const { fixture, count, required, requiredAny } of cases) {
       const config = resolve(
         project,
         `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`,
@@ -553,7 +724,9 @@ function verifyAuthoringLanguageService(
         if (
           diagnostics.length !== count ||
           firstLevel.length < count ||
-          required.some((fragment) => !visible.includes(fragment))
+          required.some((fragment) => !visible.includes(fragment)) ||
+          (requiredAny !== undefined &&
+            !requiredAny.some((fragment) => visible.includes(fragment)))
         ) {
           throw new Error(
             `Language service first-level diagnostic is incomplete for ${fixture}\n${visible}`,

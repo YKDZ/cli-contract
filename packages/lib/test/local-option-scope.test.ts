@@ -61,7 +61,7 @@ void test("叶命令独立声明应用选项，清单版本与执行线版本各
     },
   });
 
-  assert.equal(cli.manifest.schemaVersion, "3");
+  assert.equal(cli.manifest.schemaVersion, "4");
   for (const command of ["deploy", "inspect"] as const) {
     const node = cli.grammar.nodes.find(
       (candidate) => candidate.id === command,
@@ -105,6 +105,6 @@ void test("叶命令独立声明应用选项，清单版本与执行线版本各
     },
   });
   assert.deepEqual(writes, [
-    '{"schemaVersion":"1","command":"deploy","kind":"completion"}\n',
+    '{"schemaVersion":"2","command":"deploy","kind":"completion"}\n',
   ]);
 });
