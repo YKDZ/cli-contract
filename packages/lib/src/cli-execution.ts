@@ -6,6 +6,7 @@ import {
   createFailureFact,
   createStreamRecordFact,
   createStreamSuccessFact,
+  countHelpFactForConstraint,
   formatFieldUsage,
   getCompiledCli,
   helpTemplateSpecifications,
@@ -404,10 +405,10 @@ function formatUsageConstraint(
       field: constraint.field,
       requires: constraint.requires,
     });
-  if (constraint.kind === "exclusive")
-    return renderHelpFactTemplate("exclusive", wording?.exclusive, {
-      fields: constraint.fields.join(", "),
-    });
+  if (constraint.kind === "count") {
+    const { slot, values } = countHelpFactForConstraint(constraint);
+    return renderHelpFactTemplate(slot, wording?.[slot], values);
+  }
   return renderHelpFactTemplate(
     "forbiddenCombination",
     wording?.forbiddenCombination,

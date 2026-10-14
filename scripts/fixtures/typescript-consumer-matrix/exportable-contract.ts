@@ -71,6 +71,12 @@ export const inspectCombination = define.command("inspect")({
   input: inspectInput,
   usageConstraints: [
     {
+      kind: "count",
+      fields: ["query", "dryRun"],
+      min: 1,
+      max: 1,
+    },
+    {
       kind: "forbiddenCombination",
       all: [
         { kind: "equals", field: "query", value: "alpha" },

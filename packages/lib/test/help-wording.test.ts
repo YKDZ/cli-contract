@@ -416,16 +416,16 @@ void test("命令组占位词贯穿帮助、用法失败和契约清单", async 
   assert.match(writes.join(""), /jobs <命令>/);
 });
 
-void test("三类用法约束模板保留关系并允许调整词序", async () => {
+void test("用法约束模板保留关系并允许调整词序", async () => {
   const cli = defineCli()({
     root: "publish",
     help: helpCapability({
       wording: {
         requires: "{requires} 是 {field} 的前提",
-        exclusive: "不能同时使用 {fields}",
         present: "存在 {field}",
         equals: "{field} 等于 {value}",
         forbiddenCombination: "禁止同时出现 {facts}",
+        countAtMost: "{fields} 的数量不超过 {max}",
       },
     }),
     output: outputCapability({ defaultFormat: "structured" }),
@@ -451,7 +451,7 @@ void test("三类用法约束模板保留关系并允许调整词序", async () 
         },
         usageConstraints: [
           { kind: "requires", field: "auth", requires: "token" },
-          { kind: "exclusive", fields: ["token", "quiet"] },
+          { kind: "count", fields: ["token", "quiet"], max: 1 },
           {
             kind: "forbiddenCombination",
             all: [
@@ -482,7 +482,7 @@ void test("三类用法约束模板保留关系并允许调整词序", async () 
   });
   const help = writes.join("");
   assert.match(help, /token 是 auth 的前提/);
-  assert.match(help, /不能同时使用 token, quiet/);
+  assert.match(help, /token, quiet 的数量不超过 1/);
   assert.match(help, /禁止同时出现 quiet 等于 true, force 等于 true/);
 });
 
