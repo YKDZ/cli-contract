@@ -9,8 +9,11 @@ import {
   outputCapability,
   parseCliInvocation,
   type CliContract,
+  type ContractSchema,
+  type JsonObject,
   type UsageConstraint,
 } from "@ykdz/cli-contract";
+import { Ajv2020 } from "ajv/dist/2020.js";
 import { z } from "zod";
 
 import { englishHelpCapability } from "./english-help.ts";
@@ -199,6 +202,110 @@ function createRequiredCountCli() {
   });
 }
 
+function createProjectedSchemaCountCli(input: ContractSchema) {
+  return defineCli()({
+    root: "countProjection",
+    help: helpCapability({
+      wording: { countExactly: "{fields} 恰好出现 {count} 项" },
+    }),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      countProjection: {
+        kind: "rootCommand",
+        name: "count-projection",
+        description: "数量模式投影",
+        fields: {
+          auth: {
+            kind: "valueOption",
+            longOption: "--auth",
+            description: "认证方式",
+          },
+          quiet: {
+            kind: "flag",
+            longOption: "--quiet",
+            negatedLongOption: "--no-quiet",
+            description: "静默输出",
+          },
+        },
+        usageConstraints: [
+          { kind: "count", fields: ["auth", "quiet"], min: 1, max: 1 },
+        ],
+        input,
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      },
+    },
+  });
+}
+
+function createReferencedCountInputSchema(
+  fields: readonly Readonly<{
+    readonly name: string;
+    readonly type: "boolean" | "string";
+  }>[],
+  id: string,
+  includeCountDefinitionCollision = false,
+): JsonObject {
+  const referencedProperties = Object.fromEntries(
+    fields.map(({ name, type }) => [name, { $ref: `#/$defs/${type}` }]),
+  );
+  const directProperties = Object.fromEntries(
+    fields.map(({ name, type }) => [name, { type }]),
+  );
+  return {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    $id: `https://example.test/${id}.schema.json`,
+    $defs: {
+      boolean: { type: "boolean" },
+      string: { type: "string" },
+      fields: {
+        type: "object",
+        properties: referencedProperties,
+        additionalProperties: false,
+      },
+      ...(includeCountDefinitionCollision
+        ? { __cliContract_count_0_state_0_0: false }
+        : {}),
+    },
+    $ref: "#/$defs/fields",
+    type: "object",
+    properties: directProperties,
+    additionalProperties: false,
+  };
+}
+
+function createJsonSchemaContract(inputSchema: JsonObject): ContractSchema {
+  return {
+    "~standard": {
+      version: 1,
+      vendor: "count-schema-test",
+      validate: (value) => ({ value }),
+      jsonSchema: {
+        input: () => inputSchema,
+        output: () => inputSchema,
+      },
+    },
+  };
+}
+
+function getObjectMember(value: unknown, key: string): unknown {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? Reflect.get(value, key)
+    : undefined;
+}
+
+function valueOptionField<const Name extends string>(
+  name: Name,
+): Readonly<{
+  readonly kind: "valueOption";
+  readonly longOption: `--${Name}`;
+  readonly description: Name;
+}> {
+  return { kind: "valueOption", longOption: `--${name}`, description: name };
+}
+
 void test("count 按 raw 自有字段计数，false 与重复值只计一项且默认不补", async () => {
   let executions = 0;
   const cli = createCountCli(() => {
@@ -290,6 +397,146 @@ void test("count 按 raw 自有字段计数，false 与重复值只计一项且�
         "count-inputs [--auth <auth>] [--quiet|--no-quiet] [--label <labels>]... [<paths...>]",
     },
   });
+});
+
+void test("count 的 Draft 2020-12 投影与 parser 在有效 raw 输入上判定一致", () => {
+  const cli = createCountCli();
+  const ajv = new Ajv2020({ allErrors: true, strict: false });
+  const validator = ajv.compile(
+    cli.manifest.commands.countInputs.input.inputSchema,
+  );
+  const cases = [
+    {
+      argv: ["--no-quiet", "--label", "first", "--label", "second"],
+      input: { quiet: false, labels: ["first", "second"] },
+      accepted: true,
+    },
+    {
+      argv: ["--auth", "secret"],
+      input: { auth: "secret" },
+      accepted: false,
+    },
+    {
+      argv: ["--auth", "secret", "--no-quiet", "--label", "first"],
+      input: { auth: "secret", quiet: false, labels: ["first"] },
+      accepted: false,
+    },
+  ] as const;
+
+  for (const { argv, input, accepted } of cases) {
+    const invocation = parseCliInvocation(cli, argv);
+    assert.equal(
+      invocation.kind === "parsed",
+      accepted,
+      JSON.stringify(invocation),
+    );
+    assert.equal(validator(input), accepted, ajv.errorsText(validator.errors));
+  }
+});
+
+void test("count 投影保留模式引用并避免定义名碰撞", () => {
+  const inputSchema = createReferencedCountInputSchema(
+    [
+      { name: "auth", type: "string" },
+      { name: "quiet", type: "boolean" },
+    ],
+    "count-reference-collision",
+    true,
+  );
+  const cli = createProjectedSchemaCountCli(
+    createJsonSchemaContract(inputSchema),
+  );
+  const projected = cli.manifest.commands.countProjection.input.inputSchema;
+  assert.equal(projected.$id, inputSchema.$id);
+  assert.equal(projected.$ref, inputSchema.$ref);
+  assert.deepEqual(
+    getObjectMember(projected.$defs, "fields"),
+    getObjectMember(inputSchema.$defs, "fields"),
+  );
+  assert.equal(
+    getObjectMember(projected.$defs, "__cliContract_count_0_state_0_0"),
+    false,
+  );
+
+  const validator = new Ajv2020({ allErrors: true, strict: false }).compile(
+    projected,
+  );
+  for (const { input, accepted } of [
+    { input: { auth: "secret" }, accepted: true },
+    { input: { quiet: false }, accepted: true },
+    { input: { auth: "secret", quiet: false }, accepted: false },
+    { input: {}, accepted: false },
+  ] as const) {
+    assert.equal(validator(input), accepted);
+  }
+});
+
+void test("count 投影的模式体积在较宽字段组下保持可用", () => {
+  const fields = [
+    "field0",
+    "field1",
+    "field2",
+    "field3",
+    "field4",
+    "field5",
+    "field6",
+    "field7",
+    "field8",
+    "field9",
+    "field10",
+    "field11",
+    "field12",
+    "field13",
+    "field14",
+    "field15",
+  ] as const;
+  const fieldDefinitions = {
+    field0: valueOptionField("field0"),
+    field1: valueOptionField("field1"),
+    field2: valueOptionField("field2"),
+    field3: valueOptionField("field3"),
+    field4: valueOptionField("field4"),
+    field5: valueOptionField("field5"),
+    field6: valueOptionField("field6"),
+    field7: valueOptionField("field7"),
+    field8: valueOptionField("field8"),
+    field9: valueOptionField("field9"),
+    field10: valueOptionField("field10"),
+    field11: valueOptionField("field11"),
+    field12: valueOptionField("field12"),
+    field13: valueOptionField("field13"),
+    field14: valueOptionField("field14"),
+    field15: valueOptionField("field15"),
+  } as const;
+  const inputSchema = createReferencedCountInputSchema(
+    fields.map((name) => ({ name, type: "string" as const })),
+    "count-projection-volume",
+  );
+  const cli = defineCli()({
+    root: "countVolume",
+    help: helpCapability({
+      wording: { countExactly: "{fields} 恰好出现 {count} 项" },
+    }),
+    output: outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      countVolume: {
+        kind: "rootCommand",
+        name: "count-volume",
+        description: "数量模式体积",
+        fields: fieldDefinitions,
+        usageConstraints: [{ kind: "count", fields, min: 1, max: 1 }],
+        input: createJsonSchemaContract(inputSchema),
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      },
+    },
+  });
+  const size = Buffer.byteLength(
+    JSON.stringify(cli.manifest.commands.countVolume.input.inputSchema),
+  );
+  assert.ok(size < 100_000, `count 投影为 ${size} 字节`);
 });
 
 void test("count 补齐默认端点并按固定顺序选择帮助模板", async () => {
