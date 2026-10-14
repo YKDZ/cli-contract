@@ -452,16 +452,29 @@ void test("真实 Zod 与 Valibot 的 union 投影不会被求解为字段候选
   for (const producer of inputs) {
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 测试模式由 fixture 提供 Standard Schema 能力。
     const input = producer as unknown as ContractSchema<CombinationRawInput>;
+    const exported = producer["~standard"].jsonSchema.input({
+      target: "draft-2020-12",
+    });
+    const properties = Reflect.get(exported, "properties");
+    assert.ok(typeof properties === "object" && properties !== null);
+    const received = Reflect.get(properties, "mode");
     assert.throws(
       () => createCombinationCli(input),
       (error) => {
         assert.ok(error instanceof ContractDefinitionError);
-        assert.deepEqual(error.issues, [
+        const [issue] = error.issues;
+        assert.equal(issue?.code, "schemaFieldDoesNotAcceptRawValue");
+        if (issue?.code !== "schemaFieldDoesNotAcceptRawValue") {
+          assert.fail("预期得到输入模式 raw 冲突问题");
+        }
+        assert.equal(issue.command, "combination");
+        assert.equal(issue.location, "input");
+        assert.deepEqual(issue.fields, [
           {
-            code: "schemaFieldDoesNotAcceptRawValue",
-            command: "combination",
-            location: "input",
-            fields: [{ field: "mode", expected: "string" }],
+            field: "mode",
+            path: ["commands", "combination", "input", "properties", "mode"],
+            expected: "string",
+            received,
           },
         ]);
         return true;

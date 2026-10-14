@@ -449,9 +449,20 @@ void test("定义期拒绝与 value option 不相容的 Input JSON Schema", () =
           code: "schemaFieldDoesNotAcceptRawValue",
           command: "greet",
           location: "input",
-          fields: [{ field: "name", expected: "string" }],
+          fields: [
+            {
+              field: "name",
+              path: ["commands", "greet", "input", "properties", "name"],
+              expected: "string",
+              received: { type: "number" },
+            },
+          ],
         },
       ]);
+      assert.match(
+        error.message,
+        /命令 greet 的输入字段 name（commands\.greet\.input\.properties\.name）需要 raw string，实际输入模式属性为 \{"type":"number"\}/,
+      );
       return true;
     },
   );
