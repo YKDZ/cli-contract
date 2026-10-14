@@ -236,6 +236,9 @@ async function verifyHierarchyTextCoverageDiagnostic(
   );
   if (result.error !== undefined) throw result.error;
   const diagnostics = `${result.stderr}\n${result.stdout}`;
+  const firstLevel = firstLevelCompilerMessages(diagnostics, fixture).join(
+    "\n",
+  );
   const required = [
     "missingTextPresenter",
     'command: "leaf"',
@@ -247,11 +250,12 @@ async function verifyHierarchyTextCoverageDiagnostic(
     'variant: "found"',
     'variant: "unavailable"',
     'variant: "update"',
+    'missing: "text"',
   ];
   const headers = diagnostics.match(
     /^hierarchy-text-coverage-unchecked\.ts\(\d+,\d+\): error TS\d+:/gm,
   );
-  const firstLevelCodes = diagnostics.match(/^  [^ ].*missingTextPresenter/gm);
+  const firstLevelCodes = firstLevel.match(/^  [^ ].*missingTextPresenter/gm);
   const allHeaders = diagnostics.match(/^.+\(\d+,\d+\): error TS\d+:/gm);
   const unrelated = [
     "TS7006",
@@ -260,7 +264,7 @@ async function verifyHierarchyTextCoverageDiagnostic(
   ];
   if (
     result.status === 0 ||
-    required.some((fragment) => !diagnostics.includes(fragment)) ||
+    required.some((fragment) => !firstLevel.includes(fragment)) ||
     unrelated.some((fragment) => diagnostics.includes(fragment)) ||
     headers?.length !== 5 ||
     firstLevelCodes?.length !== 5 ||
@@ -328,9 +332,33 @@ const authoringDiagnosticCases = [
       'command: "rootInspect"',
       'location: "failure"',
       'variant: "permissionDenied"',
+      'unexpected: "text"',
     ],
   },
 ] as const;
+
+function firstLevelCompilerMessages(
+  output: string,
+  fixture: string,
+): readonly string[] {
+  const firstLevel: string[] = [];
+  let inFixtureDiagnostic = false;
+  for (const line of output.split(/\r?\n/)) {
+    if (line.startsWith(`${fixture}(`) && line.includes(": error TS")) {
+      inFixtureDiagnostic = true;
+      firstLevel.push(line);
+    } else if (!inFixtureDiagnostic) {
+      continue;
+    } else if (/^  [^ ]/.test(line)) {
+      firstLevel.push(line);
+    } else if (line.startsWith("    ")) {
+      continue;
+    } else {
+      inFixtureDiagnostic = false;
+    }
+  }
+  return firstLevel;
+}
 
 async function verifyAuthoringDiagnostic(
   project: string,
@@ -350,11 +378,13 @@ async function verifyAuthoringDiagnostic(
   );
   if (result.error !== undefined) throw result.error;
   const diagnostics = `${result.stderr}\n${result.stdout}`;
+  const firstLevelMessages = firstLevelCompilerMessages(diagnostics, fixture);
+  const firstLevel = firstLevelMessages.join("\n");
   const lines = diagnostics.split("\n");
   const headers = lines.filter(
     (line) => line.startsWith(`${fixture}(`) && line.includes(": error TS"),
   );
-  const firstLevelCodes = lines.flatMap((line) => {
+  const firstLevelCodes = firstLevelMessages.flatMap((line) => {
     const match = /^  [^ ].*ContractTypeError<"([^"]+)"/.exec(line);
     const code = match?.[1];
     return code === undefined ? [] : [code];
@@ -369,10 +399,10 @@ async function verifyAuthoringDiagnostic(
       [...expectedCodes]
         .sort((left, right) => left.localeCompare(right))
         .join(",") ||
-    required.some((fragment) => !diagnostics.includes(fragment))
+    required.some((fragment) => !firstLevel.includes(fragment))
   ) {
     throw new Error(
-      `Published authoring diagnostic is incomplete for ${fixture}\n${diagnostics}`,
+      `Published authoring diagnostic first level is incomplete for ${fixture}\n${firstLevel}\nFull diagnostics:\n${diagnostics}`,
     );
   }
 }
@@ -428,11 +458,16 @@ function verifyAuthoringLanguageService(
       count: 5,
       required: [
         "missingTextPresenter",
+        'command: "leaf"',
         'location: "completion"',
         'location: "data"',
         'location: "failure"',
         'location: "record"',
         'location: "streamSuccess"',
+        'variant: "found"',
+        'variant: "unavailable"',
+        'variant: "update"',
+        'missing: "text"',
       ],
     },
     {
@@ -444,6 +479,7 @@ function verifyAuthoringLanguageService(
         'command: "rootInspect"',
         'location: "failure"',
         'variant: "permissionDenied"',
+        'unexpected: "text"',
       ],
     },
   ] as const;
@@ -538,6 +574,9 @@ async function verifyMissingStreamDiagnostic(
   );
   if (result.error !== undefined) throw result.error;
   const diagnostics = `${result.stderr}\n${result.stdout}`;
+  const firstLevel = firstLevelCompilerMessages(diagnostics, fixture).join(
+    "\n",
+  );
   const required = [
     "missingTextPresenter",
     'command: "missingRecord"',
@@ -553,12 +592,12 @@ async function verifyMissingStreamDiagnostic(
   const allHeaders = diagnostics.match(/^.+\(\d+,\d+\): error TS\d+:/gm);
   if (
     result.status === 0 ||
-    required.some((fragment) => !diagnostics.includes(fragment)) ||
+    required.some((fragment) => !firstLevel.includes(fragment)) ||
     headers?.length !== 2 ||
     allHeaders?.length !== headers.length
   ) {
     throw new Error(
-      `Missing-stream diagnostic did not expose only local contract evidence\n${diagnostics}`,
+      `Missing-stream diagnostic first level did not expose only local contract evidence\n${firstLevel}\nFull diagnostics:\n${diagnostics}`,
     );
   }
 }
@@ -735,8 +774,10 @@ async function verifyMissingCompletionDiagnostic(
   );
   if (result.error !== undefined) throw result.error;
   const diagnostics = `${result.stderr}\n${result.stdout}`;
+  const firstLevel = firstLevelCompilerMessages(diagnostics, fixture).join(
+    "\n",
+  );
   const requiredFragments = [
-    "completion-missing.ts",
     "missingTextPresenter",
     'command: "missingCompletion"',
     'command: "missingCompletionWithField"',
@@ -745,10 +786,10 @@ async function verifyMissingCompletionDiagnostic(
   ];
   if (
     result.status === 0 ||
-    requiredFragments.some((fragment) => !diagnostics.includes(fragment))
+    requiredFragments.some((fragment) => !firstLevel.includes(fragment))
   ) {
     throw new Error(
-      `Missing-completion diagnostic did not expose its local contract evidence\n${diagnostics}`,
+      `Missing-completion diagnostic first level did not expose its local contract evidence\n${firstLevel}\nFull diagnostics:\n${diagnostics}`,
     );
   }
   const unrelatedFragments = [
@@ -780,6 +821,9 @@ async function verifyMissingNamedVariantDiagnostic(
   );
   if (result.error !== undefined) throw result.error;
   const diagnostics = `${result.stderr}\n${result.stdout}`;
+  const firstLevel = firstLevelCompilerMessages(diagnostics, fixture).join(
+    "\n",
+  );
   const requiredFragments = [
     "named-variant-missing.ts",
     "missingTextPresenter",
@@ -794,10 +838,10 @@ async function verifyMissingNamedVariantDiagnostic(
   ];
   if (
     result.status === 0 ||
-    requiredFragments.some((fragment) => !diagnostics.includes(fragment))
+    requiredFragments.some((fragment) => !firstLevel.includes(fragment))
   ) {
     throw new Error(
-      `Named-variant diagnostic did not expose its local contract evidence\n${diagnostics}`,
+      `Named-variant diagnostic first level did not expose its local contract evidence\n${firstLevel}\nFull diagnostics:\n${diagnostics}`,
     );
   }
   const diagnosticHeaders = diagnostics.match(

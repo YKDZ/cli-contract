@@ -854,6 +854,68 @@ void test("动态层级在执行前闭合五类文本 presenter", () => {
   assert.equal(handlerStarted, 0);
 });
 
+void test("动态关闭 text 时聚合并定位意外 presenter", () => {
+  const define = defineCli();
+  const payload = z.object({ resource: z.string() });
+  let handlerStarted = 0;
+
+  assert.throws(
+    () =>
+      // @ts-expect-error [unexpected-text-presenter] structured-only 的组合命令故意保留 presenter，以验证定义期闭合。
+      define({
+        root: "workspace",
+        help: englishHelpCapability(),
+        output: outputCapability({ defaultFormat: "structured" }),
+        usageFailureExitCode: 64,
+        commands: {
+          workspace: {
+            kind: "rootGroup",
+            name: "workspace",
+            description: "工作区",
+          },
+          ...define.command("inspect")({
+            kind: "command",
+            parent: "workspace",
+            name: "inspect",
+            description: "检查",
+            input: z.object({}),
+            success: { kind: "completion", text: () => text.silent },
+            failures: {
+              permissionDenied: {
+                description: "无权限",
+                schema: payload,
+                exitCode: 13,
+                text: ({ resource }) => text.line(resource),
+              },
+            },
+            handler: ({ outcome }) => {
+              handlerStarted += 1;
+              return outcome.completion();
+            },
+          }),
+        },
+      }),
+    (error) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "unexpectedTextPresenter",
+          command: "inspect",
+          location: "completion",
+        },
+        {
+          code: "unexpectedTextPresenter",
+          command: "inspect",
+          location: "failure",
+          variant: "permissionDenied",
+        },
+      ]);
+      return true;
+    },
+  );
+  assert.equal(handlerStarted, 0);
+});
+
 void test("compatibility flag 在定义期闭合到已启用格式和 control 拼写", () => {
   for (const [flag, format] of [
     ["--plain_mode", "structured"],
