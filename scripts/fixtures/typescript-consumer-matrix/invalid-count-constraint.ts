@@ -18,6 +18,12 @@ const dynamicCountFields: readonly ["auth" | "quiet", ...("auth" | "quiet")[]] =
   ["auth", "quiet"];
 declare const missingFixedCountFields: readonly ["missing", string];
 declare const missingRestCountFields: readonly ["missing", ...string[]];
+declare const missingSuffixCountFields: readonly [...string[], "missing"];
+declare const duplicateSuffixCountFields: readonly [
+  "token",
+  ...string[],
+  "token",
+];
 declare const broadCountFields: string[];
 declare const broadCountTuple: readonly [string, string];
 declare const unionCountTuple: readonly ["auth" | "quiet", "auth" | "quiet"];
@@ -343,6 +349,62 @@ defineCli()({
         { kind: "count", fields: broadCountFields, min: 0, max: 1 },
         { kind: "count", fields: broadCountTuple, min: 0, max: 2 },
         { kind: "count", fields: unionCountTuple, min: 0, max: 2 },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+defineCli()({
+  root: "missingSuffixCountField",
+  help: countHelp,
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    missingSuffixCountField: {
+      kind: "rootCommand",
+      name: "后缀未知字段",
+      description: "保留已知后缀字段",
+      fields: {
+        token: {
+          kind: "valueOption",
+          longOption: "--token",
+          description: "令牌",
+        },
+      },
+      input: z.object({ token: z.string().optional() }),
+      usageConstraints: [
+        { kind: "count", fields: missingSuffixCountFields, max: 1 },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+defineCli()({
+  root: "duplicateSuffixCountField",
+  help: countHelp,
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    duplicateSuffixCountField: {
+      kind: "rootCommand",
+      name: "后缀重复字段",
+      description: "保留已知前后缀字段",
+      fields: {
+        token: {
+          kind: "valueOption",
+          longOption: "--token",
+          description: "令牌",
+        },
+      },
+      input: z.object({ token: z.string().optional() }),
+      usageConstraints: [
+        { kind: "count", fields: duplicateSuffixCountFields, max: 1 },
       ],
       success: { kind: "completion" },
       failures: {},

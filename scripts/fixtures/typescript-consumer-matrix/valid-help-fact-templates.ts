@@ -1,4 +1,9 @@
-import { helpCapability } from "@ykdz/cli-contract";
+import {
+  defineCli,
+  helpCapability,
+  outputCapability,
+} from "@ykdz/cli-contract";
+import { z } from "zod";
 
 const help = helpCapability({
   wording: {
@@ -33,3 +38,67 @@ const optionalValidWording: OptionalValidWording = {
   wording: { choices: "候选 {choices}" },
 };
 void helpCapability(optionalValidWording);
+
+const validSuffixCountFields: readonly [...string[], "token"] = ["token"];
+const suffixHelp = helpCapability({
+  wording: {
+    countAtLeast: "至少提供 {min} 项：{fields}",
+    countAtMost: "至多提供 {max} 项：{fields}",
+  },
+});
+const validSuffixCount = defineCli()({
+  root: "validSuffixCount",
+  help: suffixHelp,
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    validSuffixCount: {
+      kind: "rootCommand",
+      name: "有效后缀数量",
+      description: "已知后缀字段仍可使用",
+      fields: {
+        token: {
+          kind: "valueOption",
+          longOption: "--token",
+          description: "令牌",
+        },
+      },
+      input: z.object({ token: z.string().optional() }),
+      usageConstraints: [
+        { kind: "count", fields: validSuffixCountFields, max: 1 },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+const validNegatedOptionWithoutAlias = defineCli()({
+  root: "validNegatedOption",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    validNegatedOption: {
+      kind: "rootCommand",
+      name: "有效反向选项",
+      description: "无短别名的合法反向选项",
+      fields: {
+        token: {
+          kind: "flag",
+          longOption: "--token",
+          negatedLongOption: "--no-token",
+          description: "令牌",
+        },
+      },
+      input: z.object({ token: z.boolean().optional() }),
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+void validSuffixCount;
+void validNegatedOptionWithoutAlias;

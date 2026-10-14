@@ -100,6 +100,7 @@ export type {
 
 const cliContractType = Symbol("CliContract.type");
 const helpCapabilities = new WeakSet<object>();
+const invalidHelpFactWordingValues = new WeakMap<object, ReadonlyMap<string, unknown>>();
 const outputCapabilities = new WeakSet<object>();
 const versionCapabilities = new WeakSet<object>();
 const compiledCliContracts = new WeakMap<object, RuntimeCompiledCli>();
@@ -618,74 +619,128 @@ export type ValueOptionDefinitionsForInput<Input> = Readonly<{
   [Field in Extract<keyof Input, string>]: ValueOptionDefinition;
 }>;
 
+type InvalidCanonicalLongOptionIssue<
+  Command extends string,
+  Key,
+  LongOption extends `--${string}`,
+> = LongOption extends CanonicalLongOption<LongOption>
+  ? never
+  : ContractTypeError<
+      "invalidFieldLongOption",
+      Readonly<{
+        readonly command: Command;
+        readonly field: Extract<Key, string>;
+        readonly received: LongOption;
+      }>
+    >;
+
+type InvalidShortOptionAliasIssue<
+  Field,
+  Command extends string,
+  Key,
+> = Field extends Readonly<{
+  readonly shortAlias: infer ShortAlias extends `-${string}`;
+}>
+  ? ShortAlias extends ShortOptionAlias<ShortAlias>
+    ? never
+    : ContractTypeError<
+        "invalidFieldShortAlias",
+        Readonly<{
+          readonly command: Command;
+          readonly field: Extract<Key, string>;
+          readonly received: ShortAlias;
+        }>
+      >
+  : never;
+
+type InvalidNegatedLongOptionIssue<
+  Field,
+  Key,
+  Command extends string,
+> = Field extends Readonly<{
+  readonly negatedLongOption: infer NegatedLongOption extends `--${string}`;
+}>
+  ? NegatedLongOption extends CanonicalLongOption<NegatedLongOption>
+    ? never
+    : ContractTypeError<
+        "invalidFieldLongOption",
+        Readonly<{
+          readonly command: Command;
+          readonly field: Extract<Key, string>;
+          readonly received: NegatedLongOption;
+        }>
+      >
+  : never;
+
 type CheckedFieldDefinition<
   Field extends FieldDefinition,
   Key,
+  Command extends string,
 > = Field extends PositionalDefinition
   ? Field
   : Field extends VariadicPositionalDefinition
     ? Field
-    : Field extends FlagDefinition<infer LongOption, infer ShortAlias>
-      ? CheckedNegatedFlagDefinition<Field, Key, LongOption, ShortAlias>
+    : Field extends FlagDefinition<infer LongOption>
+      ? CheckedNegatedFlagDefinition<
+          Field,
+          Key,
+          LongOption,
+          Command
+        >
       : Field extends RepeatableOptionDefinition<
-            infer LongOption,
-            infer ShortAlias
+            infer LongOption
           >
-        ? CheckedOptionDefinition<Field, Key, LongOption, ShortAlias>
-        : Field extends ValueOptionDefinition<
-              infer LongOption,
-              infer ShortAlias
+        ? CheckedOptionDefinition<
+            Field,
+            Key,
+            LongOption,
+            Command
+          >
+        : Field extends ValueOptionDefinition<infer LongOption>
+          ? CheckedOptionDefinition<
+              Field,
+              Key,
+              LongOption,
+              Command
             >
-          ? CheckedOptionDefinition<Field, Key, LongOption, ShortAlias>
           : never;
 
 type CheckedNegatedFlagDefinition<
   Field,
   Key,
   LongOption extends `--${string}`,
-  ShortAlias extends `-${string}` | undefined,
-> =
-  CheckedOptionDefinition<Field, Key, LongOption, ShortAlias> extends Field
-    ? Field extends {
-        readonly negatedLongOption: infer NegatedLongOption extends
-          `--${string}`;
-      }
-      ? NegatedLongOption extends CanonicalLongOption<NegatedLongOption>
-        ? Field
-        : ContractTypeError<
-            "invalidNegatedLongOption",
-            Readonly<{
-              readonly field: Key;
-              readonly received: NegatedLongOption;
-            }>
-          >
-      : Field
-    : CheckedOptionDefinition<Field, Key, LongOption, ShortAlias>;
+  Command extends string,
+> = [
+  InvalidCanonicalLongOptionIssue<Command, Key, LongOption>,
+] extends [never]
+  ? [InvalidShortOptionAliasIssue<Field, Command, Key>] extends [never]
+    ? [InvalidNegatedLongOptionIssue<Field, Key, Command>] extends [never]
+      ? Field
+      : InvalidNegatedLongOptionIssue<Field, Key, Command>
+    : InvalidShortOptionAliasIssue<Field, Command, Key>
+  : InvalidCanonicalLongOptionIssue<Command, Key, LongOption>;
 
 type CheckedOptionDefinition<
   Field,
   Key,
   LongOption extends `--${string}`,
-  ShortAlias extends `-${string}` | undefined,
-> =
-  LongOption extends CanonicalLongOption<LongOption>
-    ? ShortAlias extends undefined
-      ? Field
-      : ShortAlias extends ShortOptionAlias<Extract<ShortAlias, string>>
-        ? Field
-        : ContractTypeError<
-            "invalidShortOptionAlias",
-            Readonly<{ readonly field: Key; readonly received: ShortAlias }>
-          >
-    : ContractTypeError<
-        "invalidCanonicalLongOption",
-        Readonly<{ readonly field: Key; readonly received: LongOption }>
-      >;
+  Command extends string,
+> = [
+  InvalidCanonicalLongOptionIssue<Command, Key, LongOption>,
+] extends [never]
+  ? [InvalidShortOptionAliasIssue<Field, Command, Key>] extends [never]
+    ? Field
+    : InvalidShortOptionAliasIssue<Field, Command, Key>
+  : InvalidCanonicalLongOptionIssue<Command, Key, LongOption>;
 
-type CheckedFieldDefinitions<Fields extends FieldDefinitions> = {
+type CheckedFieldDefinitions<
+  Fields extends FieldDefinitions,
+  Command extends string,
+> = {
   readonly [Field in keyof Fields]: CheckedFieldDefinition<
     Fields[Field],
-    Field
+    Field,
+    Command
   > &
     RejectUnknownProperties<
       Fields[Field],
@@ -876,14 +931,21 @@ type InvalidFieldIdentities<Fields extends FieldDefinitions> = {
     : Field;
 }[keyof Fields & string];
 
-type FieldIdentityContract<Fields extends FieldDefinitions> =
+type FieldIdentityContract<
+  Command extends string,
+  Fields extends FieldDefinitions,
+> =
   string extends keyof Fields
     ? unknown
     : InvalidFieldIdentities<Fields> extends never
       ? unknown
       : ContractTypeError<
-          "fieldMustBeLowerCamelCase",
-          Readonly<{ readonly fields: InvalidFieldIdentities<Fields> }>
+          "invalidFieldIdentity",
+          Readonly<{
+            readonly command: Command;
+            readonly field: InvalidFieldIdentities<Fields>;
+            readonly reason: "lowerCamelCase";
+          }>
         >;
 
 export type RawValueOptionInputForSchema<InputSchema extends ContractSchema> =
@@ -1136,25 +1198,31 @@ type InvalidVariantNames<Variants> = {
 
 type InvalidDataVariantNames<Variants> = InvalidVariantNames<Variants>;
 
-type DataVariantNameContract<Variants> =
+type DataVariantNameContract<Command extends string, Variants> =
   InvalidDataVariantNames<Variants> extends never
     ? unknown
     : ContractTypeError<
-        "dataVariantMustBeLowerCamelCase",
+        "invalidVariantName",
         Readonly<{
-          readonly variants: InvalidDataVariantNames<Variants>;
+          readonly command: Command;
+          readonly location: "data";
+          readonly variant: InvalidDataVariantNames<Variants>;
+          readonly reason: "lowerCamelCase";
         }>
       >;
 
 type InvalidFailureVariantNames<Failures> = InvalidVariantNames<Failures>;
 
-type FailureVariantNameContract<Failures> =
+type FailureVariantNameContract<Command extends string, Failures> =
   InvalidFailureVariantNames<Failures> extends never
     ? unknown
     : ContractTypeError<
-        "failureVariantMustBeLowerCamelCase",
+        "invalidVariantName",
         Readonly<{
-          readonly variants: InvalidFailureVariantNames<Failures>;
+          readonly command: Command;
+          readonly location: "failure";
+          readonly variant: InvalidFailureVariantNames<Failures>;
+          readonly reason: "lowerCamelCase";
         }>
       >;
 
@@ -1327,13 +1395,16 @@ type StreamRecordTextContract<
   StreamRecordDefinitions<false>
 >;
 
-type StreamRecordNameContract<Records> =
+type StreamRecordNameContract<Command extends string, Records> =
   InvalidVariantNames<Records> extends never
     ? unknown
     : ContractTypeError<
-        "streamRecordMustBeLowerCamelCase",
+        "invalidVariantName",
         Readonly<{
-          readonly records: InvalidVariantNames<Records>;
+          readonly command: Command;
+          readonly location: "record";
+          readonly variant: InvalidVariantNames<Records>;
+          readonly reason: "lowerCamelCase";
         }>
       >;
 
@@ -1372,15 +1443,15 @@ export interface CompletionRootCommandDefinition<
   readonly name: string;
   readonly description: string;
   readonly helpSupplement?: TextLines;
-  readonly fields?: CheckedFieldDefinitions<Fields> &
+  readonly fields?: CheckedFieldDefinitions<Fields, Command> &
     FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
-    FieldIdentityContract<Fields>;
+    FieldIdentityContract<Command, Fields>;
   readonly input: InputSchema &
     RawFieldInputContract<Command, Fields, InputSchema>;
   readonly success: CompletionSuccessDefinition<Command, TextEnabled>;
   readonly failures: Failures &
     ClosedAtomicVariants<Failures> &
-    FailureVariantNameContract<Failures> &
+    FailureVariantNameContract<Command, Failures> &
     FailureVariantTextContract<Command, Failures, TextEnabled>;
   readonly handler: (
     context: CompletionHandlerContext<
@@ -1407,20 +1478,20 @@ export interface DataRootCommandDefinition<
   readonly name: string;
   readonly description: string;
   readonly helpSupplement?: TextLines;
-  readonly fields: CheckedFieldDefinitions<Fields> &
+  readonly fields: CheckedFieldDefinitions<Fields, Command> &
     FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
-    FieldIdentityContract<Fields>;
+    FieldIdentityContract<Command, Fields>;
   readonly input: InputSchema &
     RawFieldInputContract<Command, Fields, InputSchema>;
   readonly success: Readonly<{
     readonly kind: "data";
     readonly variants: Variants &
       ClosedAtomicVariants<Variants> &
-      DataVariantNameContract<Variants>;
+      DataVariantNameContract<Command, Variants>;
   }>;
   readonly failures: Failures &
     ClosedAtomicVariants<Failures> &
-    FailureVariantNameContract<Failures>;
+    FailureVariantNameContract<Command, Failures>;
   readonly handler: (
     context: DataHandlerContext<
       Command,
@@ -1450,9 +1521,9 @@ export interface StreamRootCommandDefinition<
   readonly name: string;
   readonly description: string;
   readonly helpSupplement?: TextLines;
-  readonly fields?: CheckedFieldDefinitions<Fields> &
+  readonly fields?: CheckedFieldDefinitions<Fields, Command> &
     FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
-    FieldIdentityContract<Fields>;
+    FieldIdentityContract<Command, Fields>;
   readonly input: InputSchema &
     RawFieldInputContract<Command, Fields, InputSchema>;
   readonly success: Readonly<{
@@ -1460,7 +1531,7 @@ export interface StreamRootCommandDefinition<
     readonly records: Records &
       StreamRecordDefinitions<TextEnabled> &
       ClosedStreamRecords<Records> &
-      StreamRecordNameContract<Records>;
+      StreamRecordNameContract<Command, Records>;
   }> &
     (TextEnabled extends true
       ? Readonly<{ readonly text: CompletionTextPresenter }>
@@ -1469,7 +1540,7 @@ export interface StreamRootCommandDefinition<
         : Readonly<{ readonly text?: CompletionTextPresenter }>);
   readonly failures: Failures &
     ClosedAtomicVariants<Failures> &
-    FailureVariantNameContract<Failures>;
+    FailureVariantNameContract<Command, Failures>;
   readonly handler: (
     context: StreamHandlerContext<
       Command,
@@ -1764,6 +1835,41 @@ type UsageConstraintFactFields<Facts> = Facts extends readonly (infer Fact)[]
     : never
   : never;
 
+type LastRequiredTupleItem<Items extends readonly unknown[]> = Items extends
+  readonly [...unknown[], infer Last]
+  ? Last
+  : never;
+
+type PopRequiredTupleItem<Items extends readonly unknown[]> = Items extends
+  readonly [...infer Prefix, unknown]
+  ? readonly [...Prefix]
+  : never;
+
+type StaticallyKnownTupleSuffixItems<Items extends readonly unknown[]> =
+  [LastRequiredTupleItem<Items>] extends [never]
+    ? never
+    : string extends LastRequiredTupleItem<Items>
+      ? never
+      : LastRequiredTupleItem<Items> |
+        StaticallyKnownTupleSuffixItems<PopRequiredTupleItem<Items>>;
+
+type StaticallyKnownUsageFact<Fact> = Fact extends Readonly<{
+  readonly field: infer Field extends string;
+}>
+  ? string extends Field
+    ? never
+    : IsUnion<Field> extends true
+      ? never
+      : Fact
+  : never;
+
+type StaticallyKnownUsageTupleFacts<Facts extends readonly unknown[]> =
+  Facts extends readonly [infer Fact, ...infer Remaining]
+    ? StaticallyKnownUsageFact<Fact> | StaticallyKnownUsageTupleFacts<Remaining>
+    : StaticallyKnownTupleSuffixItems<Facts> extends infer Fact
+      ? StaticallyKnownUsageFact<Fact>
+      : never;
+
 type IsNarrowUsageFactValue<Value> = [Value] extends [string | boolean]
   ? string extends Value
     ? false
@@ -1802,11 +1908,13 @@ type ConflictingEqualsUsageFactFields<First, Others> =
       : never
     : never;
 
+type ContradictoryUsageFactUnionFields<Fact, Facts = Fact> = Fact extends unknown
+  ? ConflictingEqualsUsageFactFields<Fact, Exclude<Facts, Fact>>
+  : never;
+
 type ContradictoryUsageFactFields<Facts extends readonly unknown[]> =
-  Facts extends readonly [infer First, ...infer Rest]
-    ?
-        | ConflictingEqualsUsageFactFields<First, Rest[number]>
-        | ContradictoryUsageFactFields<Rest>
+  Facts extends unknown
+    ? ContradictoryUsageFactUnionFields<StaticallyKnownUsageTupleFacts<Facts>>
     : never;
 
 type InvalidUsageFactForFields<
@@ -1890,9 +1998,12 @@ type InvalidForbiddenCombinationFacts<
   ? [InvalidUsageFactForFields<Command, Fact, Fields, Input>] extends [never]
     ? InvalidForbiddenCombinationFacts<Command, Remaining, Fields, Input>
     : InvalidUsageFactForFields<Command, Fact, Fields, Input>
-  : Facts extends readonly []
-    ? never
-    : InvalidUsageFactForFields<Command, Facts[number], Fields, Input>;
+  : InvalidUsageFactForFields<
+      Command,
+      StaticallyKnownUsageTupleFacts<Facts>,
+      Fields,
+      Input
+    >;
 
 type InvalidWhenFacts<
   Command extends string,
@@ -1905,9 +2016,13 @@ type InvalidWhenFacts<
     ]
     ? InvalidWhenFacts<Command, Remaining, Fields, Input>
     : InvalidUsageFactForFields<Command, Fact, Fields, Input, "when">
-  : Facts extends readonly []
-    ? never
-    : InvalidUsageFactForFields<Command, Facts[number], Fields, Input, "when">;
+  : InvalidUsageFactForFields<
+      Command,
+      StaticallyKnownUsageTupleFacts<Facts>,
+      Fields,
+      Input,
+      "when"
+    >;
 
 type UnknownUsageFactProperty<Fact> =
   Fact extends Readonly<{
@@ -2271,7 +2386,25 @@ type CountFieldDuplicates<
       : Field extends Seen
         ? Field
         : CountFieldDuplicates<Remaining, Seen | Field>
-  : never;
+  : CountFieldSuffixDuplicates<Fields, Seen>;
+
+type CountFieldSuffixDuplicates<
+  Fields extends readonly unknown[],
+  Seen,
+> = [LastRequiredTupleItem<Fields>] extends [never]
+  ? never
+  : LastRequiredTupleItem<Fields> extends infer Field
+    ? string extends Field
+      ? CountFieldSuffixDuplicates<PopRequiredTupleItem<Fields>, Seen>
+      : IsUnion<Field> extends true
+        ? CountFieldSuffixDuplicates<PopRequiredTupleItem<Fields>, Seen>
+        : Field extends Seen
+          ? Field | CountFieldSuffixDuplicates<
+              PopRequiredTupleItem<Fields>,
+              Seen | Field
+            >
+          : CountFieldSuffixDuplicates<PopRequiredTupleItem<Fields>, Seen | Field>
+    : never;
 
 type CountEndpoint<
   Constraint,
@@ -2371,7 +2504,7 @@ type StaticallyKnownCountTupleFields<Fields extends readonly unknown[]> =
     ? string extends Field
       ? StaticallyKnownCountTupleFields<Remaining>
       : Field | StaticallyKnownCountTupleFields<Remaining>
-    : never;
+    : StaticallyKnownTupleSuffixItems<Fields>;
 
 type CountUnknownFieldIssue<
   Command extends string,
@@ -2505,6 +2638,28 @@ type StaticallyGuaranteedUsageTupleFields<Fields extends readonly unknown[]> =
         : Field extends string
           ? Field | StaticallyGuaranteedUsageTupleFields<Remaining>
           : StaticallyGuaranteedUsageTupleFields<Remaining>
+    : StaticallyGuaranteedUsageTupleSuffixFields<Fields>;
+
+type StaticallyGuaranteedUsageTupleSuffixFields<
+  Fields extends readonly unknown[],
+> = [LastRequiredTupleItem<Fields>] extends [never]
+  ? never
+  : LastRequiredTupleItem<Fields> extends infer Field
+    ? string extends Field
+      ? StaticallyGuaranteedUsageTupleSuffixFields<
+          PopRequiredTupleItem<Fields>
+        >
+      : IsUnion<Field> extends true
+        ? StaticallyGuaranteedUsageTupleSuffixFields<
+            PopRequiredTupleItem<Fields>
+          >
+        : Field extends string
+          ? Field | StaticallyGuaranteedUsageTupleSuffixFields<
+              PopRequiredTupleItem<Fields>
+            >
+          : StaticallyGuaranteedUsageTupleSuffixFields<
+              PopRequiredTupleItem<Fields>
+            >
     : never;
 
 type UsageArrayBranchesMissingGuaranteedField<
@@ -2848,8 +3003,11 @@ type RootIdentityContract<Root extends string> = string extends Root
   : IsLowerCamelCase<Root> extends true
     ? unknown
     : ContractTypeError<
-        "commandMustBeLowerCamelCase",
-        Readonly<{ readonly command: Root }>
+        "invalidCommandIdentity",
+        Readonly<{
+          readonly command: Root;
+          readonly reason: "lowerCamelCase";
+        }>
       >;
 
 type RootCliDefinitionBase<Root extends string> = RootIdentityContract<Root> & {
@@ -3690,32 +3848,32 @@ type RootFallbackCliDefinition<
             RootFallbackRawFieldInputContract<Command, Fields, InputSchema>;
           readonly failures: Failures &
             FailureVariantDefinitionsForSchemas<FailureSchemas, boolean> &
-            FailureVariantNameContract<Failures> &
+            FailureVariantNameContract<Command, Failures> &
             FailureVariantTextContract<Command, Failures, TextEnabled>;
         }> &
         (
           | Readonly<{
-              readonly fields: CheckedFieldDefinitions<Fields> &
+              readonly fields: CheckedFieldDefinitions<Fields, Command> &
                 FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
-                FieldIdentityContract<Fields>;
+                FieldIdentityContract<Command, Fields>;
               readonly success: Readonly<{
                 readonly kind: "data";
                 readonly variants: Variants &
                   DataVariantDefinitionsForSchemas<VariantSchemas, boolean> &
-                  DataVariantNameContract<Variants> &
+                  DataVariantNameContract<Command, Variants> &
                   DataVariantTextContract<Command, Variants, TextEnabled>;
               }>;
             }>
           | Readonly<{
-              readonly fields?: CheckedFieldDefinitions<Fields> &
+              readonly fields?: CheckedFieldDefinitions<Fields, Command> &
                 FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
-                FieldIdentityContract<Fields>;
+                FieldIdentityContract<Command, Fields>;
               readonly success: CompletionSuccessDefinition<Root, TextEnabled>;
             }>
           | Readonly<{
-              readonly fields?: CheckedFieldDefinitions<Fields> &
+              readonly fields?: CheckedFieldDefinitions<Fields, Command> &
                 FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
-                FieldIdentityContract<Fields>;
+                FieldIdentityContract<Command, Fields>;
               readonly success:
                 | (Readonly<{
                     readonly kind: "stream";
@@ -3724,7 +3882,7 @@ type RootFallbackCliDefinition<
                         RecordSchemas,
                         boolean
                       > &
-                      StreamRecordNameContract<Records>;
+                      StreamRecordNameContract<Command, Records>;
                     readonly text: CompletionTextPresenter;
                   }> &
                     StreamRecordTextContract<Command, Records, TextEnabled>)
@@ -3735,7 +3893,7 @@ type RootFallbackCliDefinition<
                         RecordSchemas,
                         boolean
                       > &
-                      StreamRecordNameContract<Records>;
+                      StreamRecordNameContract<Command, Records>;
                     readonly text?: never;
                   }> &
                     ([TextEnabled] extends [true]
@@ -3910,19 +4068,20 @@ type ActualFailureDefinitions<Failures> =
   Failures extends FailureVariantDefinitions ? Failures : never;
 
 type RootFallbackFieldsProperty<
+  Command extends string,
   Fields extends FieldDefinitions,
   InputSchema extends ContractSchema,
 > =
   | Readonly<{
-      readonly fields: CheckedFieldDefinitions<Fields> &
+      readonly fields: CheckedFieldDefinitions<Fields, Command> &
         FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
-        FieldIdentityContract<Fields>;
+        FieldIdentityContract<Command, Fields>;
       readonly success: Readonly<{ readonly kind: "data" | "stream" }>;
     }>
   | Readonly<{
-      readonly fields?: CheckedFieldDefinitions<Fields> &
+      readonly fields?: CheckedFieldDefinitions<Fields, Command> &
         FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
-        FieldIdentityContract<Fields>;
+        FieldIdentityContract<Command, Fields>;
       readonly success: Readonly<{ readonly kind: "completion" }>;
     }>;
 
@@ -3960,7 +4119,7 @@ export interface DefineCommand<Command extends string, Dependencies> {
         >["commands"][Command],
         "kind" | "fields"
       > &
-      RootFallbackFieldsProperty<Fields, InputSchema> &
+      RootFallbackFieldsProperty<Command, Fields, InputSchema> &
       RootFallbackHandlerDefinition<
         Command,
         Dependencies,
@@ -4103,6 +4262,10 @@ export function helpCapability(
   if (definition.shortAlias !== undefined && definition.shortAlias !== "-h") {
     throw new TypeError("帮助短别名必须是 -h");
   }
+  const copiedWording =
+    definition.wording === undefined
+      ? undefined
+      : copyHelpFactWording(definition.wording);
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- helpCapability 由本工厂签发并登记到 WeakSet，类型品牌不在运行时输出。
   const capability = Object.freeze({
     kind: "helpCapability" as const,
@@ -4113,11 +4276,12 @@ export function helpCapability(
     ...(definition.headings === undefined
       ? {}
       : { headings: copyHelpHeadings(definition.headings) }),
-    ...(definition.wording === undefined
-      ? {}
-      : { wording: copyHelpFactWording(definition.wording) }),
+    ...(copiedWording === undefined ? {} : { wording: copiedWording.wording }),
   }) as HelpCapability;
   helpCapabilities.add(capability);
+  if (copiedWording !== undefined && copiedWording.invalidValues.size > 0) {
+    invalidHelpFactWordingValues.set(capability, copiedWording.invalidValues);
+  }
   return capability;
 }
 
@@ -4141,11 +4305,17 @@ function copyHelpHeadings(value: unknown): HelpHeadings {
   return Object.freeze(headings);
 }
 
-function copyHelpFactWording(value: unknown): HelpFactWording {
+function copyHelpFactWording(
+  value: unknown,
+): Readonly<{
+  readonly wording: HelpFactWording;
+  readonly invalidValues: ReadonlyMap<string, unknown>;
+}> {
   if (!isPlainRecord(value)) {
     throw new TypeError("帮助事实文案必须是对象");
   }
   const wording: Record<string, string> = {};
+  const invalidValues = new Map<string, unknown>();
   const unknownSlotIssues: ContractDefinitionIssue[] = [];
   for (const [slot, raw] of Object.entries(value)) {
     if (!isHelpTemplateSlot(slot)) {
@@ -4155,19 +4325,27 @@ function copyHelpFactWording(value: unknown): HelpFactWording {
       });
       continue;
     }
-    wording[slot] = typeof raw === "string" ? raw : "";
+    if (typeof raw === "string") {
+      wording[slot] = raw;
+    } else {
+      invalidValues.set(slot, raw);
+      wording[slot] = "";
+    }
   }
   const [firstUnknownSlotIssue, ...otherUnknownSlotIssues] = unknownSlotIssues;
   if (firstUnknownSlotIssue !== undefined) {
     const templateIssues: ContractDefinitionIssue[] = [];
-    collectHelpFactTemplateIssues(wording, templateIssues);
+    collectHelpFactTemplateIssues(wording, templateIssues, invalidValues);
     throw new ContractDefinitionError([
       firstUnknownSlotIssue,
       ...otherUnknownSlotIssues,
       ...templateIssues,
     ]);
   }
-  return Object.freeze(wording);
+  return Object.freeze({
+    wording: Object.freeze(wording),
+    invalidValues,
+  });
 }
 
 function isHelpTemplateSlot(
@@ -4179,12 +4357,13 @@ function isHelpTemplateSlot(
 function collectHelpFactTemplateIssues(
   wording: HelpFactWording,
   issues: ContractDefinitionIssue[],
+  invalidValues: ReadonlyMap<string, unknown> = new Map(),
 ): void {
   for (const [slot, template] of Object.entries(wording)) {
     if (!isHelpTemplateSlot(slot)) continue;
     const path = ["help", "wording", slot];
     let reason: "singleLine" | "empty" | "placeholder" | undefined;
-    if (!isSingleLineText(template)) {
+    if (invalidValues.has(slot) || !isSingleLineText(template)) {
       reason = "singleLine";
     } else if (template.trim().length === 0) {
       reason = "empty";
@@ -4214,7 +4393,7 @@ function collectHelpFactTemplateIssues(
         code: "invalidHelpFactTemplate",
         path,
         slot,
-        received: template,
+        received: invalidValues.has(slot) ? invalidValues.get(slot) : template,
         reason,
       });
     }
@@ -4418,7 +4597,11 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
     ? definition.help.wording
     : undefined;
   if (helpWording !== undefined) {
-    collectHelpFactTemplateIssues(helpWording, issues);
+    collectHelpFactTemplateIssues(
+      helpWording,
+      issues,
+      invalidHelpFactWordingValues.get(definition.help),
+    );
   }
   if (isTextOutputEnabled(definition.output)) {
     for (const slot of ["choices", "default"] as const) {

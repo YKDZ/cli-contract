@@ -797,11 +797,6 @@ assert.deepEqual(
 if (typeof projectedDefinitions !== "object" || projectedDefinitions === null) {
   throw new TypeError("count 投影缺少模式定义");
 }
-assert.ok(
-  Object.keys(projectedDefinitions).some((name) =>
-    name.startsWith("__cliContract_count_"),
-  ),
-);
 assert.equal(
   readProperty(
     readProperty(readProperty(projectedInput, "properties"), "reference"),

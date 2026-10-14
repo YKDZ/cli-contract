@@ -42,7 +42,7 @@ export type ContractDefinitionIssue =
       readonly code: "invalidHelpFactTemplate";
       readonly path: readonly string[];
       readonly slot: string;
-      readonly received: string | null;
+      readonly received: unknown;
       readonly reason: "singleLine" | "empty" | "placeholder";
     }>
   | Readonly<

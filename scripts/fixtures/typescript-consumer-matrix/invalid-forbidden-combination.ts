@@ -5,6 +5,15 @@ import {
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
+const conflictingFactSuffix: readonly [
+  ...{ readonly kind: "present"; readonly field: "token" }[],
+  { readonly kind: "equals"; readonly field: "token"; readonly value: "safe" },
+  { readonly kind: "equals"; readonly field: "token"; readonly value: "force" },
+] = [
+  { kind: "equals", field: "token", value: "safe" },
+  { kind: "equals", field: "token", value: "force" },
+];
+
 const base = {
   help: helpCapability(),
   output: outputCapability({ defaultFormat: "structured" }),
@@ -297,6 +306,35 @@ defineCli()({
         {
           kind: "forbiddenCombination",
           all: [{ kind: "equals", field: "mode", value: { nested: true } }],
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+defineCli()({
+  root: "factSuffixConflict",
+  ...base,
+  commands: {
+    factSuffixConflict: {
+      kind: "rootCommand",
+      name: "事实后缀矛盾",
+      description: "保留事实已知后缀",
+      fields: {
+        token: {
+          kind: "valueOption",
+          longOption: "--token",
+          description: "令牌",
+        },
+      },
+      input: z.object({ token: z.enum(["safe", "force"]).optional() }),
+      usageConstraints: [
+        {
+          kind: "forbiddenCombination",
+          all: conflictingFactSuffix,
         },
       ],
       success: { kind: "completion" },

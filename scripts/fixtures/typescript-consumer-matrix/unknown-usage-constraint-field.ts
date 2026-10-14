@@ -10,6 +10,10 @@ const mixedRestReferences: readonly ["missing", ...string[]] = [
   "missing",
   "token",
 ];
+const missingSuffixEffectFields: readonly [...string[], "missing"] = [
+  "token",
+  "missing",
+];
 
 const define = defineCli();
 
@@ -102,6 +106,34 @@ defineCli()({
           kind: "when",
           all: [{ kind: "present", field: "auth" }],
           then: { require: mixedRestReferences },
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+defineCli()({
+  root: "suffixMissingEffect",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    suffixMissingEffect: {
+      kind: "rootCommand",
+      name: "后缀未知效果字段",
+      description: "保留效果已知后缀",
+      fields: {
+        token: { kind: "flag", longOption: "--token", description: "令牌" },
+      },
+      input: z.object({ token: z.boolean().optional() }),
+      usageConstraints: [
+        {
+          kind: "when",
+          all: [{ kind: "present", field: "token" }],
+          then: { require: missingSuffixEffectFields },
         },
       ],
       success: { kind: "completion" },

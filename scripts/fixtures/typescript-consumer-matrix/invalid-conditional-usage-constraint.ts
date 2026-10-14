@@ -76,6 +76,15 @@ define({
 const unionModeRequirement:
   | readonly ["mode", "token"]
   | readonly ["mode", "auth"] = ["mode", "token"];
+const requiredTokenSuffix: readonly [..."token"[], "token"] = ["token"];
+const conflictingFactSuffix: readonly [
+  ...{ readonly kind: "present"; readonly field: "token" }[],
+  { readonly kind: "equals"; readonly field: "token"; readonly value: "safe" },
+  { readonly kind: "equals"; readonly field: "token"; readonly value: "force" },
+] = [
+  { kind: "equals", field: "token", value: "safe" },
+  { kind: "equals", field: "token", value: "force" },
+];
 
 defineCli()({
   root: "multiFieldConflict",
@@ -150,6 +159,70 @@ defineCli()({
           kind: "when",
           all: [{ kind: "present", field: "mode" }],
           then: { require: unionModeRequirement, forbid: ["mode"] },
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+defineCli()({
+  root: "effectSuffixConflict",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    effectSuffixConflict: {
+      kind: "rootCommand",
+      name: "效果后缀矛盾",
+      description: "保留效果已知后缀",
+      fields: {
+        token: {
+          kind: "valueOption",
+          longOption: "--token",
+          description: "令牌",
+        },
+      },
+      input: z.object({ token: z.string().optional() }),
+      usageConstraints: [
+        {
+          kind: "when",
+          all: [{ kind: "present", field: "token" }],
+          then: { require: requiredTokenSuffix, forbid: ["token"] },
+        },
+      ],
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+defineCli()({
+  root: "factSuffixConflict",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    factSuffixConflict: {
+      kind: "rootCommand",
+      name: "事实后缀矛盾",
+      description: "保留事实已知后缀",
+      fields: {
+        token: {
+          kind: "valueOption",
+          longOption: "--token",
+          description: "令牌",
+        },
+      },
+      input: z.object({ token: z.enum(["safe", "force"]).optional() }),
+      usageConstraints: [
+        {
+          kind: "when",
+          all: conflictingFactSuffix,
+          then: { require: ["token"] },
         },
       ],
       success: { kind: "completion" },
