@@ -488,7 +488,6 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
       "unknownUsageConstraintField",
       "unknownUsageConstraintField",
       "unknownUsageConstraintField",
-      "unknownUsageConstraintField",
     ],
     required: [
       'command: "deploy"',
