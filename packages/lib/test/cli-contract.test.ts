@@ -77,6 +77,13 @@ function createFixtureCli(onRun: () => void = () => undefined) {
   });
 }
 
+function readProperty(value: unknown, key: string): unknown {
+  if (typeof value !== "object" || value === null || !Reflect.has(value, key)) {
+    return undefined;
+  }
+  return Reflect.get(value, key);
+}
+
 void test("空调用执行 completion 契约并写出规范 JSON", async () => {
   let runCount = 0;
   const cli = createFixtureCli(() => {
@@ -211,12 +218,25 @@ void test("usage failure manifest 闭合全部问题 wire 形状", () => {
   assert.doesNotMatch(wire, /"exitCode"/);
 });
 
-void test("inputRejected wire evidence 至少保留一个执行期 schema issue", () => {
-  const wire = JSON.stringify(createFixtureCli().manifest.usageFailure.wire);
-  assert.match(
-    wire,
-    /"code":\{"const":"inputRejected"\}.*?"evidence":\{.*?"minItems":1,"type":"array"\}\},"required":\["code","evidence"\]/,
-  );
+void test("inputRejected 线格式模式允许空 evidence", () => {
+  const wire = createFixtureCli().manifest.usageFailure.wire;
+  const scopes = readProperty(wire, "oneOf");
+  assert.ok(Array.isArray(scopes));
+  const issues = readProperty(readProperty(scopes[0], "properties"), "issues");
+  const issueVariants = readProperty(readProperty(issues, "items"), "oneOf");
+  assert.ok(Array.isArray(issueVariants));
+  const inputRejected = issueVariants.find((variant: unknown) => {
+    const properties = readProperty(variant, "properties");
+    return (
+      readProperty(readProperty(properties, "code"), "const") ===
+      "inputRejected"
+    );
+  });
+  assert.ok(inputRejected !== undefined);
+  const properties = readProperty(inputRejected, "properties");
+  const evidence = readProperty(properties, "evidence");
+  assert.equal(readProperty(evidence, "type"), "array");
+  assert.equal(readProperty(evidence, "minItems"), undefined);
 });
 
 void test("定义期请求两侧 Draft 2020-12 并公开不可变投影", () => {

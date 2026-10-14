@@ -1018,12 +1018,7 @@ function isStandardResult(
   if (!("issues" in value) || value.issues === undefined) {
     return "value" in value;
   }
-  return (
-    !("value" in value) &&
-    Array.isArray(value.issues) &&
-    value.issues.length > 0 &&
-    value.issues.every(isStandardIssue)
-  );
+  return Array.isArray(value.issues) && value.issues.every(isStandardIssue);
 }
 
 function isStandardIssue(value: unknown): value is StandardSchemaV1.Issue {
