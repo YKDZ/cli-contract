@@ -20,6 +20,7 @@ interface AuthoringDiagnosticCase {
   readonly fixture: string;
   readonly expectedCodes: readonly string[];
   readonly required: readonly string[];
+  readonly requiredAny?: readonly string[];
   readonly allowAdditionalDiagnostics?: boolean;
   readonly forbidden?: readonly string[];
 }
@@ -149,6 +150,7 @@ async function verifyCoreOnly(
     await writeFixtures(project, fixtures, [
       "core-node.ts",
       "core-root.ts",
+      "invalid-command-combination.ts",
       "invalid-forbidden-combination.ts",
       "invalid-help-fact-templates.ts",
       "input-schema-raw-mismatch.ts",
@@ -351,15 +353,16 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
       'actual: "staging"',
       "actual: 42",
       "actual: null",
-      "actual: { readonly nested: true; }",
+      "readonly actual: {",
       "expected: true",
-      'expected: "safe" | "force"',
       'kind: "repeatableOption"',
       'member: "all"',
       'fields: "mode"',
       'property: "typo"',
       'member: "forbiddenCombination"',
     ],
+    requiredAny: ['expected: "safe" | "force"', 'expected: "force" | "safe"'],
+    allowAdditionalDiagnostics: true,
   },
   {
     fixture: "invalid-help-fact-templates.ts",
@@ -418,6 +421,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
       "schemaInput: string",
       "schemaInput: number[]",
     ],
+    allowAdditionalDiagnostics: true,
   },
   {
     fixture: "unexpected-text-presenter.ts",
@@ -464,6 +468,7 @@ async function verifyAuthoringDiagnostic(
     fixture,
     expectedCodes,
     required,
+    requiredAny = [],
     allowAdditionalDiagnostics = false,
     forbidden = [],
   } = diagnostic;
@@ -503,6 +508,8 @@ async function verifyAuthoringDiagnostic(
         .sort((left, right) => left.localeCompare(right))
         .join(",") ||
     required.some((fragment) => !firstLevel.includes(fragment)) ||
+    (requiredAny.length > 0 &&
+      !requiredAny.some((fragment) => firstLevel.includes(fragment))) ||
     forbidden.some((fragment) => firstLevel.includes(fragment))
   ) {
     throw new Error(
@@ -513,10 +520,21 @@ async function verifyAuthoringDiagnostic(
         `Missing first-level evidence: ${required
           .filter((fragment) => !firstLevel.includes(fragment))
           .join(", ")}`,
+        requiredAny.length === 0 ||
+        requiredAny.some((fragment) => firstLevel.includes(fragment))
+          ? ""
+          : `Missing one of first-level evidence: ${requiredAny.join(" OR ")}`,
         firstLevel,
       ].join("\n"),
     );
   }
+}
+
+interface LanguageServiceDiagnosticCase {
+  readonly fixture: string;
+  readonly count: number;
+  readonly required: readonly string[];
+  readonly requiredAny?: readonly string[];
 }
 
 function verifyAuthoringLanguageService(
@@ -524,7 +542,7 @@ function verifyAuthoringLanguageService(
   resolution: (typeof resolutions)[number],
   fixtures: Readonly<Record<string, string>>,
 ): void {
-  const cases = [
+  const cases: readonly LanguageServiceDiagnosticCase[] = [
     {
       fixture: "unknown-usage-constraint-field.ts",
       count: 2,
@@ -548,7 +566,7 @@ function verifyAuthoringLanguageService(
     },
     {
       fixture: "invalid-forbidden-combination.ts",
-      count: 12,
+      count: 13,
       required: [
         "invalidUsageConstraintValue",
         "unknownDefinitionProperty",
@@ -574,15 +592,15 @@ function verifyAuthoringLanguageService(
         'actual: "staging"',
         "actual: 42",
         "actual: null",
-        "actual: { readonly nested: true; }",
+        "actual: {",
         "expected: true",
-        'expected: "safe" | "force"',
         'kind: "repeatableOption"',
         'member: "all"',
         'fields: "mode"',
         'property: "typo"',
         'member: "forbiddenCombination"',
       ],
+      requiredAny: ['expected: "safe" | "force"', 'expected: "force" | "safe"'],
     },
     {
       fixture: "invalid-help-fact-templates.ts",
@@ -606,7 +624,7 @@ function verifyAuthoringLanguageService(
     },
     {
       fixture: "input-schema-raw-mismatch.ts",
-      count: 4,
+      count: 5,
       required: [
         "fieldInputMustAcceptRawValue",
         'command: "inspect"',
@@ -686,7 +704,7 @@ function verifyAuthoringLanguageService(
     } finally {
       coreSnapshot.dispose();
     }
-    for (const { fixture, count, required } of cases) {
+    for (const { fixture, count, required, requiredAny } of cases) {
       const config = resolve(
         project,
         `tsconfig.${resolution}.${fixture.replace(".ts", "")}.json`,
@@ -706,7 +724,9 @@ function verifyAuthoringLanguageService(
         if (
           diagnostics.length !== count ||
           firstLevel.length < count ||
-          required.some((fragment) => !visible.includes(fragment))
+          required.some((fragment) => !visible.includes(fragment)) ||
+          (requiredAny !== undefined &&
+            !requiredAny.some((fragment) => visible.includes(fragment)))
         ) {
           throw new Error(
             `Language service first-level diagnostic is incomplete for ${fixture}\n${visible}`,

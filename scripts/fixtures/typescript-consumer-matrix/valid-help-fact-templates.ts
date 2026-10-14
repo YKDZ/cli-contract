@@ -19,6 +19,11 @@ const validChoicesUnion: ValidChoicesUnion =
     : { choices: "可选 {choices}" };
 void helpCapability({ wording: validChoicesUnion });
 
+const inferredEmptyWordingBranch =
+  Math.random() < 0.5 ? {} : { wording: { choices: "候选 {choises}" } };
+// @ts-expect-error 无注解空分支不能让另一分支中的非法模板通过。
+void helpCapability(inferredEmptyWordingBranch);
+
 type OptionalValidWording = {
   readonly shortAlias: "-h";
   readonly wording?: { readonly choices: "候选 {choices}" };
