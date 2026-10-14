@@ -384,9 +384,8 @@ export type FieldDefinition =
 export type FieldDefinitions = Readonly<Record<string, FieldDefinition>>;
 
 /**
- * 由调用语法拥有、可同时投影到 parser 和 Draft 2020-12 的字段关系。
- * `requires` 与 `exclusive` 作用于可选 option；`forbiddenCombination`
- * 的离散值只作用于 flag 或 value option。动态声明在定义期检查这些前提。
+ * 由调用语法拥有、可同时交给 parser 判定并投影到 Draft 2020-12 的有限字段关系。
+ * 依赖跨字段计算、时间或业务状态的规则仍由 handler 返回具名失败表达。
  */
 export type UsageConstraint<
   Fields extends FieldDefinitions = FieldDefinitions,
