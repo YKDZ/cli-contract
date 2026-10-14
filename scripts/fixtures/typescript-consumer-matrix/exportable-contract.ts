@@ -24,10 +24,29 @@ type Found = Readonly<{
 type Unavailable = Readonly<{
   readonly reason: "offline" | "denied";
 }>;
+type TailInput = Readonly<{
+  readonly topic: "source" | "mirror";
+  readonly follow?: boolean;
+}>;
+type TailOutput = Readonly<{
+  readonly target: string;
+  readonly follow?: boolean;
+}>;
+type TailLine = Readonly<{
+  readonly target: string;
+  readonly endpoint: Dependencies["endpoint"];
+}>;
+type TailUnavailable = Readonly<{
+  readonly reason: "offline" | "denied";
+  readonly endpoint: Dependencies["endpoint"];
+}>;
 
 declare const inspectInput: ContractSchema<InspectInput, InspectOutput>;
 declare const foundPayload: ContractSchema<Found>;
 declare const unavailablePayload: ContractSchema<Unavailable>;
+declare const tailInput: ContractSchema<TailInput, TailOutput>;
+declare const tailLinePayload: ContractSchema<TailLine>;
+declare const tailUnavailablePayload: ContractSchema<TailUnavailable>;
 
 const define = defineCli<Dependencies>();
 
@@ -82,6 +101,64 @@ export const inspectCombination = define.command("inspect")({
     }),
 });
 
+export const tailCombination = define.command("tail")({
+  kind: "command",
+  parent: "tool",
+  name: "tail",
+  description: "读取记录",
+  fields: {
+    topic: {
+      kind: "valueOption",
+      longOption: "--topic",
+      description: "来源",
+    },
+    follow: {
+      kind: "flag",
+      longOption: "--follow",
+      description: "持续读取",
+    },
+  },
+  input: tailInput,
+  usageConstraints: [
+    {
+      kind: "forbiddenCombination",
+      all: [
+        { kind: "equals", field: "topic", value: "source" },
+        { kind: "present", field: "follow" },
+      ],
+    },
+  ],
+  success: {
+    kind: "stream",
+    records: {
+      line: {
+        description: "读取结果",
+        schema: tailLinePayload,
+      },
+    },
+  },
+  failures: {
+    unavailable: {
+      description: "来源不可用",
+      schema: tailUnavailablePayload,
+      exitCode: 10,
+    },
+  },
+  async *handler({ dependencies, input, outcome }) {
+    yield outcome.record.line({
+      target: input.target,
+      endpoint: dependencies.endpoint,
+    });
+    if (input.follow) {
+      return outcome.failure.unavailable({
+        reason: "offline",
+        endpoint: dependencies.endpoint,
+      });
+    }
+    return outcome.streamSuccess();
+  },
+});
+
 export const cli = define({
   root: "tool",
   help: helpCapability(),
@@ -94,5 +171,6 @@ export const cli = define({
       description: "工具",
     },
     ...inspectCombination,
+    ...tailCombination,
   },
 });
