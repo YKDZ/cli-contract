@@ -10,6 +10,8 @@ export {
   type CliContractRoot,
   type CliGrammar,
   type CliManifest,
+  type CommandCombination,
+  type CommandCombinationBrand,
   type CommandGrammar,
   type CommandGroupDefinition,
   type CommandGroupGrammar,
@@ -101,6 +103,7 @@ export {
   type UsageConstraintGrammar,
   type ExclusiveUsageConstraint,
 } from "#/cli-contract";
+export type { AtomicTextPresenter } from "#/outcome-fact";
 export {
   executeCli,
   type CliOutput,
