@@ -26,7 +26,6 @@ export type ContractDefinitionIssue =
         | "choices"
         | "default"
         | "requires"
-        | "exclusive"
         | "forbiddenCombination"
         | "countExactly"
         | "countAtLeast"
@@ -335,11 +334,7 @@ export type ContractDefinitionIssue =
   | Readonly<{
       readonly code: "unknownUsageConstraintField";
       readonly command: string;
-      readonly constraint:
-        | "requires"
-        | "exclusive"
-        | "count"
-        | "forbiddenCombination";
+      readonly constraint: "requires" | "count" | "forbiddenCombination";
       readonly index: number;
       readonly member: "field" | "requires" | "fields" | "all.field";
       readonly field: string;
@@ -347,7 +342,7 @@ export type ContractDefinitionIssue =
   | Readonly<{
       readonly code: "inapplicableUsageConstraintField";
       readonly command: string;
-      readonly constraint: "requires" | "exclusive" | "forbiddenCombination";
+      readonly constraint: "requires" | "forbiddenCombination";
       readonly field: string;
       readonly kind: FieldKind;
     }>
@@ -364,7 +359,7 @@ export type ContractDefinitionIssue =
   | Readonly<{
       readonly code: "contradictoryUsageConstraint";
       readonly command: string;
-      readonly constraint: "requires" | "exclusive" | "forbiddenCombination";
+      readonly constraint: "requires" | "forbiddenCombination";
       readonly member?: "all";
       readonly fields: readonly string[];
     }>;

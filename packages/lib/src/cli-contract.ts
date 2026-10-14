@@ -149,7 +149,6 @@ const definitionPropertyKeys = {
   },
   usage: {
     requires: ["kind", "field", "requires"],
-    exclusive: ["kind", "fields"],
     count: ["kind", "fields", "min", "max"],
     forbiddenCombination: ["kind", "all"],
     fact: {
@@ -202,8 +201,6 @@ export interface HelpFactWording {
   readonly default?: string;
   /** 字段依赖关系，必须包含 `{field}` 与 `{requires}`。 */
   readonly requires?: string;
-  /** 互斥字段集合，必须包含 `{fields}`。 */
-  readonly exclusive?: string;
   /** 字段出现事实，必须包含 `{field}`。 */
   readonly present?: string;
   /** 字段等值事实，必须包含 `{field}` 与 `{value}`。 */
@@ -226,7 +223,6 @@ export const helpTemplateSpecifications = {
   choices: { placeholders: ["choices"] },
   default: { placeholders: ["value"] },
   requires: { placeholders: ["field", "requires"] },
-  exclusive: { placeholders: ["fields"] },
   present: { placeholders: ["field"] },
   equals: { placeholders: ["field", "value"] },
   forbiddenCombination: { placeholders: ["facts"] },
@@ -438,15 +434,14 @@ export type FieldDefinitions = Readonly<Record<string, FieldDefinition>>;
 
 /**
  * 由调用语法拥有、可同时投影到 parser 和 Draft 2020-12 的字段关系。
- * `requires` 与 `exclusive` 作用于可选 option；禁配事实可检查所有输入字段的
- * 出现状态，以及单值 flag、value option、positional 的等值状态。动态声明在定义期检查可观察的模式候选值。
+ * 禁配事实可检查所有输入字段的出现状态，以及单值 flag、value option、positional
+ * 的等值状态。动态声明在定义期检查可观察的模式候选值。
  */
 export type UsageConstraint<
   Fields extends FieldDefinitions = FieldDefinitions,
   Input = unknown,
 > =
   | RequiresUsageConstraint<Extract<keyof Fields, string>>
-  | ExclusiveUsageConstraint<Extract<keyof Fields, string>>
   | CountUsageConstraint<Fields>
   | ForbiddenCombinationUsageConstraint<Fields, Input>;
 
@@ -456,14 +451,9 @@ export interface RequiresUsageConstraint<Field extends string = string> {
   readonly requires: Field;
 }
 
-export interface ExclusiveUsageConstraint<Field extends string = string> {
-  readonly kind: "exclusive";
-  readonly fields: readonly [Field, Field, ...Field[]];
-}
-
 /**
  * 限制当前命令中 `fields` 所列 raw 输入字段的出现数量；字段组必须非空且无重复。
- * 规范化端点须满足 `0 <= min <= max <= fields.length`。每个 raw 自有属性只计一次，
+ * 规范化端点必须是有限整数，且满足 `0 <= min <= max <= fields.length`。每个 raw 自有属性只计一次，
  * 因而 `false` 也算出现，repeatable 或 variadic 字段的多个值仍只计一项；
  * 缺席的 variadic 字段没有属性，schema 默认值和转换结果也不会增加计数。
  * 缺省 `min` 为 0，缺省 `max` 为字段组长度，至少显式提供一个端点。
@@ -480,13 +470,6 @@ export interface CountUsageConstraint<
   readonly min?: number;
   readonly max?: number;
 }
-
-type DiscreteUsageValue<Field extends FieldDefinition> =
-  Field extends FlagDefinition
-    ? boolean
-    : Field extends ValueOptionDefinition
-      ? string
-      : never;
 
 /** 表示一个输入字段在 raw argv 解析结果中出现。 */
 export interface PresentUsageFact<Field extends string = string> {
@@ -726,21 +709,16 @@ type ClosedUsageConstraint<Constraint> =
         Constraint,
         (typeof definitionPropertyKeys.usage.requires)[number]
       >
-    : Constraint extends Readonly<{ readonly kind: "exclusive" }>
+    : Constraint extends Readonly<{ readonly kind: "count" }>
       ? RejectUnknownProperties<
           Constraint,
-          (typeof definitionPropertyKeys.usage.exclusive)[number]
+          (typeof definitionPropertyKeys.usage.count)[number]
         >
-      : Constraint extends Readonly<{ readonly kind: "count" }>
-        ? RejectUnknownProperties<
-            Constraint,
-            (typeof definitionPropertyKeys.usage.count)[number]
-          >
-        : Constraint extends Readonly<{
-              readonly kind: "forbiddenCombination";
-            }>
-          ? unknown
-          : unknown;
+      : Constraint extends Readonly<{
+            readonly kind: "forbiddenCombination";
+          }>
+        ? unknown
+        : unknown;
 
 type ClosedUsageConstraints<
   Command extends string,
@@ -2119,9 +2097,13 @@ type CountFieldDuplicates<
   Fields extends readonly unknown[],
   Seen = never,
 > = Fields extends readonly [infer Field, ...infer Remaining]
-  ? Field extends Seen
-    ? Field
-    : CountFieldDuplicates<Remaining, Seen | Field>
+  ? string extends Field
+    ? CountFieldDuplicates<Remaining, Seen>
+    : IsUnion<Field> extends true
+      ? CountFieldDuplicates<Remaining, Seen>
+      : Field extends Seen
+        ? Field
+        : CountFieldDuplicates<Remaining, Seen | Field>
   : never;
 
 type CountEndpoint<
@@ -2182,6 +2164,19 @@ type CountEndpointIssue<
               >
         : never;
 
+type CountEndpointValidationIssue<
+  Command extends string,
+  Constraint,
+  Fields extends readonly unknown[],
+  Member extends "min" | "max",
+> = CountEndpointIssue<
+  Command,
+  Member,
+  CountEndpoint<Constraint, Member>,
+  CountFieldRange<Fields>,
+  CountFieldMaximum<Fields>
+>;
+
 type CountRangeOrderIssue<
   Command extends string,
   Minimum,
@@ -2204,6 +2199,76 @@ type CountRangeOrderIssue<
     : never
   : never;
 
+type CountUnknownFieldIssue<
+  Command extends string,
+  Fields extends FieldDefinitions,
+  CountFields extends readonly unknown[],
+> = string extends CountFields[number]
+  ? never
+  : Exclude<CountFields[number], keyof Fields> extends infer UnknownField
+    ? [UnknownField] extends [never]
+      ? never
+      : ContractTypeError<
+          "unknownUsageConstraintField",
+          Readonly<{
+            readonly command: Command;
+            readonly constraint: "count";
+            readonly member: "fields";
+            readonly field: Extract<UnknownField, string>;
+          }>
+        >
+    : never;
+
+type CountDuplicateFieldIssue<
+  Command extends string,
+  CountFields extends readonly unknown[],
+> = [CountFieldDuplicates<CountFields>] extends [never]
+  ? never
+  : ContractTypeError<
+      "invalidCountConstraint",
+      Readonly<{
+        readonly command: Command;
+        readonly constraint: "count";
+        readonly member: "fields";
+        readonly reason: "duplicateFields";
+        readonly fields: CountFieldDuplicates<CountFields>;
+      }>
+    >;
+
+type CountEndpointRangeIssue<
+  Command extends string,
+  Constraint,
+  CountFields extends readonly unknown[],
+> = [
+  CountEndpoint<Constraint, "min"> | CountEndpoint<Constraint, "max">,
+] extends [never]
+  ? ContractTypeError<
+      "invalidCountConstraint",
+      Readonly<{
+        readonly command: Command;
+        readonly constraint: "count";
+        readonly member: "min";
+        readonly reason: "endpointRequired";
+      }>
+    >
+  : [
+        CountEndpointValidationIssue<Command, Constraint, CountFields, "min">,
+      ] extends [never]
+    ? [
+        CountEndpointValidationIssue<Command, Constraint, CountFields, "max">,
+      ] extends [never]
+      ? number extends
+          | CountEndpoint<Constraint, "min">
+          | CountEndpoint<Constraint, "max">
+        ? never
+        : CountRangeOrderIssue<
+            Command,
+            CountEndpoint<Constraint, "min">,
+            CountEndpoint<Constraint, "max">
+          >
+      : CountEndpointValidationIssue<Command, Constraint, CountFields, "max">
+    : CountEndpointValidationIssue<Command, Constraint, CountFields, "min">;
+
 type InvalidCountConstraintForFields<
   Command extends string,
   Constraint,
@@ -2212,100 +2277,21 @@ type InvalidCountConstraintForFields<
   Constraint extends Readonly<{
     readonly fields: infer CountFields extends readonly unknown[];
   }>
-    ?
-        | (string extends CountFields[number]
-            ? never
-            : Exclude<
-                  CountFields[number],
-                  keyof Fields
-                > extends infer UnknownField
-              ? [UnknownField] extends [never]
-                ? never
-                : ContractTypeError<
-                    "unknownUsageConstraintField",
-                    Readonly<{
-                      readonly command: Command;
-                      readonly constraint: "count";
-                      readonly member: "fields";
-                      readonly field: Extract<UnknownField, string>;
-                    }>
-                  >
-              : never)
-        | ([CountFields] extends [readonly [unknown, ...unknown[]]]
-            ? [CountFieldDuplicates<CountFields>] extends [never]
-              ? never
-              : ContractTypeError<
-                  "invalidCountConstraint",
-                  Readonly<{
-                    readonly command: Command;
-                    readonly constraint: "count";
-                    readonly member: "fields";
-                    readonly reason: "duplicateFields";
-                    readonly fields: CountFieldDuplicates<CountFields>;
-                  }>
-                >
-            : ContractTypeError<
-                "invalidCountConstraint",
-                Readonly<{
-                  readonly command: Command;
-                  readonly constraint: "count";
-                  readonly member: "fields";
-                  readonly reason: "nonEmpty";
-                }>
-              >)
-        | ([
-            CountEndpoint<Constraint, "min"> | CountEndpoint<Constraint, "max">,
-          ] extends [never]
-            ? ContractTypeError<
-                "invalidCountConstraint",
-                Readonly<{
-                  readonly command: Command;
-                  readonly constraint: "count";
-                  readonly member: "min";
-                  readonly reason: "endpointRequired";
-                }>
-              >
-            : never)
-        | CountEndpointIssue<
-            Command,
-            "min",
-            CountEndpoint<Constraint, "min">,
-            CountFieldRange<CountFields>,
-            CountFieldMaximum<CountFields>
+    ? [CountUnknownFieldIssue<Command, Fields, CountFields>] extends [never]
+      ? [CountFields["length"]] extends [0]
+        ? ContractTypeError<
+            "invalidCountConstraint",
+            Readonly<{
+              readonly command: Command;
+              readonly constraint: "count";
+              readonly member: "fields";
+              readonly reason: "nonEmpty";
+            }>
           >
-        | CountEndpointIssue<
-            Command,
-            "max",
-            CountEndpoint<Constraint, "max">,
-            CountFieldRange<CountFields>,
-            CountFieldMaximum<CountFields>
-          >
-        | ([
-            | CountEndpointIssue<
-                Command,
-                "min",
-                CountEndpoint<Constraint, "min">,
-                CountFieldRange<CountFields>,
-                CountFieldMaximum<CountFields>
-              >
-            | CountEndpointIssue<
-                Command,
-                "max",
-                CountEndpoint<Constraint, "max">,
-                CountFieldRange<CountFields>,
-                CountFieldMaximum<CountFields>
-              >,
-          ] extends [never]
-            ? number extends
-                | CountEndpoint<Constraint, "min">
-                | CountEndpoint<Constraint, "max">
-              ? never
-              : CountRangeOrderIssue<
-                  Command,
-                  CountEndpoint<Constraint, "min">,
-                  CountEndpoint<Constraint, "max">
-                >
-            : never)
+        : [CountDuplicateFieldIssue<Command, CountFields>] extends [never]
+          ? CountEndpointRangeIssue<Command, Constraint, CountFields>
+          : CountDuplicateFieldIssue<Command, CountFields>
+      : CountUnknownFieldIssue<Command, Fields, CountFields>
     : ContractTypeError<
         "invalidCountConstraint",
         Readonly<{
@@ -2348,23 +2334,8 @@ type InvalidUsageConstraintForFields<
             readonly field: Exclude<Field, keyof Fields>;
           }>
         >
-    : Constraint extends Readonly<{
-          readonly kind: "exclusive";
-          readonly fields: readonly (infer Field extends string)[];
-        }>
-      ? Exclude<Field, keyof Fields> extends never
-        ? never
-        : ContractTypeError<
-            "unknownUsageConstraintField",
-            Readonly<{
-              readonly command: Command;
-              readonly constraint: "exclusive";
-              readonly member: "fields";
-              readonly field: Exclude<Field, keyof Fields>;
-            }>
-          >
-      : Constraint extends Readonly<{ readonly kind: "count" }>
-        ? InvalidCountConstraintForFields<Command, Constraint, Fields>
+    : Constraint extends Readonly<{ readonly kind: "count" }>
+      ? InvalidCountConstraintForFields<Command, Constraint, Fields>
       : Constraint extends Readonly<{
             readonly kind: "forbiddenCombination";
             readonly all: infer Facts extends readonly unknown[];
@@ -2760,7 +2731,6 @@ export interface ExecutableCommandManifest extends Omit<
 
 export type UsageConstraintGrammar =
   | RequiresUsageConstraint
-  | ExclusiveUsageConstraint
   | CountUsageConstraintGrammar
   | ForbiddenCombinationUsageConstraint;
 
@@ -4456,13 +4426,11 @@ function collectUnknownDefinitionProperties(
         const allowed =
           constraint.kind === "requires"
             ? definitionPropertyKeys.usage.requires
-            : constraint.kind === "exclusive"
-              ? definitionPropertyKeys.usage.exclusive
-              : constraint.kind === "count"
-                ? definitionPropertyKeys.usage.count
-                : constraint.kind === "forbiddenCombination"
-                  ? definitionPropertyKeys.usage.forbiddenCombination
-                  : undefined;
+            : constraint.kind === "count"
+              ? definitionPropertyKeys.usage.count
+              : constraint.kind === "forbiddenCombination"
+                ? definitionPropertyKeys.usage.forbiddenCombination
+                : undefined;
         if (allowed === undefined) return;
         collectUnknownProperties(constraint, constraintPath, allowed, issues);
         if (
@@ -4874,7 +4842,6 @@ function compileUsageConstraints(
     const candidate = definition as Readonly<Record<string, unknown>>;
     if (
       candidate.kind !== "requires" &&
-      candidate.kind !== "exclusive" &&
       candidate.kind !== "count" &&
       candidate.kind !== "forbiddenCombination"
     ) {
@@ -4959,65 +4926,6 @@ function compileUsageConstraints(
           }),
         );
       }
-      continue;
-    }
-    if (candidate.kind === "exclusive") {
-      if (
-        !Array.isArray(candidate.fields) ||
-        candidate.fields.length < 2 ||
-        !candidate.fields.every((field) => typeof field === "string")
-      ) {
-        issues.push({
-          code: "invalidUsageConstraint",
-          command,
-          index,
-          aspect: "members",
-          received: "exclusive",
-        });
-        continue;
-      }
-      const selected = candidate.fields.map((key) => fieldsByKey.get(key));
-      for (const [fieldIndex, field] of selected.entries()) {
-        if (field === undefined) {
-          issues.push({
-            code: "unknownUsageConstraintField",
-            command,
-            constraint: "exclusive",
-            index,
-            member: "fields",
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- fields 已逐项检查为字符串，索引来自对应 selected 数组。
-            field: candidate.fields[fieldIndex] as string,
-          });
-        } else if (!isOptionalOption(field)) {
-          issues.push({
-            code: "inapplicableUsageConstraintField",
-            command,
-            constraint: "exclusive",
-            field: field.key,
-            kind: field.kind,
-          });
-        }
-      }
-      const fieldsInConstraint = candidate.fields;
-      if (new Set(fieldsInConstraint).size !== fieldsInConstraint.length)
-        issues.push({
-          code: "contradictoryUsageConstraint",
-          command,
-          constraint: "exclusive",
-          fields: Object.freeze([...fieldsInConstraint]),
-        });
-      if (selected.every((field) => field !== undefined))
-        compiled.push(
-          deepFreeze({
-            kind: "exclusive" as const,
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- fields 已检查至少两个字符串，冻结后保留非空元组长度。
-            fields: Object.freeze([...fieldsInConstraint]) as [
-              string,
-              string,
-              ...string[],
-            ],
-          }),
-        );
       continue;
     }
     if (candidate.kind === "forbiddenCombination") {
@@ -5252,23 +5160,6 @@ function compileUsageConstraints(
       aspect: "kind",
       received: null,
     });
-  }
-  for (const constraint of compiled) {
-    if (constraint.kind !== "requires") continue;
-    if (constraint.field === constraint.requires) continue;
-    const exclusive = compiled.find(
-      (candidate): candidate is ExclusiveUsageConstraint =>
-        candidate.kind === "exclusive" &&
-        candidate.fields.includes(constraint.field) &&
-        candidate.fields.includes(constraint.requires),
-    );
-    if (exclusive !== undefined)
-      issues.push({
-        code: "contradictoryUsageConstraint",
-        command,
-        constraint: "requires",
-        fields: Object.freeze([constraint.field, constraint.requires]),
-      });
   }
   return deepFreeze(compiled);
 }
@@ -5524,18 +5415,6 @@ function projectUsageConstraints(
           ["then", { required: [constraint.requires] }],
         ]),
       );
-      continue;
-    }
-    if (constraint.kind === "exclusive") {
-      constraintSchemas.push({
-        not: {
-          anyOf: constraint.fields.flatMap((field, index) =>
-            constraint.fields.slice(index + 1).map((other) => ({
-              required: [field, other],
-            })),
-          ),
-        },
-      });
       continue;
     }
     if (constraint.kind === "count") {

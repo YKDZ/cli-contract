@@ -58,7 +58,7 @@ function createConstrainedCli(handler = () => undefined) {
         },
         usageConstraints: [
           { kind: "requires", field: "auth", requires: "token" },
-          { kind: "exclusive", fields: ["output", "quiet"] },
+          { kind: "count", fields: ["output", "quiet"], max: 1 },
           {
             kind: "forbiddenCombination",
             all: [
@@ -338,6 +338,23 @@ void test("count 按 raw 自有字段计数，false 与重复值只计一项且�
   });
   assert.equal(executions, 0);
 
+  const variadicInvocation = parseCliInvocation(cli, [
+    "--no-quiet",
+    "first",
+    "second",
+  ]);
+  assert.equal(
+    variadicInvocation.kind,
+    "parsed",
+    JSON.stringify(variadicInvocation),
+  );
+  if (variadicInvocation.kind !== "parsed") return;
+  assert.deepEqual(variadicInvocation.input, {
+    quiet: false,
+    paths: ["first", "second"],
+  });
+  assert.equal(executions, 0);
+
   const invalidInvocation = parseCliInvocation(cli, ["--no-quiet"]);
   assert.deepEqual(invalidInvocation, {
     kind: "usageFailure",
@@ -357,6 +374,33 @@ void test("count 按 raw 自有字段计数，false 与重复值只计一项且�
         "count-inputs [--auth <auth>] [--quiet|--no-quiet] [--label <labels>]... [<paths...>]",
     },
   });
+  const validateUsageWire = new Ajv2020({ strict: false }).compile(
+    cli.manifest.usageFailure.wire,
+  );
+  const countFailureIssue = {
+    code: "countConstraintViolation",
+    min: 2,
+    max: 2,
+    presentFields: ["quiet"],
+    absentFields: ["auth", "labels", "paths"],
+  };
+  const usageFailureWire = {
+    schemaVersion: "2",
+    command: "countInputs",
+    kind: "usageFailure",
+    issues: [countFailureIssue],
+    usage:
+      "count-inputs [--auth <auth>] [--quiet|--no-quiet] [--label <labels>]... [<paths...>]",
+    helpArgv: ["count-inputs", "--help"],
+  };
+  assert.equal(validateUsageWire(usageFailureWire), true);
+  assert.equal(
+    validateUsageWire({
+      ...usageFailureWire,
+      issues: [{ ...countFailureIssue, presentFields: [], absentFields: [] }],
+    }),
+    false,
+  );
   const termination = await executeCli(cli, {
     invocation: invalidInvocation,
     dependencies: undefined,
@@ -409,6 +453,11 @@ void test("count 的 Draft 2020-12 投影与 parser 在有效 raw 输入上判�
     {
       argv: ["--no-quiet", "--label", "first", "--label", "second"],
       input: { quiet: false, labels: ["first", "second"] },
+      accepted: true,
+    },
+    {
+      argv: ["--no-quiet", "first", "second"],
+      input: { quiet: false, paths: ["first", "second"] },
       accepted: true,
     },
     {
@@ -628,11 +677,15 @@ void test("count 不会把声明必需但缺席的字段预先算作出现", () 
 
 void test("动态 count 定义按端点和字段问题给出局部原因", () => {
   const dynamicFields: string[] = ["auth", "quiet"];
+  const emptyDynamicFields: string[] = [];
+  const duplicateDynamicFields: string[] = ["auth", "auth"];
   const dynamicNegative: number = -1;
   const dynamicFraction: number = 0.5;
   const cases: readonly Readonly<{
     readonly constraint: unknown;
-    readonly expected: Readonly<Record<string, unknown>>;
+    readonly expected:
+      | Readonly<Record<string, unknown>>
+      | readonly Readonly<Record<string, unknown>>[];
   }>[] = [
     {
       constraint: {
@@ -743,6 +796,46 @@ void test("动态 count 定义按端点和字段问题给出局部原因", () =>
       },
     },
     {
+      constraint: {
+        kind: "count",
+        fields: duplicateDynamicFields,
+        min: 1,
+      },
+      expected: {
+        code: "invalidCountConstraint",
+        command: "countInputs",
+        index: 0,
+        member: "fields",
+        reason: "duplicateFields",
+        fields: ["auth"],
+      },
+    },
+    {
+      constraint: {
+        kind: "count",
+        fields: emptyDynamicFields,
+        min: -1,
+        max: 0,
+      },
+      expected: [
+        {
+          code: "invalidCountConstraint",
+          command: "countInputs",
+          index: 0,
+          member: "fields",
+          reason: "nonEmpty",
+        },
+        {
+          code: "invalidCountConstraint",
+          command: "countInputs",
+          index: 0,
+          member: "min",
+          reason: "nonNegative",
+          actual: -1,
+        },
+      ],
+    },
+    {
       constraint: { kind: "count", fields: ["auth", "auth"], min: 1 },
       expected: {
         code: "invalidCountConstraint",
@@ -806,7 +899,10 @@ void test("动态 count 定义按端点和字段问题给出局部原因", () =>
       () => defineCli()(definition as never),
       (error: unknown) => {
         assert(error instanceof ContractDefinitionError);
-        assert.deepEqual(error.issues[0], expected);
+        assert.deepEqual(
+          error.issues,
+          Array.isArray(expected) ? expected : [expected],
+        );
         return true;
       },
     );
@@ -937,7 +1033,7 @@ void test("动态 count 数组聚合仍可独立判定的成员和端点问题",
   );
 });
 
-void test("三类闭合关系在无歧义解析后按声明顺序聚合，失败不执行 handler", async () => {
+void test("数量和禁配关系在无歧义解析后按声明顺序聚合，失败不执行 handler", async () => {
   let executions = 0;
   const cli = createConstrainedCli(() => {
     executions += 1;
@@ -956,7 +1052,13 @@ void test("三类闭合关系在无歧义解析后按声明顺序聚合，失败
     command: "publish",
     issues: [
       { code: "requiredByUsageConstraint", field: "auth", requires: "token" },
-      { code: "exclusiveUsageConstraint", fields: ["output", "quiet"] },
+      {
+        code: "countConstraintViolation",
+        min: 0,
+        max: 1,
+        presentFields: ["output", "quiet"],
+        absentFields: [],
+      },
       {
         code: "forbiddenCombinationViolation",
         facts: [
@@ -983,7 +1085,7 @@ void test("三类闭合关系在无歧义解析后按声明顺序聚合，失败
   assert.equal(termination.kind, "usageFailure");
   assert.equal(executions, 0);
   assert.deepEqual(writes, [
-    '{"schemaVersion":"2","command":"publish","kind":"usageFailure","issues":[{"code":"requiredByUsageConstraint","field":"auth","requires":"token"},{"code":"exclusiveUsageConstraint","fields":["output","quiet"]},{"code":"forbiddenCombinationViolation","facts":[{"kind":"equals","field":"format","value":"json"},{"kind":"equals","field":"quiet","value":true}]}],"usage":"publish [--auth <auth>] [--token <token>] [--output <output>] [--quiet] [--format <format>]","helpArgv":["publish","--help"]}\n',
+    '{"schemaVersion":"2","command":"publish","kind":"usageFailure","issues":[{"code":"requiredByUsageConstraint","field":"auth","requires":"token"},{"code":"countConstraintViolation","min":0,"max":1,"presentFields":["output","quiet"],"absentFields":[]},{"code":"forbiddenCombinationViolation","facts":[{"kind":"equals","field":"format","value":"json"},{"kind":"equals","field":"quiet","value":true}]}],"usage":"publish [--auth <auth>] [--token <token>] [--output <output>] [--quiet] [--format <format>]","helpArgv":["publish","--help"]}\n',
   ]);
 });
 
@@ -1257,7 +1359,7 @@ void test("同一约束事实投影到 grammar、manifest、Draft 2020-12 与 he
   const cli = createConstrainedCli();
   const constraints = [
     { kind: "requires", field: "auth", requires: "token" },
-    { kind: "exclusive", fields: ["output", "quiet"] },
+    { kind: "count", fields: ["output", "quiet"], min: 0, max: 1 },
     {
       kind: "forbiddenCombination",
       all: [
@@ -1271,29 +1373,12 @@ void test("同一约束事实投影到 grammar、manifest、Draft 2020-12 与 he
     cli.grammar.root.usageConstraints,
     cli.manifest.commands.publish.usageConstraints,
   );
-  assert.deepEqual(cli.manifest.commands.publish.input.inputSchema.allOf, [
-    Object.fromEntries([
-      ["if", { required: ["auth"] }],
-      // oxlint-disable-next-line unicorn/no-thenable -- Draft 2020-12 固定关键字。
-      ["then", { required: ["token"] }],
-    ]),
-    {
-      not: {
-        anyOf: [{ required: ["output", "quiet"] }],
-      },
-    },
-    {
-      not: {
-        allOf: [
-          {
-            properties: { format: { const: "json" } },
-            required: ["format"],
-          },
-          { properties: { quiet: { const: true } }, required: ["quiet"] },
-        ],
-      },
-    },
-  ]);
+  const projectedSchema = cli.manifest.commands.publish.input.inputSchema;
+  assert.ok(Array.isArray(projectedSchema.allOf));
+  assert.equal(projectedSchema.allOf.length, 3);
+  const validate = new Ajv2020({ strict: false }).compile(projectedSchema);
+  assert.equal(validate({ output: "result.txt" }), true);
+  assert.equal(validate({ output: "result.txt", quiet: false }), false);
 
   const writes: string[] = [];
   await executeCli(cli, {
@@ -1305,11 +1390,11 @@ void test("同一约束事实投影到 grammar、manifest、Draft 2020-12 与 he
   });
   assert.match(
     writes.join(""),
-    /--help\n\n  auth requires token\n  exclusive output, quiet\n  forbidden combination of format="json", quiet=true\n$/,
+    /--help\n\n  auth requires token\n  output, quiet at most 1\n  forbidden combination of format="json", quiet=true\n$/,
   );
 });
 
-void test("defineCli 以局部身份拒绝无效约束引用、字段种类、值和矛盾", () => {
+void test("defineCli 以局部身份拒绝无效约束引用和事实值", () => {
   const definition = {
     root: "invalidConstraints",
     help: englishHelpCapability(),
@@ -1331,7 +1416,6 @@ void test("defineCli 以局部身份拒绝无效约束引用、字段种类、�
         },
         usageConstraints: [
           { kind: "requires", field: "missing", requires: "force" },
-          { kind: "exclusive", fields: ["source", "force"] },
           {
             kind: "forbiddenCombination",
             all: [
@@ -1370,7 +1454,6 @@ void test("defineCli 以局部身份拒绝无效约束引用、字段种类、�
         [
           "unknownUsageConstraintField",
           "inapplicableUsageConstraintField",
-          "inapplicableUsageConstraintField",
           "invalidUsageConstraintValue",
           "contradictoryUsageConstraint",
         ],
@@ -1400,13 +1483,10 @@ void test("defineCli 聚合拒绝无效成员形状与动态候选值", () => {
           },
         },
         usageConstraints: [
-          { kind: "exclusive", fields: [] },
-          { kind: "exclusive", fields: ["force"] },
           {
             kind: "forbiddenCombination",
             all: [{ kind: "equals", field: "force", value: 42 }],
           },
-          { kind: "exclusive", fields: "force" },
           { kind: "forbiddenCombination", all: [] },
           { kind: "predicate" },
           {
@@ -1463,23 +1543,9 @@ void test("defineCli 聚合拒绝无效成员形状与动态候选值", () => {
       assert(error instanceof ContractDefinitionError);
       assert.deepEqual(error.issues, [
         {
-          code: "invalidUsageConstraint",
-          command: "invalidShapes",
-          index: 0,
-          aspect: "members",
-          received: "exclusive",
-        },
-        {
-          code: "invalidUsageConstraint",
-          command: "invalidShapes",
-          index: 1,
-          aspect: "members",
-          received: "exclusive",
-        },
-        {
           code: "invalidUsageConstraintValue",
           command: "invalidShapes",
-          index: 2,
+          index: 0,
           constraint: "forbiddenCombination",
           member: "all.value",
           field: "force",
@@ -1489,21 +1555,14 @@ void test("defineCli 聚合拒绝无效成员形状与动态候选值", () => {
         {
           code: "invalidUsageConstraint",
           command: "invalidShapes",
-          index: 3,
-          aspect: "members",
-          received: "exclusive",
-        },
-        {
-          code: "invalidUsageConstraint",
-          command: "invalidShapes",
-          index: 4,
+          index: 1,
           aspect: "members",
           received: "forbiddenCombination",
         },
         {
           code: "invalidUsageConstraint",
           command: "invalidShapes",
-          index: 5,
+          index: 2,
           aspect: "kind",
           received: "predicate",
         },
@@ -1511,7 +1570,7 @@ void test("defineCli 聚合拒绝无效成员形状与动态候选值", () => {
           code: "invalidUsageConstraintValue",
           command: "invalidShapes",
           constraint: "forbiddenCombination",
-          index: 6,
+          index: 3,
           member: "all.value",
           field: "mode",
           actual: "toml",
@@ -1521,7 +1580,7 @@ void test("defineCli 聚合拒绝无效成员形状与动态候选值", () => {
           code: "invalidUsageConstraintValue",
           command: "invalidShapes",
           constraint: "forbiddenCombination",
-          index: 7,
+          index: 4,
           member: "all.value",
           field: "force",
           actual: false,
@@ -1530,7 +1589,7 @@ void test("defineCli 聚合拒绝无效成员形状与动态候选值", () => {
         {
           code: "invalidUsageConstraint",
           command: "invalidShapes",
-          index: 8,
+          index: 5,
           aspect: "members",
           received: "forbiddenCombination",
         },
@@ -1538,7 +1597,7 @@ void test("defineCli 聚合拒绝无效成员形状与动态候选值", () => {
           code: "unknownUsageConstraintField",
           command: "invalidShapes",
           constraint: "forbiddenCombination",
-          index: 8,
+          index: 5,
           member: "all.field",
           field: "missing",
         },
@@ -1546,7 +1605,7 @@ void test("defineCli 聚合拒绝无效成员形状与动态候选值", () => {
           code: "invalidUsageConstraintValue",
           command: "invalidShapes",
           constraint: "forbiddenCombination",
-          index: 8,
+          index: 5,
           member: "all.value",
           field: "mode",
           actual: "toml",
@@ -1556,7 +1615,7 @@ void test("defineCli 聚合拒绝无效成员形状与动态候选值", () => {
           code: "invalidUsageConstraintValue",
           command: "invalidShapes",
           constraint: "forbiddenCombination",
-          index: 9,
+          index: 6,
           member: "all.value",
           field: "mode",
           actual: 42,
@@ -1566,7 +1625,7 @@ void test("defineCli 聚合拒绝无效成员形状与动态候选值", () => {
           code: "invalidUsageConstraintValue",
           command: "invalidShapes",
           constraint: "forbiddenCombination",
-          index: 10,
+          index: 7,
           member: "all.value",
           field: "mode",
           actual: null,
@@ -1576,7 +1635,7 @@ void test("defineCli 聚合拒绝无效成员形状与动态候选值", () => {
           code: "invalidUsageConstraintValue",
           command: "invalidShapes",
           constraint: "forbiddenCombination",
-          index: 11,
+          index: 8,
           member: "all.value",
           field: "mode",
           actual: { nested: true },
@@ -1586,7 +1645,7 @@ void test("defineCli 聚合拒绝无效成员形状与动态候选值", () => {
           code: "invalidUsageConstraintValue",
           command: "invalidShapes",
           constraint: "forbiddenCombination",
-          index: 12,
+          index: 9,
           member: "all.value",
           field: "mode",
           actual: undefined,
@@ -1595,7 +1654,7 @@ void test("defineCli 聚合拒绝无效成员形状与动态候选值", () => {
         {
           code: "invalidUsageConstraint",
           command: "invalidShapes",
-          index: 13,
+          index: 10,
           aspect: "members",
           received: "forbiddenCombination",
         },

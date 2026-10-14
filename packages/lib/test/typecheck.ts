@@ -381,7 +381,6 @@ function exhaustivelyRecognizeUsageIssue(issue: UsageIssue): string {
     case "conflictingFlag":
     case "conflictingOutputFormat":
     case "countConstraintViolation":
-    case "exclusiveUsageConstraint":
     case "forbiddenCombinationViolation":
     case "inputRejected":
     case "invalidOutputFormat":
@@ -1170,6 +1169,18 @@ function verifyTypeErrors() {
     min: 1,
     maximum: 1,
   });
+  const dynamicCountFieldNames: string[] = ["auth", "quiet"];
+  const dynamicCountFieldsDefinition = countDefinitionWith({
+    kind: "count",
+    fields: dynamicCountFieldNames,
+    min: 1,
+  });
+  const dynamicCountFieldPair: readonly [string, string] = ["auth", "quiet"];
+  const dynamicCountFieldPairDefinition = countDefinitionWith({
+    kind: "count",
+    fields: dynamicCountFieldPair,
+    min: 1,
+  });
   const dynamicCountFields: readonly [string, ...string[]] = ["auth", "quiet"];
   const reversedDynamicCountDefinition = countDefinitionWith({
     kind: "count",
@@ -1218,6 +1229,8 @@ function verifyTypeErrors() {
   defineCli()(emptyCountFieldsDefinition);
   // @ts-expect-error 数量约束不接受未声明属性。
   defineCli()(unknownCountPropertyDefinition);
+  defineCli()(dynamicCountFieldsDefinition);
+  defineCli()(dynamicCountFieldPairDefinition);
   // @ts-expect-error 字段组长度动态时仍在作者期拒绝已知颠倒端点。
   defineCli()(reversedDynamicCountDefinition);
   // @ts-expect-error 字段组长度动态时仍在作者期拒绝已知负数端点。

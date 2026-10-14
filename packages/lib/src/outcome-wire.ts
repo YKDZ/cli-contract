@@ -198,9 +198,6 @@ function usageIssueSchemas(): JsonObject[] {
     issueSchema("conflictingOutputFormat", {
       occurrences: { items: outputOccurrence, minItems: 2, type: "array" },
     }),
-    issueSchema("exclusiveUsageConstraint", {
-      fields: { items: string, minItems: 2, type: "array" },
-    }),
     {
       ...issueSchema("countConstraintViolation", {
         min: { minimum: 0, type: "integer" },

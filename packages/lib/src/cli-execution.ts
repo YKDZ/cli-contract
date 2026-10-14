@@ -405,10 +405,6 @@ function formatUsageConstraint(
       field: constraint.field,
       requires: constraint.requires,
     });
-  if (constraint.kind === "exclusive")
-    return renderHelpFactTemplate("exclusive", wording?.exclusive, {
-      fields: constraint.fields.join(", "),
-    });
   if (constraint.kind === "count") {
     const { slot, values } = countHelpFactForConstraint(constraint);
     return renderHelpFactTemplate(slot, wording?.[slot], values);

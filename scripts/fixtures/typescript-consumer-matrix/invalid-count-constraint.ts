@@ -94,6 +94,57 @@ const invalidFixedMaximumChild = define.command("quota")({
   handler: ({ outcome }) => outcome.completion(),
 });
 
+const invalidCompoundChild = define.command("compound")({
+  kind: "command",
+  parent: "workspace",
+  name: "compound",
+  description: "多个数量错误",
+  fields: {
+    auth: { kind: "flag", longOption: "--auth", description: "认证" },
+    quiet: { kind: "flag", longOption: "--quiet", description: "静默" },
+  },
+  input: z.object({
+    auth: z.boolean().optional(),
+    quiet: z.boolean().optional(),
+  }),
+  usageConstraints: [
+    {
+      kind: "count",
+      fields: ["auth", "quiet"],
+      min: -1,
+      max: 3,
+    },
+  ],
+  success: { kind: "completion" },
+  failures: {},
+  handler: ({ outcome }) => outcome.completion(),
+});
+
+const invalidFractionalChild = define.command("fractional")({
+  kind: "command",
+  parent: "workspace",
+  name: "fractional",
+  description: "小数端点",
+  fields: {
+    auth: { kind: "flag", longOption: "--auth", description: "认证" },
+    quiet: { kind: "flag", longOption: "--quiet", description: "静默" },
+  },
+  input: z.object({
+    auth: z.boolean().optional(),
+    quiet: z.boolean().optional(),
+  }),
+  usageConstraints: [
+    {
+      kind: "count",
+      fields: ["auth", "quiet"],
+      min: 0.5,
+    },
+  ],
+  success: { kind: "completion" },
+  failures: {},
+  handler: ({ outcome }) => outcome.completion(),
+});
+
 define({
   root: "workspace",
   help: countHelp,
@@ -106,8 +157,66 @@ define({
       description: "工作区",
     },
     ...invalidChild,
+  },
+});
+
+define({
+  root: "workspace",
+  help: countHelp,
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    workspace: {
+      kind: "rootGroup",
+      name: "工作区",
+      description: "工作区",
+    },
     ...invalidDynamicNegativeChild,
+  },
+});
+
+define({
+  root: "workspace",
+  help: countHelp,
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    workspace: {
+      kind: "rootGroup",
+      name: "工作区",
+      description: "工作区",
+    },
     ...invalidFixedMaximumChild,
+  },
+});
+
+define({
+  root: "workspace",
+  help: countHelp,
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    workspace: {
+      kind: "rootGroup",
+      name: "工作区",
+      description: "工作区",
+    },
+    ...invalidCompoundChild,
+  },
+});
+
+define({
+  root: "workspace",
+  help: countHelp,
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    workspace: {
+      kind: "rootGroup",
+      name: "工作区",
+      description: "工作区",
+    },
+    ...invalidFractionalChild,
   },
 });
 

@@ -107,11 +107,6 @@ export interface RequiredByUsageConstraintIssue {
   readonly requires: string;
 }
 
-export interface ExclusiveUsageConstraintIssue {
-  readonly code: "exclusiveUsageConstraint";
-  readonly fields: readonly [string, string, ...string[]];
-}
-
 /** 一条数量规则失败，按字段声明顺序划分 raw 输入中出现与缺席的字段。 */
 export interface CountConstraintViolationIssue {
   readonly code: "countConstraintViolation";
@@ -177,7 +172,6 @@ export type UsageIssue =
   | ConflictingFlagIssue
   | ConflictingOutputFormatIssue
   | CountConstraintViolationIssue
-  | ExclusiveUsageConstraintIssue
   | ForbiddenCombinationViolationIssue
   | InputRejectedIssue
   | InvalidFieldChoiceIssue
@@ -792,20 +786,6 @@ function collectStructuralIssues(
                 code: "requiredByUsageConstraint",
                 field: constraint.field,
                 requires: constraint.requires,
-              },
-            ]
-          : [];
-      }
-      if (constraint.kind === "exclusive") {
-        const present = constraint.fields.filter((field) =>
-          Object.hasOwn(input, field),
-        );
-        return present.length > 1
-          ? [
-              {
-                code: "exclusiveUsageConstraint",
-                // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- present.length 已检查大于一。
-                fields: Object.freeze(present) as [string, string, ...string[]],
               },
             ]
           : [];

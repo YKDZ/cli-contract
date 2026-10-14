@@ -107,7 +107,6 @@ export {
   type UsageConstraint,
   type UsageConstraintGrammar,
   type CountUsageConstraintGrammar,
-  type ExclusiveUsageConstraint,
 } from "#/cli-contract";
 export type { AtomicTextPresenter } from "#/outcome-fact";
 export {
@@ -126,7 +125,6 @@ export {
   type ConflictingFlagIssue,
   type ConflictingOutputFormatIssue,
   type CountConstraintViolationIssue,
-  type ExclusiveUsageConstraintIssue,
   type ForbiddenCombinationViolationIssue,
   type HelpRequest,
   type InputRejectedIssue,
