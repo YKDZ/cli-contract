@@ -19,7 +19,7 @@ const dependencies = {
 const commands = defineCommandScenarios(cli, {
   lookup: { argv: ["get", "alice", "--json"], dependencies },
   logs: { argv: ["logs", "--json"], dependencies },
-  refresh: { argv: ["refresh"], dependencies },
+  validate: { argv: ["validate", "alice"], dependencies },
 });
 const failures = defineFailureScenarios(cli, {
   lookup: {
@@ -33,7 +33,7 @@ for (const [command, scenario] of Object.entries(commands)) {
     const capture = await runCliScenario({ cliContract: cli, ...scenario });
     assert.equal(capture.termination.exitCode, 0);
     assert.equal(capture.stderr, "");
-    if (command === "refresh") {
+    if (command === "validate") {
       assert.equal(capture.stdout, "");
       return;
     }

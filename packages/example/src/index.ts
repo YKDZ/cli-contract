@@ -80,13 +80,13 @@ const logs = define.command("logs")({
   },
 });
 
-const refresh = define.command("refresh")({
+const validate = define.command("validate")({
   kind: "command",
   parent: "users",
-  name: "refresh",
-  description: "刷新用户索引",
-  fields: {},
-  input: z.object({}),
+  name: "validate",
+  description: "校验非空用户标识",
+  fields: { id: { kind: "positional", description: "用户标识" } },
+  input: z.object({ id: z.string().min(1) }),
   success: { kind: "completion", text: () => text.silent },
   failures: {},
   handler({ outcome }) {
@@ -120,10 +120,10 @@ export const cli = define({
     users: {
       kind: "rootGroup",
       name: "user",
-      description: "用户查询、索引维护与日志",
+      description: "用户查询、标识校验与日志",
     },
     ...lookup,
     ...logs,
-    ...refresh,
+    ...validate,
   },
 });
