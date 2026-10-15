@@ -1075,6 +1075,7 @@ assert.match(
 
 function defineInstalledFieldCli(field: string) {
   const projection = {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
     type: "object",
     properties: { [field]: { type: "string" } },
     additionalProperties: false,
