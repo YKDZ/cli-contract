@@ -100,7 +100,7 @@ const validate = define.command("validate")({
   },
   input: z.object({
     id: z.string().min(1).optional(),
-    email: z.string().email().optional(),
+    email: z.email().optional(),
     domain: z.string().min(1).optional(),
   }),
   // 模式分别校验字段格式；数量约束选择一种标识，域名条件只允许用于邮箱。
@@ -117,7 +117,7 @@ const validate = define.command("validate")({
     emailDomainMismatch: {
       description: "邮箱不属于指定域",
       schema: z.object({
-        email: z.string().email(),
+        email: z.email(),
         domain: z.string().min(1),
       }),
       exitCode: 1,
