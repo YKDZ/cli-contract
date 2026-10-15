@@ -64,6 +64,13 @@ const invalidTailOutput: TailOutput = { topic: "source" };
 
 type Constraints = (typeof inspectCombination.inspect.usageConstraints)[number];
 type CountConstraint = Extract<Constraints, { readonly kind: "count" }>;
+type WhenConstraint = Extract<Constraints, { readonly kind: "when" }>;
+const matchedField: WhenConstraint["onMatch"]["require"][number] = "dryRun";
+// @ts-expect-error 生成声明后的成立分支仍保留精确效果字段。
+const invalidMatchedField: WhenConstraint["onMatch"]["require"][number] =
+  "query";
+void matchedField;
+void invalidMatchedField;
 type CountField = CountConstraint["fields"][number];
 type ForbiddenFacts = Extract<
   Constraints,
@@ -103,6 +110,7 @@ const invocation = parseCliInvocation(cli, ["inspect", "--query", "alpha"]);
 if (invocation.kind === "usageFailure" && invocation.command === "inspect") {
   for (const issue of invocation.issues) {
     if (issue.code !== "conditionalConstraintViolation") continue;
+    issue.branch satisfies "onMatch" | "otherwise";
     const condition = issue.conditions[0];
     if (condition.kind !== "equals") continue;
     const expectedInput: "alpha" = condition.expected;

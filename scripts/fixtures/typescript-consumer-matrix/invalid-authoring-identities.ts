@@ -218,3 +218,173 @@ define({
     ...invalidNegatedChild,
   },
 });
+
+defineCli()({
+  root: "reservedConstructor",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    reservedConstructor: {
+      kind: "rootCommand",
+      name: "保留字段",
+      description: "禁名不因字段形态或必填性而放行",
+      fields: {
+        constructor: {
+          kind: "valueOption",
+          longOption: "--constructor",
+          description: "保留字段身份",
+        },
+      },
+      input: z.object({ constructor: z.string().optional() }),
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+defineCli()({
+  root: "reservedHasOwnProperty",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    reservedHasOwnProperty: {
+      kind: "rootCommand",
+      name: "保留字段",
+      description: "禁名不因字段形态或必填性而放行",
+      fields: {
+        hasOwnProperty: {
+          kind: "flag",
+          longOption: "--hasownproperty",
+          description: "保留字段身份",
+        },
+      },
+      input: z.object({ hasOwnProperty: z.boolean() }),
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+defineCli()({
+  root: "reservedIsPrototypeOf",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    reservedIsPrototypeOf: {
+      kind: "rootCommand",
+      name: "保留字段",
+      description: "禁名不因字段形态或必填性而放行",
+      fields: {
+        isPrototypeOf: {
+          kind: "positional",
+          description: "保留字段身份",
+        },
+      },
+      input: z.object({ isPrototypeOf: z.string() }),
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+defineCli()({
+  root: "reservedPropertyIsEnumerable",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    reservedPropertyIsEnumerable: {
+      kind: "rootCommand",
+      name: "保留字段",
+      description: "禁名不因字段形态或必填性而放行",
+      fields: {
+        propertyIsEnumerable: {
+          kind: "repeatableOption",
+          longOption: "--propertyisenumerable",
+          description: "保留字段身份",
+        },
+      },
+      input: z.object({
+        propertyIsEnumerable: z.array(z.string()).min(1).optional(),
+      }),
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+defineCli()({
+  root: "reservedToString",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    reservedToString: {
+      kind: "rootCommand",
+      name: "保留字段",
+      description: "禁名不因字段形态或必填性而放行",
+      fields: {
+        toString: {
+          kind: "valueOption",
+          longOption: "--tostring",
+          description: "保留字段身份",
+        },
+      },
+      input: z.object({ toString: z.string().optional() }),
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+defineCli()({
+  root: "reservedValueOf",
+  help: helpCapability(),
+  output: outputCapability({ defaultFormat: "structured" }),
+  usageFailureExitCode: 64,
+  commands: {
+    reservedValueOf: {
+      kind: "rootCommand",
+      name: "保留字段",
+      description: "禁名不因字段形态或必填性而放行",
+      fields: {
+        valueOf: {
+          kind: "variadicPositional",
+          description: "保留字段身份",
+        },
+      },
+      input: z.object({ valueOf: z.array(z.string()).min(1) }),
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    },
+  },
+});
+
+const reservedLocaleFields = {
+  toLocaleString: {
+    kind: "valueOption",
+    longOption: "--tolocalestring",
+    description: "保留字段身份",
+  },
+} as const;
+
+define.command("reservedToLocaleString")({
+  kind: "command",
+  parent: "workspace",
+  name: "保留字段",
+  description: "提取字段经命令组合也应拒绝",
+  fields: reservedLocaleFields,
+  input: z.object({ toLocaleString: z.string().optional() }),
+  success: { kind: "completion" },
+  failures: {},
+  handler: ({ outcome }) => outcome.completion(),
+});

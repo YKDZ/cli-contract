@@ -1,5 +1,4 @@
 import { toStandardJsonSchema } from "@valibot/to-json-schema";
-/* oxlint-disable unicorn/no-thenable -- then 是 when 条件的公开分支名。 */
 import {
   defineCli,
   executeCli,
@@ -526,18 +525,18 @@ const validWhenCli = defineCli()({
             { kind: "equals", field: "mode", value: "safe" },
             { kind: "present", field: "mode" },
           ],
-          then: { require: ["token", "token"], forbid: ["cursor"] },
+          onMatch: { require: ["token", "token"], forbid: ["cursor"] },
           otherwise: { forbid: ["token", "token"] },
         },
         {
           kind: "when",
           all: [{ kind: "present", field: "token" }],
-          then: { require: ["token"] },
+          onMatch: { require: ["token"] },
         },
         {
           kind: "when",
           all: [{ kind: "present", field: "cursor" }],
-          then: {},
+          onMatch: {},
           otherwise: { forbid: ["token"] },
         },
       ],
@@ -581,7 +580,7 @@ const dynamicEffectsWhenCli = defineCli()({
         {
           kind: "when",
           all: [{ kind: "present", field: "mode" }],
-          then: {
+          onMatch: {
             require: dynamicRequiredEffectFields,
             forbid: dynamicForbiddenEffectFields,
           },
@@ -618,7 +617,7 @@ const invalidWhenValueCli = defineCli()({
         {
           kind: "when",
           all: [{ kind: "equals", field: "mode", value: "toml" }],
-          then: { require: ["mode"] },
+          onMatch: { require: ["mode"] },
         },
       ],
       success: { kind: "completion" },
@@ -652,7 +651,7 @@ const invalidWhenEffectsCli = defineCli()({
         {
           kind: "when",
           all: [{ kind: "present", field: "mode" }],
-          then: { require: ["mode"], forbid: ["mode"] },
+          onMatch: { require: ["mode"], forbid: ["mode"] },
         },
       ],
       success: { kind: "completion" },
@@ -686,7 +685,7 @@ const noEffectWhenCli = defineCli()({
         {
           kind: "when",
           all: [{ kind: "present", field: "mode" }],
-          then: { require: [] },
+          onMatch: { require: [] },
           otherwise: { forbid: [] },
         },
       ],
@@ -698,7 +697,7 @@ const noEffectWhenCli = defineCli()({
 });
 void noEffectWhenCli;
 
-// @ts-expect-error then 和 otherwise 都未声明时仍是无效果规则。
+// @ts-expect-error onMatch 和 otherwise 都未声明时仍是无效果规则。
 defineCli()({
   root: "missingWhenEffects",
   help: helpCapability(),
@@ -735,7 +734,7 @@ const extractedWhenUnion =
     ? ({
         kind: "when",
         all: [{ kind: "present", field: "mode" }],
-        then: { require: ["token"], typo: true },
+        onMatch: { require: ["token"], typo: true },
       } as const)
     : ({
         kind: "when",
@@ -860,7 +859,7 @@ const replayCommand = defineObservationCli.command("replay")({
         { kind: "equals", field: "mode", value: "after" },
         { kind: "present", field: "token" },
       ],
-      then: { require: ["token"] },
+      onMatch: { require: ["token"] },
       otherwise: { forbid: ["token"] },
     },
   ],
@@ -893,7 +892,7 @@ const inspectCommand = defineObservationCli.command("inspect")({
     {
       kind: "when",
       all: [{ kind: "equals", field: "mode", value: "json" }],
-      then: { forbid: ["token"] },
+      onMatch: { forbid: ["token"] },
     },
   ],
   success: { kind: "completion" },
@@ -1010,7 +1009,7 @@ const rootObservationCli = defineCli()({
         {
           kind: "when",
           all: [{ kind: "equals", field: "mode", value: "safe" }],
-          then: { require: ["token"] },
+          onMatch: { require: ["token"] },
         },
       ],
       success: { kind: "completion" },

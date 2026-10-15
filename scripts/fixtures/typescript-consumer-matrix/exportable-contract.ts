@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/no-thenable -- then 是 when 条件的公开分支名。 */
 import {
   defineCli,
   helpCapability,
@@ -81,7 +80,7 @@ export const inspectCombination = define.command("inspect")({
     {
       kind: "when",
       all: [{ kind: "equals", field: "query", value: "alpha" }],
-      then: { require: ["dryRun"] },
+      onMatch: { require: ["dryRun"] },
       otherwise: { forbid: ["dryRun"] },
     },
     {

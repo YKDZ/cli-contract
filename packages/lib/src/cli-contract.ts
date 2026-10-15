@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/no-thenable -- then 是 when 条件的公开分支名。 */
 import {
   compileAtomicVariants,
   type RuntimeAtomicVariant,
@@ -23,6 +22,7 @@ import {
   projectFieldDescriptions,
 } from "#/contract-schema-compiler";
 import { copySingleLineText, isSingleLineText } from "#/description";
+import type { reservedFieldNames } from "#/field-identity";
 import { deepFreeze } from "#/json-value";
 import type {
   AtomicTextPresenter,
@@ -154,7 +154,7 @@ const definitionPropertyKeys = {
   },
   usage: {
     count: ["kind", "fields", "min", "max"],
-    when: ["kind", "all", "then", "otherwise"],
+    when: ["kind", "all", "onMatch", "otherwise"],
     effect: ["require", "forbid"],
     forbiddenCombination: ["kind", "all"],
     fact: {
@@ -205,12 +205,12 @@ export interface HelpFactWording {
   readonly choices?: string;
   /** 字段或输出格式的默认 JSON 值，必须包含 `{value}`。 */
   readonly default?: string;
-  /** 有效的成立分支，必须包含 `{facts}` 与 `{then}`。 */
-  readonly whenThen?: string;
+  /** 有效的成立分支，必须包含 `{facts}` 与 `{onMatch}`。 */
+  readonly whenOnMatch?: string;
   /** 有效的不成立分支，必须包含 `{facts}` 与 `{otherwise}`。 */
   readonly whenOtherwise?: string;
-  /** 两侧均有效的条件分支，必须包含 `{facts}`、`{then}` 与 `{otherwise}`。 */
-  readonly whenThenOtherwise?: string;
+  /** 两侧均有效的条件分支，必须包含 `{facts}`、`{onMatch}` 与 `{otherwise}`。 */
+  readonly whenOnMatchOtherwise?: string;
   /** 效果中的必需字段组，必须包含 `{fields}`。 */
   readonly require?: string;
   /** 效果中的禁止字段组，必须包含 `{fields}`。 */
@@ -236,9 +236,9 @@ export const helpTemplateSpecifications = {
   commandPlaceholder: { placeholders: [] },
   choices: { placeholders: ["choices"] },
   default: { placeholders: ["value"] },
-  whenThen: { placeholders: ["facts", "then"] },
+  whenOnMatch: { placeholders: ["facts", "onMatch"] },
   whenOtherwise: { placeholders: ["facts", "otherwise"] },
-  whenThenOtherwise: { placeholders: ["facts", "then", "otherwise"] },
+  whenOnMatchOtherwise: { placeholders: ["facts", "onMatch", "otherwise"] },
   require: { placeholders: ["fields"] },
   forbid: { placeholders: ["fields"] },
   present: { placeholders: ["field"] },
@@ -448,6 +448,11 @@ export type FieldDefinition =
   | VariadicPositionalDefinition
   | ValueOptionDefinition;
 
+/**
+ * 字段键须符合 lowerCamelCase，且不能使用 constructor、hasOwnProperty、
+ * isPrototypeOf、propertyIsEnumerable、toString、valueOf 或 toLocaleString。
+ * 迁移字段键时同步模式 Input 键及引用，命令行拼写可保留。
+ */
 export type FieldDefinitions = Readonly<Record<string, FieldDefinition>>;
 
 /**
@@ -583,7 +588,7 @@ export interface WhenUsageConstraint<
     UsageFact<Fields, Input>,
     ...UsageFact<Fields, Input>[],
   ];
-  readonly then?: UsageConstraintEffect<Extract<keyof Fields, string>>;
+  readonly onMatch?: UsageConstraintEffect<Extract<keyof Fields, string>>;
   readonly otherwise?: UsageConstraintEffect<Extract<keyof Fields, string>>;
 }
 
@@ -801,8 +806,8 @@ type ClosedUsageConstraint<Constraint> =
         (typeof definitionPropertyKeys.usage.when)[number]
       > &
         Readonly<{ readonly all: ClosedUsageFacts<Facts> }> &
-        (Constraint extends Readonly<{ readonly then?: infer Then }>
-          ? Readonly<{ readonly then?: ClosedUsageEffect<Then> }>
+        (Constraint extends Readonly<{ readonly onMatch?: infer OnMatch }>
+          ? Readonly<{ readonly onMatch?: ClosedUsageEffect<OnMatch> }>
           : unknown) &
         (Constraint extends Readonly<{ readonly otherwise?: infer Otherwise }>
           ? Readonly<{ readonly otherwise?: ClosedUsageEffect<Otherwise> }>
@@ -913,14 +918,26 @@ type FieldIdentityContract<
   Fields extends FieldDefinitions,
 > = string extends keyof Fields
   ? unknown
-  : InvalidFieldIdentities<Fields> extends never
+  :
+        | InvalidFieldIdentities<Fields>
+        | Extract<
+            keyof Fields,
+            (typeof reservedFieldNames)[number]
+          > extends never
     ? unknown
     : ContractTypeError<
         "invalidFieldIdentity",
         Readonly<{
           readonly command: Command;
-          readonly field: InvalidFieldIdentities<Fields>;
-          readonly reason: "lowerCamelCase";
+          readonly field: InvalidFieldIdentities<Fields> extends never
+            ? Extract<keyof Fields, (typeof reservedFieldNames)[number]>
+            : InvalidFieldIdentities<Fields>;
+          readonly reason: InvalidFieldIdentities<Fields> extends never
+            ? "reservedName"
+            : "lowerCamelCase";
+          readonly hint: InvalidFieldIdentities<Fields> extends never
+            ? "更换字段键，同步模式 Input 键及引用；CLI 拼写可保留"
+            : "小写字母开头，仅含字母和数字";
         }>
       >;
 
@@ -2114,8 +2131,8 @@ type InvalidWhenProperties<Command extends string, Constraint, Facts> =
             }>
           >
       : never)
-  | (Constraint extends Readonly<{ readonly then?: infer Then }>
-      ? InvalidWhenEffectProperties<Command, "then", Then>
+  | (Constraint extends Readonly<{ readonly onMatch?: infer OnMatch }>
+      ? InvalidWhenEffectProperties<Command, "onMatch", OnMatch>
       : never)
   | (Constraint extends Readonly<{ readonly otherwise?: infer Otherwise }>
       ? InvalidWhenEffectProperties<Command, "otherwise", Otherwise>
@@ -2675,7 +2692,7 @@ type GuaranteedUsageEffectFields<
 
 type UnknownUsageEffectFields<
   Command extends string,
-  Branch extends "then" | "otherwise",
+  Branch extends "onMatch" | "otherwise",
   Member extends "require" | "forbid",
   Effect,
   Fields extends FieldDefinitions,
@@ -2727,7 +2744,7 @@ type ContradictoryUsageEffectFields<Effect> = Effect extends unknown
 
 type InvalidUsageEffectForFields<
   Command extends string,
-  Branch extends "then" | "otherwise",
+  Branch extends "onMatch" | "otherwise",
   Effect,
   Fields extends FieldDefinitions,
 > =
@@ -2747,7 +2764,7 @@ type InvalidUsageEffectForFields<
 
 type WhenEffectForConstraint<
   Constraint,
-  Branch extends "then" | "otherwise",
+  Branch extends "onMatch" | "otherwise",
 > = Constraint extends object
   ? Branch extends keyof Constraint
     ? Exclude<Constraint[Branch], undefined>
@@ -2759,7 +2776,9 @@ type InvalidWhenHasNoEffects<
   Constraint,
 > = Constraint extends unknown
   ? [
-      DefinitelyEmptyUsageEffect<WhenEffectForConstraint<Constraint, "then">>,
+      DefinitelyEmptyUsageEffect<
+        WhenEffectForConstraint<Constraint, "onMatch">
+      >,
     ] extends [true]
     ? [
         DefinitelyEmptyUsageEffect<
@@ -2807,9 +2826,11 @@ type InvalidUsageConstraintForFields<
               ? [
                   InvalidUsageEffectForFields<
                     Command,
-                    "then",
-                    Constraint extends Readonly<{ readonly then?: infer Then }>
-                      ? Then
+                    "onMatch",
+                    Constraint extends Readonly<{
+                      readonly onMatch?: infer OnMatch;
+                    }>
+                      ? OnMatch
                       : undefined,
                     Fields
                   >,
@@ -2852,9 +2873,11 @@ type InvalidUsageConstraintForFields<
                     >
                 : InvalidUsageEffectForFields<
                     Command,
-                    "then",
-                    Constraint extends Readonly<{ readonly then?: infer Then }>
-                      ? Then
+                    "onMatch",
+                    Constraint extends Readonly<{
+                      readonly onMatch?: infer OnMatch;
+                    }>
+                      ? OnMatch
                       : undefined,
                     Fields
                   >
@@ -4743,16 +4766,16 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
         requiredUsageTemplates.add(countHelpFactForConstraint(constraint).slot);
       }
       if (constraint.kind === "when") {
-        const hasThen =
-          (constraint.then?.require?.length ?? 0) > 0 ||
-          (constraint.then?.forbid?.length ?? 0) > 0;
+        const hasOnMatch =
+          (constraint.onMatch?.require?.length ?? 0) > 0 ||
+          (constraint.onMatch?.forbid?.length ?? 0) > 0;
         const hasOtherwise =
           (constraint.otherwise?.require?.length ?? 0) > 0 ||
           (constraint.otherwise?.forbid?.length ?? 0) > 0;
-        if (hasThen && hasOtherwise) {
-          requiredUsageTemplates.add("whenThenOtherwise");
-        } else if (hasThen) {
-          requiredUsageTemplates.add("whenThen");
+        if (hasOnMatch && hasOtherwise) {
+          requiredUsageTemplates.add("whenOnMatchOtherwise");
+        } else if (hasOnMatch) {
+          requiredUsageTemplates.add("whenOnMatch");
         } else {
           requiredUsageTemplates.add("whenOtherwise");
         }
@@ -4760,13 +4783,13 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
           requiredUsageTemplates.add(fact.kind);
         }
         if (
-          (constraint.then?.require?.length ?? 0) > 0 ||
+          (constraint.onMatch?.require?.length ?? 0) > 0 ||
           (constraint.otherwise?.require?.length ?? 0) > 0
         ) {
           requiredUsageTemplates.add("require");
         }
         if (
-          (constraint.then?.forbid?.length ?? 0) > 0 ||
+          (constraint.onMatch?.forbid?.length ?? 0) > 0 ||
           (constraint.otherwise?.forbid?.length ?? 0) > 0
         ) {
           requiredUsageTemplates.add("forbid");
@@ -5073,7 +5096,7 @@ function collectUnknownDefinitionProperties(
           });
         }
         if (constraint.kind === "when") {
-          for (const branch of ["then", "otherwise"] as const) {
+          for (const branch of ["onMatch", "otherwise"] as const) {
             const effect = constraint[branch];
             if (!isPlainRecord(effect)) continue;
             collectUnknownProperties(
@@ -5503,9 +5526,9 @@ function compileUsageConstraints(
         fieldsByKey,
         issues,
       );
-      const then = compileUsageEffect(
-        candidate.then,
-        "then",
+      const onMatch = compileUsageEffect(
+        candidate.onMatch,
+        "onMatch",
         index,
         command,
         fieldsByKey,
@@ -5519,8 +5542,8 @@ function compileUsageConstraints(
         fieldsByKey,
         issues,
       );
-      const hasEffect = then.hasEffect || otherwise.hasEffect;
-      if (then.valid && otherwise.valid && !hasEffect) {
+      const hasEffect = onMatch.hasEffect || otherwise.hasEffect;
+      if (onMatch.valid && otherwise.valid && !hasEffect) {
         issues.push({
           code: "invalidUsageConstraint",
           command,
@@ -5532,13 +5555,15 @@ function compileUsageConstraints(
           expected: "至少一个分支包含非空 require 或 forbid 字段组",
         });
       }
-      if (facts.valid && then.valid && otherwise.valid && hasEffect) {
+      if (facts.valid && onMatch.valid && otherwise.valid && hasEffect) {
         compiled.push(
           deepFreeze({
             kind: "when" as const,
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- compileUsageFacts仅在all非空且所有事实合法时返回valid。
             all: facts.facts as [UsageFact, ...UsageFact[]],
-            ...(then.effect === undefined ? {} : { then: then.effect }),
+            ...(onMatch.effect === undefined
+              ? {}
+              : { onMatch: onMatch.effect }),
             ...(otherwise.effect === undefined
               ? {}
               : { otherwise: otherwise.effect }),
@@ -5848,7 +5873,7 @@ function compileUsageFacts(
 
 function compileUsageEffect(
   definition: unknown,
-  branch: "then" | "otherwise",
+  branch: "onMatch" | "otherwise",
   index: number,
   command: string,
   fieldsByKey: ReadonlyMap<string, FieldGrammar>,
@@ -6204,12 +6229,14 @@ function projectUsageConstraints(
         ),
       };
       const effects: Record<string, JsonValue> = {};
-      const then = constraint.then;
+      const onMatch = constraint.onMatch;
       if (
-        then !== undefined &&
-        ((then.require?.length ?? 0) > 0 || (then.forbid?.length ?? 0) > 0)
+        onMatch !== undefined &&
+        ((onMatch.require?.length ?? 0) > 0 ||
+          (onMatch.forbid?.length ?? 0) > 0)
       ) {
-        effects.then = usageEffectSchema(then);
+        // oxlint-disable-next-line unicorn/no-thenable -- Draft 2020-12 固定关键字。
+        effects.then = usageEffectSchema(onMatch);
       }
       const otherwise = constraint.otherwise;
       if (

@@ -30,9 +30,9 @@ export type ContractDefinitionIssue =
         | "countAtLeast"
         | "countAtMost"
         | "countBetween"
-        | "whenThen"
+        | "whenOnMatch"
         | "whenOtherwise"
-        | "whenThenOtherwise"
+        | "whenOnMatchOtherwise"
         | "require"
         | "forbid"
         | "present"
@@ -254,6 +254,7 @@ export type ContractDefinitionIssue =
       readonly code: "invalidFieldIdentity";
       readonly command: string;
       readonly field: string;
+      readonly reason: "lowerCamelCase" | "reservedName";
     }>
   | Readonly<{
       readonly code: "invalidFieldKind";
@@ -346,8 +347,8 @@ export type ContractDefinitionIssue =
       readonly member:
         | "fields"
         | "all.field"
-        | "then.require"
-        | "then.forbid"
+        | "onMatch.require"
+        | "onMatch.forbid"
         | "otherwise.require"
         | "otherwise.forbid";
       readonly field: string;
@@ -376,7 +377,7 @@ export type ContractDefinitionIssue =
       readonly command: string;
       readonly constraint: "forbiddenCombination" | "when";
       readonly index?: number;
-      readonly member?: "all" | "then" | "otherwise";
+      readonly member?: "all" | "onMatch" | "otherwise";
       readonly fields: readonly string[];
     }>;
 
@@ -492,7 +493,9 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
     case "invalidFieldLongOption":
       return `命令 ${issue.command} 的字段 ${issue.field} long option 无效`;
     case "invalidFieldIdentity":
-      return `命令 ${issue.command} 的字段身份 ${issue.field} 无效`;
+      return issue.reason === "reservedName"
+        ? `命令 ${issue.command} 的字段身份 ${issue.field} 为保留名称；请更换字段键，并同步模式 Input 键及相关引用；CLI 拼写可保留`
+        : `命令 ${issue.command} 的字段身份 ${issue.field} 必须符合 lowerCamelCase（小写字母开头，仅含字母和数字）`;
     case "invalidFieldKind":
       return `命令 ${issue.command} 的字段 ${issue.field} kind 无效`;
     case "invalidFieldShortAlias":

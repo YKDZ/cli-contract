@@ -9,6 +9,7 @@ import type {
 } from "#/contract-definition-error";
 import type { ContractSchema, JsonObject } from "#/contract-schema";
 import { isSingleLineText } from "#/description";
+import { invalidFieldIdentityReason } from "#/field-identity";
 import { copyJsonObject, deepFreeze } from "#/json-value";
 
 export function compileContractSchema(
@@ -177,8 +178,14 @@ export function compileInputFields(
   }
 
   const fields = Object.entries(definitions).map(([key, field]) => {
-    if (!/^[a-z][A-Za-z0-9]*$/.test(key)) {
-      issues.push({ code: "invalidFieldIdentity", command, field: key });
+    const identityReason = invalidFieldIdentityReason(key);
+    if (identityReason !== undefined) {
+      issues.push({
+        code: "invalidFieldIdentity",
+        command,
+        field: key,
+        reason: identityReason,
+      });
     }
     const invalidKind = readInvalidFieldKind(field);
     if (invalidKind !== undefined) {

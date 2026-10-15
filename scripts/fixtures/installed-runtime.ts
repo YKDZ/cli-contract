@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/no-thenable -- then 是 when 条件的公开分支名。 */
 import assert from "node:assert/strict";
 import { realpathSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -522,7 +521,8 @@ const constrainedCli = coreModule.defineCli()({
   help: coreModule.helpCapability({
     wording: {
       choices: "候选 {choices}",
-      whenThenOtherwise: "当全部满足 {facts} 时，{then}；否则，{otherwise}",
+      whenOnMatchOtherwise:
+        "当全部满足 {facts} 时，{onMatch}；否则，{otherwise}",
       require: "必须提供 {fields}",
       present: "字段 {field} 已出现",
       equals: "字段 {field}={value}",
@@ -569,7 +569,7 @@ const constrainedCli = coreModule.defineCli()({
         {
           kind: "when",
           all: [{ kind: "equals", field: "mode", value: "after" }],
-          then: { require: ["quiet"] },
+          onMatch: { require: ["quiet"] },
           otherwise: { require: ["format"] },
         },
         {
@@ -843,13 +843,13 @@ assert.deepEqual(countOnlyInvocation.issues, [
     absentFields: [],
   },
 ]);
-const rawThenMissingQuiet = {
+const rawOnMatchMissingQuiet = {
   format: "json",
   mode: "after",
   reference: "stable",
 };
 const rawOtherwiseMissingFormat = { reference: "stable" };
-const rawThenAllowedInput = {
+const rawOnMatchAllowedInput = {
   mode: "after",
   quiet: true,
   reference: "stable",
@@ -860,16 +860,16 @@ const rawOtherwiseAllowedInput = {
   reference: "stable",
 };
 for (const raw of [
-  rawThenMissingQuiet,
+  rawOnMatchMissingQuiet,
   rawOtherwiseMissingFormat,
-  rawThenAllowedInput,
+  rawOnMatchAllowedInput,
   rawOtherwiseAllowedInput,
 ]) {
   assert.equal(validateBaseInput(raw), true);
 }
-assert.equal(validateProjectedInput(rawThenMissingQuiet), false);
+assert.equal(validateProjectedInput(rawOnMatchMissingQuiet), false);
 assert.equal(validateProjectedInput(rawOtherwiseMissingFormat), false);
-assert.equal(validateProjectedInput(rawThenAllowedInput), true);
+assert.equal(validateProjectedInput(rawOnMatchAllowedInput), true);
 assert.equal(validateProjectedInput(rawOtherwiseAllowedInput), true);
 
 const allowedInvocation = coreModule.parseCliInvocation(constrainedCli, [
@@ -904,7 +904,7 @@ assert.deepEqual(forbiddenInvocation.issues, [
   { code: "forbiddenCombinationViolation", facts: expectedFacts },
 ]);
 
-const thenViolation = coreModule.parseCliInvocation(constrainedCli, [
+const onMatchViolation = coreModule.parseCliInvocation(constrainedCli, [
   "--mode",
   "after",
   "--format",
@@ -912,9 +912,9 @@ const thenViolation = coreModule.parseCliInvocation(constrainedCli, [
   "--reference",
   "stable",
 ]);
-const expectedThenIssue = {
+const expectedOnMatchIssue = {
   code: "conditionalConstraintViolation",
-  branch: "then",
+  branch: "onMatch",
   conditions: [
     {
       kind: "equals",
@@ -927,8 +927,8 @@ const expectedThenIssue = {
   missingRequiredFields: ["quiet"],
   presentForbiddenFields: [],
 };
-assert.equal(thenViolation.kind, "usageFailure");
-assert.deepEqual(thenViolation.issues, [expectedThenIssue]);
+assert.equal(onMatchViolation.kind, "usageFailure");
+assert.deepEqual(onMatchViolation.issues, [expectedOnMatchIssue]);
 
 const otherwiseViolation = coreModule.parseCliInvocation(constrainedCli, [
   "--reference",
@@ -1022,7 +1022,7 @@ const validateUsageWire = new Ajv2020({ strict: false }).compile(
 assert.equal(validateUsageWire(usageEnvelope), true);
 
 const conditionalTermination = await coreModule.executeCli(constrainedCli, {
-  invocation: thenViolation,
+  invocation: onMatchViolation,
   dependencies: undefined,
   write(output: Readonly<{ destination: string; chunk: string }>) {
     usageWrites.push(output);
@@ -1031,13 +1031,13 @@ const conditionalTermination = await coreModule.executeCli(constrainedCli, {
 assert.deepEqual(conditionalTermination, {
   kind: "usageFailure",
   command: "installedFacts",
-  issues: [expectedThenIssue],
+  issues: [expectedOnMatchIssue],
   exitCode: 64,
 });
 assert.equal(usageWrites.length, 2);
 const conditionalEnvelope: unknown = JSON.parse(usageWrites[1]!.chunk);
 assert.deepEqual(readProperty(conditionalEnvelope, "issues"), [
-  expectedThenIssue,
+  expectedOnMatchIssue,
 ]);
 assert.equal(validateUsageWire(conditionalEnvelope), true);
 
@@ -1072,3 +1072,75 @@ assert.match(
   helpWrites[0]!.chunk,
   /当全部满足 字段 mode="after" 时，必须提供 quiet；否则，必须提供 format/u,
 );
+
+function defineInstalledFieldCli(field: string) {
+  const projection = {
+    type: "object",
+    properties: { [field]: { type: "string" } },
+    additionalProperties: false,
+  };
+  return coreModule.defineCli()({
+    root: "fieldIdentity",
+    help: coreModule.helpCapability(),
+    output: coreModule.outputCapability({ defaultFormat: "structured" }),
+    usageFailureExitCode: 64,
+    commands: {
+      fieldIdentity: {
+        kind: "rootCommand",
+        name: "inspect",
+        description: "安装包字段身份",
+        fields: {
+          [field]: {
+            kind: "valueOption",
+            longOption: "--constructor",
+            description: "构造器",
+          },
+        },
+        input: {
+          "~standard": {
+            version: 1,
+            vendor: "installed-consumer",
+            validate(value: unknown) {
+              return { value };
+            },
+            jsonSchema: { input: () => projection, output: () => projection },
+          },
+        },
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }: { outcome: { completion(): unknown } }) =>
+          outcome.completion(),
+      },
+    },
+  });
+}
+assert.throws(
+  () => defineInstalledFieldCli("constructor"),
+  (error) => {
+    assert.ok(error instanceof coreModule.ContractDefinitionError);
+    assert.ok(error instanceof Error);
+    assert.deepEqual(readProperty(error, "issues"), [
+      {
+        code: "invalidFieldIdentity",
+        command: "fieldIdentity",
+        field: "constructor",
+        reason: "reservedName",
+      },
+    ]);
+    assert.match(error.message, /模式 Input.*引用.*CLI 拼写可保留/);
+    return true;
+  },
+);
+const renamedFieldCli = defineInstalledFieldCli("constructorName");
+const renamedFieldInvocation = coreModule.parseCliInvocation(renamedFieldCli, [
+  "--constructor",
+  "named",
+]);
+assert.equal(renamedFieldInvocation.kind, "parsed");
+assert.deepEqual(renamedFieldInvocation.input, { constructorName: "named" });
+const renamedFieldTermination = await coreModule.executeCli(renamedFieldCli, {
+  invocation: renamedFieldInvocation,
+  dependencies: undefined,
+  write: () => undefined,
+});
+assert.equal(renamedFieldTermination.kind, "applicationResult");

@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/no-thenable -- then 是 when 条件的公开分支名。 */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -62,7 +61,7 @@ function createConstrainedCli(handler = () => undefined) {
           {
             kind: "when",
             all: [{ kind: "present", field: "auth" }],
-            then: { require: ["token"], forbid: ["output", "quiet"] },
+            onMatch: { require: ["token"], forbid: ["output", "quiet"] },
           },
           {
             kind: "forbiddenCombination",
@@ -1065,7 +1064,7 @@ void test("条件规则与禁配规则按声明顺序聚合，失败不执行 ha
       },
       {
         code: "conditionalConstraintViolation",
-        branch: "then",
+        branch: "onMatch",
         conditions: [{ kind: "present", field: "auth", present: true }],
         missingRequiredFields: ["token"],
         presentForbiddenFields: ["output", "quiet"],
@@ -1096,7 +1095,7 @@ void test("条件规则与禁配规则按声明顺序聚合，失败不执行 ha
   assert.equal(termination.kind, "usageFailure");
   assert.equal(executions, 0);
   assert.deepEqual(writes, [
-    '{"schemaVersion":"2","command":"publish","kind":"usageFailure","issues":[{"code":"countConstraintViolation","min":0,"max":1,"presentFields":["output","quiet"],"absentFields":[]},{"code":"conditionalConstraintViolation","branch":"then","conditions":[{"kind":"present","field":"auth","present":true}],"missingRequiredFields":["token"],"presentForbiddenFields":["output","quiet"]},{"code":"forbiddenCombinationViolation","facts":[{"kind":"equals","field":"format","value":"json"},{"kind":"equals","field":"quiet","value":true}]}],"usage":"publish [--auth <auth>] [--token <token>] [--output <output>] [--quiet] [--format <format>]","helpArgv":["publish","--help"]}\n',
+    '{"schemaVersion":"2","command":"publish","kind":"usageFailure","issues":[{"code":"countConstraintViolation","min":0,"max":1,"presentFields":["output","quiet"],"absentFields":[]},{"code":"conditionalConstraintViolation","branch":"onMatch","conditions":[{"kind":"present","field":"auth","present":true}],"missingRequiredFields":["token"],"presentForbiddenFields":["output","quiet"]},{"code":"forbiddenCombinationViolation","facts":[{"kind":"equals","field":"format","value":"json"},{"kind":"equals","field":"quiet","value":true}]}],"usage":"publish [--auth <auth>] [--token <token>] [--output <output>] [--quiet] [--format <format>]","helpArgv":["publish","--help"]}\n',
   ]);
   const validateWire = new Ajv2020({ strict: false }).compile(
     cli.manifest.usageFailure.wire,
@@ -1110,7 +1109,7 @@ void test("条件规则与禁配规则按声明顺序聚合，失败不执行 ha
       issues: [
         {
           code: "conditionalConstraintViolation",
-          branch: "then",
+          branch: "onMatch",
           conditions: [
             {
               kind: "equals",
@@ -1138,7 +1137,7 @@ void test("跨规则的不可达条件分支不会触发全局可满足性拒绝
       {
         kind: "when",
         all: [{ kind: "present", field: "auth" }],
-        then: { require: ["quiet"] },
+        onMatch: { require: ["quiet"] },
       },
     ]),
     help: englishHelpCapability(),
@@ -1494,13 +1493,13 @@ void test("when 的分支 schema 与 parser 对照保留根引用及空效果", 
               { kind: "equals", field: "mode", value: "replay" },
               { kind: "present", field: "cursor" },
             ],
-            then: { require: ["token", "token"], forbid: ["feedback"] },
+            onMatch: { require: ["token", "token"], forbid: ["feedback"] },
             otherwise: { require: ["token"], forbid: ["feedback"] },
           },
           {
             kind: "when",
             all: [{ kind: "equals", field: "mode", value: "live" }],
-            then: { require: ["cursor"] },
+            onMatch: { require: ["cursor"] },
           },
           {
             kind: "when",
@@ -1510,7 +1509,7 @@ void test("when 的分支 schema 与 parser 对照保留根引用及空效果", 
           {
             kind: "when",
             all: [{ kind: "present", field: "token" }],
-            then: {},
+            onMatch: {},
             otherwise: { forbid: ["cursor"] },
           },
         ],
@@ -1543,27 +1542,27 @@ void test("when 的分支 schema 与 parser 对照保留根引用及空效果", 
     assert.equal(parseCliInvocation(cli, scenario.argv).kind, "parsed");
   }
 
-  const invalidThen = parseCliInvocation(cli, [
+  const invalidOnMatch = parseCliInvocation(cli, [
     "--mode",
     "replay",
     "--cursor",
     "c-7",
     "--feedback",
   ]);
-  assert.equal(invalidThen.kind, "usageFailure");
+  assert.equal(invalidOnMatch.kind, "usageFailure");
   assert.equal(
     validate({ mode: "replay", cursor: "c-7", feedback: true }),
     false,
   );
-  if (invalidThen.kind === "usageFailure") {
+  if (invalidOnMatch.kind === "usageFailure") {
     assert.deepEqual(
-      invalidThen.issues.filter(
+      invalidOnMatch.issues.filter(
         (issue) => issue.code === "conditionalConstraintViolation",
       ),
       [
         {
           code: "conditionalConstraintViolation",
-          branch: "then",
+          branch: "onMatch",
           conditions: [
             {
               kind: "equals",
@@ -1638,7 +1637,7 @@ void test("同一约束事实投影到 grammar、manifest、Draft 2020-12 与 he
     {
       kind: "when",
       all: [{ kind: "present", field: "auth" }],
-      then: { require: ["token"], forbid: ["output", "quiet"] },
+      onMatch: { require: ["token"], forbid: ["output", "quiet"] },
     },
     {
       kind: "forbiddenCombination",
@@ -1665,6 +1664,7 @@ void test("同一约束事实投影到 grammar、manifest、Draft 2020-12 与 he
   );
   assert.deepEqual(projectedSchema.allOf[1], {
     if: { allOf: [{ required: ["auth"] }] },
+    // oxlint-disable-next-line unicorn/no-thenable -- Draft 2020-12 固定关键字。
     then: {
       required: ["token"],
       not: {
@@ -1731,7 +1731,7 @@ void test("动态 when 校验复用事实和值域规则，并检查分支局部
               { kind: "equals", field: "tags", value: "nightly" },
               { kind: "present", field: "missing" },
             ],
-            then: { require: ["mode", "absent"], forbid: ["mode"] },
+            onMatch: { require: ["mode", "absent"], forbid: ["mode"] },
             otherwise: { forbid: ["missing"] },
           },
         ],
@@ -1782,7 +1782,7 @@ void test("动态 when 校验复用事实和值域规则，并检查分支局部
           command: "invalidConstraints",
           constraint: "when",
           index: 0,
-          member: "then",
+          member: "onMatch",
           fields: ["mode"],
         },
       );
@@ -1824,7 +1824,7 @@ void test("动态 when 聚合空分支、畸形成员及闭合属性诊断", () 
           {
             kind: "when",
             all: [],
-            then: { require: [] },
+            onMatch: { require: [] },
             otherwise: { forbid: [] },
           },
           {
@@ -1836,7 +1836,7 @@ void test("动态 when 聚合空分支、畸形成员及闭合属性诊断", () 
               { kind: "present", field: "mode", typo: true },
               { kind: "equals", field: "mode" },
             ],
-            then: { require: "mode", other: true },
+            onMatch: { require: "mode", other: true },
             otherwise: null,
           },
           { kind: "predicate" },
@@ -1904,7 +1904,7 @@ void test("动态 when 聚合空分支、畸形成员及闭合属性诊断", () 
             "invalidShapes",
             "usageConstraints",
             "5",
-            "then",
+            "onMatch",
             "other",
           ],
         ],
@@ -1946,7 +1946,7 @@ void test("动态 when 聚合空分支、畸形成员及闭合属性诊断", () 
           (issue) =>
             issue.code === "invalidUsageConstraint" &&
             issue.index === 5 &&
-            issue.member === "then.require",
+            issue.member === "onMatch.require",
         ),
       );
       assert.ok(
@@ -2246,7 +2246,7 @@ void test("when 成立时按一条规则报告完整条件与全部失败效果"
               { kind: "equals", field: "mode", value: "replay" },
               { kind: "present", field: "cursor" },
             ],
-            then: { require: ["token"], forbid: ["feedback"] },
+            onMatch: { require: ["token"], forbid: ["feedback"] },
             otherwise: { forbid: ["token"] },
           },
         ],
@@ -2272,7 +2272,7 @@ void test("when 成立时按一条规则报告完整条件与全部失败效果"
   assert.deepEqual(invocation.issues, [
     {
       code: "conditionalConstraintViolation",
-      branch: "then",
+      branch: "onMatch",
       conditions: [
         {
           kind: "equals",
@@ -2335,7 +2335,7 @@ void test("动态效果字段数组只在运行值实际重叠时产生条件失
           {
             kind: "when",
             all: [{ kind: "present", field: "mode" }],
-            then: { require: required, forbid: forbidden },
+            onMatch: { require: required, forbid: forbidden },
           },
         ],
         success: { kind: "completion" },
@@ -2351,7 +2351,7 @@ void test("动态效果字段数组只在运行值实际重叠时产生条件失
     issues: [
       {
         code: "conditionalConstraintViolation",
-        branch: "then",
+        branch: "onMatch",
         conditions: [{ kind: "present", field: "mode", present: true }],
         missingRequiredFields: ["token"],
         presentForbiddenFields: ["mode"],
@@ -2369,7 +2369,7 @@ void test("动态 when 效果保留混合数组中可知的错字段定位", () 
     {
       kind: "when",
       all: [{ kind: "present", field: "auth" }],
-      then: { require: ["missing", "quiet"] },
+      onMatch: { require: ["missing", "quiet"] },
     },
   ];
   assert.throws(
@@ -2382,7 +2382,7 @@ void test("动态 when 效果保留混合数组中可知的错字段定位", () 
           command: "countInputs",
           constraint: "when",
           index: 0,
-          member: "then.require",
+          member: "onMatch.require",
           field: "missing",
         },
       ]);

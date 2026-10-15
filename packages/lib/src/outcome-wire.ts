@@ -246,7 +246,7 @@ function usageIssueSchemas(): JsonObject[] {
     }),
     {
       ...issueSchema("conditionalConstraintViolation", {
-        branch: { enum: ["then", "otherwise"] },
+        branch: { enum: ["onMatch", "otherwise"] },
         conditions: {
           items: usageObservation,
           minItems: 1,

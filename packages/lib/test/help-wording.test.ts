@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/no-thenable -- then 是 when 条件的公开分支名。 */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -200,7 +199,7 @@ void test("已声明帮助事实缺少模板时在定义期报告命令与槽位
               {
                 kind: "when",
                 all: [{ kind: "present", field: "mode" }],
-                then: { require: ["mode"] },
+                onMatch: { require: ["mode"] },
               },
               {
                 kind: "when",
@@ -210,7 +209,7 @@ void test("已声明帮助事实缺少模板时在定义期报告命令与槽位
               {
                 kind: "when",
                 all: [{ kind: "equals", field: "mode", value: "force" }],
-                then: { require: ["mode"] },
+                onMatch: { require: ["mode"] },
                 otherwise: { forbid: ["mode"] },
               },
               {
@@ -235,7 +234,7 @@ void test("已声明帮助事实缺少模板时在定义期报告命令与槽位
         {
           code: "missingHelpFactTemplate",
           command: "choose",
-          slot: "whenThen",
+          slot: "whenOnMatch",
         },
         { code: "missingHelpFactTemplate", command: "choose", slot: "present" },
         {
@@ -252,7 +251,7 @@ void test("已声明帮助事实缺少模板时在定义期报告命令与槽位
         {
           code: "missingHelpFactTemplate",
           command: "choose",
-          slot: "whenThenOtherwise",
+          slot: "whenOnMatchOtherwise",
         },
         { code: "missingHelpFactTemplate", command: "choose", slot: "equals" },
         {
@@ -295,7 +294,7 @@ void test("空效果分支不要求对应帮助槽位", async () => {
           {
             kind: "when",
             all: [{ kind: "present", field: "mode" }],
-            then: {},
+            onMatch: {},
             otherwise: { forbid: ["mode"] },
           },
         ],
@@ -372,7 +371,7 @@ void test("动态帮助事实模板在根装配时聚合报告非法槽位", () 
 
 void test("帮助模板错误保留非法原值并继续聚合定义期问题", () => {
   const helpDefinition: HelpCapabilityDefinition = JSON.parse(
-    '{"wording":{"choices":42,"default":null,"countExactly":{},"whenThen":"满足 {unknown}"}}',
+    '{"wording":{"choices":42,"default":null,"countExactly":{},"whenOnMatch":"满足 {unknown}"}}',
   );
   const definition = {
     root: "choose",
@@ -424,8 +423,8 @@ void test("帮助模板错误保留非法原值并继续聚合定义期问题", 
         },
         {
           code: "invalidHelpFactTemplate",
-          path: ["help", "wording", "whenThen"],
-          slot: "whenThen",
+          path: ["help", "wording", "whenOnMatch"],
+          slot: "whenOnMatch",
           received: "满足 {unknown}",
           reason: "placeholder",
         },
@@ -580,9 +579,10 @@ void test("条件分支模板表达全称条件，并允许各槽位调整词序
     root: "publish",
     help: helpCapability({
       wording: {
-        whenThen: "当全部满足 {facts} 时，{then}",
+        whenOnMatch: "当全部满足 {facts} 时，{onMatch}",
         whenOtherwise: "当并非全部满足 {facts} 时，{otherwise}",
-        whenThenOtherwise: "当全部满足 {facts} 时，{then}；否则，{otherwise}",
+        whenOnMatchOtherwise:
+          "当全部满足 {facts} 时，{onMatch}；否则，{otherwise}",
         require: "必须提供 {fields}",
         forbid: "不能提供 {fields}",
         present: "存在 {field}",
@@ -617,7 +617,7 @@ void test("条件分支模板表达全称条件，并允许各槽位调整词序
           {
             kind: "when",
             all: [{ kind: "present", field: "auth" }],
-            then: { require: ["token"] },
+            onMatch: { require: ["token"] },
           },
           {
             kind: "when",
@@ -627,7 +627,7 @@ void test("条件分支模板表达全称条件，并允许各槽位调整词序
           {
             kind: "when",
             all: [{ kind: "equals", field: "quiet", value: true }],
-            then: { require: ["auth"] },
+            onMatch: { require: ["auth"] },
             otherwise: { forbid: ["token"] },
           },
           {

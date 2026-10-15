@@ -172,7 +172,7 @@ void test("邮箱域条件在子进程中返回准确的条件失败", () => {
     issues: [
       {
         code: "conditionalConstraintViolation",
-        branch: "then",
+        branch: "onMatch",
         conditions: [{ kind: "present", field: "domain", present: true }],
         missingRequiredFields: ["email"],
         presentForbiddenFields: [],

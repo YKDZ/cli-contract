@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/no-thenable -- then 是 when 条件的公开分支名。 */
 import {
   defineCli,
   helpCapability,
@@ -98,7 +97,7 @@ const replayScenarioCommand = defineScenarioCli.command("replay")({
     {
       kind: "when",
       all: [{ kind: "equals", field: "mode", value: "after" }],
-      then: { require: ["token"] },
+      onMatch: { require: ["token"] },
     },
   ],
   success: { kind: "completion" },
@@ -127,7 +126,7 @@ const inspectScenarioCommand = defineScenarioCli.command("inspect")({
     {
       kind: "when",
       all: [{ kind: "equals", field: "mode", value: "json" }],
-      then: { forbid: ["token"] },
+      onMatch: { forbid: ["token"] },
     },
   ],
   success: { kind: "completion" },

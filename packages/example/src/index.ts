@@ -109,8 +109,7 @@ const validate = define.command("validate")({
     {
       kind: "when",
       all: [{ kind: "present", field: "domain" }],
-      // oxlint-disable-next-line unicorn/no-thenable -- then 是 when 条件的公开分支名。
-      then: { require: ["email"] },
+      onMatch: { require: ["email"] },
     },
   ],
   success: { kind: "completion", text: () => text.silent },
@@ -155,7 +154,7 @@ export const cli = define({
       choices: "（候选：{choices}）",
       default: "（默认：{value}）",
       countExactly: "{fields} 恰好出现 {count} 项",
-      whenThen: "当全部满足 {facts} 时，{then}",
+      whenOnMatch: "当全部满足 {facts} 时，{onMatch}",
       require: "必须提供 {fields}",
       present: "{field} 已提供",
     },

@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/no-thenable -- then 是 when 条件的公开分支名。 */
 import {
   defineCli,
   helpCapability,
@@ -63,7 +62,7 @@ define({
         {
           kind: "when",
           all: [{ kind: "present", field: "token" }],
-          then: { require: ["token"], forbid: ["token"] },
+          onMatch: { require: ["token"], forbid: ["token"] },
         },
       ],
       success: { kind: "completion" },
@@ -116,7 +115,7 @@ defineCli()({
         {
           kind: "when",
           all: [{ kind: "present", field: "mode" }],
-          then: { require: ["mode", "token"], forbid: ["token"] },
+          onMatch: { require: ["mode", "token"], forbid: ["token"] },
         },
       ],
       success: { kind: "completion" },
@@ -158,7 +157,7 @@ defineCli()({
         {
           kind: "when",
           all: [{ kind: "present", field: "mode" }],
-          then: { require: unionModeRequirement, forbid: ["mode"] },
+          onMatch: { require: unionModeRequirement, forbid: ["mode"] },
         },
       ],
       success: { kind: "completion" },
@@ -190,7 +189,7 @@ defineCli()({
         {
           kind: "when",
           all: [{ kind: "present", field: "token" }],
-          then: { require: requiredTokenSuffix, forbid: ["token"] },
+          onMatch: { require: requiredTokenSuffix, forbid: ["token"] },
         },
       ],
       success: { kind: "completion" },
@@ -222,7 +221,7 @@ defineCli()({
         {
           kind: "when",
           all: conflictingFactSuffix,
-          then: { require: ["token"] },
+          onMatch: { require: ["token"] },
         },
       ],
       success: { kind: "completion" },

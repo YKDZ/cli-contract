@@ -4,9 +4,10 @@ export const englishHelpWording = {
   commandPlaceholder: "command",
   choices: "(choices: {choices})",
   default: "(default: {value})",
-  whenThen: "when all of {facts}, {then}",
+  whenOnMatch: "when all of {facts}, {onMatch}",
   whenOtherwise: "when not all of {facts}, {otherwise}",
-  whenThenOtherwise: "when all of {facts}, {then}; otherwise, {otherwise}",
+  whenOnMatchOtherwise:
+    "when all of {facts}, {onMatch}; otherwise, {otherwise}",
   require: "require {fields}",
   forbid: "forbid {fields}",
   present: "{field} is present",

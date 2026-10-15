@@ -171,7 +171,7 @@ void test("指定邮箱域时要求同时提供邮箱", async () => {
   assert.deepEqual(capture.termination.issues, [
     {
       code: "conditionalConstraintViolation",
-      branch: "then",
+      branch: "onMatch",
       conditions: [{ kind: "present", field: "domain", present: true }],
       missingRequiredFields: ["email"],
       presentForbiddenFields: [],

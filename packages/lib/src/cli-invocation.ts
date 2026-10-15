@@ -178,7 +178,7 @@ type EffectFields<
 /** 一条条件规则的完整 raw 观察和分支效果；每条失败规则只产生这一条问题。 */
 export interface ConditionalConstraintViolationIssue<
   Conditions extends readonly unknown[] = readonly UsageConstraintObservation[],
-  Branch extends "then" | "otherwise" = "then" | "otherwise",
+  Branch extends "onMatch" | "otherwise" = "onMatch" | "otherwise",
   MissingField extends string = string,
   ForbiddenField extends string = string,
 > {
@@ -201,10 +201,10 @@ type ConditionalConstraintEffectFields<
   WhenConstraintUnion<Constraints> extends infer Constraint
     ? Constraint extends Readonly<{
         readonly kind: "when";
-        readonly then?: infer Then;
+        readonly onMatch?: infer OnMatch;
         readonly otherwise?: infer Otherwise;
       }>
-      ? EffectFields<Then, Member> | EffectFields<Otherwise, Member>
+      ? EffectFields<OnMatch, Member> | EffectFields<Otherwise, Member>
       : never
     : never;
 
@@ -216,7 +216,7 @@ type ConditionalConstraintIssueFor<
   Constraint extends WhenUsageConstraint<FieldDefinitions, unknown>
     ? ConditionalConstraintViolationIssue<
         UsageConstraintObservationTuple<Constraint["all"]>,
-        "then" | "otherwise",
+        "onMatch" | "otherwise",
         MissingField,
         ForbiddenField
       >
@@ -953,7 +953,7 @@ function collectStructuralIssues(
           observeUsageFact(fact, input),
         );
         const branch = observed.every(({ matches }) => matches)
-          ? "then"
+          ? "onMatch"
           : "otherwise";
         const effect = constraint[branch];
         if (effect === undefined) return [];

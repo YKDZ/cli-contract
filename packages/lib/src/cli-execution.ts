@@ -1,6 +1,5 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 
-/* oxlint-disable unicorn/no-thenable -- then 是 when 条件的公开分支名。 */
 import {
   createCompletionFact,
   createDataFact,
@@ -416,25 +415,25 @@ function formatUsageConstraint(
     .map((fact) => formatUsageFact(fact, wording))
     .join(", ");
   if (constraint.kind === "when") {
-    const then =
-      constraint.then === undefined
+    const onMatch =
+      constraint.onMatch === undefined
         ? ""
-        : formatUsageEffect(constraint.then, wording);
+        : formatUsageEffect(constraint.onMatch, wording);
     const otherwise =
       constraint.otherwise === undefined
         ? ""
         : formatUsageEffect(constraint.otherwise, wording);
-    if (then.length > 0 && otherwise.length > 0) {
+    if (onMatch.length > 0 && otherwise.length > 0) {
       return renderHelpFactTemplate(
-        "whenThenOtherwise",
-        wording?.whenThenOtherwise,
-        { facts, then, otherwise },
+        "whenOnMatchOtherwise",
+        wording?.whenOnMatchOtherwise,
+        { facts, onMatch, otherwise },
       );
     }
-    if (then.length > 0) {
-      return renderHelpFactTemplate("whenThen", wording?.whenThen, {
+    if (onMatch.length > 0) {
+      return renderHelpFactTemplate("whenOnMatch", wording?.whenOnMatch, {
         facts,
-        then,
+        onMatch,
       });
     }
     return renderHelpFactTemplate("whenOtherwise", wording?.whenOtherwise, {

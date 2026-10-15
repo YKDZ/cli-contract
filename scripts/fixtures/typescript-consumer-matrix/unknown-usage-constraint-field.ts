@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/no-thenable -- then 是 when 条件的公开分支名。 */
 import {
   defineCli,
   helpCapability,
@@ -41,7 +40,7 @@ define({
         {
           kind: "when",
           all: [{ kind: "present", field: "auth" }],
-          then: { require: ["token"] },
+          onMatch: { require: ["token"] },
         },
       ],
       success: { kind: "completion" },
@@ -69,7 +68,7 @@ defineCli()({
         {
           kind: "when",
           all: [{ kind: "present", field: "auth" }],
-          then: { require: ["token"] },
+          onMatch: { require: ["token"] },
         },
       ],
       success: { kind: "completion" },
@@ -105,7 +104,7 @@ defineCli()({
         {
           kind: "when",
           all: [{ kind: "present", field: "auth" }],
-          then: { require: mixedRestReferences },
+          onMatch: { require: mixedRestReferences },
         },
       ],
       success: { kind: "completion" },
@@ -133,7 +132,7 @@ defineCli()({
         {
           kind: "when",
           all: [{ kind: "present", field: "token" }],
-          then: { require: missingSuffixEffectFields },
+          onMatch: { require: missingSuffixEffectFields },
         },
       ],
       success: { kind: "completion" },
