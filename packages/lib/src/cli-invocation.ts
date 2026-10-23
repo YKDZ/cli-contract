@@ -11,6 +11,7 @@ import {
   type UsageFact,
 } from "#/cli-contract";
 import { ContractExecutionError } from "#/contract-execution-error";
+import { evaluateCountUsageConstraint } from "#/usage-constraint";
 
 const cliInvocationType = Symbol("CliInvocation.type");
 const invocationContracts = new WeakMap<object, object>();
@@ -926,27 +927,8 @@ function collectStructuralIssues(
   const constraintIssues = usageConstraints.flatMap(
     (constraint): UsageIssue[] => {
       if (constraint.kind === "count") {
-        const presentFields = constraint.fields.filter((field) =>
-          Object.hasOwn(input, field),
-        );
-        if (
-          presentFields.length >= constraint.min &&
-          presentFields.length <= constraint.max
-        ) {
-          return [];
-        }
-        const present = new Set(presentFields);
-        return [
-          {
-            code: "countConstraintViolation",
-            min: constraint.min,
-            max: constraint.max,
-            presentFields: Object.freeze(presentFields),
-            absentFields: Object.freeze(
-              constraint.fields.filter((field) => !present.has(field)),
-            ),
-          },
-        ];
+        const issue = evaluateCountUsageConstraint(constraint, input);
+        return issue === undefined ? [] : [issue];
       }
       if (constraint.kind === "when") {
         const observed = constraint.all.map((fact) =>
