@@ -1,6 +1,6 @@
 {
   "name": "@ykdz/cli-contract-testing",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Consumer test scenarios for @ykdz/cli-contract.",
   "keywords": [
     "cli",
