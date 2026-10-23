@@ -39,7 +39,11 @@ import {
 import type { ContractSchema } from "#/contract-schema";
 import type { JsonValue } from "#/contract-schema";
 import { copyJsonValue } from "#/json-value";
-import { isIssuedTextProjection } from "#/outcome-fact";
+import {
+  encodeAtomicText,
+  encodeRecordText,
+  encodeTerminalText,
+} from "#/outcome-fact";
 import {
   createCompletionEnvelope,
   createDataEnvelope,
@@ -800,7 +804,7 @@ function projectApplicationFact(
     const chunk =
       outputFormat === "structured"
         ? `${JSON.stringify(createStreamRecordEnvelope(result.variant, data))}\n`
-        : formatStreamRecordText(record.text, data);
+        : encodeRecordText(presentStreamRecordText(record.text, data));
     return { result, output: { destination: "stdout", chunk }, exitCode: 0 };
   }
   if (phase === "terminal" && result.kind === "streamSuccess") {
@@ -812,18 +816,19 @@ function projectApplicationFact(
         received: result.kind,
       });
     }
-    let chunk: string;
+    let chunk: string | undefined;
     if (outputFormat === "structured")
       chunk = `${JSON.stringify(createStreamSuccessEnvelope())}\n`;
     else {
       const presenter = compiled.success.text;
       if (typeof presenter !== "function")
         throw new ContractExecutionError([{ code: "invalidCliContract" }]);
-      chunk = formatCompletionText(presenter());
+      chunk = encodeTerminalText(presenter());
     }
     return {
       result,
-      output: chunk === "" ? undefined : { destination: "stdout", chunk },
+      output:
+        chunk === undefined ? undefined : { destination: "stdout", chunk },
       exitCode: 0,
     };
   }
@@ -865,7 +870,7 @@ function projectApplicationFact(
         result: normalized,
         output: {
           destination: "stderr",
-          chunk: formatAtomicText(presenter(data)),
+          chunk: encodeAtomicText(presenter(data)),
         },
         exitCode: failure.exitCode,
       };
@@ -893,10 +898,11 @@ function projectApplicationFact(
       if (typeof presenter !== "function") {
         throw new ContractExecutionError([{ code: "invalidCliContract" }]);
       }
-      const chunk = formatCompletionText(presenter());
+      const chunk = encodeTerminalText(presenter());
       return {
         result,
-        output: chunk === "" ? undefined : { destination: "stdout", chunk },
+        output:
+          chunk === undefined ? undefined : { destination: "stdout", chunk },
         exitCode: 0,
       };
     }
@@ -947,7 +953,7 @@ function projectApplicationFact(
       result: normalized,
       output: {
         destination: "stdout",
-        chunk: formatAtomicText(presenter(data)),
+        chunk: encodeAtomicText(presenter(data)),
       },
       exitCode: variant.exitCode,
     };
@@ -962,72 +968,11 @@ function projectApplicationFact(
   };
 }
 
-function formatCompletionText(value: unknown): string {
-  if (isSilentText(value)) return "";
-  return formatAtomicText(value);
-}
-
-function formatTextLine(value: unknown): string {
-  if (
-    !isIssuedTextProjection(value) ||
-    value.kind !== "line" ||
-    typeof value.value !== "string" ||
-    value.value.length === 0 ||
-    value.value.includes("\r") ||
-    value.value.includes("\n") ||
-    value.value.includes("\0")
-  ) {
-    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
-  }
-  return `${value.value}\n`;
-}
-
-function formatAtomicText(value: unknown): string {
-  if (isIssuedTextProjection(value) && value.kind === "lines") {
-    return formatTextLines(value.lines);
-  }
-  return formatTextLine(value);
-}
-
-function formatTextLines(value: unknown): string {
-  if (
-    !Array.isArray(value) ||
-    value.every((line) => typeof line === "string" && line.length === 0) ||
-    value.some(
-      (line) =>
-        typeof line !== "string" ||
-        line.includes("\r") ||
-        line.includes("\n") ||
-        line.includes("\0"),
-    )
-  ) {
-    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
-  }
-  return `${value.join("\n")}\n`;
-}
-
-function formatStreamRecordText(presenter: unknown, data: unknown): string {
+function presentStreamRecordText(presenter: unknown, data: unknown): unknown {
   if (typeof presenter !== "function") {
     throw new ContractExecutionError([{ code: "invalidCliContract" }]);
   }
-  const value: unknown = presenter(data);
-  if (isIssuedTextProjection(value) && value.kind === "fragment") {
-    if (
-      typeof value.value !== "string" ||
-      value.value.length === 0 ||
-      value.value.includes("\0")
-    ) {
-      throw new ContractExecutionError([{ code: "invalidCliContract" }]);
-    }
-    return value.value;
-  }
-  return formatTextLine(value);
-}
-
-function isSilentText(
-  value: unknown,
-): value is Readonly<{ readonly kind: "silent" }> {
-  return isIssuedTextProjection(value) && value.kind === "silent";
+  return presenter(data);
 }
 
 // oxlint-disable-next-line typescript/consistent-return -- 验证失败分支通过 throwExecutionIssue 以 never 终止。

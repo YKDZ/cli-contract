@@ -1,3 +1,4 @@
+import { ContractExecutionError } from "#/contract-execution-error";
 import type { ContractSchema } from "#/contract-schema";
 
 const outcomeFactType = Symbol("OutcomeFact.type");
@@ -239,6 +240,51 @@ export function isIssuedTextProjection(
     value !== null &&
     issuedTextProjections.has(value)
   );
+}
+
+export function encodeAtomicText(value: unknown): string {
+  return encodeApplicationText(value, "atomic");
+}
+
+export function encodeRecordText(value: unknown): string {
+  return encodeApplicationText(value, "record");
+}
+
+export function encodeTerminalText(value: unknown): string | undefined {
+  return encodeApplicationText(value, "terminal");
+}
+
+function encodeApplicationText(
+  value: unknown,
+  purpose: "atomic" | "record",
+): string;
+function encodeApplicationText(
+  value: unknown,
+  purpose: "terminal",
+): string | undefined;
+function encodeApplicationText(
+  value: unknown,
+  purpose: "atomic" | "record" | "terminal",
+): string | undefined {
+  if (!isIssuedTextProjection(value)) {
+    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+  }
+
+  switch (value.kind) {
+    case "line":
+      return `${value.value}\n`;
+    case "lines":
+      if (purpose !== "record") return `${value.lines.join("\n")}\n`;
+      break;
+    case "fragment":
+      if (purpose === "record") return value.value;
+      break;
+    case "silent":
+      if (purpose === "terminal") return undefined;
+      break;
+  }
+
+  throw new ContractExecutionError([{ code: "invalidCliContract" }]);
 }
 
 export type DataVariantDefinition<
