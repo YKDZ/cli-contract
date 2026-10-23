@@ -108,8 +108,8 @@ settings:
 catalogs:
   default:
     '@types/node':
-      specifier: ^24.19.0
-      version: 24.19.0
+      specifier: ^24.19.2
+      version: 24.19.2
     oxfmt:
       specifier: ^0.71.0
       version: 0.71.0
@@ -135,7 +135,7 @@ importers:
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
-        version: 24.19.0
+        version: 24.19.2
       oxfmt:
         specifier: 'catalog:'
         version: 0.71.0
@@ -166,7 +166,7 @@ importers:
         version: link:../typescript-config
       '@types/node':
         specifier: 'catalog:'
-        version: 24.19.0
+        version: 24.19.2
       '@ykdz/cli-contract-testing':
         specifier: workspace:*
         version: link:../testing
@@ -190,7 +190,7 @@ importers:
         version: 1.1.0
       '@types/node':
         specifier: 'catalog:'
-        version: 24.19.0
+        version: 24.19.2
     devDependencies:
       '@cli-contract/typescript-config':
         specifier: workspace:*
@@ -231,7 +231,7 @@ importers:
         version: link:../typescript-config
       '@types/node':
         specifier: 'catalog:'
-        version: 24.19.0
+        version: 24.19.2
       oxfmt:
         specifier: 'catalog:'
         version: 0.71.0
@@ -560,8 +560,8 @@ packages:
     cpu: [arm64]
     os: [win32]
 
-  '@types/node@24.19.0':
-    resolution: {integrity: sha512-zY+5tKxXdhGh1PYI0ac+7juvEu4OI6vWtVVoj5i2m42jxAY1U+zHGt6QCyOFwykdP62sM3MJ9stoYYUw5aCWew==}
+  '@types/node@24.19.2':
+    resolution: {integrity: sha512-93d49wCWJkCyN87MxLpNN6KXPCwFw7bVUg79mGUV1OS40JGWwVCr8n61DXCSqz7CV6/VfPkb7xec7uP2M+QHWQ==}
 
   '@typescript/typescript-aix-ppc64@7.0.2':
     resolution: {integrity: sha512-MTKKkWB7p/0E9xi1d1tHtZ5PiLkGEMIq88pK2CubZjOsLtYTLqhgIgi6zepFa+9GHZ6h05NMCkQxGKiPXMxXtQ==}
@@ -915,7 +915,7 @@ snapshots:
   '@turbo/windows-arm64@2.11.4':
     optional: true
 
-  '@types/node@24.19.0':
+  '@types/node@24.19.2':
     dependencies:
       undici-types: 7.24.6
 
