@@ -38,6 +38,10 @@ export type StreamTextPresenter<Payload> = {
 export type TextValueErrorIssue =
   | Readonly<{
       readonly code: "invalidTextLine";
+      readonly reason: "notString";
+    }>
+  | Readonly<{
+      readonly code: "invalidTextLine";
       readonly reason:
         | "empty"
         | "carriageReturn"
@@ -60,7 +64,7 @@ export type TextValueErrorIssue =
     }>
   | Readonly<{
       readonly code: "invalidTextFragment";
-      readonly reason: "empty";
+      readonly reason: "notString" | "empty";
     }>
   | Readonly<{
       readonly code: "invalidTextFragment";
@@ -85,6 +89,9 @@ export class TextValueError extends TypeError {
 
 /* oxlint-disable typescript/no-unsafe-type-assertion -- 文本投影仅由这些工厂签发，运行时身份由 WeakSet 核对。 */
 function createTextLine(value: string): TextLine {
+  if (typeof value !== "string") {
+    throw new TextValueError({ code: "invalidTextLine", reason: "notString" });
+  }
   if (value.length === 0) {
     throw new TextValueError({ code: "invalidTextLine", reason: "empty" });
   }
@@ -115,7 +122,8 @@ function createTextLines(values: readonly [string, ...string[]]): TextLines {
   if (values.length === 0) {
     throw new TextValueError({ code: "invalidTextLines", reason: "noLines" });
   }
-  for (const [line, value] of values.entries()) {
+  const snapshot = [...values];
+  for (const [line, value] of snapshot.entries()) {
     if (typeof value !== "string") {
       throw new TextValueError({
         code: "invalidTextLines",
@@ -145,7 +153,7 @@ function createTextLines(values: readonly [string, ...string[]]): TextLines {
       });
     }
   }
-  if (values.every((value) => value.length === 0)) {
+  if (snapshot.every((value) => value.length === 0)) {
     throw new TextValueError({
       code: "invalidTextLines",
       reason: "noNonEmptyLine",
@@ -153,7 +161,7 @@ function createTextLines(values: readonly [string, ...string[]]): TextLines {
   }
   const projection = Object.freeze({
     kind: "lines" as const,
-    lines: Object.freeze([...values]),
+    lines: Object.freeze(snapshot),
   });
   issuedTextProjections.add(projection);
   return projection as TextLines;
@@ -164,6 +172,12 @@ issuedTextProjections.add(silentProjection);
 const silentText = silentProjection as SilentText;
 
 function createTextFragment(value: string): TextFragment {
+  if (typeof value !== "string") {
+    throw new TextValueError({
+      code: "invalidTextFragment",
+      reason: "notString",
+    });
+  }
   if (value.length === 0) {
     throw new TextValueError({
       code: "invalidTextFragment",
@@ -191,9 +205,10 @@ function createTextFragment(value: string): TextFragment {
  */
 export const text = Object.freeze({
   /**
-   * 构造非空单行，拒绝 CR、LF、NUL；核心写出时追加恰好一个 LF。
+   * 构造非空原始字符串单行，拒绝 CR、LF、NUL；核心写出时追加恰好一个 LF。
    * 适用于 completion、data、failure、stream success 终态和普通 stream record；
-   * 呈现器提供完整文本，核心不补写文案。非法值会说明具体拒绝原因。
+   * 呈现器提供完整文本，核心不补写文案。动态非字符串以 notString 拒绝且不附文本或行号；
+   * 调用方可显式调用 String 转换，转换后的字符串仍按内容规则检查。
    */
   line: createTextLine,
   /**
@@ -204,7 +219,8 @@ export const text = Object.freeze({
    */
   lines: createTextLines,
   /**
-   * 仅用于 stream record 中需要连续拼接的增量文本；必须非空且不含 NUL，可以含 LF。
+   * 仅用于 stream record 中需要连续拼接的增量文本；必须是非空原始字符串且不含 NUL，可以含 LF。
+   * 动态非字符串以 notString 拒绝且不附文本或行号；调用方可显式调用 String 转换，转换后的字符串仍按内容规则检查。
    * 核心原样写出，不追加或转换字符，因此不承诺一行对应一条记录；NUL 的错误位置按 0 基行号给出。
    */
   fragment: createTextFragment,

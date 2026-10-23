@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   ContractDefinitionError,
   ContractExecutionError,
+  TextValueError,
   defineCli,
   executeCli,
   outputCapability,
@@ -476,6 +477,20 @@ void test("文本构造错误保留稳定 code、闭合原因和适用的行位�
   );
 
   assert.throws(
+    () => text.lines(["有效", 7] as never),
+    (error: unknown) => {
+      assert.ok(error instanceof TypeError);
+      assert.ok("issue" in error);
+      assert.deepEqual(error.issue, {
+        code: "invalidTextLines",
+        reason: "notString",
+        line: 1,
+      });
+      return true;
+    },
+  );
+
+  assert.throws(
     () => text.lines(["", ""]),
     (error: unknown) => {
       assert.ok(error instanceof TypeError);
@@ -503,6 +518,44 @@ void test("文本构造错误保留稳定 code、闭合原因和适用的行位�
       return true;
     },
   );
+});
+
+void test("text.line 与 text.fragment 在构造时拒绝非原始字符串", () => {
+  const privateText = "包装文本不应泄漏";
+  const wrapped = new String(privateText);
+
+  for (const [construct, code] of [
+    [text.line, "invalidTextLine"],
+    [text.fragment, "invalidTextFragment"],
+  ] as const) {
+    assert.throws(
+      () => construct(wrapped as never),
+      (error: unknown) => {
+        assert.ok(error instanceof TextValueError);
+        assert.equal(error.message, code);
+        assert.deepEqual(error.issue, { code, reason: "notString" });
+        assert.equal(JSON.stringify(error.issue).includes(privateText), false);
+        return true;
+      },
+    );
+  }
+
+  assert.equal(text.line(String(wrapped)).value, privateText);
+  assert.equal(text.fragment(String(wrapped)).value, privateText);
+});
+
+void test("text.lines 验证并签发同一份内容快照", () => {
+  let reads = 0;
+  const values = ["有效"] as [string];
+  Object.defineProperty(values, 0, {
+    configurable: true,
+    get() {
+      reads += 1;
+      return reads < 3 ? "有效" : "未验证\n行";
+    },
+  });
+
+  assert.deepEqual(text.lines(values).lines, ["有效"]);
 });
 
 void test("completion 接受 text.lines，伪造的动态行组在写出前被拒绝", async () => {

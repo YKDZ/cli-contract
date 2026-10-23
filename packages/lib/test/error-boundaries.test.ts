@@ -5,6 +5,7 @@ import {
   ContractExecutionError,
   ContractDefinitionError,
   CliWriteError,
+  TextValueError,
   defineCli,
   executeCli,
   helpCapability,
@@ -155,9 +156,35 @@ void test("handler 抛出的开放异常保持原始身份", async () => {
   assert.deepEqual(writes, []);
 });
 
-void test("执行期文本值检查以稳定 code 拒绝而不写出", async () => {
-  const cli = createCompletionCli(() => {
-    text.line("");
+void test("文本呈现器中的非字符串构造错误保持原身份并不写出", async () => {
+  const privateText = "包装文本不应泄漏";
+  let constructionError: unknown;
+  const cli = defineCli()({
+    root: "fixture",
+    help: englishHelpCapability(),
+    output: createDynamicTextOutput(),
+    usageFailureExitCode: 64,
+    commands: {
+      fixture: {
+        kind: "rootCommand",
+        name: "fixture",
+        description: "fixture command",
+        input: z.object({}),
+        success: {
+          kind: "completion",
+          text: () => {
+            try {
+              return text.line(new String(privateText) as never);
+            } catch (error) {
+              constructionError = error;
+              throw error;
+            }
+          },
+        },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      },
+    },
   });
   const writes: string[] = [];
   await assert.rejects(
@@ -168,11 +195,12 @@ void test("执行期文本值检查以稳定 code 拒绝而不写出", async () 
         writes.push(chunk);
       },
     }),
-    (error: unknown) => {
-      assert.ok(error instanceof TypeError);
-      assert.equal(error.message, "invalidTextLine");
-      return true;
-    },
+    (error: unknown) =>
+      error === constructionError &&
+      error instanceof TextValueError &&
+      error.message === "invalidTextLine" &&
+      error.issue.code === "invalidTextLine" &&
+      error.issue.reason === "notString",
   );
   assert.deepEqual(writes, []);
 });

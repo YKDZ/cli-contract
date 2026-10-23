@@ -114,6 +114,26 @@ assert.throws(
   },
 );
 
+assert.throws(
+  () =>
+    Reflect.apply(coreModule.text.line, coreModule.text, [
+      new String(privateText),
+    ]),
+  (error: unknown) => {
+    if (!(error instanceof TypeError)) return false;
+    assert.ok(error instanceof coreModule.TextValueError);
+    const issue = Reflect.get(error, "issue");
+    assert.equal(error.message, "invalidTextLine");
+    assert.deepEqual(issue, {
+      code: "invalidTextLine",
+      reason: "notString",
+    });
+    assert.equal(readProperty(issue, "line"), undefined);
+    assert.equal(JSON.stringify(issue).includes(privateText), false);
+    return true;
+  },
+);
+
 const installedTextSchema = {
   "~standard": {
     version: 1,

@@ -26,6 +26,7 @@ import {
   type StreamRecordDefinition,
   type ShortOptionAlias,
   type TextLines,
+  type TextValueErrorIssue,
   type UsageIssue,
   type UsageConstraint,
   type UsageFactValue,
@@ -1165,6 +1166,19 @@ void text.lines(knownNonEmptyTextLines);
 const dynamicTextLines: string[] = ["第一行"];
 // @ts-expect-error 普通数组没有保留至少一行的静态事实。
 text.lines(dynamicTextLines);
+
+function narrowNotStringTextIssue(issue: TextValueErrorIssue): void {
+  if (issue.reason !== "notString") return;
+  if (issue.code === "invalidTextLines") {
+    const line: number = issue.line;
+    void line;
+    return;
+  }
+  // @ts-expect-error 行与片段构造问题不含行位置，必须先检查 code。
+  const line: number = issue.line;
+  void line;
+}
+void narrowNotStringTextIssue;
 
 const shortHelp = helpCapability({ shortAlias: "-h" });
 void shortHelp;
