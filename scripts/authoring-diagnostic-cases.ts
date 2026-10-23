@@ -175,7 +175,11 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
           cliMultiplicity: 3,
           languageServiceRequired: true,
         },
-        { code: "invalidFieldShortAlias", cliMultiplicity: 1 },
+        {
+          code: "invalidFieldShortAlias",
+          cliMultiplicity: 1,
+          languageServiceRequired: true,
+        },
         {
           code: "invalidFieldIdentity",
           cliMultiplicity: 8,
@@ -665,7 +669,13 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
         'variant: "update"',
         'missing: "text"',
       ],
-      codes: [{ code: "missingTextPresenter", cliMultiplicity: 5 }],
+      codes: [
+        {
+          code: "missingTextPresenter",
+          cliMultiplicity: 5,
+          languageServiceRequired: true,
+        },
+      ],
     },
     cli: {
       kind: "hierarchy",
