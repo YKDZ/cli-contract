@@ -19,8 +19,6 @@ import {
   type HelpFactTemplateParameters,
   type HelpFactWording,
   type OutcomeFact,
-  type UsageConstraintEffect,
-  type UsageFact,
 } from "#/cli-contract";
 import {
   invocationBelongsTo,
@@ -53,7 +51,7 @@ import {
   createStreamSuccessEnvelope,
   createUsageFailureEnvelope,
 } from "#/outcome-wire";
-import { countHelpFactForConstraint } from "#/usage-constraint";
+import { formatUsageConstraint } from "#/usage-constraint";
 
 type CompiledCommand = ReturnType<typeof getCompiledCli>["commands"][string];
 type CompiledExecutable = Extract<
@@ -287,7 +285,11 @@ function createHelpText(
     segments,
     headings?.constraints,
     usageConstraints.map((constraint) =>
-      helpLine(formatUsageConstraint(constraint, wording)),
+      helpLine(
+        formatUsageConstraint(constraint, (slot, values) =>
+          renderHelpFactTemplate(slot, wording?.[slot], values),
+        ),
+      ),
     ),
   );
   appendHelpSegment(
@@ -405,89 +407,6 @@ async function writeUsageFailure(
       ),
     )}\n`,
   });
-}
-
-function formatUsageConstraint(
-  constraint: CompiledExecutable["usageConstraints"][number],
-  wording: HelpFactWording | undefined,
-): string {
-  if (constraint.kind === "count") {
-    const { slot, values } = countHelpFactForConstraint(constraint);
-    return renderHelpFactTemplate(slot, wording?.[slot], values);
-  }
-  const facts = constraint.all
-    .map((fact) => formatUsageFact(fact, wording))
-    .join(", ");
-  if (constraint.kind === "when") {
-    const onMatch =
-      constraint.onMatch === undefined
-        ? ""
-        : formatUsageEffect(constraint.onMatch, wording);
-    const otherwise =
-      constraint.otherwise === undefined
-        ? ""
-        : formatUsageEffect(constraint.otherwise, wording);
-    if (onMatch.length > 0 && otherwise.length > 0) {
-      return renderHelpFactTemplate(
-        "whenOnMatchOtherwise",
-        wording?.whenOnMatchOtherwise,
-        { facts, onMatch, otherwise },
-      );
-    }
-    if (onMatch.length > 0) {
-      return renderHelpFactTemplate("whenOnMatch", wording?.whenOnMatch, {
-        facts,
-        onMatch,
-      });
-    }
-    return renderHelpFactTemplate("whenOtherwise", wording?.whenOtherwise, {
-      facts,
-      otherwise,
-    });
-  }
-  return renderHelpFactTemplate(
-    "forbiddenCombination",
-    wording?.forbiddenCombination,
-    { facts },
-  );
-}
-
-function formatUsageEffect(
-  effect: UsageConstraintEffect,
-  wording: HelpFactWording | undefined,
-): string {
-  const parts: string[] = [];
-  const required = effect.require ?? [];
-  const forbidden = effect.forbid ?? [];
-  if (required.length > 0) {
-    parts.push(
-      renderHelpFactTemplate("require", wording?.require, {
-        fields: required.join(", "),
-      }),
-    );
-  }
-  if (forbidden.length > 0) {
-    parts.push(
-      renderHelpFactTemplate("forbid", wording?.forbid, {
-        fields: forbidden.join(", "),
-      }),
-    );
-  }
-  return parts.join(", ");
-}
-
-function formatUsageFact(
-  fact: UsageFact,
-  wording: HelpFactWording | undefined,
-): string {
-  return fact.kind === "present"
-    ? renderHelpFactTemplate("present", wording?.present, {
-        field: fact.field,
-      })
-    : renderHelpFactTemplate("equals", wording?.equals, {
-        field: fact.field,
-        value: JSON.stringify(fact.value),
-      });
 }
 
 function renderHelpFactTemplate<
