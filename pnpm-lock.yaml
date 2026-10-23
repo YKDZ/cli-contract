@@ -196,8 +196,8 @@ importers:
         specifier: workspace:*
         version: link:../typescript-config
       '@valibot/to-json-schema':
-        specifier: ^1.7.1
-        version: 1.7.1(valibot@1.5.0(typescript@7.0.2))
+        specifier: ^1.8.0
+        version: 1.8.0(valibot@1.5.0(typescript@7.0.2))
       ajv:
         specifier: ^8.20.0
         version: 8.20.0
@@ -683,10 +683,10 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@valibot/to-json-schema@1.7.1':
-    resolution: {integrity: sha512-3qkmU6KXWh8GIThEAW3kuRHPQBMjWkKy+Ppz3WkUucx53DTpOa6siMn4xDGSOhlVyMrDaJTCTMLYPZVAIk1P0A==}
+  '@valibot/to-json-schema@1.8.0':
+    resolution: {integrity: sha512-a0M+uwCuQZEPAo65NYkFSJ14O5c213KoSZmPdoCfuFvUhfULi4T2Z6Tpjv6lTVMW9RoLm74RpRAjNEa43KcN+g==}
     peerDependencies:
-      valibot: ^1.4.0
+      valibot: ^1.5.0
 
   ajv@8.20.0:
     resolution: {integrity: sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA==}
@@ -979,7 +979,7 @@ snapshots:
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
 
-  '@valibot/to-json-schema@1.7.1(valibot@1.5.0(typescript@7.0.2))':
+  '@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@7.0.2))':
     dependencies:
       valibot: 1.5.0(typescript@7.0.2)
 
