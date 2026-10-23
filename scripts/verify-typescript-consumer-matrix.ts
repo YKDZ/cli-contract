@@ -3,10 +3,7 @@ import { lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 
-import {
-  readAuthoringDiagnosticFixtures,
-  verifyAuthoringDiagnosticCases,
-} from "./authoring-diagnostic-cases.ts";
+import { verifyAuthoringDiagnosticCases } from "./authoring-diagnostic-cases.ts";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const corePackage = "@ykdz/cli-contract";
@@ -21,10 +18,7 @@ interface CandidateTarballs {
 
 async function main(): Promise<void> {
   const candidate = await parseCandidateTarballs(process.argv.slice(2));
-  const fixtures = {
-    ...(await readFixtures()),
-    ...(await readAuthoringDiagnosticFixtures()),
-  };
+  const fixtures = await readFixtures();
 
   for (const compilerVersion of compilerVersions) {
     await verifyCompilerVersion(candidate, fixtures, compilerVersion);
@@ -38,6 +32,7 @@ async function readFixtures(): Promise<Readonly<Record<string, string>>> {
         "consumer.ts",
         "core-node.ts",
         "core-root.ts",
+        "exportable-contract.ts",
         "exportable-contract-reconsumer.ts",
         "schema-input.ts",
         "valid-help-fact-templates.ts",
@@ -163,7 +158,6 @@ async function verifyCoreOnly(
         project,
         resolution,
         compilerVersion,
-        fixtures,
       );
     }
   } finally {

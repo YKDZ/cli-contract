@@ -24,7 +24,6 @@ type SourceDerivation =
 type CliDiagnosticExpectation =
   | {
       readonly kind: "codes";
-      readonly expectedCodes: readonly string[];
       readonly required: readonly string[];
       readonly requiredAny?: readonly string[];
       readonly allowAdditionalDiagnostics?: boolean;
@@ -36,12 +35,13 @@ type CliDiagnosticExpectation =
       readonly forbidden: readonly string[];
     }
   | {
-      readonly kind:
-        | "namedVariant"
-        | "streamText"
-        | "streamRecordName"
-        | "hierarchy";
+      readonly kind: "namedVariant" | "streamText" | "streamRecordName";
       readonly expectedDiagnostics: number;
+      readonly required: readonly string[];
+      readonly forbidden?: readonly string[];
+    }
+  | {
+      readonly kind: "hierarchy";
       readonly required: readonly string[];
       readonly forbidden?: readonly string[];
     };
@@ -52,11 +52,18 @@ interface LanguageServiceDiagnosticExpectation {
   readonly requiredAny?: readonly string[];
 }
 
+interface CommonDiagnosticCodeExpectation {
+  readonly code: string;
+  readonly cliMultiplicity?: number;
+  readonly languageServiceRequired?: true;
+}
+
 interface AuthoringDiagnosticCase {
   readonly fixture: string;
   readonly sourcePath: string;
   readonly derivation: SourceDerivation;
   readonly common: {
+    readonly codes: readonly CommonDiagnosticCodeExpectation[];
     readonly required: readonly string[];
     readonly requiredAny?: readonly string[];
   };
@@ -77,6 +84,7 @@ async function verifyHierarchyTextCoverageDiagnostic(
   }
   const fixture = diagnostic.derivation.fixture;
   const { cli } = diagnostic;
+  const expectedCodes = expectedCliCodes(diagnostic);
   const tsconfig = diagnosticTsconfigName(resolution, fixture);
   const result = spawnSync(
     resolve(project, "node_modules/.bin/tsc"),
@@ -85,24 +93,33 @@ async function verifyHierarchyTextCoverageDiagnostic(
   );
   if (result.error !== undefined) throw result.error;
   const diagnostics = `${result.stderr}\n${result.stdout}`;
-  const firstLevel = firstLevelCompilerMessages(diagnostics, fixture).join(
-    "\n",
-  );
+  const firstLevelMessages = firstLevelCompilerMessages(diagnostics, fixture);
+  const firstLevel = firstLevelMessages.join("\n");
   const headers = diagnostics
     .split(/\r?\n/)
     .filter(
       (line) => line.startsWith(`${fixture}(`) && line.includes(": error TS"),
     );
-  const firstLevelCodes = firstLevel.match(/^  [^ ].*missingTextPresenter/gm);
+  const firstLevelCodes = firstLevelMessages.flatMap((line) => {
+    const match = /^  [^ ].*ContractTypeError<"([^"]+)"/.exec(line);
+    const code = match?.[1];
+    return code === undefined ? [] : [code];
+  });
+  const actualCodes = [...firstLevelCodes].sort((left, right) =>
+    left.localeCompare(right),
+  );
+  const sortedExpectedCodes = [...expectedCodes].sort((left, right) =>
+    left.localeCompare(right),
+  );
   const allHeaders = diagnostics.match(/^.+\(\d+,\d+\): error TS\d+:/gm);
-  const required = [...diagnostic.common.required, ...cli.required];
+  const required = [...commonEvidence(diagnostic), ...cli.required];
   const unrelated = cli.forbidden ?? [];
   if (
     result.status === 0 ||
     required.some((fragment) => !firstLevel.includes(fragment)) ||
     unrelated.some((fragment) => diagnostics.includes(fragment)) ||
-    headers.length !== cli.expectedDiagnostics ||
-    firstLevelCodes?.length !== cli.expectedDiagnostics ||
+    headers.length !== expectedCodes.length ||
+    actualCodes.join(",") !== sortedExpectedCodes.join(",") ||
     allHeaders?.length !== headers.length
   ) {
     throw new Error(
@@ -128,7 +145,6 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
         'command: "longOptionIdentity"',
         'received: "--Bad"',
         'command: "shortAliasIdentity"',
-        "invalidFieldShortAlias",
         'received: "-bad"',
         'command: "fieldIdentity"',
         'field: "bad_field"',
@@ -148,37 +164,37 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
         'variant: "bad_name"',
         'command: "deploy"',
       ],
+      codes: [
+        {
+          code: "invalidCommandIdentity",
+          cliMultiplicity: 1,
+          languageServiceRequired: true,
+        },
+        {
+          code: "invalidFieldLongOption",
+          cliMultiplicity: 3,
+          languageServiceRequired: true,
+        },
+        { code: "invalidFieldShortAlias", cliMultiplicity: 1 },
+        {
+          code: "invalidFieldIdentity",
+          cliMultiplicity: 8,
+          languageServiceRequired: true,
+        },
+        {
+          code: "invalidVariantName",
+          cliMultiplicity: 2,
+          languageServiceRequired: true,
+        },
+      ],
     },
     cli: {
       kind: "codes",
-      expectedCodes: [
-        "invalidCommandIdentity",
-        "invalidFieldLongOption",
-        "invalidFieldLongOption",
-        "invalidFieldLongOption",
-        "invalidFieldShortAlias",
-        "invalidFieldIdentity",
-        "invalidFieldIdentity",
-        "invalidFieldIdentity",
-        "invalidFieldIdentity",
-        "invalidFieldIdentity",
-        "invalidFieldIdentity",
-        "invalidFieldIdentity",
-        "invalidFieldIdentity",
-        "invalidVariantName",
-        "invalidVariantName",
-      ],
       required: [],
     },
     languageService: {
       count: 15,
-      required: [
-        "invalidCommandIdentity",
-        "invalidFieldLongOption",
-        "invalidFieldIdentity",
-        "invalidVariantName",
-        'field: "token"',
-      ],
+      required: ['field: "token"'],
     },
   },
   {
@@ -201,22 +217,26 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
         'fields: "token"',
         'fields: "mode"',
       ],
+      codes: [
+        {
+          code: "invalidUsageConstraint",
+          cliMultiplicity: 1,
+          languageServiceRequired: true,
+        },
+        {
+          code: "contradictoryUsageConstraint",
+          cliMultiplicity: 5,
+          languageServiceRequired: true,
+        },
+      ],
     },
     cli: {
       kind: "codes",
-      expectedCodes: [
-        "invalidUsageConstraint",
-        "contradictoryUsageConstraint",
-        "contradictoryUsageConstraint",
-        "contradictoryUsageConstraint",
-        "contradictoryUsageConstraint",
-        "contradictoryUsageConstraint",
-      ],
       required: ['constraint: "when"'],
     },
     languageService: {
       count: 6,
-      required: ["invalidUsageConstraint", "contradictoryUsageConstraint"],
+      required: [],
     },
   },
   {
@@ -236,20 +256,21 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
         'field: "token"',
         'field: "missing"',
       ],
+      codes: [
+        {
+          code: "unknownUsageConstraintField",
+          cliMultiplicity: 4,
+          languageServiceRequired: true,
+        },
+      ],
     },
     cli: {
       kind: "codes",
-      expectedCodes: [
-        "unknownUsageConstraintField",
-        "unknownUsageConstraintField",
-        "unknownUsageConstraintField",
-        "unknownUsageConstraintField",
-      ],
       required: ['constraint: "when"'],
     },
     languageService: {
       count: 4,
-      required: ["unknownUsageConstraintField"],
+      required: [],
     },
   },
   {
@@ -261,17 +282,23 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
     },
     common: {
       required: ['command: "inspect"', 'member: "all"', 'property: "typo"'],
+      codes: [
+        {
+          code: "unknownDefinitionProperty",
+          cliMultiplicity: 1,
+          languageServiceRequired: true,
+        },
+      ],
     },
     cli: {
       kind: "codes",
-      expectedCodes: ["unknownDefinitionProperty"],
       required: [],
       allowAdditionalDiagnostics: true,
       forbidden: ["No overload matches this call", "StreamHandlerContext"],
     },
     languageService: {
       count: 2,
-      required: ["unknownDefinitionProperty"],
+      required: [],
     },
   },
   {
@@ -314,35 +341,33 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
         'member: "forbiddenCombination"',
       ],
       requiredAny: ['expected: "safe" | "force"', 'expected: "force" | "safe"'],
+      codes: [
+        {
+          code: "invalidUsageConstraintValue",
+          cliMultiplicity: 5,
+          languageServiceRequired: true,
+        },
+        { code: "contradictoryUsageConstraint", cliMultiplicity: 3 },
+        {
+          code: "inapplicableUsageConstraintField",
+          cliMultiplicity: 1,
+          languageServiceRequired: true,
+        },
+        {
+          code: "unknownDefinitionProperty",
+          cliMultiplicity: 4,
+          languageServiceRequired: true,
+        },
+      ],
     },
     cli: {
       kind: "codes",
-      expectedCodes: [
-        "invalidUsageConstraintValue",
-        "contradictoryUsageConstraint",
-        "invalidUsageConstraintValue",
-        "inapplicableUsageConstraintField",
-        "contradictoryUsageConstraint",
-        "contradictoryUsageConstraint",
-        "unknownDefinitionProperty",
-        "unknownDefinitionProperty",
-        "invalidUsageConstraintValue",
-        "invalidUsageConstraintValue",
-        "unknownDefinitionProperty",
-        "unknownDefinitionProperty",
-        "invalidUsageConstraintValue",
-      ],
       required: ['constraint: "forbiddenCombination"', "readonly actual: {"],
       allowAdditionalDiagnostics: true,
     },
     languageService: {
       count: 14,
-      required: [
-        "invalidUsageConstraintValue",
-        "unknownDefinitionProperty",
-        "inapplicableUsageConstraintField",
-        "actual: {",
-      ],
+      required: ["actual: {"],
     },
   },
   {
@@ -367,22 +392,21 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
         'slot: "forbiddenCombination"',
         'reason: "singleLine"',
       ],
+      codes: [
+        {
+          code: "invalidHelpFactTemplate",
+          cliMultiplicity: 8,
+          languageServiceRequired: true,
+        },
+        {
+          code: "unknownDefinitionProperty",
+          cliMultiplicity: 3,
+          languageServiceRequired: true,
+        },
+      ],
     },
     cli: {
       kind: "codes",
-      expectedCodes: [
-        "invalidHelpFactTemplate",
-        "invalidHelpFactTemplate",
-        "invalidHelpFactTemplate",
-        "unknownDefinitionProperty",
-        "invalidHelpFactTemplate",
-        "invalidHelpFactTemplate",
-        "invalidHelpFactTemplate",
-        "unknownDefinitionProperty",
-        "invalidHelpFactTemplate",
-        "invalidHelpFactTemplate",
-        "unknownDefinitionProperty",
-      ],
       required: [
         'path: readonly ["help", "wording", "choises"]',
         'received: "字段"',
@@ -391,7 +415,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
     },
     languageService: {
       count: 11,
-      required: ["invalidHelpFactTemplate", "unknownDefinitionProperty"],
+      required: [],
     },
   },
   {
@@ -424,27 +448,26 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
         'reason: "duplicateFields"',
         'reason: "integer"',
       ],
+      codes: [
+        {
+          code: "invalidCountConstraint",
+          cliMultiplicity: 7,
+          languageServiceRequired: true,
+        },
+        {
+          code: "unknownUsageConstraintField",
+          cliMultiplicity: 4,
+          languageServiceRequired: true,
+        },
+      ],
     },
     cli: {
       kind: "codes",
-      expectedCodes: [
-        "invalidCountConstraint",
-        "invalidCountConstraint",
-        "invalidCountConstraint",
-        "invalidCountConstraint",
-        "invalidCountConstraint",
-        "invalidCountConstraint",
-        "invalidCountConstraint",
-        "unknownUsageConstraintField",
-        "unknownUsageConstraintField",
-        "unknownUsageConstraintField",
-        "unknownUsageConstraintField",
-      ],
       required: [],
     },
     languageService: {
       count: 11,
-      required: ["invalidCountConstraint", "unknownUsageConstraintField"],
+      required: [],
     },
   },
   {
@@ -470,21 +493,22 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
         "schemaInput: string",
         "schemaInput: number[]",
       ],
+      codes: [
+        {
+          code: "fieldInputMustAcceptRawValue",
+          cliMultiplicity: 4,
+          languageServiceRequired: true,
+        },
+      ],
     },
     cli: {
       kind: "codes",
-      expectedCodes: [
-        "fieldInputMustAcceptRawValue",
-        "fieldInputMustAcceptRawValue",
-        "fieldInputMustAcceptRawValue",
-        "fieldInputMustAcceptRawValue",
-      ],
       required: [],
       allowAdditionalDiagnostics: true,
     },
     languageService: {
       count: 5,
-      required: ["fieldInputMustAcceptRawValue"],
+      required: [],
     },
   },
   {
@@ -502,15 +526,21 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
         'variant: "permissionDenied"',
         'unexpected: "text"',
       ],
+      codes: [
+        {
+          code: "unexpectedTextPresenter",
+          cliMultiplicity: 2,
+          languageServiceRequired: true,
+        },
+      ],
     },
     cli: {
       kind: "codes",
-      expectedCodes: ["unexpectedTextPresenter", "unexpectedTextPresenter"],
       required: [],
     },
     languageService: {
       count: 2,
-      required: ["unexpectedTextPresenter"],
+      required: [],
     },
   },
   {
@@ -522,11 +552,11 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
     },
     common: {
       required: [],
+      codes: [{ code: "missingTextPresenter" }],
     },
     cli: {
       kind: "completion",
       required: [
-        "missingTextPresenter",
         'command: "missingCompletion"',
         'command: "missingCompletionWithField"',
         'location: "completion"',
@@ -548,13 +578,13 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
     },
     common: {
       required: [],
+      codes: [{ code: "missingTextPresenter" }],
     },
     cli: {
       kind: "namedVariant",
       expectedDiagnostics: 3,
       required: [
         "named-variant-missing.ts",
-        "missingTextPresenter",
         'command: "missingDataVariantText"',
         'command: "missingDataFailureText"',
         'command: "missingCompletionFailureText"',
@@ -576,12 +606,12 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
     },
     common: {
       required: [],
+      codes: [{ code: "missingTextPresenter" }],
     },
     cli: {
       kind: "streamText",
       expectedDiagnostics: 2,
       required: [
-        "missingTextPresenter",
         'command: "missingRecord"',
         'command: "missingSuccess"',
         'location: "record"',
@@ -601,12 +631,12 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
     },
     common: {
       required: [],
+      codes: [{ code: "invalidVariantName" }],
     },
     cli: {
       kind: "streamRecordName",
       expectedDiagnostics: 1,
       required: [
-        "invalidVariantName",
         'command: "invalidRecordName"',
         'location: "record"',
         'variant: "bad_name"',
@@ -624,7 +654,6 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
     },
     common: {
       required: [
-        "missingTextPresenter",
         'command: "leaf"',
         'location: "completion"',
         'location: "data"',
@@ -636,10 +665,10 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
         'variant: "update"',
         'missing: "text"',
       ],
+      codes: [{ code: "missingTextPresenter", cliMultiplicity: 5 }],
     },
     cli: {
       kind: "hierarchy",
-      expectedDiagnostics: 5,
       required: [],
       forbidden: [
         "TS7006",
@@ -666,7 +695,7 @@ const authoringDiscoverySources = [
   },
 ] as const;
 
-export async function readAuthoringDiagnosticFixtures(): Promise<
+async function readAuthoringDiagnosticFixtures(): Promise<
   Readonly<Record<string, string>>
 > {
   const repositoryRoot = resolve(import.meta.dirname, "..");
@@ -708,6 +737,36 @@ function firstLevelCompilerMessages(
     }
   }
   return firstLevel;
+}
+
+function commonEvidence(
+  diagnostic: AuthoringDiagnosticCase,
+  channel: "cli" | "languageService" = "cli",
+): readonly string[] {
+  const codes = diagnostic.common.codes
+    .filter(
+      ({ languageServiceRequired }) =>
+        channel === "cli" || languageServiceRequired === true,
+    )
+    .map(({ code }) => code);
+  return [...new Set([...codes, ...diagnostic.common.required])];
+}
+
+function expectedCliCodes(
+  diagnostic: AuthoringDiagnosticCase,
+): readonly string[] {
+  if (
+    diagnostic.common.codes.some(
+      ({ cliMultiplicity }) => cliMultiplicity === undefined,
+    )
+  ) {
+    throw new Error(`场景未完整声明 CLI 错误码数量：${diagnostic.fixture}`);
+  }
+  return diagnostic.common.codes.flatMap(({ code, cliMultiplicity }) =>
+    cliMultiplicity === undefined
+      ? []
+      : Array.from({ length: cliMultiplicity }, () => code),
+  );
 }
 
 interface CliDiagnosticObservation {
@@ -758,8 +817,8 @@ async function verifyAuthoringDiagnostic(
     throw new Error("该场景应使用编译器错误码适配器");
   }
   const { fixture, common, cli } = diagnostic;
-  const { expectedCodes } = cli;
-  const required = [...common.required, ...cli.required];
+  const expectedCodes = expectedCliCodes(diagnostic);
+  const required = [...commonEvidence(diagnostic), ...cli.required];
   const requiredAnyGroups = [common.requiredAny, cli.requiredAny].filter(
     (group): group is readonly string[] => group !== undefined,
   );
@@ -994,7 +1053,10 @@ function verifyAuthoringLanguageService(
               ? diagnostic.fixture
               : diagnostic.derivation.fixture,
           count: expectation.count,
-          required: [...diagnostic.common.required, ...expectation.required],
+          required: [
+            ...commonEvidence(diagnostic, "languageService"),
+            ...expectation.required,
+          ],
           ...(requiredAny === undefined ? {} : { requiredAny }),
         },
       ];
@@ -1160,7 +1222,7 @@ async function verifyMissingStreamDiagnostic(
       : diagnostic.derivation.fixture;
   const { cli } = diagnostic;
   const observation = observeCliDiagnostic(project, resolution, fixture);
-  const required = [...diagnostic.common.required, ...cli.required];
+  const required = [...commonEvidence(diagnostic), ...cli.required];
   if (
     observation.status === 0 ||
     required.some((fragment) => !observation.firstLevel.includes(fragment)) ||
@@ -1187,7 +1249,7 @@ async function verifyInvalidStreamRecordNameDiagnostic(
       : diagnostic.derivation.fixture;
   const { cli } = diagnostic;
   const observation = observeCliDiagnostic(project, resolution, fixture);
-  const required = [...diagnostic.common.required, ...cli.required];
+  const required = [...commonEvidence(diagnostic), ...cli.required];
   if (
     observation.status === 0 ||
     required.some((fragment) => !observation.firstLevel.includes(fragment)) ||
@@ -1210,7 +1272,7 @@ async function verifyMissingCompletionDiagnostic(
   }
   const { fixture } = diagnostic;
   const observation = observeCliDiagnostic(project, resolution, fixture);
-  const required = [...diagnostic.common.required, ...diagnostic.cli.required];
+  const required = [...commonEvidence(diagnostic), ...diagnostic.cli.required];
   if (
     observation.status === 0 ||
     required.some((fragment) => !observation.firstLevel.includes(fragment))
@@ -1241,7 +1303,7 @@ async function verifyMissingNamedVariantDiagnostic(
   const { fixture } = diagnostic;
   const { cli } = diagnostic;
   const observation = observeCliDiagnostic(project, resolution, fixture);
-  const required = [...diagnostic.common.required, ...cli.required];
+  const required = [...commonEvidence(diagnostic), ...cli.required];
   if (
     observation.status === 0 ||
     required.some((fragment) => !observation.firstLevel.includes(fragment))
@@ -1345,8 +1407,8 @@ export async function verifyAuthoringDiagnosticCases(
   project: string,
   resolution: Resolution,
   compilerVersion: CompilerVersion,
-  fixtures: Readonly<Record<string, string>>,
 ): Promise<void> {
+  const fixtures = await readAuthoringDiagnosticFixtures();
   await prepareAuthoringDiagnosticCases(project, resolution, fixtures);
   await compileFixture(project, resolution, "authoring-example.ts");
   for (const diagnostic of authoringDiagnosticCases) {
