@@ -1630,6 +1630,90 @@ void test("when 的分支 schema 与 parser 对照保留根引用及空效果", 
   }
 });
 
+void test("无效 count 不会遮蔽有效 count 所需的帮助模板诊断", () => {
+  const invalidMinimum: number = -1;
+  const definition = {
+    ...countCliDefinition([
+      { kind: "count", fields: ["auth"], min: invalidMinimum },
+      { kind: "count", fields: ["auth"], min: 1 },
+    ]),
+    help: helpCapability({ wording: { default: "默认值 {value}" } }),
+  };
+
+  assert.throws(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 动态非法 count 需要越过作者期静态诊断。
+    () => defineCli()(definition as never),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidCountConstraint",
+          command: "countInputs",
+          index: 0,
+          member: "min",
+          reason: "nonNegative",
+          actual: -1,
+        },
+        {
+          code: "missingHelpFactTemplate",
+          command: "countInputs",
+          slot: "countExactly",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("输入 schema 投影缺失时仍收集 count 定义诊断", () => {
+  const input = z.object({ auth: z.string().optional() });
+  const missingProjection = {
+    "~standard": {
+      validate: input["~standard"].validate,
+      vendor: "fixture",
+      version: 1,
+    },
+  } as unknown as ContractSchema<{ readonly auth?: string }>;
+  const countDefinition = countCliDefinition([
+    { kind: "count", fields: ["auth"], min: 1 },
+  ]);
+  const definition = {
+    ...countDefinition,
+    commands: {
+      ...countDefinition.commands,
+      countInputs: {
+        ...countDefinition.commands.countInputs,
+        input: missingProjection,
+      },
+    },
+  };
+
+  assert.throws(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 缺少 JSON Schema 接缝的负例需绕过静态消费类型。
+    () => defineCli()(definition as never),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "missingSchemaCapability",
+          command: "countInputs",
+          location: "input",
+          capability: "jsonSchema",
+        },
+        {
+          code: "unknownUsageConstraintField",
+          command: "countInputs",
+          constraint: "count",
+          index: 0,
+          member: "fields",
+          field: "auth",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
 void test("同一约束事实投影到 grammar、manifest、Draft 2020-12 与 help", async () => {
   const cli = createConstrainedCli();
   const constraints = [

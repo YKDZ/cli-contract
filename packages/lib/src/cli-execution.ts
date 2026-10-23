@@ -6,7 +6,6 @@ import {
   createFailureFact,
   createStreamRecordFact,
   createStreamSuccessFact,
-  countHelpFactForConstraint,
   formatFieldUsage,
   getCompiledCli,
   helpTemplateSpecifications,
@@ -50,6 +49,7 @@ import {
   createStreamSuccessEnvelope,
   createUsageFailureEnvelope,
 } from "#/outcome-wire";
+import { countHelpFactForConstraint } from "#/usage-constraint";
 
 type CompiledCommand = ReturnType<typeof getCompiledCli>["commands"][string];
 type CompiledExecutable = Extract<
