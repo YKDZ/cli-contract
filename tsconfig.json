@@ -10,6 +10,7 @@
     "scripts/fixtures/installed-runtime.ts",
     "scripts/verify-example.ts",
     "scripts/validate-release-tag.ts",
+    "scripts/authoring-diagnostic-cases.ts",
     "scripts/verify-release-candidate.ts",
     "scripts/verify-typescript-consumer-matrix.ts",
     "scripts/run-root-owned-task.ts"
