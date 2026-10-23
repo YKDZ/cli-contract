@@ -23,7 +23,7 @@ import {
 } from "#/contract-schema-compiler";
 import { copySingleLineText, isSingleLineText } from "#/description";
 import type { reservedFieldNames } from "#/field-identity";
-import { deepFreeze } from "#/json-value";
+import { deepFreeze, isPlainRecord } from "#/json-value";
 import type {
   AtomicTextPresenter,
   CompletionFact,
@@ -60,11 +60,11 @@ import {
   type StreamRecordManifest,
 } from "#/stream-variant-compiler";
 import {
-  compileCountUsageConstraint,
-  countHelpFactForConstraint,
-  countUsageConstraintPropertyKeys,
-  projectCountUsageConstraint,
+  compileUsageConstraints,
+  collectUnknownUsageConstraintDefinitionProperties,
+  usageConstraintDefinitionPropertyKeys,
   type CountUsageConstraintGrammar,
+  type UsageConstraintGrammar,
 } from "#/usage-constraint";
 export {
   createCompletionFact,
@@ -159,16 +159,7 @@ const definitionPropertyKeys = {
     option: ["kind", "longOption", "shortAlias", "description"],
     positional: ["kind", "description"],
   },
-  usage: {
-    count: countUsageConstraintPropertyKeys,
-    when: ["kind", "all", "onMatch", "otherwise"],
-    effect: ["require", "forbid"],
-    forbiddenCombination: ["kind", "all"],
-    fact: {
-      present: ["kind", "field"],
-      equals: ["kind", "field", "value"],
-    },
-  },
+  usage: usageConstraintDefinitionPropertyKeys,
   success: {
     completion: ["kind", "text"],
     data: ["kind", "variants"],
@@ -3309,11 +3300,7 @@ export interface ExecutableCommandManifest extends Omit<
   readonly helpSupplement?: readonly string[];
 }
 
-export type UsageConstraintGrammar =
-  | CountUsageConstraintGrammar
-  | WhenUsageConstraint
-  | ForbiddenCombinationUsageConstraint;
-export type { CountUsageConstraintGrammar };
+export type { CountUsageConstraintGrammar, UsageConstraintGrammar };
 
 export interface CliManifest<
   Root extends string,
@@ -4705,61 +4692,17 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
     const describedInput =
       input === undefined ? undefined : projectFieldDescriptions(input, fields);
     collectControlFieldConflicts(id, fields, definition, issues);
-    const usageConstraints = compileUsageConstraints(
+    const usageCompilation = compileUsageConstraints(
       executable.usageConstraints === undefined
         ? []
         : executable.usageConstraints,
       fields,
       id,
       issues,
+      describedInput,
     );
-    const requiredUsageTemplates = new Set<
-      Extract<
-        ContractDefinitionIssue,
-        { readonly code: "missingHelpFactTemplate" }
-      >["slot"]
-    >();
-    for (const constraint of usageConstraints) {
-      if (constraint.kind === "count") {
-        requiredUsageTemplates.add(countHelpFactForConstraint(constraint).slot);
-      }
-      if (constraint.kind === "when") {
-        const hasOnMatch =
-          (constraint.onMatch?.require?.length ?? 0) > 0 ||
-          (constraint.onMatch?.forbid?.length ?? 0) > 0;
-        const hasOtherwise =
-          (constraint.otherwise?.require?.length ?? 0) > 0 ||
-          (constraint.otherwise?.forbid?.length ?? 0) > 0;
-        if (hasOnMatch && hasOtherwise) {
-          requiredUsageTemplates.add("whenOnMatchOtherwise");
-        } else if (hasOnMatch) {
-          requiredUsageTemplates.add("whenOnMatch");
-        } else {
-          requiredUsageTemplates.add("whenOtherwise");
-        }
-        for (const fact of constraint.all) {
-          requiredUsageTemplates.add(fact.kind);
-        }
-        if (
-          (constraint.onMatch?.require?.length ?? 0) > 0 ||
-          (constraint.otherwise?.require?.length ?? 0) > 0
-        ) {
-          requiredUsageTemplates.add("require");
-        }
-        if (
-          (constraint.onMatch?.forbid?.length ?? 0) > 0 ||
-          (constraint.otherwise?.forbid?.length ?? 0) > 0
-        ) {
-          requiredUsageTemplates.add("forbid");
-        }
-      }
-      if (constraint.kind === "forbiddenCombination") {
-        requiredUsageTemplates.add("forbiddenCombination");
-        for (const fact of constraint.all)
-          requiredUsageTemplates.add(fact.kind);
-      }
-    }
-    for (const slot of requiredUsageTemplates) {
+    const usageConstraints = usageCompilation.constraints;
+    for (const slot of usageCompilation.requiredHelpTemplates) {
       if (helpWording?.[slot] === undefined) {
         reportMissingHelpFactTemplate(issues, id, slot);
       }
@@ -4804,13 +4747,13 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
         }),
       );
     }
-    if (describedInput === undefined) continue;
+    if (usageCompilation.inputProjection === undefined) continue;
     const manifestDetails = {
       description: executable.description,
       ...(helpSupplement === undefined ? {} : { helpSupplement }),
       fields,
       ...(usageConstraints.length === 0 ? {} : { usageConstraints }),
-      input: projectUsageConstraints(describedInput, usageConstraints),
+      input: usageCompilation.inputProjection,
       success: compiledSuccess.manifest,
       failures: compiledFailures.manifest,
     };
@@ -5016,57 +4959,11 @@ function collectUnknownDefinitionProperties(
         }
       }
     }
-    if (Array.isArray(node.usageConstraints)) {
-      node.usageConstraints.forEach((constraint, index) => {
-        const constraintPath = [...path, "usageConstraints", String(index)];
-        if (!isPlainRecord(constraint)) return;
-        const allowed =
-          constraint.kind === "when"
-            ? definitionPropertyKeys.usage.when
-            : constraint.kind === "count"
-              ? definitionPropertyKeys.usage.count
-              : constraint.kind === "forbiddenCombination"
-                ? definitionPropertyKeys.usage.forbiddenCombination
-                : undefined;
-        if (allowed === undefined) return;
-        collectUnknownProperties(constraint, constraintPath, allowed, issues);
-        if (
-          (constraint.kind === "forbiddenCombination" ||
-            constraint.kind === "when") &&
-          Array.isArray(constraint.all)
-        ) {
-          constraint.all.forEach((fact, factIndex) => {
-            if (!isPlainRecord(fact)) return;
-            const allowedFact =
-              fact.kind === "present"
-                ? definitionPropertyKeys.usage.fact.present
-                : fact.kind === "equals"
-                  ? definitionPropertyKeys.usage.fact.equals
-                  : undefined;
-            if (allowedFact !== undefined) {
-              collectUnknownProperties(
-                fact,
-                [...constraintPath, "all", String(factIndex)],
-                allowedFact,
-                issues,
-              );
-            }
-          });
-        }
-        if (constraint.kind === "when") {
-          for (const branch of ["onMatch", "otherwise"] as const) {
-            const effect = constraint[branch];
-            if (!isPlainRecord(effect)) continue;
-            collectUnknownProperties(
-              effect,
-              [...constraintPath, branch],
-              definitionPropertyKeys.usage.effect,
-              issues,
-            );
-          }
-        }
-      });
-    }
+    collectUnknownUsageConstraintDefinitionProperties(
+      node.usageConstraints,
+      [...path, "usageConstraints"],
+      issues,
+    );
     if (isPlainRecord(node.success)) {
       const successPath = [...path, "success"];
       const success = node.success;
@@ -5419,622 +5316,6 @@ export function usageFailureHelpArgv(
   return [...path, "--help"];
 }
 
-function compileUsageConstraints(
-  definitions: unknown,
-  fields: readonly FieldGrammar[],
-  command: string,
-  issues: ContractDefinitionIssue[],
-): readonly UsageConstraintGrammar[] {
-  const fieldsByKey = new Map(fields.map((field) => [field.key, field]));
-  const compiled: UsageConstraintGrammar[] = [];
-  if (!Array.isArray(definitions)) {
-    issues.push({
-      code: "invalidUsageConstraint",
-      command,
-      index: null,
-      aspect: "collection",
-      received: null,
-    });
-    return deepFreeze(compiled);
-  }
-  for (const [index, definition] of definitions.entries()) {
-    if (typeof definition !== "object" || definition === null) {
-      issues.push({
-        code: "invalidUsageConstraint",
-        command,
-        index,
-        aspect: "entry",
-        received: null,
-      });
-      continue;
-    }
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 定义条目已通过非 null 对象检查，此处读取动态属性。
-    const candidate = definition as Readonly<Record<string, unknown>>;
-    if (
-      candidate.kind !== "count" &&
-      candidate.kind !== "when" &&
-      candidate.kind !== "forbiddenCombination"
-    ) {
-      issues.push({
-        code: "invalidUsageConstraint",
-        command,
-        index,
-        aspect: "kind",
-        received: typeof candidate.kind === "string" ? candidate.kind : null,
-      });
-      continue;
-    }
-    if (candidate.kind === "count") {
-      const compiledCount = compileCountUsageConstraint(
-        candidate,
-        fields,
-        command,
-        index,
-        issues,
-      );
-      if (compiledCount !== undefined) compiled.push(compiledCount);
-      continue;
-    }
-    if (candidate.kind === "when") {
-      const facts = compileUsageFacts(
-        candidate.all,
-        "when",
-        index,
-        command,
-        fieldsByKey,
-        issues,
-      );
-      const onMatch = compileUsageEffect(
-        candidate.onMatch,
-        "onMatch",
-        index,
-        command,
-        fieldsByKey,
-        issues,
-      );
-      const otherwise = compileUsageEffect(
-        candidate.otherwise,
-        "otherwise",
-        index,
-        command,
-        fieldsByKey,
-        issues,
-      );
-      const hasEffect = onMatch.hasEffect || otherwise.hasEffect;
-      if (onMatch.valid && otherwise.valid && !hasEffect) {
-        issues.push({
-          code: "invalidUsageConstraint",
-          command,
-          index,
-          aspect: "members",
-          received: "when",
-          member: "effects",
-          path: ["commands", command, "usageConstraints", index],
-          expected: "至少一个分支包含非空 require 或 forbid 字段组",
-        });
-      }
-      if (facts.valid && onMatch.valid && otherwise.valid && hasEffect) {
-        compiled.push(
-          deepFreeze({
-            kind: "when" as const,
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- compileUsageFacts仅在all非空且所有事实合法时返回valid。
-            all: facts.facts as [UsageFact, ...UsageFact[]],
-            ...(onMatch.effect === undefined
-              ? {}
-              : { onMatch: onMatch.effect }),
-            ...(otherwise.effect === undefined
-              ? {}
-              : { otherwise: otherwise.effect }),
-          }),
-        );
-      }
-      continue;
-    }
-    if (candidate.kind === "forbiddenCombination") {
-      const facts = compileUsageFacts(
-        candidate.all,
-        "forbiddenCombination",
-        index,
-        command,
-        fieldsByKey,
-        issues,
-      );
-      if (facts.valid)
-        compiled.push(
-          deepFreeze({
-            kind: "forbiddenCombination" as const,
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- compileUsageFacts仅在all非空且所有事实合法时返回valid。
-            all: facts.facts as [UsageFact, ...UsageFact[]],
-          }),
-        );
-      continue;
-    }
-    issues.push({
-      code: "invalidUsageConstraint",
-      command,
-      index,
-      aspect: "kind",
-      received: null,
-    });
-  }
-  return deepFreeze(compiled);
-}
-
-interface CompiledUsageFacts {
-  readonly facts: readonly UsageFact[];
-  readonly valid: boolean;
-}
-
-interface CompiledUsageEffect {
-  readonly effect?: UsageConstraintEffect;
-  readonly valid: boolean;
-  readonly hasEffect: boolean;
-}
-
-type UsageFactForValidation =
-  | UsageFact
-  | Readonly<{
-      readonly kind: "invalidEqualsValue";
-      readonly field: string;
-      readonly value: unknown;
-    }>;
-
-function compileUsageFacts(
-  definitions: unknown,
-  constraint: "when" | "forbiddenCombination",
-  index: number,
-  command: string,
-  fieldsByKey: ReadonlyMap<string, FieldGrammar>,
-  issues: ContractDefinitionIssue[],
-): CompiledUsageFacts {
-  if (!Array.isArray(definitions) || definitions.length === 0) {
-    issues.push({
-      code: "invalidUsageConstraint",
-      command,
-      index,
-      aspect: "members",
-      received: constraint,
-      member: "all",
-      path: ["commands", command, "usageConstraints", index, "all"],
-      expected: "非空字段事实数组",
-    });
-    return { facts: [], valid: false };
-  }
-
-  const facts: UsageFact[] = [];
-  const factsForValidation: UsageFactForValidation[] = [];
-  let valid = true;
-  for (const [factIndex, candidateFact] of definitions.entries()) {
-    const path = [
-      "commands",
-      command,
-      "usageConstraints",
-      index,
-      "all",
-      factIndex,
-    ];
-    if (!isPlainRecord(candidateFact)) {
-      valid = false;
-      issues.push({
-        code: "invalidUsageConstraint",
-        command,
-        index,
-        aspect: "members",
-        received: candidateFact,
-        member: "all",
-        path,
-        expected: "present 或 equals 字段事实对象",
-      });
-      continue;
-    }
-    if (
-      candidateFact.kind === "present" &&
-      typeof candidateFact.field === "string"
-    ) {
-      const fact = { kind: "present", field: candidateFact.field } as const;
-      facts.push(fact);
-      factsForValidation.push(fact);
-      continue;
-    }
-    if (
-      candidateFact.kind === "equals" &&
-      typeof candidateFact.field === "string" &&
-      Object.hasOwn(candidateFact, "value")
-    ) {
-      if (
-        typeof candidateFact.value === "boolean" ||
-        typeof candidateFact.value === "string"
-      ) {
-        const fact = {
-          kind: "equals",
-          field: candidateFact.field,
-          value: candidateFact.value,
-        } as const;
-        facts.push(fact);
-        factsForValidation.push(fact);
-      } else {
-        factsForValidation.push({
-          kind: "invalidEqualsValue",
-          field: candidateFact.field,
-          value: candidateFact.value,
-        });
-      }
-      continue;
-    }
-    valid = false;
-    issues.push({
-      code: "invalidUsageConstraint",
-      command,
-      index,
-      aspect: "members",
-      received: candidateFact.kind,
-      member: "all",
-      path,
-      expected: "present{field} 或 equals{field,value}",
-    });
-  }
-
-  let invalidFactCount = 0;
-  for (const fact of factsForValidation) {
-    if (fact.kind === "invalidEqualsValue") {
-      const field = fieldsByKey.get(fact.field);
-      if (field === undefined) {
-        invalidFactCount += 1;
-        issues.push({
-          code: "unknownUsageConstraintField",
-          command,
-          constraint,
-          index,
-          member: "all.field",
-          field: fact.field,
-        });
-        continue;
-      }
-      if (
-        field.kind !== "flag" &&
-        field.kind !== "valueOption" &&
-        field.kind !== "positional"
-      ) {
-        invalidFactCount += 1;
-        issues.push({
-          code: "inapplicableUsageConstraintField",
-          command,
-          constraint,
-          index,
-          member: "all.field",
-          field: field.key,
-          kind: field.kind,
-        });
-        continue;
-      }
-      invalidFactCount += 1;
-      const expected =
-        field.kind === "flag"
-          ? field.negatedLongOption === undefined
-            ? true
-            : "boolean"
-          : field.choices === undefined
-            ? "string"
-            : Object.freeze([...field.choices]);
-      issues.push({
-        code: "invalidUsageConstraintValue",
-        command,
-        constraint,
-        index,
-        member: "all.value",
-        field: field.key,
-        actual: fact.value,
-        expected,
-      });
-      continue;
-    }
-
-    const field = fieldsByKey.get(fact.field);
-    if (field === undefined) {
-      invalidFactCount += 1;
-      issues.push({
-        code: "unknownUsageConstraintField",
-        command,
-        constraint,
-        index,
-        member: "all.field",
-        field: fact.field,
-      });
-      continue;
-    }
-    if (
-      fact.kind === "equals" &&
-      field.kind !== "flag" &&
-      field.kind !== "valueOption" &&
-      field.kind !== "positional"
-    ) {
-      invalidFactCount += 1;
-      issues.push({
-        code: "inapplicableUsageConstraintField",
-        command,
-        constraint,
-        index,
-        member: "all.field",
-        field: field.key,
-        kind: field.kind,
-      });
-      continue;
-    }
-    if (fact.kind !== "equals") continue;
-
-    const expectedKind = field.kind === "flag" ? "boolean" : "string";
-    const hasExpectedType =
-      expectedKind === "boolean"
-        ? typeof fact.value === "boolean"
-        : typeof fact.value === "string";
-    const onlyTrue =
-      field.kind === "flag" &&
-      field.negatedLongOption === undefined &&
-      fact.value !== true;
-    const outsideChoices =
-      typeof fact.value === "string" &&
-      field.choices !== undefined &&
-      !field.choices.includes(fact.value);
-    if (!hasExpectedType || onlyTrue || outsideChoices) {
-      invalidFactCount += 1;
-      issues.push({
-        code: "invalidUsageConstraintValue",
-        command,
-        constraint,
-        index,
-        member: "all.value",
-        field: field.key,
-        actual: fact.value,
-        expected:
-          outsideChoices && field.choices !== undefined
-            ? Object.freeze([...field.choices])
-            : onlyTrue
-              ? true
-              : expectedKind === "boolean"
-                ? "boolean"
-                : "string",
-      });
-    }
-  }
-
-  const conflictingFields = new Set<string>();
-  for (const [factIndex, fact] of facts.entries()) {
-    if (fact.kind !== "equals") continue;
-    if (
-      facts.some(
-        (other, otherIndex) =>
-          otherIndex !== factIndex &&
-          other.kind === "equals" &&
-          other.field === fact.field &&
-          other.value !== fact.value,
-      )
-    ) {
-      conflictingFields.add(fact.field);
-    }
-  }
-  if (conflictingFields.size > 0) {
-    issues.push({
-      code: "contradictoryUsageConstraint",
-      command,
-      constraint,
-      index,
-      member: "all",
-      fields: Object.freeze([...conflictingFields]),
-    });
-  }
-  valid &&=
-    invalidFactCount === 0 &&
-    conflictingFields.size === 0 &&
-    facts.length === definitions.length;
-  return { facts: deepFreeze(facts), valid };
-}
-
-function compileUsageEffect(
-  definition: unknown,
-  branch: "onMatch" | "otherwise",
-  index: number,
-  command: string,
-  fieldsByKey: ReadonlyMap<string, FieldGrammar>,
-  issues: ContractDefinitionIssue[],
-): CompiledUsageEffect {
-  if (definition === undefined) return { valid: true, hasEffect: false };
-  const path = ["commands", command, "usageConstraints", index, branch];
-  if (!isPlainRecord(definition)) {
-    issues.push({
-      code: "invalidUsageConstraint",
-      command,
-      index,
-      aspect: "members",
-      received: definition,
-      member: branch,
-      path,
-      expected: "只包含 require 和 forbid 字段数组的效果对象",
-    });
-    return { valid: false, hasEffect: false };
-  }
-
-  let valid = true;
-  let hasEffect = false;
-  const compiled: { require?: string[]; forbid?: string[] } = {};
-  for (const member of ["require", "forbid"] as const) {
-    if (!Object.hasOwn(definition, member)) continue;
-    const values = definition[member];
-    if (!Array.isArray(values)) {
-      valid = false;
-      issues.push({
-        code: "invalidUsageConstraint",
-        command,
-        index,
-        aspect: "members",
-        received: values,
-        member: `${branch}.${member}`,
-        path: [...path, member],
-        expected: "字段名称数组",
-      });
-      continue;
-    }
-    if (values.length > 0) hasEffect = true;
-    const compiledFields: string[] = [];
-    for (const [fieldIndex, field] of values.entries()) {
-      if (typeof field !== "string") {
-        valid = false;
-        issues.push({
-          code: "invalidUsageConstraint",
-          command,
-          index,
-          aspect: "members",
-          received: field,
-          member: `${branch}.${member}`,
-          path: [...path, member, fieldIndex],
-          expected: "字段名称字符串",
-        });
-        continue;
-      }
-      if (!fieldsByKey.has(field)) {
-        valid = false;
-        issues.push({
-          code: "unknownUsageConstraintField",
-          command,
-          constraint: "when",
-          index,
-          member: `${branch}.${member}`,
-          field,
-        });
-        continue;
-      }
-      compiledFields.push(field);
-    }
-    compiled[member] = compiledFields;
-  }
-
-  const forbidden = new Set(compiled.forbid ?? []);
-  const conflictingFields = [...new Set(compiled.require ?? [])].filter(
-    (field) => forbidden.has(field),
-  );
-  if (conflictingFields.length > 0) {
-    valid = false;
-    issues.push({
-      code: "contradictoryUsageConstraint",
-      command,
-      constraint: "when",
-      index,
-      member: branch,
-      fields: Object.freeze(conflictingFields),
-    });
-  }
-  return {
-    effect: deepFreeze(compiled),
-    valid,
-    hasEffect,
-  };
-}
-
-function projectUsageConstraints(
-  schema: SchemaManifest,
-  constraints: readonly UsageConstraintGrammar[],
-): SchemaManifest {
-  const constraintSchemas: JsonObject[] = [];
-  const countDefinitions: Record<string, JsonValue> = isPlainRecord(
-    schema.inputSchema.$defs,
-  )
-    ? // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- inputSchema 的 $defs 是已验证 JSON Schema 对象。
-      { ...(schema.inputSchema.$defs as JsonObject) }
-    : {};
-  let countConstraintIndex = 0;
-  for (const constraint of constraints) {
-    if (constraint.kind === "count") {
-      const projection = projectCountUsageConstraint(
-        constraint,
-        countDefinitions,
-        countConstraintIndex,
-      );
-      if (projection !== undefined) {
-        constraintSchemas.push(projection);
-        countConstraintIndex += 1;
-      }
-      continue;
-    }
-    if (constraint.kind === "when") {
-      const condition = {
-        allOf: constraint.all.map((fact) =>
-          fact.kind === "present"
-            ? { required: [fact.field] }
-            : {
-                properties: { [fact.field]: { const: fact.value } },
-                required: [fact.field],
-              },
-        ),
-      };
-      const effects: Record<string, JsonValue> = {};
-      const onMatch = constraint.onMatch;
-      if (
-        onMatch !== undefined &&
-        ((onMatch.require?.length ?? 0) > 0 ||
-          (onMatch.forbid?.length ?? 0) > 0)
-      ) {
-        // oxlint-disable-next-line unicorn/no-thenable -- Draft 2020-12 固定关键字。
-        effects.then = usageEffectSchema(onMatch);
-      }
-      const otherwise = constraint.otherwise;
-      if (
-        otherwise !== undefined &&
-        ((otherwise.require?.length ?? 0) > 0 ||
-          (otherwise.forbid?.length ?? 0) > 0)
-      ) {
-        effects.else = usageEffectSchema(otherwise);
-      }
-      constraintSchemas.push({ if: condition, ...effects });
-      continue;
-    }
-    constraintSchemas.push({
-      not: {
-        allOf: constraint.all.map((fact) =>
-          fact.kind === "present"
-            ? { required: [fact.field] }
-            : {
-                properties: { [fact.field]: { const: fact.value } },
-                required: [fact.field],
-              },
-        ),
-      },
-    });
-  }
-  if (constraintSchemas.length === 0) return schema;
-  return deepFreeze({
-    inputSchema: {
-      ...schema.inputSchema,
-      ...(countConstraintIndex === 0 ? {} : { $defs: countDefinitions }),
-      allOf: [
-        ...(Array.isArray(schema.inputSchema.allOf)
-          ? schema.inputSchema.allOf
-          : []),
-        ...constraintSchemas,
-      ],
-    },
-    outputSchema: schema.outputSchema,
-  });
-}
-
-function usageEffectSchema(effect: UsageConstraintEffect): JsonObject {
-  const required = effect.require ?? [];
-  const forbidden = effect.forbid ?? [];
-  const hasRepeatedRequiredField = new Set(required).size < required.length;
-  return {
-    ...(required.length === 0
-      ? {}
-      : hasRepeatedRequiredField
-        ? { allOf: required.map((field) => ({ required: [field] })) }
-        : { required: [...required] }),
-    ...(forbidden.length === 0
-      ? {}
-      : {
-          not: {
-            anyOf: forbidden.map((field) => ({ required: [field] })),
-          },
-        }),
-  };
-}
-
 function compileFailures(
   command: string,
   failures: FailureVariantDefinitions,
@@ -6189,16 +5470,6 @@ function collectControlFieldConflicts(
       }
     }
   }
-}
-
-function isPlainRecord(
-  value: unknown,
-): value is Readonly<Record<string, unknown>> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
 }
 
 function outputCompatibilityFlagsKind(value: unknown): string {

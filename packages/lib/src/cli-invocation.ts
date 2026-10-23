@@ -11,7 +11,7 @@ import {
   type UsageFact,
 } from "#/cli-contract";
 import { ContractExecutionError } from "#/contract-execution-error";
-import { evaluateCountUsageConstraint } from "#/usage-constraint";
+import { evaluateUsageConstraints } from "#/usage-constraint";
 
 const cliInvocationType = Symbol("CliInvocation.type");
 const invocationContracts = new WeakMap<object, object>();
@@ -924,106 +924,8 @@ function collectStructuralIssues(
     }
     return issues;
   });
-  const constraintIssues = usageConstraints.flatMap(
-    (constraint): UsageIssue[] => {
-      if (constraint.kind === "count") {
-        const issue = evaluateCountUsageConstraint(constraint, input);
-        return issue === undefined ? [] : [issue];
-      }
-      if (constraint.kind === "when") {
-        const observed = constraint.all.map((fact) =>
-          observeUsageFact(fact, input),
-        );
-        const branch = observed.every(({ matches }) => matches)
-          ? "onMatch"
-          : "otherwise";
-        const effect = constraint[branch];
-        if (effect === undefined) return [];
-        const missingRequiredFields = (effect.require ?? []).filter(
-          (field) => !Object.hasOwn(input, field),
-        );
-        const presentForbiddenFields = (effect.forbid ?? []).filter((field) =>
-          Object.hasOwn(input, field),
-        );
-        if (
-          missingRequiredFields.length === 0 &&
-          presentForbiddenFields.length === 0
-        ) {
-          return [];
-        }
-        return [
-          {
-            code: "conditionalConstraintViolation",
-            branch,
-            conditions: Object.freeze(
-              observed.map(({ observation }) => observation),
-            ),
-            missingRequiredFields: Object.freeze(missingRequiredFields),
-            presentForbiddenFields: Object.freeze(presentForbiddenFields),
-          },
-        ];
-      }
-      return constraint.all.every((fact) =>
-        fact.kind === "present"
-          ? Object.hasOwn(input, fact.field)
-          : Object.hasOwn(input, fact.field) &&
-            input[fact.field] === fact.value,
-      )
-        ? [
-            {
-              code: "forbiddenCombinationViolation",
-              facts: constraint.all,
-            },
-          ]
-        : [];
-    },
-  );
+  const constraintIssues = evaluateUsageConstraints(usageConstraints, input);
   return [...fieldIssues, ...constraintIssues];
-}
-
-function observeUsageFact(
-  fact: UsageFact,
-  input: Readonly<Record<string, boolean | string | string[]>>,
-): Readonly<{
-  readonly matches: boolean;
-  readonly observation: UsageConstraintObservation;
-}> {
-  const present = Object.hasOwn(input, fact.field);
-  if (fact.kind === "present") {
-    return {
-      matches: present,
-      observation: Object.freeze({
-        kind: "present",
-        field: fact.field,
-        present,
-      }),
-    };
-  }
-  if (!present) {
-    return {
-      matches: false,
-      observation: Object.freeze({
-        kind: "equals",
-        field: fact.field,
-        expected: fact.value,
-        present: false,
-      }),
-    };
-  }
-  const actual = input[fact.field];
-  if (typeof actual !== "boolean" && typeof actual !== "string") {
-    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
-  }
-  return {
-    matches: actual === fact.value,
-    observation: Object.freeze({
-      kind: "equals",
-      field: fact.field,
-      expected: fact.value,
-      present: true,
-      actual,
-    }),
-  };
 }
 
 function freezeOccurrenceEvidence(
