@@ -1,24 +1,36 @@
 import {
   defineCli,
   helpCapability,
-  outputCapability,
   text,
   type CliContractDependencies,
+  type CliContractRawInput,
   type CliContractResult,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
-const emptyInput = z.object({});
-const namedInput = z.object({ name: z.string() });
-const payload = z.object({ message: z.string() });
+const textCoverageHelp = helpCapability({
+  wording: {
+    commandPlaceholder: "command",
+    choices: "(choices: {choices})",
+    default: "(default: {value})",
+  },
+});
 
+const emptyInput = z.object({});
+const inspectInput = z.object({
+  name: z
+    .string()
+    .transform((value) => value.length)
+    .pipe(z.number()),
+});
+const payload = z.object({ message: z.string() });
 type Dependencies = Readonly<{ readonly requestId: string }>;
+const namedInput = z.object({ name: z.string() });
 
 const defineHierarchy = defineCli<Dependencies>();
-const completeHierarchy = defineHierarchy({
+const hierarchy = defineHierarchy({
   root: "workspace",
-  help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+  help: textCoverageHelp,
   usageFailureExitCode: 64,
   commands: {
     workspace: {
@@ -26,35 +38,9 @@ const completeHierarchy = defineHierarchy({
       name: "workspace",
       description: "工作区",
     },
-    packages: {
-      kind: "commandGroup",
-      parent: "workspace",
-      name: "packages",
-      description: "包命令",
-    },
-    ...defineHierarchy.command("complete")({
-      kind: "command",
-      parent: "packages",
-      name: "complete",
-      description: "完成",
-      input: emptyInput,
-      success: { kind: "completion", text: () => text.silent },
-      failures: {
-        unavailable: {
-          description: "不可用",
-          schema: payload,
-          exitCode: 9,
-          text: (value) => text.line(value.message),
-        },
-      },
-      handler: ({ dependencies, outcome }) => {
-        dependencies.requestId satisfies string;
-        return outcome.completion();
-      },
-    }),
     ...defineHierarchy.command("inspect")({
       kind: "command",
-      parent: "packages",
+      parent: "workspace",
       name: "inspect",
       description: "检查",
       fields: {
@@ -64,77 +50,125 @@ const completeHierarchy = defineHierarchy({
           description: "名称",
         },
       },
-      input: namedInput,
-      success: {
-        kind: "data",
-        variants: {
-          found: {
-            description: "找到",
-            schema: payload,
-            exitCode: 0,
-            text: (value) => text.line(value.message),
-          },
+      input: inspectInput,
+      outputs: defineHierarchy.outputModes("inspect", inspectInput, (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode.atomic({
+            description: "结构化输出",
+            format: "structured",
+            success: {
+              kind: "data",
+              variants: {
+                found: { description: "找到", schema: payload, exitCode: 0 },
+              },
+            },
+            failures: {
+              unavailable: {
+                description: "不可用",
+                schema: payload,
+                exitCode: 9,
+              },
+            },
+            handler: ({ input, dependencies, outcome }) => {
+              input.name satisfies number;
+              dependencies.requestId satisfies string;
+              return outcome.data.found({ message: String(input.name) });
+            },
+          }),
+          text: mode.atomic({
+            description: "文本输出",
+            format: "text",
+            success: {
+              kind: "data",
+              variants: {
+                found: {
+                  description: "找到",
+                  schema: payload,
+                  exitCode: 0,
+                  text: ({ message }) => text.line(message),
+                },
+              },
+            },
+            failures: {
+              unavailable: {
+                description: "不可用",
+                schema: payload,
+                exitCode: 9,
+                text: ({ message }) => text.line(message),
+              },
+            },
+            handler: ({ input, outcome }) => {
+              input.name satisfies number;
+              return outcome.data.found({ message: String(input.name) });
+            },
+          }),
         },
-      },
-      failures: {},
-      handler: ({ input, dependencies, outcome }) => {
-        input.name satisfies string;
-        dependencies.requestId satisfies string;
-        return outcome.data.found({ message: input.name });
-      },
+      })),
     }),
     ...defineHierarchy.command("watch")({
       kind: "command",
-      parent: "packages",
+      parent: "workspace",
       name: "watch",
       description: "监看",
-      fields: {
-        name: {
-          kind: "valueOption",
-          longOption: "--name",
-          description: "名称",
+      fields: {},
+      input: emptyInput,
+      outputs: defineHierarchy.outputModes("watch", emptyInput, (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode.stream({
+            description: "结构化输出",
+            format: "structured",
+            success: {
+              kind: "stream",
+              records: {
+                update: { description: "更新", schema: payload },
+              },
+            },
+            failures: {},
+            async *handler({ dependencies, outcome }) {
+              dependencies.requestId satisfies string;
+              yield outcome.record.update({ message: "更新" });
+              return outcome.streamSuccess();
+            },
+          }),
+          text: mode.stream({
+            description: "文本流",
+            format: "text",
+            success: {
+              kind: "stream",
+              text: () => text.silent,
+              records: {
+                update: {
+                  description: "更新",
+                  schema: payload,
+                  text: ({ message }) => text.line(message),
+                },
+              },
+            },
+            failures: {},
+            async *handler({ outcome }) {
+              yield outcome.record.update({ message: "更新" });
+              return outcome.streamSuccess();
+            },
+          }),
         },
-      },
-      input: namedInput,
-      success: {
-        kind: "stream",
-        text: () => text.silent,
-        records: {
-          update: {
-            description: "更新",
-            schema: payload,
-            text: (value) => text.line(value.message),
-          },
-        },
-      },
-      failures: {},
-      async *handler({ input, dependencies, outcome }) {
-        input.name satisfies string;
-        dependencies.requestId satisfies string;
-        yield outcome.record.update({ message: input.name });
-        return outcome.streamSuccess();
-      },
+      })),
     }),
   },
 });
 
-declare const hierarchyDependencies: CliContractDependencies<
-  typeof completeHierarchy
->;
-hierarchyDependencies.requestId satisfies string;
-declare const hierarchyResult: CliContractResult<typeof completeHierarchy>;
-hierarchyResult.command satisfies
-  | "workspace"
-  | "complete"
-  | "inspect"
-  | "watch";
+declare const dependencies: CliContractDependencies<typeof hierarchy>;
+dependencies.requestId satisfies string;
+declare const rawInput: CliContractRawInput<typeof hierarchy>;
+rawInput satisfies Readonly<{ readonly name?: string }>;
+declare const result: CliContractResult<typeof hierarchy>;
+result.command satisfies "inspect" | "watch";
 
 const defineMissingCompletion = defineCli();
-// @ts-expect-error [hierarchy-text-coverage] 层级 completion 缺少 presenter 必须在根装配时拒绝。
 defineMissingCompletion({
   root: "missingCompletion",
-  help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+  help: textCoverageHelp,
   usageFailureExitCode: 64,
   commands: {
     missingCompletion: {
@@ -148,19 +182,31 @@ defineMissingCompletion({
       name: "leaf",
       description: "叶命令",
       input: emptyInput,
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+      outputs: defineMissingCompletion.outputModes(
+        "leaf",
+        emptyInput,
+        (mode) => ({
+          default: "text",
+          modes: {
+            // @ts-expect-error [hierarchy-text-coverage] 文本完成方式缺少呈现器。
+            text: mode.atomic({
+              description: "文本输出",
+              format: "text",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     }),
   },
 });
 
 const defineMissingData = defineCli();
-// @ts-expect-error [hierarchy-text-coverage] 层级 data 变体缺少 presenter 必须在根装配时拒绝。
 defineMissingData({
   root: "missingData",
-  help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+  help: textCoverageHelp,
   usageFailureExitCode: 64,
   commands: {
     missingData: {
@@ -181,24 +227,36 @@ defineMissingData({
         },
       },
       input: namedInput,
-      success: {
-        kind: "data",
-        variants: {
-          found: { description: "找到", schema: payload, exitCode: 0 },
+      outputs: defineMissingData.outputModes("leaf", namedInput, (mode) => ({
+        default: "text",
+        modes: {
+          // @ts-expect-error [hierarchy-text-coverage] 文本结果变体缺少呈现器。
+          text: mode.atomic({
+            description: "文本输出",
+            format: "text",
+            success: {
+              kind: "data",
+              variants: {
+                found: {
+                  description: "找到",
+                  schema: payload,
+                  exitCode: 0,
+                },
+              },
+            },
+            failures: {},
+            handler: ({ outcome }) => outcome.data.found({ message: "结果" }),
+          }),
         },
-      },
-      failures: {},
-      handler: ({ outcome }) => outcome.data.found({ message: "结果" }),
+      })),
     }),
   },
 });
 
 const defineMissingFailure = defineCli();
-// @ts-expect-error [hierarchy-text-coverage] 层级 failure 变体缺少 presenter 必须在根装配时拒绝。
 defineMissingFailure({
   root: "missingFailure",
-  help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+  help: textCoverageHelp,
   usageFailureExitCode: 64,
   commands: {
     missingFailure: {
@@ -212,21 +270,33 @@ defineMissingFailure({
       name: "leaf",
       description: "叶命令",
       input: emptyInput,
-      success: { kind: "completion", text: () => text.silent },
-      failures: {
-        unavailable: { description: "不可用", schema: payload, exitCode: 9 },
-      },
-      handler: ({ outcome }) => outcome.completion(),
+      outputs: defineMissingFailure.outputModes("leaf", emptyInput, (mode) => ({
+        default: "text",
+        modes: {
+          // @ts-expect-error [hierarchy-text-coverage] 文本失败变体缺少呈现器。
+          text: mode.atomic({
+            description: "文本输出",
+            format: "text",
+            success: { kind: "completion", text: () => text.silent },
+            failures: {
+              unavailable: {
+                description: "不可用",
+                schema: payload,
+                exitCode: 9,
+              },
+            },
+            handler: ({ outcome }) => outcome.completion(),
+          }),
+        },
+      })),
     }),
   },
 });
 
 const defineMissingRecord = defineCli();
-// @ts-expect-error [hierarchy-text-coverage] 层级 stream record 缺少 presenter 必须在根装配时拒绝。
 defineMissingRecord({
   root: "missingRecord",
-  help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+  help: textCoverageHelp,
   usageFailureExitCode: 64,
   commands: {
     missingRecord: {
@@ -247,26 +317,36 @@ defineMissingRecord({
         },
       },
       input: namedInput,
-      success: {
-        kind: "stream",
-        text: () => text.silent,
-        records: { update: { description: "更新", schema: payload } },
-      },
-      failures: {},
-      async *handler({ outcome }) {
-        yield outcome.record.update({ message: "更新" });
-        return outcome.streamSuccess();
-      },
+      outputs: defineMissingRecord.outputModes("leaf", namedInput, (mode) => ({
+        default: "text",
+        modes: {
+          // @ts-expect-error [hierarchy-text-coverage] 文本流记录缺少呈现器。
+          text: mode.stream({
+            description: "文本输出",
+            format: "text",
+            success: {
+              kind: "stream",
+              text: () => text.silent,
+              records: {
+                update: { description: "更新", schema: payload },
+              },
+            },
+            failures: {},
+            async *handler({ outcome }) {
+              yield outcome.record.update({ message: "更新" });
+              return outcome.streamSuccess();
+            },
+          }),
+        },
+      })),
     }),
   },
 });
 
 const defineMissingStreamSuccess = defineCli();
-// @ts-expect-error [hierarchy-text-coverage] 层级 stream success 缺少 presenter 必须在根装配时拒绝。
 defineMissingStreamSuccess({
   root: "missingStreamSuccess",
-  help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+  help: textCoverageHelp,
   usageFailureExitCode: 64,
   commands: {
     missingStreamSuccess: {
@@ -287,195 +367,82 @@ defineMissingStreamSuccess({
         },
       },
       input: namedInput,
-      success: {
-        kind: "stream",
-        records: {
-          update: {
-            description: "更新",
-            schema: payload,
-            text: (value: Readonly<{ readonly message: string }>) =>
-              text.line(value.message),
+      outputs: defineMissingStreamSuccess.outputModes(
+        "leaf",
+        namedInput,
+        (mode) => ({
+          default: "text",
+          modes: {
+            // @ts-expect-error [hierarchy-text-coverage] 文本流终态缺少呈现器。
+            text: mode.stream({
+              description: "文本输出",
+              format: "text",
+              success: {
+                kind: "stream",
+                records: {
+                  update: {
+                    description: "更新",
+                    schema: payload,
+                    text: (value: Readonly<{ readonly message: string }>) =>
+                      text.line(value.message),
+                  },
+                },
+              },
+              failures: {},
+              async *handler({ outcome }) {
+                yield outcome.record.update({ message: "更新" });
+                return outcome.streamSuccess();
+              },
+            }),
           },
-        },
-      },
-      failures: {},
-      async *handler({ outcome }) {
-        yield outcome.record.update({ message: "更新" });
-        return outcome.streamSuccess();
-      },
+        }),
+      ),
     }),
   },
 });
 
-const defineUndeclaredCompletionFailure = defineCli();
-const undeclaredCompletionFailure = defineUndeclaredCompletionFailure.command(
-  "completionLeaf",
-)({
-  kind: "command",
-  parent: "failureRoot",
-  name: "completion",
-  description: "completion failure",
-  input: emptyInput,
-  success: { kind: "completion" },
-  failures: {},
-  handler: ({ outcome }) => {
-    // @ts-expect-error hierarchy completion 的空 failure 表不提供未知构造器。
-    return outcome.failure.undeclared({});
-  },
-});
-defineUndeclaredCompletionFailure({
-  root: "failureRoot",
-  help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
-  usageFailureExitCode: 64,
-  commands: {
-    failureRoot: {
-      kind: "rootGroup",
-      name: "failures",
-      description: "failures",
+function rejectedModes() {
+  const define = defineCli();
+  const input = z.object({});
+  const badModes = define.outputModes("bad", input, (mode) => ({
+    default: "structured",
+    modes: {
+      structured: mode.atomic({
+        description: "结构化输出",
+        format: "structured",
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      }),
+      // @ts-expect-error 文本完成方式必须在当前方式内声明呈现器。
+      text: mode.atomic({
+        description: "文本输出",
+        format: "text",
+        success: { kind: "completion" },
+        failures: {},
+        handler: () => undefined as never,
+      }),
     },
-    ...undeclaredCompletionFailure,
-  },
-});
+  }));
+  void badModes;
 
-const defineUndeclaredDataFailure = defineCli();
-const undeclaredDataFailure = defineUndeclaredDataFailure.command("dataLeaf")({
-  kind: "command",
-  parent: "dataFailureRoot",
-  name: "data",
-  description: "data failure",
-  fields: {},
-  input: emptyInput,
-  success: {
-    kind: "data",
-    variants: { found: { description: "found", schema: payload, exitCode: 0 } },
-  },
-  failures: {},
-  handler: ({ outcome }) => {
-    // @ts-expect-error hierarchy data 的空 failure 表不提供未知构造器。
-    return outcome.failure.undeclared({});
-  },
-});
-defineUndeclaredDataFailure({
-  root: "dataFailureRoot",
-  help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
-  usageFailureExitCode: 64,
-  commands: {
-    dataFailureRoot: {
-      kind: "rootGroup",
-      name: "failures",
-      description: "failures",
+  const modes = define.outputModes("structured", input, (mode) => ({
+    default: "structured",
+    modes: {
+      // @ts-expect-error structured 方式不接受呈现器。
+      structured: mode.atomic({
+        description: "结构化输出",
+        format: "structured",
+        success: {
+          kind: "completion",
+          text: () => text.silent,
+        },
+        failures: {},
+        handler: () => undefined as never,
+      }),
     },
-    ...undeclaredDataFailure,
-  },
-});
+  }));
+  void modes;
+}
 
-const defineUndeclaredStreamFailure = defineCli();
-const undeclaredStreamFailure = defineUndeclaredStreamFailure.command(
-  "streamLeaf",
-)({
-  kind: "command",
-  parent: "streamFailureRoot",
-  name: "stream",
-  description: "stream failure",
-  fields: {},
-  input: emptyInput,
-  success: {
-    kind: "stream",
-    records: { update: { description: "update", schema: payload } },
-  },
-  failures: {},
-  async *handler({ outcome }) {
-    yield outcome.record.update({ message: "update" });
-    // @ts-expect-error hierarchy stream 的空 failure 表不提供未知构造器。
-    return outcome.failure.undeclared({});
-  },
-});
-defineUndeclaredStreamFailure({
-  root: "streamFailureRoot",
-  help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
-  usageFailureExitCode: 64,
-  commands: {
-    streamFailureRoot: {
-      kind: "rootGroup",
-      name: "failures",
-      description: "failures",
-    },
-    ...undeclaredStreamFailure,
-  },
-});
-
-const defineDataWithoutFields = defineCli();
-const dataWithFields = defineDataWithoutFields.command("dataLeaf")({
-  kind: "command",
-  parent: "dataWithoutFields",
-  name: "data",
-  description: "data",
-  fields: {},
-  input: emptyInput,
-  success: {
-    kind: "data",
-    variants: {
-      found: { description: "found", schema: payload, exitCode: 0 },
-    },
-  },
-  failures: {},
-  handler: ({ outcome }) => outcome.data.found({ message: "found" }),
-});
-const { fields: _dataFields, ...dataWithoutFieldsDefinition } =
-  dataWithFields.dataLeaf;
-const dataWithoutFields = defineDataWithoutFields.command("dataLeaf")(
-  // @ts-expect-error hierarchy data 命令必须显式声明 fields。
-  dataWithoutFieldsDefinition,
-);
-defineDataWithoutFields({
-  root: "dataWithoutFields",
-  help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
-  usageFailureExitCode: 64,
-  commands: {
-    dataWithoutFields: { kind: "rootGroup", name: "data", description: "data" },
-    ...dataWithoutFields,
-  },
-});
-
-const defineStreamWithoutFields = defineCli();
-const streamWithFields = defineStreamWithoutFields.command("streamLeaf")({
-  kind: "command",
-  parent: "streamWithoutFields",
-  name: "stream",
-  description: "stream",
-  fields: {},
-  input: emptyInput,
-  success: {
-    kind: "stream",
-    records: { update: { description: "update", schema: payload } },
-  },
-  failures: {},
-  async *handler({ outcome }) {
-    yield outcome.record.update({ message: "update" });
-    return outcome.streamSuccess();
-  },
-});
-const { fields: _streamFields, ...streamWithoutFieldsDefinition } =
-  streamWithFields.streamLeaf;
-const streamWithoutFields = defineStreamWithoutFields.command("streamLeaf")(
-  // @ts-expect-error hierarchy stream 命令必须显式声明 fields。
-  streamWithoutFieldsDefinition,
-);
-defineStreamWithoutFields({
-  root: "streamWithoutFields",
-  help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
-  usageFailureExitCode: 64,
-  commands: {
-    streamWithoutFields: {
-      kind: "rootGroup",
-      name: "stream",
-      description: "stream",
-    },
-    ...streamWithoutFields,
-  },
-});
+void rejectedModes;

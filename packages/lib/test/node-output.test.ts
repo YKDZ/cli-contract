@@ -7,12 +7,12 @@ import {
   CliWriteError,
   defineCli,
   executeCli,
-  helpCapability,
-  outputCapability,
   parseCliInvocation,
 } from "@ykdz/cli-contract";
 import { isNodeBrokenPipe, nodeCliOutput } from "@ykdz/cli-contract/node";
 import { z } from "zod";
+
+import { englishHelpCapability } from "./english-help.ts";
 
 class ControlledWritable extends EventEmitter {
   readonly chunks: string[] = [];
@@ -185,33 +185,46 @@ void test("isNodeBrokenPipe 只识别 Node EPIPE 证据及其 cause 链", () => 
 void test("stream 经 nodeCliOutput 写入失败时保留公共 CliWriteError 并清理 generator", async () => {
   let pulled = 0;
   let cleaned = false;
+  const sharedInput0 = z.object({});
   const cli = defineCli()({
     root: "list",
-    help: helpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability(),
+
     usageFailureExitCode: 64,
     commands: {
       list: {
         kind: "rootCommand",
         name: "list",
         description: "列出项目",
-        input: z.object({}),
-        success: {
-          kind: "stream",
-          records: { item: { description: "项目", schema: z.object({}) } },
-        },
-        failures: {},
-        async *handler({ outcome }) {
-          try {
-            pulled += 1;
-            yield outcome.record.item({});
-            pulled += 1;
-            yield outcome.record.item({});
-            return outcome.streamSuccess();
-          } finally {
-            cleaned = true;
-          }
-        },
+        input: sharedInput0,
+
+        outputs: defineCli().outputModes("list", sharedInput0, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.stream({
+              description: "结构化输出",
+              format: "structured",
+              success: {
+                kind: "stream",
+                records: {
+                  item: { description: "项目", schema: z.object({}) },
+                },
+              },
+              failures: {},
+              async *handler({ outcome }) {
+                try {
+                  pulled += 1;
+                  yield outcome.record.item({});
+                  pulled += 1;
+                  yield outcome.record.item({});
+                  return outcome.streamSuccess();
+                } finally {
+                  cleaned = true;
+                }
+              },
+            }),
+          },
+        })),
       },
     },
   });

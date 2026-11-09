@@ -5,7 +5,6 @@ import {
   ContractDefinitionError,
   defineCli,
   executeCli,
-  outputCapability,
   parseCliInvocation,
   type ContractSchema,
 } from "@ykdz/cli-contract";
@@ -23,7 +22,7 @@ function createDefaultingCli(
   return defineCli()({
     root: "greet",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       greet: {
@@ -38,12 +37,22 @@ function createDefaultingCli(
           },
         },
         input,
-        success: { kind: "completion" },
-        failures: {},
-        handler({ input: validatedInput, outcome }) {
-          received.push(validatedInput);
-          return outcome.completion();
-        },
+
+        outputs: defineCli().outputModes("greet", input, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler({ input: validatedInput, outcome }) {
+                received.push(validatedInput);
+                return outcome.completion();
+              },
+            }),
+          },
+        })),
       },
     },
   });
@@ -107,7 +116,7 @@ void test("Zod 默认只由 validation 施加，并同源投影到 grammar、man
   });
   assert.equal(validationCalls, 0);
   assert.deepEqual(helpWrites, [
-    '生成问候\n\n  greet [--name <name>]\n\n  [--name <name>] (default: "Ada")\n    问候对象\n  --help\n',
+    '生成问候\n\n  greet [--output <mode>] [--name <name>]\n\n  [--name <name>] (default: "Ada")\n    问候对象\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured (atomic, structured)\n    结构化输出\n',
   ]);
 
   await executeCli(cli, {
@@ -120,10 +129,14 @@ void test("Zod 默认只由 validation 施加，并同源投影到 grammar、man
 });
 
 void test("显式 false 和空数组默认值保留在同源帮助详情", async () => {
+  const sharedInput0 = z.object({
+    enabled: z.boolean().optional().default(false),
+    tags: z.array(z.string()).optional().default([]),
+  });
   const cli = defineCli()({
     root: "defaults",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       defaults: {
@@ -142,13 +155,20 @@ void test("显式 false 和空数组默认值保留在同源帮助详情", async
             description: "标签",
           },
         },
-        input: z.object({
-          enabled: z.boolean().optional().default(false),
-          tags: z.array(z.string()).optional().default([]),
-        }),
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        input: sharedInput0,
+
+        outputs: defineCli().outputModes("defaults", sharedInput0, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -180,7 +200,7 @@ void test("显式 false 和空数组默认值保留在同源帮助详情", async
     },
   });
   assert.deepEqual(writes, [
-    "默认值\n\n  defaults [--enabled] [--tag <tags>]...\n\n  [--enabled] (default: false)\n    启用\n  [--tag <tags>]... (default: [])\n    标签\n  --help\n",
+    '默认值\n\n  defaults [--output <mode>] [--enabled] [--tag <tags>]...\n\n  [--enabled] (default: false)\n    启用\n  [--tag <tags>]... (default: [])\n    标签\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured (atomic, structured)\n    结构化输出\n',
   ]);
 });
 

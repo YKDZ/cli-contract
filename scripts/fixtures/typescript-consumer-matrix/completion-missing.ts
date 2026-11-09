@@ -1,8 +1,4 @@
-import {
-  defineCli,
-  helpCapability,
-  outputCapability,
-} from "@ykdz/cli-contract";
+import { defineCli, helpCapability } from "@ykdz/cli-contract";
 import { z } from "zod";
 
 const emptyInput = z.object({});
@@ -11,7 +7,7 @@ const textInput = z.object({ name: z.string().optional() });
 defineCli()({
   root: "missingCompletion",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+
   usageFailureExitCode: 64,
   commands: {
     missingCompletion: {
@@ -19,9 +15,30 @@ defineCli()({
       name: "missing-completion",
       description: "缺少 completion presenter",
       input: emptyInput,
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "missingCompletion",
+        emptyInput,
+        (mode) => ({
+          default: "text",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+            text: mode.atomic({
+              description: "文本输出",
+              format: "text",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
@@ -29,7 +46,7 @@ defineCli()({
 defineCli()({
   root: "missingCompletionWithField",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+
   usageFailureExitCode: 64,
   commands: {
     missingCompletionWithField: {
@@ -44,12 +61,36 @@ defineCli()({
         },
       },
       input: textInput,
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ input, outcome }) => {
-        input.name satisfies string | undefined;
-        return outcome.completion();
-      },
+
+      outputs: defineCli().outputModes(
+        "missingCompletionWithField",
+        textInput,
+        (mode) => ({
+          default: "text",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ input, outcome }) => {
+                input.name satisfies string | undefined;
+                return outcome.completion();
+              },
+            }),
+            text: mode.atomic({
+              description: "文本输出",
+              format: "text",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ input, outcome }) => {
+                input.name satisfies string | undefined;
+                return outcome.completion();
+              },
+            }),
+          },
+        }),
+      ),
     },
   },
 });

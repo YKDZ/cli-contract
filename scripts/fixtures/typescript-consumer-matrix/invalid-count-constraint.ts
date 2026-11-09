@@ -1,8 +1,4 @@
-import {
-  defineCli,
-  helpCapability,
-  outputCapability,
-} from "@ykdz/cli-contract";
+import { defineCli, helpCapability } from "@ykdz/cli-contract";
 import { z } from "zod";
 
 const define = defineCli();
@@ -35,6 +31,10 @@ declare const broadCountFields: string[];
 declare const broadCountTuple: readonly [string, string];
 declare const unionCountTuple: readonly ["auth" | "quiet", "auth" | "quiet"];
 
+const sharedInput0 = z.object({
+  auth: z.boolean().optional(),
+  quiet: z.boolean().optional(),
+});
 const invalidChild = define.command("deploy")({
   kind: "command",
   parent: "workspace",
@@ -44,10 +44,7 @@ const invalidChild = define.command("deploy")({
     auth: { kind: "flag", longOption: "--auth", description: "认证" },
     quiet: { kind: "flag", longOption: "--quiet", description: "静默" },
   },
-  input: z.object({
-    auth: z.boolean().optional(),
-    quiet: z.boolean().optional(),
-  }),
+  input: sharedInput0,
   usageConstraints: [
     {
       kind: "count",
@@ -56,11 +53,25 @@ const invalidChild = define.command("deploy")({
       max: 1,
     },
   ],
-  success: { kind: "completion" },
-  failures: {},
-  handler: ({ outcome }) => outcome.completion(),
+
+  outputs: define.outputModes("deploy", sharedInput0, (mode) => ({
+    default: "structured",
+    modes: {
+      structured: mode.atomic({
+        description: "结构化输出",
+        format: "structured",
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      }),
+    },
+  })),
 });
 
+const sharedInput1 = z.object({
+  auth: z.boolean().optional(),
+  quiet: z.boolean().optional(),
+});
 const invalidDynamicNegativeChild = define.command("stage")({
   kind: "command",
   parent: "workspace",
@@ -70,10 +81,7 @@ const invalidDynamicNegativeChild = define.command("stage")({
     auth: { kind: "flag", longOption: "--auth", description: "认证" },
     quiet: { kind: "flag", longOption: "--quiet", description: "静默" },
   },
-  input: z.object({
-    auth: z.boolean().optional(),
-    quiet: z.boolean().optional(),
-  }),
+  input: sharedInput1,
   usageConstraints: [
     {
       kind: "count",
@@ -82,11 +90,25 @@ const invalidDynamicNegativeChild = define.command("stage")({
       max: 1,
     },
   ],
-  success: { kind: "completion" },
-  failures: {},
-  handler: ({ outcome }) => outcome.completion(),
+
+  outputs: define.outputModes("stage", sharedInput1, (mode) => ({
+    default: "structured",
+    modes: {
+      structured: mode.atomic({
+        description: "结构化输出",
+        format: "structured",
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      }),
+    },
+  })),
 });
 
+const sharedInput2 = z.object({
+  auth: z.boolean().optional(),
+  quiet: z.boolean().optional(),
+});
 const invalidFixedMaximumChild = define.command("quota")({
   kind: "command",
   parent: "workspace",
@@ -96,10 +118,7 @@ const invalidFixedMaximumChild = define.command("quota")({
     auth: { kind: "flag", longOption: "--auth", description: "认证" },
     quiet: { kind: "flag", longOption: "--quiet", description: "静默" },
   },
-  input: z.object({
-    auth: z.boolean().optional(),
-    quiet: z.boolean().optional(),
-  }),
+  input: sharedInput2,
   usageConstraints: [
     {
       kind: "count",
@@ -107,11 +126,25 @@ const invalidFixedMaximumChild = define.command("quota")({
       max: 3,
     },
   ],
-  success: { kind: "completion" },
-  failures: {},
-  handler: ({ outcome }) => outcome.completion(),
+
+  outputs: define.outputModes("quota", sharedInput2, (mode) => ({
+    default: "structured",
+    modes: {
+      structured: mode.atomic({
+        description: "结构化输出",
+        format: "structured",
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      }),
+    },
+  })),
 });
 
+const sharedInput3 = z.object({
+  auth: z.boolean().optional(),
+  quiet: z.boolean().optional(),
+});
 const invalidCompoundChild = define.command("compound")({
   kind: "command",
   parent: "workspace",
@@ -121,10 +154,7 @@ const invalidCompoundChild = define.command("compound")({
     auth: { kind: "flag", longOption: "--auth", description: "认证" },
     quiet: { kind: "flag", longOption: "--quiet", description: "静默" },
   },
-  input: z.object({
-    auth: z.boolean().optional(),
-    quiet: z.boolean().optional(),
-  }),
+  input: sharedInput3,
   usageConstraints: [
     {
       kind: "count",
@@ -133,11 +163,25 @@ const invalidCompoundChild = define.command("compound")({
       max: 3,
     },
   ],
-  success: { kind: "completion" },
-  failures: {},
-  handler: ({ outcome }) => outcome.completion(),
+
+  outputs: define.outputModes("compound", sharedInput3, (mode) => ({
+    default: "structured",
+    modes: {
+      structured: mode.atomic({
+        description: "结构化输出",
+        format: "structured",
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      }),
+    },
+  })),
 });
 
+const sharedInput4 = z.object({
+  auth: z.boolean().optional(),
+  quiet: z.boolean().optional(),
+});
 const invalidFractionalChild = define.command("fractional")({
   kind: "command",
   parent: "workspace",
@@ -147,10 +191,7 @@ const invalidFractionalChild = define.command("fractional")({
     auth: { kind: "flag", longOption: "--auth", description: "认证" },
     quiet: { kind: "flag", longOption: "--quiet", description: "静默" },
   },
-  input: z.object({
-    auth: z.boolean().optional(),
-    quiet: z.boolean().optional(),
-  }),
+  input: sharedInput4,
   usageConstraints: [
     {
       kind: "count",
@@ -158,15 +199,25 @@ const invalidFractionalChild = define.command("fractional")({
       min: 0.5,
     },
   ],
-  success: { kind: "completion" },
-  failures: {},
-  handler: ({ outcome }) => outcome.completion(),
+
+  outputs: define.outputModes("fractional", sharedInput4, (mode) => ({
+    default: "structured",
+    modes: {
+      structured: mode.atomic({
+        description: "结构化输出",
+        format: "structured",
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      }),
+    },
+  })),
 });
 
 define({
   root: "workspace",
   help: countHelp,
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     workspace: {
@@ -181,7 +232,7 @@ define({
 define({
   root: "workspace",
   help: countHelp,
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     workspace: {
@@ -196,7 +247,7 @@ define({
 define({
   root: "workspace",
   help: countHelp,
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     workspace: {
@@ -211,7 +262,7 @@ define({
 define({
   root: "workspace",
   help: countHelp,
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     workspace: {
@@ -226,7 +277,7 @@ define({
 define({
   root: "workspace",
   help: countHelp,
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     workspace: {
@@ -238,10 +289,14 @@ define({
   },
 });
 
+const sharedInput5 = z.object({
+  auth: z.boolean().optional(),
+  quiet: z.boolean().optional(),
+});
 defineCli()({
   root: "rootDeploy",
   help: countHelp,
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     rootDeploy: {
@@ -252,10 +307,7 @@ defineCli()({
         auth: { kind: "flag", longOption: "--auth", description: "认证" },
         quiet: { kind: "flag", longOption: "--quiet", description: "静默" },
       },
-      input: z.object({
-        auth: z.boolean().optional(),
-        quiet: z.boolean().optional(),
-      }),
+      input: sharedInput5,
       usageConstraints: [
         {
           kind: "count",
@@ -263,17 +315,28 @@ defineCli()({
           min: -1,
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes("rootDeploy", sharedInput5, (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode.atomic({
+            description: "结构化输出",
+            format: "structured",
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          }),
+        },
+      })),
     },
   },
 });
 
+const sharedInput6 = z.object({ auth: z.boolean().optional() });
 defineCli()({
   root: "rootMissingCountField",
   help: countHelp,
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     rootMissingCountField: {
@@ -283,7 +346,7 @@ defineCli()({
       fields: {
         auth: { kind: "flag", longOption: "--auth", description: "认证" },
       },
-      input: z.object({ auth: z.boolean().optional() }),
+      input: sharedInput6,
       usageConstraints: [
         {
           kind: "count",
@@ -291,13 +354,28 @@ defineCli()({
           min: 0,
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "rootMissingCountField",
+        sharedInput6,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
 
+const sharedInput7 = z.object({ auth: z.boolean().optional() });
 const invalidMixedCountChild = define.command("missingCountChild")({
   kind: "command",
   parent: "workspace",
@@ -306,7 +384,7 @@ const invalidMixedCountChild = define.command("missingCountChild")({
   fields: {
     auth: { kind: "flag", longOption: "--auth", description: "认证" },
   },
-  input: z.object({ auth: z.boolean().optional() }),
+  input: sharedInput7,
   usageConstraints: [
     {
       kind: "count",
@@ -314,15 +392,25 @@ const invalidMixedCountChild = define.command("missingCountChild")({
       min: 0,
     },
   ],
-  success: { kind: "completion" },
-  failures: {},
-  handler: ({ outcome }) => outcome.completion(),
+
+  outputs: define.outputModes("missingCountChild", sharedInput7, (mode) => ({
+    default: "structured",
+    modes: {
+      structured: mode.atomic({
+        description: "结构化输出",
+        format: "structured",
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      }),
+    },
+  })),
 });
 
 define({
   root: "workspace",
   help: countHelp,
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     workspace: {
@@ -334,10 +422,14 @@ define({
   },
 });
 
+const sharedInput8 = z.object({
+  auth: z.boolean().optional(),
+  quiet: z.boolean().optional(),
+});
 defineCli()({
   root: "validBroadCounts",
   help: countHelp,
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     validBroadCounts: {
@@ -348,10 +440,7 @@ defineCli()({
         auth: { kind: "flag", longOption: "--auth", description: "认证" },
         quiet: { kind: "flag", longOption: "--quiet", description: "静默" },
       },
-      input: z.object({
-        auth: z.boolean().optional(),
-        quiet: z.boolean().optional(),
-      }),
+      input: sharedInput8,
       usageConstraints: [
         { kind: "count", fields: broadCountFields, min: 0, max: 1 },
         { kind: "count", fields: broadCountTuple, min: 0, max: 2 },
@@ -363,17 +452,32 @@ defineCli()({
           max: 2,
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "validBroadCounts",
+        sharedInput8,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
 
+const sharedInput9 = z.object({ token: z.string().optional() });
 defineCli()({
   root: "missingSuffixCountField",
   help: countHelp,
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     missingSuffixCountField: {
@@ -387,21 +491,36 @@ defineCli()({
           description: "令牌",
         },
       },
-      input: z.object({ token: z.string().optional() }),
+      input: sharedInput9,
       usageConstraints: [
         { kind: "count", fields: missingSuffixCountFields, max: 1 },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "missingSuffixCountField",
+        sharedInput9,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
 
+const sharedInput10 = z.object({ token: z.string().optional() });
 defineCli()({
   root: "missingSuffixBeforeWideCountField",
   help: countHelp,
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     missingSuffixBeforeWideCountField: {
@@ -415,7 +534,7 @@ defineCli()({
           description: "令牌",
         },
       },
-      input: z.object({ token: z.string().optional() }),
+      input: sharedInput10,
       usageConstraints: [
         {
           kind: "count",
@@ -423,17 +542,32 @@ defineCli()({
           max: 1,
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "missingSuffixBeforeWideCountField",
+        sharedInput10,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
 
+const sharedInput11 = z.object({ token: z.string().optional() });
 defineCli()({
   root: "duplicateSuffixCountField",
   help: countHelp,
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     duplicateSuffixCountField: {
@@ -447,13 +581,27 @@ defineCli()({
           description: "令牌",
         },
       },
-      input: z.object({ token: z.string().optional() }),
+      input: sharedInput11,
       usageConstraints: [
         { kind: "count", fields: duplicateSuffixCountFields, max: 1 },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "duplicateSuffixCountField",
+        sharedInput11,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });

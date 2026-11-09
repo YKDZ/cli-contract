@@ -1,8 +1,4 @@
-import {
-  defineCli,
-  helpCapability,
-  outputCapability,
-} from "@ykdz/cli-contract";
+import { defineCli, helpCapability } from "@ykdz/cli-contract";
 import { z } from "zod";
 
 const mixedRestReferences: readonly ["missing", ...string[]] = [
@@ -16,10 +12,11 @@ const missingSuffixEffectFields: readonly [...string[], "missing"] = [
 
 const define = defineCli();
 
+const sharedInput0 = z.object({ auth: z.boolean().optional() });
 define({
   root: "workspace",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     workspace: {
@@ -35,7 +32,7 @@ define({
       fields: {
         auth: { kind: "flag", longOption: "--auth", description: "认证" },
       },
-      input: z.object({ auth: z.boolean().optional() }),
+      input: sharedInput0,
       usageConstraints: [
         {
           kind: "when",
@@ -43,17 +40,28 @@ define({
           onMatch: { require: ["token"] },
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: define.outputModes("deploy", sharedInput0, (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode.atomic({
+            description: "结构化输出",
+            format: "structured",
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          }),
+        },
+      })),
     }),
   },
 });
 
+const sharedInput1 = z.object({ auth: z.boolean().optional() });
 defineCli()({
   root: "rootDeploy",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     rootDeploy: {
@@ -63,7 +71,7 @@ defineCli()({
       fields: {
         auth: { kind: "flag", longOption: "--auth", description: "认证" },
       },
-      input: z.object({ auth: z.boolean().optional() }),
+      input: sharedInput1,
       usageConstraints: [
         {
           kind: "when",
@@ -71,17 +79,31 @@ defineCli()({
           onMatch: { require: ["token"] },
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes("rootDeploy", sharedInput1, (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode.atomic({
+            description: "结构化输出",
+            format: "structured",
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          }),
+        },
+      })),
     },
   },
 });
 
+const sharedInput2 = z.object({
+  auth: z.boolean().optional(),
+  token: z.string().optional(),
+});
 defineCli()({
   root: "mixedRest",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     mixedRest: {
@@ -96,10 +118,7 @@ defineCli()({
           description: "令牌",
         },
       },
-      input: z.object({
-        auth: z.boolean().optional(),
-        token: z.string().optional(),
-      }),
+      input: sharedInput2,
       usageConstraints: [
         {
           kind: "when",
@@ -107,17 +126,28 @@ defineCli()({
           onMatch: { require: mixedRestReferences },
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes("mixedRest", sharedInput2, (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode.atomic({
+            description: "结构化输出",
+            format: "structured",
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          }),
+        },
+      })),
     },
   },
 });
 
+const sharedInput3 = z.object({ token: z.boolean().optional() });
 defineCli()({
   root: "suffixMissingEffect",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     suffixMissingEffect: {
@@ -127,7 +157,7 @@ defineCli()({
       fields: {
         token: { kind: "flag", longOption: "--token", description: "令牌" },
       },
-      input: z.object({ token: z.boolean().optional() }),
+      input: sharedInput3,
       usageConstraints: [
         {
           kind: "when",
@@ -135,9 +165,23 @@ defineCli()({
           onMatch: { require: missingSuffixEffectFields },
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "suffixMissingEffect",
+        sharedInput3,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });

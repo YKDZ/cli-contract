@@ -1,3 +1,4 @@
+import type { SchemaIssueEvidence, UsageIssue } from "#/cli-invocation";
 import type { JsonValue } from "#/contract-schema";
 
 export type SchemaDefinitionTarget =
@@ -62,6 +63,13 @@ export type ContractDefinitionIssue =
       SchemaDefinitionTarget & {
         readonly code: "schemaExportFailed";
         readonly projection: "input" | "output";
+      }
+    >
+  | Readonly<
+      SchemaDefinitionTarget & {
+        readonly code: "schemaReferenceNotSelfContained";
+        readonly projection: "input" | "output";
+        readonly reference: string;
       }
     >
   | Readonly<
@@ -144,21 +152,34 @@ export type ContractDefinitionIssue =
     }>
   | Readonly<{
       readonly code: "invalidCapability";
-      readonly capability: "help" | "output" | "version";
+      readonly capability: "help" | "version" | "schema";
     }>
   | Readonly<{
-      readonly code: "invalidOutputFormat";
-      readonly expected: "structured|text";
+      readonly code: "invalidOutputModes";
+      readonly command: string;
+      readonly reason:
+        | "notFactoryOutputModes"
+        | "emptyModes"
+        | "mismatchedCommand"
+        | "mismatchedInput";
+    }>
+  | Readonly<{
+      readonly code: "invalidDefaultOutputMode";
+      readonly command: string;
       readonly received: string | null;
     }>
   | Readonly<{
-      readonly code: "invalidOutputCompatibilityFlag";
-      readonly flag: string;
-      readonly received: string | null;
-    }>
-  | Readonly<{
-      readonly code: "invalidOutputCompatibilityFlags";
-      readonly received: string;
+      readonly code: "invalidOutputMode";
+      readonly command: string;
+      readonly mode: string;
+      readonly reason:
+        | "invalidName"
+        | "invalidDescription"
+        | "invalidDelivery"
+        | "invalidFormat"
+        | "missingHandler"
+        | "invalidSuccess"
+        | "invalidFailures";
     }>
   | Readonly<{
       readonly code: "missingTextPresenter";
@@ -286,7 +307,7 @@ export type ContractDefinitionIssue =
       readonly command: string;
       readonly field: string;
       readonly spelling: string;
-      readonly control: "help" | "outputFormat" | "version";
+      readonly control: "help" | "outputMode" | "version" | "schema";
     }>
   | Readonly<{
       readonly code: "requiredPositionalAfterOptional";
@@ -309,6 +330,27 @@ export type ContractDefinitionIssue =
   | Readonly<{
       readonly code: "missingDataVariant";
       readonly command: string;
+    }>
+  | Readonly<{
+      readonly code: "invalidCommandExample";
+      readonly command: string;
+      readonly index: number;
+      readonly reason:
+        | "invalidShape"
+        | "unknownField"
+        | "unencodableFieldValue"
+        | "invalidOutputMode"
+        | "parseDidNotComplete"
+        | "wrongCommand"
+        | "wrongOutputMode"
+        | "rawInputMismatch"
+        | "inputRejected";
+      readonly field?: string;
+      readonly received?: string;
+      readonly expected?: string;
+      readonly usageIssues?: readonly UsageIssue[];
+      readonly evidence?: readonly SchemaIssueEvidence[];
+      readonly mismatchedFields?: readonly string[];
     }>
   | Readonly<{
       readonly code: "invalidUsageConstraint";
@@ -426,6 +468,8 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `${formatSchemaTarget(issue)} 的 ${issue.projection} 投影不是 Draft 2020-12`;
     case "schemaExportFailed":
       return `${formatSchemaTarget(issue)} 无法导出 ${issue.projection} 投影`;
+    case "schemaReferenceNotSelfContained":
+      return `${formatSchemaTarget(issue)} 的 ${issue.projection} 投影引用 ${issue.reference} 无法离线解释`;
     case "invalidSchemaProjection":
       return `${formatSchemaTarget(issue)} 的 ${issue.projection} 投影不是 JSON object`;
     case "schemaFieldSetMismatch":
@@ -454,12 +498,12 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `命令 ${issue.command} 的 stream 必须声明至少一个 record`;
     case "invalidCapability":
       return `CLI 的 ${issue.capability} 能力无效`;
-    case "invalidOutputFormat":
-      return `CLI 输出格式应为 ${issue.expected}，实际为 ${issue.received ?? "非字符串"}`;
-    case "invalidOutputCompatibilityFlag":
-      return `CLI 输出兼容 flag ${issue.flag} 无效`;
-    case "invalidOutputCompatibilityFlags":
-      return `CLI 输出兼容 flags 必须是普通 record，实际为 ${issue.received}`;
+    case "invalidOutputModes":
+      return `命令 ${issue.command} 的输出方式集合无效（${issue.reason}）`;
+    case "invalidDefaultOutputMode":
+      return `命令 ${issue.command} 的默认输出方式 ${issue.received ?? "缺失"} 无效`;
+    case "invalidOutputMode":
+      return `命令 ${issue.command} 的输出方式 ${issue.mode} 无效（${issue.reason}）`;
     case "missingTextPresenter":
       return `命令 ${issue.command} 的 ${issue.location}${issue.variant === undefined ? "" : ` 变体 ${issue.variant}`} 缺少 text presenter`;
     case "unexpectedTextPresenter":
@@ -512,6 +556,8 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `命令 ${issue.command} 的字段 ${issue.fields.join(", ")} 重复使用 long option ${issue.longOption}`;
     case "missingDataVariant":
       return `命令 ${issue.command} 必须声明至少一个 data 变体`;
+    case "invalidCommandExample":
+      return formatCommandExampleIssue(issue);
     case "invalidUsageConstraint":
       return `命令 ${issue.command} 的 usage constraint${issue.index === null ? "" : `[${issue.index}]`}${issue.member === undefined ? "" : ` ${issue.member}`} ${formatIssueValue(issue.received)} 无效${issue.expected === undefined ? "" : `，期望 ${issue.expected}`}${issue.path === undefined ? "" : `（${issue.path.join(".")}）`}`;
     case "invalidCountConstraint":
@@ -524,6 +570,38 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `命令 ${issue.command} 的 ${issue.constraint} 等值事实 ${issue.field}=${formatIssueValue(issue.actual)} 不属于可接受值 ${JSON.stringify(issue.expected)}`;
     case "contradictoryUsageConstraint":
       return `命令 ${issue.command} 的 ${issue.constraint} usage constraint${issue.member === undefined ? "" : ` ${issue.member}`} 内部矛盾：${issue.fields.join(", ")}`;
+  }
+}
+
+// oxlint-disable-next-line typescript/consistent-return -- 原因联合闭合，所有分支均返回诊断文本。
+function formatCommandExampleIssue(
+  issue: Extract<
+    ContractDefinitionIssue,
+    { readonly code: "invalidCommandExample" }
+  >,
+): string {
+  const location = `命令 ${issue.command} 的示例[${issue.index}]`;
+  switch (issue.reason) {
+    case "invalidShape":
+      return `${location} 必须包含对象形式的 input`;
+    case "unknownField":
+      return `${location} 引用了未声明字段 ${issue.field ?? "<未知>"}`;
+    case "unencodableFieldValue":
+      return `${location} 的字段 ${issue.field ?? "<未知>"} 不符合可编码的原始字段形状`;
+    case "invalidOutputMode":
+      return `${location} 指定了命令 ${issue.command} 不存在的输出方式 ${issue.received ?? "<无效值>"}`;
+    case "parseDidNotComplete":
+      return issue.usageIssues === undefined
+        ? `${location} 的规范 argv 未解析为完整调用`
+        : `${location} 的调用语法无效：${formatIssueValue(issue.usageIssues)}`;
+    case "wrongCommand":
+      return `${location} 解析到命令 ${issue.received ?? "<未知>"}，预期 ${issue.expected ?? issue.command}`;
+    case "wrongOutputMode":
+      return `${location} 解析到输出方式 ${issue.received ?? "<未知>"}，预期 ${issue.expected ?? "<未知>"}`;
+    case "rawInputMismatch":
+      return `${location} 的原始输入无法经规范 argv 往返${issue.mismatchedFields === undefined ? "" : `：${issue.mismatchedFields.join(", ")}`}`;
+    case "inputRejected":
+      return `${location} 未通过输入模式验证：${(issue.evidence ?? []).map(({ message, path }) => `${message}${path === undefined ? "" : ` (${path.join(".")})`}`).join("；")}`;
   }
 }
 

@@ -3,7 +3,6 @@ import { test } from "node:test";
 
 import {
   defineCli,
-  outputCapability,
   parseCliInvocation,
   text,
   versionCapability,
@@ -14,15 +13,18 @@ import { englishHelpCapability } from "./english-help.ts";
 
 function createSuggestionCli() {
   const define = defineCli();
+  const sharedInput0 = z.object({
+    verbose: z.boolean().optional(),
+    registry: z.string().optional(),
+    name: z.string(),
+    force: z.boolean().optional(),
+    label: z.string().optional(),
+  });
   return define({
     root: "workspace",
     help: englishHelpCapability(),
     version: versionCapability({ value: text.line("1.0.0") }),
-    output: outputCapability({
-      defaultFormat: "structured",
-      text: true,
-      compatibilityFlags: { "--plain": "text" },
-    }),
+
     usageFailureExitCode: 64,
     commands: {
       workspace: {
@@ -72,16 +74,20 @@ function createSuggestionCli() {
             description: "标签",
           },
         },
-        input: z.object({
-          verbose: z.boolean().optional(),
-          registry: z.string().optional(),
-          name: z.string(),
-          force: z.boolean().optional(),
-          label: z.string().optional(),
-        }),
-        success: { kind: "completion", text: () => text.silent },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        input: sharedInput0,
+
+        outputs: define.outputModes("addPackage", sharedInput0, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       }),
     },
   });
@@ -126,8 +132,7 @@ void test("长选项建议从当前可执行命令字段与核心 controls 机�
     [["package", "add", "--focre"], "--focre", "--force"],
     [["--hepl"], "--hepl", "--help"],
     [["--versoin"], "--versoin", "--version"],
-    [["--output-frmat"], "--output-frmat", "--output-format"],
-    [["--plani"], "--plani", "--plain"],
+    [["--outpt"], "--outpt", "--output"],
     [["package", "add", "--lable=release"], "--lable=release", "--label"],
   ] as const) {
     const invocation = parseCliInvocation(cli, argv);
@@ -158,17 +163,25 @@ void test("长选项建议从当前可执行命令字段与核心 controls 机�
     usage: {
       command: "addPackage",
       synopsis:
-        "workspace package add [--verbose] [--registry <registry>] <name> [--force] [--label <label>]",
+        "workspace package add [--output <mode>] [--verbose] [--registry <registry>] <name> [--force] [--label <label>]",
     },
   });
 });
 
 void test("建议保持大小写敏感，并在阈值、并列或过远时省略", () => {
   const define = defineCli();
+  const sharedInput0 = z.object({});
+  const sharedInput1 = z.object({
+    read: z.boolean().optional(),
+    write: z.boolean().optional(),
+    abcxxx: z.boolean().optional(),
+    cave: z.boolean().optional(),
+    case: z.boolean().optional(),
+  });
   const cli = define({
     root: "root",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       root: { kind: "rootGroup", name: "root", description: "根" },
@@ -204,26 +217,40 @@ void test("建议保持大小写敏感，并在阈值、并列或过远时省略
             description: "大小写",
           },
         },
-        input: z.object({
-          read: z.boolean().optional(),
-          write: z.boolean().optional(),
-          abcxxx: z.boolean().optional(),
-          cave: z.boolean().optional(),
-          case: z.boolean().optional(),
-        }),
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        input: sharedInput1,
+
+        outputs: define.outputModes("add", sharedInput1, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       }),
       ...define.command("and")({
         kind: "command",
         parent: "root",
         name: "and",
         description: "并且",
-        input: z.object({}),
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        input: sharedInput0,
+
+        outputs: define.outputModes("and", sharedInput0, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       }),
     },
   });

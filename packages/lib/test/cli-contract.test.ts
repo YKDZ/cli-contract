@@ -4,12 +4,12 @@ import { test } from "node:test";
 import {
   defineCli,
   executeCli,
-  helpCapability,
-  outputCapability,
   parseCliInvocation,
   type ContractSchema,
   type EmptyCliInput,
 } from "@ykdz/cli-contract";
+
+import { englishHelpCapability, englishHelpWording } from "./english-help.ts";
 
 const emptyJsonSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
@@ -53,25 +53,37 @@ function emptyInputSchema(
 }
 
 function createFixtureCli(onRun: () => void = () => undefined) {
-  return defineCli()({
+  const define = defineCli();
+  const input = emptyInputSchema();
+  return define({
     root: "fixture",
-    help: helpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability(),
+
     usageFailureExitCode: 64,
     commands: {
       fixture: {
         kind: "rootCommand",
         name: "fixture",
         description: "演示最小 CLI",
-        input: emptyInputSchema(),
-        success: { kind: "completion" },
-        failures: {},
-        handler({ input, dependencies, outcome }) {
-          assert.deepEqual(input, {});
-          assert.equal(dependencies, undefined);
-          onRun();
-          return outcome.completion();
-        },
+        input,
+
+        outputs: define.outputModes("fixture", input, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler({ input, dependencies, outcome }) {
+                assert.deepEqual(input, {});
+                assert.equal(dependencies, undefined);
+                onRun();
+                return outcome.completion();
+              },
+            }),
+          },
+        })),
       },
     },
   });
@@ -103,12 +115,14 @@ void test("空调用执行 completion 契约并写出规范 JSON", async () => {
   assert.deepEqual(writes, [
     {
       destination: "stdout",
-      chunk: '{"schemaVersion":"2","command":"fixture","kind":"completion"}\n',
+      chunk:
+        '{"schemaVersion":"3","command":"fixture","outputMode":"structured","kind":"completion"}\n',
     },
   ]);
   assert.deepEqual(termination, {
     kind: "applicationResult",
     command: "fixture",
+    outputMode: "structured",
     result: { kind: "completion", command: "fixture" },
     exitCode: 0,
   });
@@ -133,7 +147,8 @@ void test("帮助从契约机械产生且不执行 handler", async () => {
   assert.deepEqual(writes, [
     {
       destination: "stdout",
-      chunk: "演示最小 CLI\n\n  fixture\n\n  --help\n",
+      chunk:
+        '演示最小 CLI\n\n  fixture [--output <mode>]\n\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured (atomic, structured)\n    结构化输出\n',
     },
   ]);
   assert.deepEqual(termination, {
@@ -163,7 +178,7 @@ void test("多余 positional 产生结构化用法失败和简短 usage", async 
     ],
     usage: {
       command: "fixture",
-      synopsis: "fixture",
+      synopsis: "fixture [--output <mode>]",
     },
   });
 
@@ -180,7 +195,7 @@ void test("多余 positional 产生结构化用法失败和简短 usage", async 
     {
       destination: "stderr",
       chunk:
-        '{"schemaVersion":"2","command":"fixture","kind":"usageFailure","issues":[{"code":"unexpectedPositional","position":0,"value":"extra"}],"usage":"fixture","helpArgv":["fixture","--help"]}\n',
+        '{"schemaVersion":"3","command":"fixture","kind":"usageFailure","issues":[{"code":"unexpectedPositional","position":0,"value":"extra"}],"usage":"fixture [--output <mode>]","helpArgv":["fixture","--help"]}\n',
     },
   ]);
   assert.deepEqual(termination, {
@@ -195,13 +210,13 @@ void test("usage failure manifest 闭合全部问题 wire 形状", () => {
   const wire = JSON.stringify(createFixtureCli().manifest.usageFailure.wire);
   for (const code of [
     "conflictingFlag",
-    "conflictingOutputFormat",
+    "conflictingOutputMode",
     "countConstraintViolation",
     "conditionalConstraintViolation",
     "forbiddenCombinationViolation",
     "inputRejected",
     "invalidFieldChoice",
-    "invalidOutputFormat",
+    "invalidOutputMode",
     "missingOptionValue",
     "missingRequiredField",
     "repeatedOption",
@@ -213,7 +228,7 @@ void test("usage failure manifest 闭合全部问题 wire 形状", () => {
     assert.match(wire, new RegExp(`\\"const\\":\\"${code}\\"`));
   }
   assert.match(wire, /"command":\{"const":"fixture"\}/);
-  assert.match(wire, /"usage":\{"const":"fixture"\}/);
+  assert.match(wire, /"usage":\{"const":"fixture \[--output <mode>\]"\}/);
   assert.match(wire, /"helpArgv":\{"const":\["fixture","--help"\]\}/);
   assert.doesNotMatch(wire, /"exitCode"/);
 });
@@ -244,8 +259,8 @@ void test("定义期请求两侧 Draft 2020-12 并公开不可变投影", () => 
   const schema = emptyInputSchema(requestedTargets);
   const cli = defineCli()({
     root: "fixture",
-    help: helpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability(),
+
     usageFailureExitCode: 64,
     commands: {
       fixture: {
@@ -253,9 +268,19 @@ void test("定义期请求两侧 Draft 2020-12 并公开不可变投影", () => 
         name: "fixture",
         description: "演示最小 CLI",
         input: schema,
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+
+        outputs: defineCli().outputModes("fixture", schema, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -271,19 +296,29 @@ void test("定义期请求两侧 Draft 2020-12 并公开不可变投影", () => 
       name: "fixture",
       description: "演示最小 CLI",
       fields: [],
+      outputs: {
+        selector: "--output",
+        default: "structured",
+        modes: {
+          structured: {
+            description: "结构化输出",
+            delivery: "atomic",
+            format: "structured",
+          },
+        },
+      },
       usage: {
         command: "fixture",
-        synopsis: "fixture",
+        synopsis: "fixture [--output <mode>]",
       },
     },
     nodes: [],
     controls: {
-      help: { longOption: "--help" },
-      output: { defaultFormat: "structured", formats: ["structured"] },
+      help: { longOption: "--help", wording: englishHelpWording },
     },
   });
   assert.equal(cli.manifest.root, "fixture");
-  assert.equal(cli.manifest.schemaVersion, "4");
+  assert.equal(cli.manifest.schemaVersion, "5");
   assert.deepEqual(cli.manifest.commands.fixture.input, {
     inputSchema: emptyJsonSchema,
     outputSchema: emptyJsonSchema,

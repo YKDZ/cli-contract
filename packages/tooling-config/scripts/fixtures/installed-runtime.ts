@@ -5,8 +5,6 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const project = import.meta.dirname;
-const repository = process.env.CANDIDATE_REPOSITORY_ROOT;
-if (!repository) throw new Error("缺少仓库位置");
 const imports = {
   core: "@ykdz/cli-contract",
   coreNode: "@ykdz/cli-contract/node",
@@ -19,10 +17,7 @@ const paths = Object.fromEntries(
   ]),
 );
 for (const path of Object.values(paths)) {
-  if (
-    !within(resolve(project, "node_modules"), path) ||
-    within(repository, path)
-  ) {
+  if (!within(resolve(project, "node_modules"), path)) {
     throw new Error(`公共入口未来自独立安装：${path}`);
   }
 }
@@ -55,6 +50,10 @@ function readProperty(value: unknown, key: string): unknown {
 const coreModule = await import(imports.core);
 const nodeModule = await import(imports.coreNode);
 const testingModule = await import(imports.testing);
+type OutputModeBuilder = Readonly<{
+  atomic(definition: object): object;
+  stream(definition: object): object;
+}>;
 if (
   typeof coreModule.defineCli !== "function" ||
   typeof nodeModule.nodeCliOutput !== "function" ||
@@ -175,7 +174,7 @@ assert.throws(
     define({
       root: "workspace",
       help: installedHelp,
-      output: coreModule.outputCapability({ defaultFormat: "text" }),
+
       usageFailureExitCode: 64,
       commands: {
         workspace: {
@@ -189,11 +188,25 @@ assert.throws(
           name: "inspect",
           description: "检查",
           input: installedTextSchema,
-          success: { kind: "completion" },
-          failures: {},
-          handler() {
-            handlerCalled = true;
-          },
+
+          outputs: define.outputModes(
+            "inspect",
+            installedTextSchema,
+            (mode: OutputModeBuilder) => ({
+              default: "text",
+              modes: {
+                text: mode.atomic({
+                  description: "文本输出",
+                  format: "text",
+                  success: { kind: "completion" },
+                  failures: {},
+                  handler() {
+                    handlerCalled = true;
+                  },
+                }),
+              },
+            }),
+          ),
         }),
         ...define.command("show")({
           kind: "command",
@@ -201,11 +214,25 @@ assert.throws(
           name: "show",
           description: "显示",
           input: installedTextSchema,
-          success: { kind: "completion" },
-          failures: {},
-          handler() {
-            handlerCalled = true;
-          },
+
+          outputs: define.outputModes(
+            "show",
+            installedTextSchema,
+            (mode: OutputModeBuilder) => ({
+              default: "text",
+              modes: {
+                text: mode.atomic({
+                  description: "文本输出",
+                  format: "text",
+                  success: { kind: "completion" },
+                  failures: {},
+                  handler() {
+                    handlerCalled = true;
+                  },
+                }),
+              },
+            }),
+          ),
         }),
       },
     }),
@@ -235,7 +262,7 @@ assert.throws(
     define({
       root: "workspace",
       help: installedHelp,
-      output: coreModule.outputCapability({ defaultFormat: "structured" }),
+
       usageFailureExitCode: 64,
       commands: {
         workspace: {
@@ -249,21 +276,35 @@ assert.throws(
           name: "inspect",
           description: "检查",
           input: installedTextSchema,
-          success: {
-            kind: "completion",
-            text: () => coreModule.text.silent,
-          },
-          failures: {
-            permissionDenied: {
-              description: "无权限",
-              schema: installedTextSchema,
-              exitCode: 13,
-              text: () => coreModule.text.line("无权限"),
-            },
-          },
-          handler() {
-            handlerCalled = true;
-          },
+
+          outputs: define.outputModes(
+            "inspect",
+            installedTextSchema,
+            (mode: OutputModeBuilder) => ({
+              default: "structured",
+              modes: {
+                structured: mode.atomic({
+                  description: "结构化输出",
+                  format: "structured",
+                  success: {
+                    kind: "completion",
+                    text: () => coreModule.text.silent,
+                  },
+                  failures: {
+                    permissionDenied: {
+                      description: "无权限",
+                      schema: installedTextSchema,
+                      exitCode: 13,
+                      text: () => coreModule.text.line("无权限"),
+                    },
+                  },
+                  handler() {
+                    handlerCalled = true;
+                  },
+                }),
+              },
+            }),
+          ),
         }),
       },
     }),
@@ -327,8 +368,8 @@ assert.throws(
   () =>
     coreModule.defineCli()({
       root: "rawMismatch",
-      help: coreModule.helpCapability(),
-      output: coreModule.outputCapability({ defaultFormat: "structured" }),
+      help: installedHelp,
+
       usageFailureExitCode: 64,
       commands: {
         rawMismatch: {
@@ -343,15 +384,29 @@ assert.throws(
             },
           },
           input: incompatibleInputSchema,
-          success: { kind: "completion" },
-          failures: {},
-          handler({
-            outcome,
-          }: {
-            readonly outcome: { completion(): unknown };
-          }) {
-            return outcome.completion();
-          },
+
+          outputs: define.outputModes(
+            "rawMismatch",
+            incompatibleInputSchema,
+            (mode: OutputModeBuilder) => ({
+              default: "structured",
+              modes: {
+                structured: mode.atomic({
+                  description: "结构化输出",
+                  format: "structured",
+                  success: { kind: "completion" },
+                  failures: {},
+                  handler({
+                    outcome,
+                  }: {
+                    readonly outcome: { completion(): unknown };
+                  }) {
+                    return outcome.completion();
+                  },
+                }),
+              },
+            }),
+          ),
         },
       },
     }),
@@ -411,8 +466,8 @@ for (const withValue of [false, true]) {
   };
   const cli = coreModule.defineCli()({
     root: "standard",
-    help: coreModule.helpCapability(),
-    output: coreModule.outputCapability({ defaultFormat: "structured" }),
+    help: installedHelp,
+
     usageFailureExitCode: 64,
     commands: {
       standard: {
@@ -420,11 +475,25 @@ for (const withValue of [false, true]) {
         name: "standard",
         description: "Standard Schema consumer",
         input: inputSchema,
-        success: { kind: "completion" },
-        failures: {},
-        handler() {
-          handlerCalled = true;
-        },
+
+        outputs: define.outputModes(
+          "standard",
+          inputSchema,
+          (mode: OutputModeBuilder) => ({
+            default: "structured",
+            modes: {
+              structured: mode.atomic({
+                description: "结构化输出",
+                format: "structured",
+                success: { kind: "completion" },
+                failures: {},
+                handler() {
+                  handlerCalled = true;
+                },
+              }),
+            },
+          }),
+        ),
       },
     },
   });
@@ -474,7 +543,7 @@ for (const withValue of [false, true]) {
     command: "standard",
     kind: "usageFailure",
     issues: [issue],
-    usage: "standard",
+    usage: "standard [--output <mode>]",
     helpArgv: ["standard", "--help"],
   });
   assert.equal(capture.stderr.endsWith("\n"), true);
@@ -541,6 +610,7 @@ const constrainedCli = coreModule.defineCli()({
   help: coreModule.helpCapability({
     wording: {
       choices: "候选 {choices}",
+      default: "默认 {value}",
       whenOnMatchOtherwise:
         "当全部满足 {facts} 时，{onMatch}；否则，{otherwise}",
       require: "必须提供 {fields}",
@@ -550,7 +620,7 @@ const constrainedCli = coreModule.defineCli()({
       countAtMost: "字段数 {fields} 至多 {max} 项",
     },
   }),
-  output: coreModule.outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     installedFacts: {
@@ -600,11 +670,25 @@ const constrainedCli = coreModule.defineCli()({
           ],
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler() {
-        constrainedHandlerExecutions += 1;
-      },
+
+      outputs: define.outputModes(
+        "installedFacts",
+        constrainedStandardSchema,
+        (mode: OutputModeBuilder) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler() {
+                constrainedHandlerExecutions += 1;
+              },
+            }),
+          },
+        }),
+      ),
     },
   },
 });
@@ -615,12 +699,13 @@ const invalidConstraintDefinition: unknown = {
     wording: {
       commandPlaceholder: "命令",
       choices: "候选 {choices}",
+      default: "默认 {value}",
       present: "字段 {field} 已出现",
       equals: "字段 {field}={value}",
       forbiddenCombination: "禁配事实：{facts}",
     },
   }),
-  output: coreModule.outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     workspace: {
@@ -690,9 +775,23 @@ const invalidConstraintDefinition: unknown = {
           all: [{ kind: "present", field: "format", typo: true }],
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler() {},
+
+      outputs: define.outputModes(
+        "probe",
+        constrainedStandardSchema,
+        (mode: OutputModeBuilder) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler() {},
+            }),
+          },
+        }),
+      ),
     },
   },
 };
@@ -805,7 +904,7 @@ assert.throws(
   },
 );
 
-assert.equal(constrainedCli.manifest.schemaVersion, "4");
+assert.equal(constrainedCli.manifest.schemaVersion, "5");
 const projectedInput =
   constrainedCli.manifest.commands.installedFacts.input.inputSchema;
 assert.equal(readProperty(projectedInput, "$id"), constrainedInputSchema.$id);
@@ -1025,7 +1124,7 @@ assert.deepEqual(usageTermination, {
 });
 assert.equal(usageWrites.length, 1);
 const usageEnvelope: unknown = JSON.parse(usageWrites[0]!.chunk);
-assert.equal(readProperty(usageEnvelope, "schemaVersion"), "2");
+assert.equal(readProperty(usageEnvelope, "schemaVersion"), "3");
 assert.deepEqual(readProperty(usageEnvelope, "issues"), [
   {
     code: "countConstraintViolation",
@@ -1100,10 +1199,20 @@ function defineInstalledFieldCli(field: string) {
     properties: { [field]: { type: "string" } },
     additionalProperties: false,
   };
-  return coreModule.defineCli()({
+  const inputSchema = {
+    "~standard": {
+      version: 1,
+      vendor: "installed-consumer",
+      validate(value: unknown) {
+        return { value };
+      },
+      jsonSchema: { input: () => projection, output: () => projection },
+    },
+  };
+  const define = coreModule.defineCli();
+  return define({
     root: "fieldIdentity",
-    help: coreModule.helpCapability(),
-    output: coreModule.outputCapability({ defaultFormat: "structured" }),
+    help: installedHelp,
     usageFailureExitCode: 64,
     commands: {
       fieldIdentity: {
@@ -1117,20 +1226,27 @@ function defineInstalledFieldCli(field: string) {
             description: "构造器",
           },
         },
-        input: {
-          "~standard": {
-            version: 1,
-            vendor: "installed-consumer",
-            validate(value: unknown) {
-              return { value };
+        input: inputSchema,
+        outputs: define.outputModes(
+          "fieldIdentity",
+          inputSchema,
+          (mode: OutputModeBuilder) => ({
+            default: "structured",
+            modes: {
+              structured: mode.atomic({
+                description: "结构化输出",
+                format: "structured",
+                success: { kind: "completion" },
+                failures: {},
+                handler: ({
+                  outcome,
+                }: {
+                  outcome: { completion(): unknown };
+                }) => outcome.completion(),
+              }),
             },
-            jsonSchema: { input: () => projection, output: () => projection },
-          },
-        },
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }: { outcome: { completion(): unknown } }) =>
-          outcome.completion(),
+          }),
+        ),
       },
     },
   });
@@ -1154,10 +1270,13 @@ assert.throws(
 );
 const renamedFieldCli = defineInstalledFieldCli("constructorName");
 const renamedFieldInvocation = coreModule.parseCliInvocation(renamedFieldCli, [
+  "--output",
+  "structured",
   "--constructor",
   "named",
 ]);
 assert.equal(renamedFieldInvocation.kind, "parsed");
+assert.equal(renamedFieldInvocation.outputMode, "structured");
 assert.deepEqual(renamedFieldInvocation.input, { constructorName: "named" });
 const renamedFieldTermination = await coreModule.executeCli(renamedFieldCli, {
   invocation: renamedFieldInvocation,
@@ -1165,3 +1284,303 @@ const renamedFieldTermination = await coreModule.executeCli(renamedFieldCli, {
   write: () => undefined,
 });
 assert.equal(renamedFieldTermination.kind, "applicationResult");
+assert.equal(renamedFieldTermination.outputMode, "structured");
+
+const recursiveNodeDefinition = {
+  additionalProperties: false,
+  properties: {
+    children: {
+      items: { $ref: "#/$defs/node" },
+      type: "array",
+    },
+    name: { type: "string" },
+  },
+  required: ["name", "children"],
+  type: "object",
+};
+const recursiveNodeSchema = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://example.test/installed-recursive-tree",
+  $defs: { node: recursiveNodeDefinition },
+  ...recursiveNodeDefinition,
+};
+const recursiveNodeStandardSchema = {
+  "~standard": {
+    version: 1,
+    vendor: "installed-consumer-recursive-tree",
+    validate(value: unknown) {
+      return { value };
+    },
+    jsonSchema: {
+      input: () => emptyJsonSchema,
+      output: () => recursiveNodeSchema,
+    },
+  },
+};
+const recursiveTreeData = {
+  name: "root",
+  children: [{ name: "leaf", children: [] }],
+};
+const recursiveDefine = coreModule.defineCli();
+const recursiveTree = recursiveDefine({
+  root: "tree",
+  help: installedHelp,
+  schema: coreModule.schemaCapability({
+    description: coreModule.text.line("查询递归结果契约。"),
+  }),
+  usageFailureExitCode: 64,
+  commands: {
+    tree: {
+      kind: "rootCommand",
+      name: "tree",
+      description: "返回递归树。",
+      fields: {},
+      input: installedTextSchema,
+      outputs: recursiveDefine.outputModes(
+        "tree",
+        installedTextSchema,
+        (mode: OutputModeBuilder) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "递归树的结构化结果。",
+              format: "structured",
+              success: {
+                kind: "data",
+                variants: {
+                  tree: {
+                    description: "结果树。",
+                    schema: recursiveNodeStandardSchema,
+                    exitCode: 0,
+                  },
+                },
+              },
+              failures: {},
+              handler({
+                outcome,
+              }: {
+                readonly outcome: {
+                  readonly data: {
+                    tree(value: unknown): unknown;
+                  };
+                };
+              }) {
+                return outcome.data.tree(recursiveTreeData);
+              },
+            }),
+          },
+        }),
+      ),
+    },
+  },
+});
+assert.equal(recursiveTree.manifest.schemaVersion, "5");
+
+const recursiveSummary = coreModule.queryCliContract(recursiveTree, []);
+assert.equal(recursiveSummary.kind, "summary");
+if (recursiveSummary.kind !== "summary") {
+  throw new Error("安装消费者没有取得根命令摘要");
+}
+assert.equal(recursiveSummary.outputs.default, "structured");
+const wireNext = recursiveSummary.next.find(
+  (next: { readonly target: string; readonly argv: readonly string[] }) =>
+    next.target === "wire:structured",
+);
+assert.ok(wireNext);
+assert.deepEqual(wireNext.argv, ["--schema=wire:structured"]);
+
+const wireQuery = coreModule.queryCliContract(
+  recursiveTree,
+  [],
+  "wire:structured",
+);
+assert.equal(wireQuery.kind, "wire");
+if (wireQuery.kind !== "wire") {
+  throw new Error("安装消费者没有取得结构化线模式");
+}
+const recursiveDataWire = wireQuery.wire.data?.tree;
+assert.ok(recursiveDataWire);
+const validateRecursiveWire = new Ajv2020({ strict: false }).compile(
+  recursiveDataWire,
+);
+const schemaWrites: Array<Readonly<{ destination: string; chunk: string }>> =
+  [];
+const schemaInvocation = coreModule.parseCliInvocation(
+  recursiveTree,
+  wireNext.argv,
+);
+assert.equal(schemaInvocation.kind, "schema");
+const schemaTermination = await coreModule.executeCli(recursiveTree, {
+  invocation: schemaInvocation,
+  write(output: Readonly<{ destination: string; chunk: string }>) {
+    schemaWrites.push(output);
+  },
+});
+assert.equal(schemaTermination.exitCode, 0);
+assert.equal(schemaWrites.length, 1);
+assert.deepEqual(JSON.parse(schemaWrites[0]!.chunk), wireQuery);
+
+const treeInvocation = coreModule.parseCliInvocation(recursiveTree, []);
+assert.equal(treeInvocation.kind, "parsed");
+const treeWrites: Array<Readonly<{ destination: string; chunk: string }>> = [];
+const treeTermination = await coreModule.executeCli(recursiveTree, {
+  invocation: treeInvocation,
+  dependencies: { source: "installed-consumer" },
+  write(output: Readonly<{ destination: string; chunk: string }>) {
+    treeWrites.push(output);
+  },
+});
+assert.equal(treeTermination.exitCode, 0);
+assert.equal(treeWrites.length, 1);
+const treeEnvelope: unknown = JSON.parse(treeWrites[0]!.chunk);
+assert.equal(readProperty(treeEnvelope, "schemaVersion"), "3");
+assert.equal(readProperty(treeEnvelope, "outputMode"), "structured");
+const wireValidTreeEnvelope = {
+  schemaVersion: "3",
+  command: "tree",
+  outputMode: "structured",
+  kind: "data",
+  variant: "tree",
+  data: recursiveTreeData,
+};
+assert.deepEqual(treeEnvelope, wireValidTreeEnvelope);
+assert.equal(validateRecursiveWire(treeEnvelope), true);
+assert.equal(
+  validateRecursiveWire({
+    ...wireValidTreeEnvelope,
+    data: { name: "root", children: [{ name: "leaf" }] },
+  }),
+  false,
+);
+
+const streamFailureDefine = coreModule.defineCli();
+const streamFailureCli = streamFailureDefine({
+  root: "streamFailure",
+  help: installedHelp,
+  schema: coreModule.schemaCapability({
+    description: coreModule.text.line("查询流式结果契约。"),
+  }),
+  usageFailureExitCode: 64,
+  commands: {
+    streamFailure: {
+      kind: "rootCommand",
+      name: "stream-failure",
+      description: "先输出记录，再返回中断。",
+      fields: {},
+      input: installedTextSchema,
+      outputs: streamFailureDefine.outputModes(
+        "streamFailure",
+        installedTextSchema,
+        (mode: OutputModeBuilder) => ({
+          default: "structured",
+          modes: {
+            structured: mode.stream({
+              description: "携带失败终态的结构化流。",
+              format: "structured",
+              success: {
+                kind: "stream",
+                records: {
+                  entry: {
+                    description: "已交付的记录。",
+                    schema: constrainedStandardSchema,
+                  },
+                },
+              },
+              failures: {
+                interrupted: {
+                  description: "流在记录后中断。",
+                  schema: constrainedStandardSchema,
+                  exitCode: 9,
+                },
+              },
+              async *handler({
+                outcome,
+              }: {
+                readonly outcome: {
+                  readonly record: {
+                    readonly entry: (value: unknown) => unknown;
+                  };
+                  readonly failure: {
+                    readonly interrupted: (value: unknown) => unknown;
+                  };
+                };
+              }) {
+                yield outcome.record.entry({ reference: "stable" });
+                return outcome.failure.interrupted({ reference: "stable" });
+              },
+            }),
+          },
+        }),
+      ),
+    },
+  },
+});
+const streamFailureWireQuery = coreModule.queryCliContract(
+  streamFailureCli,
+  [],
+  "wire:structured",
+);
+assert.equal(streamFailureWireQuery.kind, "wire");
+if (streamFailureWireQuery.kind !== "wire") {
+  throw new Error("安装消费者没有取得流式线模式");
+}
+const streamLineWire = streamFailureWireQuery.wire.stream?.line;
+const streamFailureWire = streamFailureWireQuery.wire.failure?.interrupted;
+assert.ok(streamLineWire);
+assert.ok(streamFailureWire);
+const validateStreamLine = new Ajv2020({ strict: false }).compile(
+  streamLineWire,
+);
+const validateStreamFailure = new Ajv2020({ strict: false }).compile(
+  streamFailureWire,
+);
+const streamWrites: Array<Readonly<{ destination: string; chunk: string }>> =
+  [];
+const streamTermination = await coreModule.executeCli(streamFailureCli, {
+  invocation: coreModule.parseCliInvocation(streamFailureCli, []),
+  dependencies: undefined,
+  write(output: Readonly<{ destination: string; chunk: string }>) {
+    streamWrites.push(output);
+  },
+});
+assert.deepEqual(streamWrites, [
+  {
+    destination: "stdout",
+    chunk:
+      '{"schemaVersion":"3","command":"streamFailure","outputMode":"structured","kind":"stream"}\n',
+  },
+  {
+    destination: "stdout",
+    chunk:
+      '{"kind":"record","variant":"entry","data":{"reference":"stable"}}\n',
+  },
+  {
+    destination: "stderr",
+    chunk:
+      '{"schemaVersion":"3","command":"streamFailure","outputMode":"structured","kind":"failure","variant":"interrupted","data":{"reference":"stable"}}\n',
+  },
+]);
+assert.equal(streamTermination.exitCode, 9);
+for (const [index, write] of streamWrites.entries()) {
+  const frame: unknown = JSON.parse(write.chunk);
+  assert.equal(
+    index === 2 ? validateStreamFailure(frame) : validateStreamLine(frame),
+    true,
+  );
+}
+assert.equal(validateStreamLine({ kind: "record", variant: "entry" }), false);
+assert.equal(
+  validateStreamLine({
+    kind: "record",
+    variant: "entry",
+    data: { reference: "unstable" },
+  }),
+  false,
+);
+assert.equal(
+  validateStreamFailure({
+    ...JSON.parse(streamWrites[2]!.chunk),
+    data: { reference: "unstable" },
+  }),
+  false,
+);

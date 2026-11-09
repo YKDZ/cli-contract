@@ -5,7 +5,6 @@ import {
   ContractDefinitionError,
   defineCli,
   executeCli,
-  outputCapability,
   parseCliInvocation,
   text,
   versionCapability,
@@ -18,7 +17,10 @@ function createVersionCli(
   onSchema: () => void = () => undefined,
   onHandler: () => void = () => undefined,
 ) {
-  const define = defineCli();
+  const define = defineCli<Readonly<{ readonly serviceName: string }>>();
+  const sharedInput0 = z.object({ name: z.string() }).superRefine(() => {
+    onSchema();
+  });
   return define({
     root: "workspace",
     help: englishHelpCapability(),
@@ -27,7 +29,7 @@ function createVersionCli(
       description: "显示版本",
       shortAlias: "-V",
     }),
-    output: outputCapability({ defaultFormat: "structured", text: true }),
+
     usageFailureExitCode: 64,
     commands: {
       workspace: {
@@ -47,35 +49,55 @@ function createVersionCli(
             description: "任务名称",
           },
         },
-        input: z.object({ name: z.string() }).superRefine(() => {
-          onSchema();
-        }),
-        success: { kind: "completion", text: () => text.silent },
-        failures: {},
-        handler: ({ outcome }) => {
-          onHandler();
-          return outcome.completion();
-        },
+        input: sharedInput0,
+
+        outputs: define.outputModes("runTask", sharedInput0, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ dependencies, outcome }) => {
+                dependencies.serviceName satisfies string;
+                onHandler();
+                return outcome.completion();
+              },
+            }),
+          },
+        })),
       }),
     },
   });
 }
 
 void test("未装配 version 时不投影 spelling 或版本请求", () => {
+  const sharedInput0 = z.object({});
   const cli = defineCli()({
     root: "quiet",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       quiet: {
         kind: "rootCommand",
         name: "quiet",
         description: "安静完成",
-        input: z.object({}),
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        input: sharedInput0,
+
+        outputs: defineCli().outputModes("quiet", sharedInput0, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -86,7 +108,7 @@ void test("未装配 version 时不投影 spelling 或版本请求", () => {
     kind: "usageFailure",
     command: "quiet",
     issues: [{ code: "unknownOption", position: 0, option: "--version" }],
-    usage: { command: "quiet", synopsis: "quiet" },
+    usage: { command: "quiet", synopsis: "quiet [--output <mode>]" },
   });
 });
 
@@ -136,34 +158,37 @@ void test("第一个 recognized eager control 短路后续格式、schema 与 ha
   assert.deepEqual(
     parseCliInvocation(cli, [
       "run",
-      "--output-format",
-      "text",
+      "--output",
+      "structured",
       "--version",
-      "--output-format",
+      "--output",
       "structured",
       "--name",
     ]),
     { kind: "version", command: "runTask" },
   );
-  assert.deepEqual(
-    parseCliInvocation(cli, ["run", "--output-format", "--version"]),
-    { kind: "version", command: "runTask" },
-  );
+  assert.deepEqual(parseCliInvocation(cli, ["run", "--output", "--version"]), {
+    kind: "version",
+    command: "runTask",
+  });
   assert.deepEqual(parseCliInvocation(cli, ["run", "--name", "--version"]), {
     kind: "version",
     command: "runTask",
   });
 
   const writes: Array<Readonly<{ destination: string; chunk: string }>> = [];
+  const invocation = parseCliInvocation(cli, [
+    "run",
+    "--output",
+    "structured",
+    "--version",
+    "--name",
+  ]);
+  if (invocation.kind !== "version") {
+    assert.fail("预期解析为 version 请求");
+  }
   const termination = await executeCli(cli, {
-    invocation: parseCliInvocation(cli, [
-      "run",
-      "--output-format",
-      "text",
-      "--version",
-      "--name",
-    ]),
-    dependencies: undefined,
+    invocation,
     write: (output) => {
       writes.push(output);
     },
@@ -182,16 +207,22 @@ void test("version 与 help 保持独立请求、终止身份且帮助只使用�
   const cli = createVersionCli();
   const versionWrites: string[] = [];
   const helpWrites: string[] = [];
+  const versionInvocation = parseCliInvocation(cli, ["--version"]);
+  if (versionInvocation.kind !== "version") {
+    assert.fail("预期解析为 version 请求");
+  }
   const version = await executeCli(cli, {
-    invocation: parseCliInvocation(cli, ["--version"]),
-    dependencies: undefined,
+    invocation: versionInvocation,
     write: ({ chunk }) => {
       versionWrites.push(chunk);
     },
   });
+  const helpInvocation = parseCliInvocation(cli, ["--help"]);
+  if (helpInvocation.kind !== "help") {
+    assert.fail("预期解析为 help 请求");
+  }
   const help = await executeCli(cli, {
-    invocation: parseCliInvocation(cli, ["--help"]),
-    dependencies: undefined,
+    invocation: helpInvocation,
     write: ({ chunk }) => {
       helpWrites.push(chunk);
     },
@@ -231,6 +262,7 @@ void test("版本值与所有 control spelling 在定义期闭合", () => {
             longOption: spelling,
             description: "冲突字段",
           };
+    const sharedInput1 = z.object({ [field]: z.boolean().optional() });
     assert.throws(
       () =>
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意越过静态类型，以验证版本能力边界。
@@ -241,7 +273,7 @@ void test("版本值与所有 control spelling 在定义期闭合", () => {
             value: text.line("2.3.4"),
             shortAlias: "-V",
           }),
-          output: outputCapability({ defaultFormat: "structured" }),
+
           usageFailureExitCode: 64,
           commands: {
             conflict: {
@@ -251,10 +283,24 @@ void test("版本值与所有 control spelling 在定义期闭合", () => {
               fields: {
                 [field]: fieldDefinition,
               },
-              input: z.object({ [field]: z.boolean().optional() }),
-              success: { kind: "completion" },
-              failures: {},
-              handler: () => undefined,
+              input: sharedInput1,
+
+              outputs: defineCli().outputModes(
+                "conflict",
+                sharedInput1,
+                (mode) => ({
+                  default: "structured",
+                  modes: {
+                    structured: mode.atomic({
+                      description: "结构化输出",
+                      format: "structured",
+                      success: { kind: "completion" },
+                      failures: {},
+                      handler: () => undefined as never,
+                    }),
+                  },
+                }),
+              ),
             },
           },
         } as never),
@@ -293,21 +339,32 @@ void test("version capability 复制并闭合单行 value 与 description", asyn
   });
   assert.equal(Object.isFrozen(version), true);
   externalValue.value = "2.3.4\n注入内容";
+  const sharedInput2 = z.object({});
   const cli = defineCli()({
     root: "copy",
     help: englishHelpCapability(),
     version,
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       copy: {
         kind: "rootCommand",
         name: "copy",
         description: "复制事实",
-        input: z.object({}),
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        input: sharedInput2,
+
+        outputs: defineCli().outputModes("copy", sharedInput2, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -339,13 +396,14 @@ void test("version capability 复制并闭合单行 value 与 description", asyn
 
 void test("层级叶命令的应用选项与 version control 冲突时报告叶身份", () => {
   const define = defineCli();
+  const sharedInput3 = z.object({ version: z.boolean().optional() });
   assert.throws(
     () =>
       define({
         root: "workspace",
         help: englishHelpCapability(),
         version: versionCapability({ value: text.line("2.3.4") }),
-        output: outputCapability({ defaultFormat: "structured" }),
+
         usageFailureExitCode: 64,
         commands: {
           workspace: {
@@ -365,10 +423,24 @@ void test("层级叶命令的应用选项与 version control 冲突时报告叶�
                 description: "冲突字段",
               },
             },
-            input: z.object({ version: z.boolean().optional() }),
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
+            input: sharedInput3,
+
+            outputs: define.outputModes(
+              "listPackages",
+              sharedInput3,
+              (mode) => ({
+                default: "structured",
+                modes: {
+                  structured: mode.atomic({
+                    description: "结构化输出",
+                    format: "structured",
+                    success: { kind: "completion" },
+                    failures: {},
+                    handler: ({ outcome }) => outcome.completion(),
+                  }),
+                },
+              }),
+            ),
           }),
         },
       }),

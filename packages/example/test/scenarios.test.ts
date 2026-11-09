@@ -24,13 +24,16 @@ function isJsonRecord(
 }
 
 const commands = defineCommandScenarios(cli, {
-  lookup: { argv: ["get", "alice", "--json"], dependencies },
-  logs: { argv: ["logs", "--json"], dependencies },
+  lookup: { argv: ["get", "alice", "--output", "structured"], dependencies },
+  logs: { argv: ["logs", "--output", "structured"], dependencies },
   validate: { argv: ["validate", "--id", "alice"], dependencies },
 });
 const failures = defineFailureScenarios(cli, {
   lookup: {
-    notFound: { argv: ["get", "bob", "--json"], dependencies },
+    notFound: {
+      argv: ["get", "bob", "--output", "structured"],
+      dependencies,
+    },
   },
   validate: {
     emailDomainMismatch: {
@@ -91,7 +94,12 @@ for (const [command, scenario] of Object.entries(commands)) {
           .split("\n")
           .map((line) => JSON.parse(line)),
         [
-          { schemaVersion: "2", command: "logs", kind: "stream" },
+          {
+            schemaVersion: "3",
+            command: "logs",
+            outputMode: "structured",
+            kind: "stream",
+          },
           { kind: "record", variant: "entry", data: { message: "started" } },
           { kind: "record", variant: "entry", data: { message: "ready" } },
           { kind: "streamSuccess" },
@@ -100,8 +108,9 @@ for (const [command, scenario] of Object.entries(commands)) {
       return;
     }
     assert.deepEqual(JSON.parse(capture.stdout), {
-      schemaVersion: "2",
+      schemaVersion: "3",
       command: "lookup",
+      outputMode: "structured",
       kind: "data",
       variant: "found",
       data: { name: "Alice" },
@@ -205,8 +214,9 @@ for (const [command, scenarios] of Object.entries(failures)) {
       assert.equal(capture.stdout, "");
       if (command === "lookup") {
         assert.deepEqual(JSON.parse(capture.stderr), {
-          schemaVersion: "2",
+          schemaVersion: "3",
           command: "lookup",
+          outputMode: "structured",
           kind: "failure",
           variant: "notFound",
           data: { id: "bob" },

@@ -58,9 +58,13 @@ interface CommonDiagnosticCodeExpectation {
   readonly languageServiceRequired?: true;
 }
 
-interface AuthoringDiagnosticCase {
+interface AuthoringDiagnosticSource {
   readonly fixture: string;
-  readonly sourcePath: string;
+  readonly sourcePath?: string;
+  readonly sourceTask?: readonly [string, string];
+}
+
+interface AuthoringDiagnosticCase extends AuthoringDiagnosticSource {
   readonly derivation: SourceDerivation;
   readonly common: {
     readonly codes: readonly CommonDiagnosticCodeExpectation[];
@@ -650,7 +654,10 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
   },
   {
     fixture: "hierarchy-text-coverage.typecheck.ts",
-    sourcePath: "packages/lib/test/hierarchy-text-coverage.typecheck.ts",
+    sourceTask: [
+      "@ykdz/cli-contract",
+      "authoring:fixture:hierarchy-text-coverage",
+    ],
     derivation: {
       kind: "removeMarkedTsExpectError",
       fixture: "hierarchy-text-coverage-unchecked.ts",
@@ -693,10 +700,10 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
   },
 ];
 
-const authoringDiscoverySources = [
+const authoringDiscoverySources: readonly AuthoringDiagnosticSource[] = [
   {
     fixture: "authoring-example.ts",
-    sourcePath: "packages/example/src/index.ts",
+    sourceTask: ["@cli-contract/example", "authoring:fixture:example"],
   },
   {
     fixture: "exportable-contract.ts",
@@ -709,19 +716,35 @@ async function readAuthoringDiagnosticFixtures(): Promise<
   Readonly<Record<string, string>>
 > {
   const repositoryRoot = resolve(import.meta.dirname, "..");
-  const sources = [
-    ...authoringDiagnosticCases.map(({ fixture, sourcePath }) => ({
+  const sources: readonly AuthoringDiagnosticSource[] = [
+    ...authoringDiagnosticCases.map(({ fixture, sourcePath, sourceTask }) => ({
       fixture,
-      sourcePath,
+      ...(sourcePath === undefined ? {} : { sourcePath }),
+      ...(sourceTask === undefined ? {} : { sourceTask }),
     })),
     ...authoringDiscoverySources,
   ];
   return Object.fromEntries(
     await Promise.all(
-      sources.map(async ({ fixture, sourcePath }) => [
-        fixture,
-        await readFile(resolve(repositoryRoot, sourcePath), "utf8"),
-      ]),
+      sources.map(async ({ fixture, sourcePath, sourceTask }) => {
+        if (sourcePath !== undefined) {
+          return [
+            fixture,
+            await readFile(resolve(repositoryRoot, sourcePath), "utf8"),
+          ];
+        }
+        if (sourceTask !== undefined) {
+          return [
+            fixture,
+            runCommand(
+              "pnpm",
+              ["--silent", "--filter", sourceTask[0], sourceTask[1]],
+              repositoryRoot,
+            ),
+          ];
+        }
+        throw new Error(`作者来源未声明：${fixture}`);
+      }),
     ),
   );
 }
@@ -930,11 +953,13 @@ function verifyAuthoringLanguageService(
     },
     {
       fixture: "authoring-example.ts",
-      marker: "output: outputCapability(",
-      token: "outputCapability",
-      requiredType: ["OutputCapability"],
-      requiredDocumentation: ["根契约", "整棵命令树"],
-      requiredSignature: ["definition"],
+      marker: 'outputModes("lookup", lookupInput',
+      token: "outputModes",
+      requiredType: ["OutputModesFromDeclaration"],
+      requiredDocumentation: ["具名输出方式", "atomic", "stream"],
+      requiredSignature: [
+        "OutputModeFactory<Command, Dependencies, InputSchema>",
+      ],
     },
     {
       fixture: "authoring-example.ts",
@@ -1499,7 +1524,7 @@ function runCommand(
   command: string,
   args: readonly string[],
   cwd: string,
-): void {
+): string {
   const result = spawnSync(command, args, { cwd, encoding: "utf8" });
   if (result.error !== undefined) throw result.error;
   if (result.status !== 0) {
@@ -1507,4 +1532,5 @@ function runCommand(
       `${command} ${args.join(" ")} failed with status ${result.status ?? "unknown"}\n${result.stderr}\n${result.stdout}`,
     );
   }
+  return result.stdout;
 }

@@ -1,8 +1,4 @@
-import {
-  defineCli,
-  helpCapability,
-  outputCapability,
-} from "@ykdz/cli-contract";
+import { defineCli, helpCapability } from "@ykdz/cli-contract";
 import { z } from "zod";
 
 const conflictingFactSuffix: readonly [
@@ -16,7 +12,7 @@ const conflictingFactSuffix: readonly [
 
 const base = {
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
 } as const;
 
@@ -44,6 +40,7 @@ type ExtractedFactWithUnknownProperty =
 declare const extractedFactWithUnknownProperty: ExtractedFactWithUnknownProperty;
 
 const define = defineCli();
+const sharedInput0 = z.object({ mode: z.enum(["safe", "force"]).optional() });
 define({
   root: "workspace",
   ...base,
@@ -65,20 +62,31 @@ define({
           description: "模式",
         },
       },
-      input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+      input: sharedInput0,
       usageConstraints: [
         {
           kind: "forbiddenCombination",
           all: [{ kind: "equals", field: "mode", value: "staging" }],
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: define.outputModes("invalidHierarchy", sharedInput0, (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode.atomic({
+            description: "结构化输出",
+            format: "structured",
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          }),
+        },
+      })),
     }),
   },
 });
 
+const sharedInput1 = z.object({ mode: z.enum(["safe", "force"]).optional() });
 defineCli()({
   root: "validExtractedFactUnion",
   ...base,
@@ -94,17 +102,32 @@ defineCli()({
           description: "模式",
         },
       },
-      input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+      input: sharedInput1,
       usageConstraints: [
         { kind: "forbiddenCombination", all: [validExtractedFact] },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "validExtractedFactUnion",
+        sharedInput1,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
 
+const sharedInput2 = z.object({ mode: z.enum(["safe", "force"]).optional() });
 defineCli()({
   root: "invalidClosedFactUnion",
   ...base,
@@ -120,20 +143,35 @@ defineCli()({
           description: "模式",
         },
       },
-      input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+      input: sharedInput2,
       usageConstraints: [
         {
           kind: "forbiddenCombination",
           all: [extractedFactWithUnknownProperty],
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "invalidClosedFactUnion",
+        sharedInput2,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
 
+const sharedInput3 = z.object({ mode: z.enum(["safe", "force"]).optional() });
 define({
   root: "workspace",
   ...base,
@@ -155,20 +193,35 @@ define({
           description: "模式",
         },
       },
-      input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+      input: sharedInput3,
       usageConstraints: [
         {
           kind: "forbiddenCombination",
           all: [extractedFactWithUnknownProperty],
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: define.outputModes(
+        "invalidClosedFactUnionHierarchy",
+        sharedInput3,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     }),
   },
 });
 
+const sharedInput4 = z.object({ mode: z.string().optional() });
 defineCli()({
   root: "invalidClosedConstraint",
   ...base,
@@ -184,7 +237,7 @@ defineCli()({
           description: "模式",
         },
       },
-      input: z.object({ mode: z.string().optional() }),
+      input: sharedInput4,
       usageConstraints: [
         {
           kind: "forbiddenCombination",
@@ -192,13 +245,28 @@ defineCli()({
           typo: true,
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "invalidClosedConstraint",
+        sharedInput4,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
 
+const sharedInput5 = z.object({ mode: z.string().optional() });
 defineCli()({
   root: "invalidClosedFact",
   ...base,
@@ -214,20 +282,35 @@ defineCli()({
           description: "模式",
         },
       },
-      input: z.object({ mode: z.string().optional() }),
+      input: sharedInput5,
       usageConstraints: [
         {
           kind: "forbiddenCombination",
           all: [{ kind: "present", field: "mode", typo: true }],
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "invalidClosedFact",
+        sharedInput5,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
 
+const sharedInput6 = z.object({ mode: z.enum(["safe", "force"]).optional() });
 defineCli()({
   root: "invalidNumericValue",
   ...base,
@@ -243,20 +326,35 @@ defineCli()({
           description: "模式",
         },
       },
-      input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+      input: sharedInput6,
       usageConstraints: [
         {
           kind: "forbiddenCombination",
           all: [{ kind: "equals", field: "mode", value: 42 }],
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "invalidNumericValue",
+        sharedInput6,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
 
+const sharedInput7 = z.object({ mode: z.enum(["safe", "force"]).optional() });
 defineCli()({
   root: "invalidNullValue",
   ...base,
@@ -272,20 +370,35 @@ defineCli()({
           description: "模式",
         },
       },
-      input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+      input: sharedInput7,
       usageConstraints: [
         {
           kind: "forbiddenCombination",
           all: [{ kind: "equals", field: "mode", value: null }],
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "invalidNullValue",
+        sharedInput7,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
 
+const sharedInput8 = z.object({ mode: z.enum(["safe", "force"]).optional() });
 defineCli()({
   root: "invalidObjectValue",
   ...base,
@@ -301,20 +414,35 @@ defineCli()({
           description: "模式",
         },
       },
-      input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+      input: sharedInput8,
       usageConstraints: [
         {
           kind: "forbiddenCombination",
           all: [{ kind: "equals", field: "mode", value: { nested: true } }],
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "invalidObjectValue",
+        sharedInput8,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
 
+const sharedInput9 = z.object({ token: z.enum(["safe", "force"]).optional() });
 defineCli()({
   root: "factSuffixConflict",
   ...base,
@@ -330,20 +458,38 @@ defineCli()({
           description: "令牌",
         },
       },
-      input: z.object({ token: z.enum(["safe", "force"]).optional() }),
+      input: sharedInput9,
       usageConstraints: [
         {
           kind: "forbiddenCombination",
           all: conflictingFactSuffix,
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "factSuffixConflict",
+        sharedInput9,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
 
+const sharedInput10 = z.object({
+  auth: z.boolean().optional(),
+  mode: z.enum(["safe", "fast"]).optional(),
+});
 defineCli()({
   root: "invalidValue",
   ...base,
@@ -360,10 +506,7 @@ defineCli()({
           description: "模式",
         },
       },
-      input: z.object({
-        auth: z.boolean().optional(),
-        mode: z.enum(["safe", "fast"]).optional(),
-      }),
+      input: sharedInput10,
       usageConstraints: [
         {
           kind: "forbiddenCombination",
@@ -373,13 +516,31 @@ defineCli()({
           ],
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "invalidValue",
+        sharedInput10,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
 
+const sharedInput11 = z.object({
+  auth: z.boolean().optional(),
+  target: z.array(z.string()).optional(),
+});
 defineCli()({
   root: "invalidKind",
   ...base,
@@ -396,10 +557,7 @@ defineCli()({
           description: "目标",
         },
       },
-      input: z.object({
-        auth: z.boolean().optional(),
-        target: z.array(z.string()).optional(),
-      }),
+      input: sharedInput11,
       usageConstraints: [
         {
           kind: "forbiddenCombination",
@@ -409,13 +567,28 @@ defineCli()({
           ],
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "invalidKind",
+        sharedInput11,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
 
+const sharedInput12 = z.object({ mode: z.string().optional() });
 defineCli()({
   root: "invalidContradiction",
   ...base,
@@ -431,7 +604,7 @@ defineCli()({
           description: "模式",
         },
       },
-      input: z.object({ mode: z.string().optional() }),
+      input: sharedInput12,
       usageConstraints: [
         {
           kind: "forbiddenCombination",
@@ -441,13 +614,28 @@ defineCli()({
           ],
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "invalidContradiction",
+        sharedInput12,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
 
+const sharedInput13 = z.object({ mode: z.string().optional() });
 define({
   root: "workspace",
   ...base,
@@ -469,7 +657,7 @@ define({
           description: "模式",
         },
       },
-      input: z.object({ mode: z.string().optional() }),
+      input: sharedInput13,
       usageConstraints: [
         {
           kind: "forbiddenCombination",
@@ -479,9 +667,23 @@ define({
           ],
         },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: define.outputModes(
+        "contradictoryHierarchy",
+        sharedInput13,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     }),
   },
 });

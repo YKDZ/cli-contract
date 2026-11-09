@@ -5,17 +5,23 @@ import {
   ContractDefinitionError,
   defineCli,
   executeCli,
-  helpCapability,
-  outputCapability,
   parseCliInvocation,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
+import { englishHelpCapability } from "./english-help.ts";
+
 function createCopyCli() {
+  const sharedInput0 = z.object({
+    source: z.string(),
+    destination: z.string().optional(),
+    force: z.boolean().optional(),
+    label: z.string().optional(),
+  });
   return defineCli()({
     root: "copyFiles",
-    help: helpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability(),
+
     usageFailureExitCode: 64,
     commands: {
       copyFiles: {
@@ -44,15 +50,20 @@ function createCopyCli() {
             description: "复制标签",
           },
         },
-        input: z.object({
-          source: z.string(),
-          destination: z.string().optional(),
-          force: z.boolean().optional(),
-          label: z.string().optional(),
-        }),
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        input: sharedInput0,
+
+        outputs: defineCli().outputModes("copyFiles", sharedInput0, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -79,20 +90,20 @@ void test("基础 argv 语法归一化 positional、flag、option、alias 与 --
         force: true,
         label: "release",
       },
-      outputFormat: "structured",
+      outputMode: "structured",
     },
   );
   assert.deepEqual(parseCliInvocation(cli, ["source.txt", "--label=nightly"]), {
     kind: "parsed",
     command: "copyFiles",
     input: { source: "source.txt", label: "nightly" },
-    outputFormat: "structured",
+    outputMode: "structured",
   });
   assert.deepEqual(parseCliInvocation(cli, ["source.txt", "-f"]), {
     kind: "parsed",
     command: "copyFiles",
     input: { source: "source.txt", force: true },
-    outputFormat: "structured",
+    outputMode: "structured",
   });
   assert.deepEqual(parseCliInvocation(cli, ["source.txt", "--help"]), {
     kind: "help",
@@ -102,7 +113,7 @@ void test("基础 argv 语法归一化 positional、flag、option、alias 与 --
     kind: "parsed",
     command: "copyFiles",
     input: { source: "source.txt", destination: "--help" },
-    outputFormat: "structured",
+    outputMode: "structured",
   });
 });
 
@@ -110,7 +121,8 @@ void test("词法问题保留首个可靠 token、字段与 spelling 事实", ()
   const cli = createCopyCli();
   const usage = {
     command: "copyFiles",
-    synopsis: "copy-files <source> [<destination>] [--force] [--label <label>]",
+    synopsis:
+      "copy-files [--output <mode>] <source> [<destination>] [--force] [--label <label>]",
   } as const;
 
   assert.deepEqual(parseCliInvocation(cli, ["source.txt", "--unknown", "x"]), {
@@ -218,7 +230,7 @@ void test("字段事实从同一 grammar 投影到 usage、help 与 manifest", a
   );
   assert.equal(
     cli.grammar.root.usage.synopsis,
-    "copy-files <source> [<destination>] [--force] [--label <label>]",
+    "copy-files [--output <mode>] <source> [<destination>] [--force] [--label <label>]",
   );
 
   const writes: string[] = [];
@@ -230,15 +242,25 @@ void test("字段事实从同一 grammar 投影到 usage、help 与 manifest", a
     },
   });
   assert.deepEqual(writes, [
-    "复制文件\n\n  copy-files <source> [<destination>] [--force] [--label <label>]\n\n  <source>\n    源文件\n  [<destination>]\n    目标文件\n\n  [--force, -f]\n    覆盖目标文件\n  [--label, -l <label>]\n    复制标签\n  --help\n",
+    '复制文件\n\n  copy-files [--output <mode>] <source> [<destination>] [--force] [--label <label>]\n\n  <source>\n    源文件\n  [<destination>]\n    目标文件\n\n  [--force, -f]\n    覆盖目标文件\n  [--label, -l <label>]\n    复制标签\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured (atomic, structured)\n    结构化输出\n',
   ]);
 });
 
 void test("defineCli 聚合动态字段身份、spelling 与 positional 顺序冲突", () => {
+  const sharedInput1 = z.object({
+    optional: z.string().optional(),
+    Bad_Field: z.string().optional(),
+    required: z.string(),
+    first: z.boolean().optional(),
+    second: z.string().optional(),
+    invalidAlias: z.boolean().optional(),
+    invalidKind: z.string().optional(),
+    broken: z.string().optional(),
+  });
   const definition = {
     root: "copyFiles",
-    help: helpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability(),
+
     usageFailureExitCode: 64,
     commands: {
       copyFiles: {
@@ -274,19 +296,20 @@ void test("defineCli 聚合动态字段身份、spelling 与 positional 顺序�
           },
           broken: null,
         },
-        input: z.object({
-          optional: z.string().optional(),
-          Bad_Field: z.string().optional(),
-          required: z.string(),
-          first: z.boolean().optional(),
-          second: z.string().optional(),
-          invalidAlias: z.boolean().optional(),
-          invalidKind: z.string().optional(),
-          broken: z.string().optional(),
-        }),
-        success: { kind: "completion" },
-        failures: {},
-        handler: () => undefined,
+        input: sharedInput1,
+
+        outputs: defineCli().outputModes("copyFiles", sharedInput1, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: () => undefined as never,
+            }),
+          },
+        })),
       },
     },
   };
@@ -371,10 +394,23 @@ void test("输入字段固定禁名覆盖全部字段形态，并区分拼写错
     ["bad_field", "valueOption"],
     ["toLocaleString", "variadicPositional"],
   ] as const;
+  const sharedInput2 = z.object(
+    Object.fromEntries(
+      entries.map(([field, kind]) => [
+        field,
+        (kind === "flag"
+          ? z.boolean()
+          : kind === "repeatableOption" || kind === "variadicPositional"
+            ? z.array(z.string()).min(1)
+            : z.string()
+        ).optional(),
+      ]),
+    ),
+  );
   const definition = {
     root: "inspect",
-    help: helpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability(),
+
     usageFailureExitCode: 64,
     commands: {
       inspect: {
@@ -395,22 +431,20 @@ void test("输入字段固定禁名覆盖全部字段形态，并区分拼写错
             },
           ]),
         ),
-        input: z.object(
-          Object.fromEntries(
-            entries.map(([field, kind]) => [
-              field,
-              (kind === "flag"
-                ? z.boolean()
-                : kind === "repeatableOption" || kind === "variadicPositional"
-                  ? z.array(z.string()).min(1)
-                  : z.string()
-              ).optional(),
-            ]),
-          ),
-        ),
-        success: { kind: "completion" },
-        failures: {},
-        handler: () => undefined,
+        input: sharedInput2,
+
+        outputs: defineCli().outputModes("inspect", sharedInput2, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: () => undefined as never,
+            }),
+          },
+        })),
       },
     },
   };
@@ -481,10 +515,11 @@ void test("输入字段固定禁名覆盖全部字段形态，并区分拼写错
 });
 
 void test("叶命令必填字段同样拒绝保留名称", () => {
+  const sharedInput0 = z.object({ constructor: z.string() });
   const definition = {
     root: "tool",
-    help: helpCapability({ wording: { commandPlaceholder: "命令" } }),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability({ wording: { commandPlaceholder: "命令" } }),
+
     usageFailureExitCode: 64,
     commands: {
       tool: { kind: "rootGroup", name: "tool", description: "工具" },
@@ -496,10 +531,20 @@ void test("叶命令必填字段同样拒绝保留名称", () => {
         fields: {
           constructor: { kind: "positional", description: "构造器" },
         },
-        input: z.object({ constructor: z.string() }),
-        success: { kind: "completion" },
-        failures: {},
-        handler: () => undefined,
+        input: sharedInput0,
+
+        outputs: defineCli().outputModes("inspect", sharedInput0, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: () => undefined as never,
+            }),
+          },
+        })),
       },
     },
   };
@@ -522,10 +567,15 @@ void test("叶命令必填字段同样拒绝保留名称", () => {
 });
 
 void test("字段身份更名可保留 CLI 拼写，其他命名域继续合法", async () => {
+  const sharedInput3 = z.object({
+    constructorName: z.string().default("fallback"),
+    // oxlint-disable-next-line unicorn/no-thenable -- 测试合法的 then 字段身份。
+    then: z.string().optional(),
+  });
   const cli = defineCli()({
     root: "constructor",
-    help: helpCapability({ wording: { default: "默认 {value}" } }),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability({ wording: { default: "默认 {value}" } }),
+
     usageFailureExitCode: 64,
     commands: {
       constructor: {
@@ -545,32 +595,42 @@ void test("字段身份更名可保留 CLI 拼写，其他命名域继续合法"
             description: "随后",
           },
         },
-        input: z.object({
-          constructorName: z.string().default("fallback"),
-          // oxlint-disable-next-line unicorn/no-thenable -- 模式保留应用自定义字段身份。
-          then: z.string().optional(),
-        }),
-        success: {
-          kind: "data",
-          variants: {
-            toString: {
-              description: "构造器资料",
-              schema: z.object({
-                constructor: z.string(),
-                // oxlint-disable-next-line unicorn/no-thenable -- 任意 JSON 载荷键不受条件分支更名影响。
-                then: z.string(),
+        input: sharedInput3,
+
+        outputs: defineCli().outputModes(
+          "constructor",
+          sharedInput3,
+          (mode) => ({
+            default: "structured",
+            modes: {
+              structured: mode.atomic({
+                description: "结构化输出",
+                format: "structured",
+                success: {
+                  kind: "data",
+                  variants: {
+                    toString: {
+                      description: "构造器资料",
+                      schema: z.object({
+                        constructor: z.string(),
+                        // oxlint-disable-next-line unicorn/no-thenable -- 任意 JSON 载荷键不受条件分支更名影响。
+                        then: z.string(),
+                      }),
+                      exitCode: 0,
+                    },
+                  },
+                },
+                failures: {},
+                handler: ({ input, outcome }) =>
+                  outcome.data.toString({
+                    constructor: input.constructorName,
+                    // oxlint-disable-next-line unicorn/no-thenable -- JSON 载荷中的普通数据键。
+                    then: input.then ?? "absent",
+                  }),
               }),
-              exitCode: 0,
             },
-          },
-        },
-        failures: {},
-        handler: ({ input, outcome }) =>
-          outcome.data.toString({
-            constructor: input.constructorName,
-            // oxlint-disable-next-line unicorn/no-thenable -- JSON 载荷中的普通数据键。
-            then: input.then ?? "absent",
           }),
+        ),
       },
     },
   });
@@ -602,8 +662,9 @@ void test("字段身份更名可保留 CLI 拼写，其他命名域继续合法"
     });
     assert.equal(termination.kind, "applicationResult");
     assert.deepEqual(JSON.parse(stdout), {
-      schemaVersion: "2",
+      schemaVersion: "3",
       command: "constructor",
+      outputMode: "structured",
       kind: "data",
       variant: "toString",
       data: expected,
@@ -612,20 +673,35 @@ void test("字段身份更名可保留 CLI 拼写，其他命名域继续合法"
 });
 
 void test("defineCli 拒绝动态非法命令身份", () => {
+  const sharedInput1 = z.object({});
   const definition = {
     root: "copy-files",
-    help: helpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability(),
+
     usageFailureExitCode: 64,
     commands: {
       "copy-files": {
         kind: "rootCommand",
         name: "copy-files",
         description: "复制文件",
-        input: z.object({}),
-        success: { kind: "completion" },
-        failures: {},
-        handler: () => undefined,
+        input: sharedInput1,
+
+        outputs: defineCli().outputModes(
+          "copy-files",
+          sharedInput1,
+          (mode) => ({
+            default: "structured",
+            modes: {
+              structured: mode.atomic({
+                description: "结构化输出",
+                format: "structured",
+                success: { kind: "completion" },
+                failures: {},
+                handler: () => undefined as never,
+              }),
+            },
+          }),
+        ),
       },
     },
   };

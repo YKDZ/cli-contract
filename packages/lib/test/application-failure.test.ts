@@ -6,12 +6,13 @@ import {
   ContractExecutionError,
   defineCli,
   executeCli,
-  helpCapability,
-  outputCapability,
   parseCliInvocation,
   type ContractSchema,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
+
+import { englishHelpCapability } from "./english-help.ts";
+import { omitPayloadRootResourceId } from "./schema-test-helpers.ts";
 
 const emptyInput = z.object({});
 const unavailableData = z.object({ service: z.string() });
@@ -19,8 +20,8 @@ const unavailableData = z.object({ service: z.string() });
 void test("具名应用失败写入 stderr 并返回显式失败状态", async () => {
   const cli = defineCli()({
     root: "check",
-    help: helpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability(),
+
     usageFailureExitCode: 64,
     commands: {
       check: {
@@ -28,22 +29,34 @@ void test("具名应用失败写入 stderr 并返回显式失败状态", async (
         name: "check",
         description: "检查服务",
         input: emptyInput,
-        success: { kind: "completion" },
-        failures: {
-          unavailable: {
-            description: "服务暂不可用",
-            schema: unavailableData,
-            exitCode: 9,
+
+        outputs: defineCli().outputModes("check", emptyInput, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {
+                unavailable: {
+                  description: "服务暂不可用",
+                  schema: unavailableData,
+                  exitCode: 9,
+                },
+              },
+              handler: ({ outcome }) =>
+                outcome.failure.unavailable({ service: "billing" }),
+            }),
           },
-        },
-        handler: ({ outcome }) =>
-          outcome.failure.unavailable({ service: "billing" }),
+        })),
       },
     },
   });
   const writes: Array<Readonly<{ destination: string; chunk: string }>> = [];
 
-  assert.deepEqual(cli.manifest.commands.check.failures, {
+  const structuredMode = cli.manifest.commands.check.outputs.modes.structured;
+  assert.ok(structuredMode);
+  assert.deepEqual(structuredMode.failures, {
     unavailable: {
       description: "服务暂不可用",
       exitCode: 9,
@@ -64,12 +77,17 @@ void test("具名应用失败写入 stderr 并返回显式失败状态", async (
       },
     },
   });
-  assert.deepEqual(cli.manifest.wire.failure?.unavailable, {
+  const structuredWire = cli.manifest.wire.structured;
+  assert.ok(structuredWire);
+  const wireFailure = structuredWire.failure?.unavailable;
+  assert.ok(wireFailure);
+  assert.deepEqual(omitPayloadRootResourceId(wireFailure), {
     $schema: "https://json-schema.org/draft/2020-12/schema",
     additionalProperties: false,
     properties: {
-      schemaVersion: { const: "2" },
+      schemaVersion: { const: "3" },
       command: { const: "check" },
+      outputMode: { const: "structured" },
       kind: { const: "failure" },
       variant: { const: "unavailable" },
       data: {
@@ -81,7 +99,14 @@ void test("具名应用失败写入 stderr 并返回显式失败状态", async (
         additionalProperties: false,
       },
     },
-    required: ["schemaVersion", "command", "kind", "variant", "data"],
+    required: [
+      "schemaVersion",
+      "command",
+      "outputMode",
+      "kind",
+      "variant",
+      "data",
+    ],
     type: "object",
   });
 
@@ -97,12 +122,13 @@ void test("具名应用失败写入 stderr 并返回显式失败状态", async (
     {
       destination: "stderr",
       chunk:
-        '{"schemaVersion":"2","command":"check","kind":"failure","variant":"unavailable","data":{"service":"billing"}}\n',
+        '{"schemaVersion":"3","command":"check","outputMode":"structured","kind":"failure","variant":"unavailable","data":{"service":"billing"}}\n',
     },
   ]);
   assert.deepEqual(termination, {
     kind: "applicationResult",
     command: "check",
+    outputMode: "structured",
     result: {
       kind: "failure",
       command: "check",
@@ -116,8 +142,8 @@ void test("具名应用失败写入 stderr 并返回显式失败状态", async (
 void test("非法失败 payload 在任何写出前被拒绝", async () => {
   const cli = defineCli()({
     root: "check",
-    help: helpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability(),
+
     usageFailureExitCode: 64,
     commands: {
       check: {
@@ -125,19 +151,29 @@ void test("非法失败 payload 在任何写出前被拒绝", async () => {
         name: "check",
         description: "检查服务",
         input: emptyInput,
-        success: { kind: "completion" },
-        failures: {
-          unavailable: {
-            description: "服务暂不可用",
-            schema: unavailableData,
-            exitCode: 9,
+
+        outputs: defineCli().outputModes("check", emptyInput, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {
+                unavailable: {
+                  description: "服务暂不可用",
+                  schema: unavailableData,
+                  exitCode: 9,
+                },
+              },
+              handler: ({ outcome }) =>
+                outcome.failure.unavailable({
+                  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意注入错误类型，以验证结果边界。
+                  service: 1 as unknown as string,
+                }),
+            }),
           },
-        },
-        handler: ({ outcome }) =>
-          outcome.failure.unavailable({
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意注入错误类型，以验证结果边界。
-            service: 1 as unknown as string,
-          }),
+        })),
       },
     },
   });
@@ -184,8 +220,8 @@ void test("failure 输出模式的空 issues 仍产生 outputSchemaRejected", as
   };
   const cli = defineCli()({
     root: "check",
-    help: helpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability(),
+
     usageFailureExitCode: 64,
     commands: {
       check: {
@@ -193,16 +229,26 @@ void test("failure 输出模式的空 issues 仍产生 outputSchemaRejected", as
         name: "check",
         description: "检查服务",
         input: emptyInput,
-        success: { kind: "completion" },
-        failures: {
-          unavailable: {
-            description: "服务暂不可用",
-            schema: rejectedFailureSchema,
-            exitCode: 9,
+
+        outputs: defineCli().outputModes("check", emptyInput, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {
+                unavailable: {
+                  description: "服务暂不可用",
+                  schema: rejectedFailureSchema,
+                  exitCode: 9,
+                },
+              },
+              handler: ({ outcome }) =>
+                outcome.failure.unavailable({ service: "billing" }),
+            }),
           },
-        },
-        handler: ({ outcome }) =>
-          outcome.failure.unavailable({ service: "billing" }),
+        })),
       },
     },
   });
@@ -239,8 +285,8 @@ void test("定义期聚合失败变体的无效描述与退出码", () => {
     () =>
       defineCli()({
         root: "check",
-        help: helpCapability(),
-        output: outputCapability({ defaultFormat: "structured" }),
+        help: englishHelpCapability(),
+
         usageFailureExitCode: 64,
         commands: {
           check: {
@@ -248,15 +294,25 @@ void test("定义期聚合失败变体的无效描述与退出码", () => {
             name: "check",
             description: "检查服务",
             input: emptyInput,
-            success: { kind: "completion" },
-            failures: {
-              unavailable: {
-                description: "",
-                schema: unavailableData,
-                exitCode: 0,
+
+            outputs: defineCli().outputModes("check", emptyInput, (mode) => ({
+              default: "structured",
+              modes: {
+                structured: mode.atomic({
+                  description: "结构化输出",
+                  format: "structured",
+                  success: { kind: "completion" },
+                  failures: {
+                    unavailable: {
+                      description: "",
+                      schema: unavailableData,
+                      exitCode: 0,
+                    },
+                  },
+                  handler: ({ outcome }) => outcome.completion(),
+                }),
               },
-            },
-            handler: ({ outcome }) => outcome.completion(),
+            })),
           },
         },
       }),

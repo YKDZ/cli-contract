@@ -6,7 +6,6 @@ import {
   ContractDefinitionError,
   defineCli,
   executeCli,
-  outputCapability,
   parseCliInvocation,
   type ContractSchema,
   type JsonObject,
@@ -33,7 +32,7 @@ function createCombinationCli(input: ContractSchema<CombinationRawInput>) {
   return defineCli()({
     root: "combination",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       combination: {
@@ -48,9 +47,19 @@ function createCombinationCli(input: ContractSchema<CombinationRawInput>) {
           },
         },
         input,
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+
+        outputs: defineCli().outputModes("combination", input, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -84,7 +93,7 @@ void test("Zod 的直接 enum 同源投影到 grammar、manifest、synopsis 与�
   const cli = defineCli()({
     root: "choose",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       choose: {
@@ -111,9 +120,19 @@ void test("Zod 的直接 enum 同源投影到 grammar、manifest、synopsis 与�
           },
         },
         input,
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+
+        outputs: defineCli().outputModes("choose", input, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -134,7 +153,7 @@ void test("Zod 的直接 enum 同源投影到 grammar、manifest、synopsis 与�
   assert.deepEqual(exported, before);
   assert.equal(
     cli.grammar.root.usage.synopsis,
-    "choose <mode> [<files...>] [--mode <option>] [--tag <tag>]... [--refined <refined>]",
+    "choose [--output <mode>] <mode> [<files...>] [--mode <option>] [--tag <tag>]... [--refined <refined>]",
   );
 
   const writes: string[] = [];
@@ -146,7 +165,7 @@ void test("Zod 的直接 enum 同源投影到 grammar、manifest、synopsis 与�
     },
   });
   assert.deepEqual(writes, [
-    '选择模式\n\n  choose <mode> [<files...>] [--mode <option>] [--tag <tag>]... [--refined <refined>]\n\n  <mode> (choices: "interactive", "allow-all")\n    位置模式\n  [<files...>] (choices: "a\\"b", "line\\nbreak")\n    文件\n\n  [--mode <option>] (choices: "interactive", "allow-all") (default: "interactive")\n    选项模式\n  [--tag <tag>]... (choices: "red", "green")\n    标签\n  [--refined <refined>]\n    精炼\n  --help\n',
+    '选择模式\n\n  choose [--output <mode>] <mode> [<files...>] [--mode <option>] [--tag <tag>]... [--refined <refined>]\n\n  <mode> (choices: "interactive", "allow-all")\n    位置模式\n  [<files...>] (choices: "a\\"b", "line\\nbreak")\n    文件\n\n  [--mode <option>] (choices: "interactive", "allow-all") (default: "interactive")\n    选项模式\n  [--tag <tag>]... (choices: "red", "green")\n    标签\n  [--refined <refined>]\n    精炼\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured (atomic, structured)\n    结构化输出\n',
   ]);
   const invalidChoices = parseCliInvocation(cli, [
     "unexpected",
@@ -183,7 +202,7 @@ void test("Valibot 的直接 enum 同样覆盖单值与 repeatable option", () =
   const cli = defineCli()({
     root: "valibotChoices",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       valibotChoices: {
@@ -203,9 +222,19 @@ void test("Valibot 的直接 enum 同样覆盖单值与 repeatable option", () =
           },
         },
         input,
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+
+        outputs: defineCli().outputModes("valibotChoices", input, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -237,7 +266,7 @@ void test("每个显式字段候选值在 parser 聚合并在 validation 与 han
   const cli = defineCli()({
     root: "choices",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       choices: {
@@ -261,12 +290,22 @@ void test("每个显式字段候选值在 parser 聚合并在 validation 与 han
           },
         },
         input,
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => {
-          handlerCalls += 1;
-          return outcome.completion();
-        },
+
+        outputs: defineCli().outputModes("choices", input, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => {
+                handlerCalls += 1;
+                return outcome.completion();
+              },
+            }),
+          },
+        })),
       },
     },
   });
@@ -365,7 +404,7 @@ void test("缺席 default、没有候选值和其余 schema 约束保持原有�
   const cli = defineCli()({
     root: "defaults",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       defaults: {
@@ -385,13 +424,23 @@ void test("缺席 default、没有候选值和其余 schema 约束保持原有�
           },
         },
         input: source,
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ input, outcome }) => {
-          handlerCalls += 1;
-          assert.equal(input.defaultMode, "safe");
-          return outcome.completion();
-        },
+
+        outputs: defineCli().outputModes("defaults", source, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ input, outcome }) => {
+                handlerCalls += 1;
+                assert.equal(input.defaultMode, "safe");
+                return outcome.completion();
+              },
+            }),
+          },
+        })),
       },
     },
   });
@@ -492,7 +541,7 @@ void test("组合、引用、条件和非字符串 enum 不推断候选值", asy
   const cli = defineCli()({
     root: "counterexample",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       counterexample: {
@@ -538,9 +587,19 @@ void test("组合、引用、条件和非字符串 enum 不推断候选值", asy
           values: { kind: "variadicPositional", description: "值" },
         },
         input,
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+
+        outputs: defineCli().outputModes("counterexample", input, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -561,7 +620,7 @@ void test("组合、引用、条件和非字符串 enum 不推断候选值", asy
   );
   assert.equal(
     cli.grammar.root.usage.synopsis,
-    "counterexample [--any-of <anyOf>] [--one-of <oneOf>] [--reference <reference>] [--conditional <conditional>] [--mixed <mixed>] [--empty <empty>] [--tag <tag>]... [<values...>]",
+    "counterexample [--output <mode>] [--any-of <anyOf>] [--one-of <oneOf>] [--reference <reference>] [--conditional <conditional>] [--mixed <mixed>] [--empty <empty>] [--tag <tag>]... [<values...>]",
   );
   const writes: string[] = [];
   await executeCli(cli, {
@@ -572,13 +631,14 @@ void test("组合、引用、条件和非字符串 enum 不推断候选值", asy
     },
   });
   assert.deepEqual(writes, [
-    "反例\n\n  counterexample [--any-of <anyOf>] [--one-of <oneOf>] [--reference <reference>] [--conditional <conditional>] [--mixed <mixed>] [--empty <empty>] [--tag <tag>]... [<values...>]\n\n  [<values...>]\n    值\n\n  [--any-of <anyOf>]\n    anyOf\n  [--one-of <oneOf>]\n    oneOf\n  [--reference <reference>]\n    引用\n  [--conditional <conditional>]\n    条件\n  [--mixed <mixed>]\n    混合\n  [--empty <empty>]\n    空\n  [--tag <tag>]...\n    标签\n  --help\n",
+    '反例\n\n  counterexample [--output <mode>] [--any-of <anyOf>] [--one-of <oneOf>] [--reference <reference>] [--conditional <conditional>] [--mixed <mixed>] [--empty <empty>] [--tag <tag>]... [<values...>]\n\n  [<values...>]\n    值\n\n  [--any-of <anyOf>]\n    anyOf\n  [--one-of <oneOf>]\n    oneOf\n  [--reference <reference>]\n    引用\n  [--conditional <conditional>]\n    条件\n  [--mixed <mixed>]\n    混合\n  [--empty <empty>]\n    空\n  [--tag <tag>]...\n    标签\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured (atomic, structured)\n    结构化输出\n',
   ]);
 });
 
 const choiceCounterexampleSchema: JsonObject = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   type: "object",
+  $defs: { value: { type: "string" } },
   properties: {
     anyOf: {
       type: "string",

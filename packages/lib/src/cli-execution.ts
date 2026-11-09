@@ -1,5 +1,3 @@
-import type { StandardSchemaV1 } from "@standard-schema/spec";
-
 import {
   createCompletionFact,
   createDataFact,
@@ -12,7 +10,7 @@ import {
   isCompiledExecutable,
   isIssuedOutcomeFact,
   usageFailureHelpArgv,
-  type CliContract,
+  type AnyCliContract,
   type CliContractDependencies,
   type CliContractResult,
   type CliContractRoot,
@@ -21,14 +19,24 @@ import {
   type OutcomeFact,
 } from "#/cli-contract";
 import {
+  validateCliInput,
+  validateContractSchemaSynchronously,
+} from "#/cli-input-validation";
+import {
   invocationBelongsTo,
   type CliInvocation,
   type NonEmptyCliUsageIssues,
   type InputRejectedIssue,
   type NonEmptyUsageIssues,
-  type SchemaIssueEvidence,
 } from "#/cli-invocation";
 import { CliWriteError } from "#/cli-write-error";
+import type { ContractQueryDocument } from "#/contract-discovery";
+import {
+  canonicalCommandPath,
+  queryCliContract,
+  type ContractDirectoryQuery,
+  type ContractSummaryQuery,
+} from "#/contract-discovery";
 import {
   ContractExecutionError,
   type ContractExecutionIssue,
@@ -62,6 +70,7 @@ type CompiledGroup = Extract<
   CompiledCommand,
   { readonly kind: "rootGroup" | "commandGroup" }
 >;
+type CompiledOutputMode = CompiledExecutable["outputModes"][string];
 
 export type CliOutputDestination = "stderr" | "stdout";
 
@@ -82,10 +91,11 @@ export type WriteCliOutput = (output: CliOutput) => Promise<void> | void;
  * 正常控制流完成全部可控写入后的程序化结果；宿主仍须落实真实进程退出状态。
  * 流结果只保留终态，不累计已写记录。程序缺陷与写入错误使执行拒绝，不进入此联合。
  */
-export type CliTermination<Contract extends CliContract = CliContract> =
+export type CliTermination<Contract extends AnyCliContract = AnyCliContract> =
   | Readonly<{
       readonly kind: "applicationResult";
       readonly command: CliContractRoot<Contract>;
+      readonly outputMode: string;
       readonly result: CliContractResult<Contract>;
       readonly exitCode: number;
     }>
@@ -99,9 +109,15 @@ export type CliTermination<Contract extends CliContract = CliContract> =
       readonly command: CliContractRoot<Contract>;
       readonly exitCode: 0;
     }>
+  | Readonly<{
+      readonly kind: "schema";
+      readonly command: CliContractRoot<Contract>;
+      readonly document: ContractQueryDocument;
+      readonly exitCode: 0;
+    }>
   | UsageFailureTermination<Contract>;
 
-type UsageFailureTermination<Contract extends CliContract> = {
+type UsageFailureTermination<Contract extends AnyCliContract> = {
   [Command in CliContractRoot<Contract>]: Readonly<{
     readonly kind: "usageFailure";
     readonly command: Command;
@@ -110,17 +126,23 @@ type UsageFailureTermination<Contract extends CliContract> = {
   }>;
 }[CliContractRoot<Contract>];
 
-export interface ExecuteCliOptions<Contract extends CliContract> {
-  readonly invocation: CliInvocation<NoInfer<Contract>>;
-  readonly dependencies: CliContractDependencies<Contract>;
+export type ExecuteCliOptions<
+  Contract extends AnyCliContract,
+  Invocation extends CliInvocation<Contract> = CliInvocation<Contract>,
+> = Readonly<{
+  readonly invocation: Invocation;
+  readonly dependencies?: CliContractDependencies<Contract>;
   readonly write: WriteCliOutput;
-}
+}> &
+  ([Extract<Invocation, { readonly kind: "parsed" }>] extends [never]
+    ? unknown
+    : Readonly<{ readonly dependencies: CliContractDependencies<Contract> }>);
 
 type RuntimeStreamGenerator = AsyncGenerator<unknown, unknown, void>;
 
 /**
  * 执行同一契约签发的调用：验证 raw input，将模式的验证结果和宿主依赖交给 handler，
- * 再验证、投影结果并顺序等待宿主写入。帮助、版本和用法失败不执行业务 handler。
+ * 再验证、投影结果并顺序等待宿主写入。帮助、版本、发现和用法失败不执行业务 handler。
  *
  * 宿主负责参数来源、依赖构造、输出端口和真实进程退出；应 await 本函数，
  * 等可控写入完成后再使用终止结果的 exitCode，不能提前结束进程。
@@ -130,9 +152,12 @@ type RuntimeStreamGenerator = AsyncGenerator<unknown, unknown, void>;
  * 活动流会执行必要清理，已经写出的合法前缀不会撤回，也不会追加伪造的成功终态。
  */
 // oxlint-disable-next-line typescript/consistent-return
-export async function executeCli<const Contract extends CliContract>(
+export async function executeCli<
+  const Contract extends AnyCliContract,
+  const Invocation extends CliInvocation<NoInfer<Contract>>,
+>(
   cliContract: Contract,
-  options: ExecuteCliOptions<Contract>,
+  options: ExecuteCliOptions<Contract, Invocation>,
 ): Promise<CliTermination<Contract>> {
   const compiled = getCompiledCli(cliContract);
   if (!invocationBelongsTo(options.invocation, cliContract)) {
@@ -178,6 +203,19 @@ export async function executeCli<const Contract extends CliContract>(
         exitCode: 0,
       });
     }
+    case "schema": {
+      await writeCliOutput(options.write, {
+        destination: "stdout",
+        chunk: `${JSON.stringify(options.invocation.document)}\n`,
+      });
+      return Object.freeze({
+        kind: "schema",
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令来自当前 Contract 的编译树。
+        command: command.id as CliContractRoot<Contract>,
+        document: options.invocation.document,
+        exitCode: 0,
+      });
+    }
     case "usageFailure": {
       await writeUsageFailure(compiled, options.write, {
         command: command.id,
@@ -196,19 +234,17 @@ export async function executeCli<const Contract extends CliContract>(
       if (!isCompiledExecutable(command)) {
         throw new ContractExecutionError([{ code: "invalidCliContract" }]);
       }
-      const validation = validateSynchronously(
+      const validation = validateCliInput(
         command.input,
         options.invocation.input,
-        { command: command.id, location: "input" },
+        command.id,
       );
-      if (validation.issues !== undefined) {
+      if (validation.kind === "rejected") {
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion
         const issues = Object.freeze([
           Object.freeze({
             code: "inputRejected" as const,
-            evidence: Object.freeze(
-              validation.issues.map(normalizeSchemaIssueEvidence),
-            ),
+            evidence: validation.evidence,
           }),
         ]) as readonly [InputRejectedIssue];
         await writeUsageFailure(compiled, options.write, {
@@ -225,11 +261,15 @@ export async function executeCli<const Contract extends CliContract>(
         });
       }
 
+      const outputMode = command.outputModes[options.invocation.outputMode];
+      if (outputMode === undefined) {
+        throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+      }
       return executeApplicationResult(
         command,
+        outputMode,
         validation.value,
         options,
-        options.invocation.outputFormat,
       );
     }
   }
@@ -259,7 +299,10 @@ function createHelpText(
   );
   const options = [
     ...optionFields.map((field) => formatHelpField(field, wording)),
-    ...formatCoreControls(compiled),
+    ...formatCoreControls(
+      compiled,
+      isCommandGroup(command) ? undefined : command,
+    ),
   ];
 
   appendHelpSegment(segments, headings?.usage, [
@@ -291,6 +334,20 @@ function createHelpText(
         ),
       ),
     ),
+  );
+  const schemaHeading =
+    compiled.contract.grammar.controls.help.headings?.schema;
+  appendHelpSegment(
+    segments,
+    schemaHeading,
+    createSchemaHelpEntries(compiled, command),
+  );
+  appendHelpSegment(
+    segments,
+    headings?.examples,
+    isCommandGroup(command)
+      ? []
+      : (command.examples ?? []).map((example) => helpLine(example.shell)),
   );
   appendHelpSegment(
     segments,
@@ -344,10 +401,11 @@ function appendHelpSegment(
 
 function formatCoreControls(
   compiled: ReturnType<typeof getCompiledCli>,
+  executable?: CompiledExecutable,
 ): readonly HelpEntry[] {
   const help = compiled.contract.grammar.controls.help;
   const version = compiled.contract.grammar.controls.version;
-  const output = compiled.contract.grammar.controls.output;
+  const schema = compiled.contract.grammar.controls.schema;
   const versionEntry: HelpEntry | undefined =
     version === undefined
       ? undefined
@@ -370,21 +428,64 @@ function formatCoreControls(
         .join(", "),
     ),
     ...(versionEntry === undefined ? [] : [versionEntry]),
-    ...(output.selector === undefined
+    ...(schema === undefined
+      ? []
+      : [helpDetail(schema.longOption, schema.description)]),
+    ...(executable === undefined
       ? []
       : [
           helpLine(
-            `${output.selector} <${output.formats.join("|")}> ${renderHelpFactTemplate("choices", help.wording?.choices, { choices: output.formats.map((format) => JSON.stringify(format)).join(", ") })} ${renderHelpFactTemplate("default", help.wording?.default, { value: JSON.stringify(output.defaultFormat) })}`,
+            [
+              "--output <mode>",
+              renderHelpFactTemplate("choices", help.wording?.choices, {
+                choices: Object.keys(executable.outputModes)
+                  .map((mode) => JSON.stringify(mode))
+                  .join(", "),
+              }),
+              renderHelpFactTemplate("default", help.wording?.default, {
+                value: JSON.stringify(executable.defaultOutputMode),
+              }),
+            ].join(" "),
+          ),
+          ...Object.values(executable.outputModes).map((mode) =>
+            helpDetail(
+              `${mode.id} (${mode.delivery}, ${mode.format})`,
+              mode.description,
+            ),
           ),
         ]),
-    ...Object.entries(output.compatibilityFlags ?? {}).map(([flag, format]) =>
-      helpLine(
-        output.selector === undefined
-          ? `${flag} = ${format}`
-          : `${flag} = ${output.selector} ${format}`,
-      ),
-    ),
   ];
+}
+
+function createSchemaHelpEntries(
+  compiled: ReturnType<typeof getCompiledCli>,
+  command: CompiledCommand,
+): readonly HelpEntry[] {
+  if (compiled.contract.grammar.controls.schema === undefined) return [];
+  const path = canonicalCommandPath(compiled.commands, command.id);
+  const query = queryCliContract(compiled.contract, path);
+  if (query.kind === "queryFailure") return [];
+  if (query.kind === "directory") {
+    return directoryHelpEntries(query);
+  }
+  if (query.kind === "summary") {
+    return summaryHelpEntries(query);
+  }
+  return [];
+}
+
+function directoryHelpEntries(
+  query: ContractDirectoryQuery,
+): readonly HelpEntry[] {
+  return query.children.map((child) =>
+    helpDetail(JSON.stringify(child.nextArgv), child.description),
+  );
+}
+
+function summaryHelpEntries(query: ContractSummaryQuery): readonly HelpEntry[] {
+  return query.next.map((next) =>
+    helpDetail(`--schema=${next.target}`, JSON.stringify(next.argv)),
+  );
 }
 
 async function writeUsageFailure(
@@ -467,24 +568,29 @@ function formatHelpField(
   );
 }
 
-async function executeApplicationResult<Contract extends CliContract>(
+async function executeApplicationResult<
+  Contract extends AnyCliContract,
+  Invocation extends CliInvocation<NoInfer<Contract>>,
+>(
   compiled: CompiledExecutable,
+  outputMode: CompiledOutputMode,
   input: unknown,
-  options: ExecuteCliOptions<Contract>,
-  outputFormat: "structured" | "text",
+  options: ExecuteCliOptions<Contract, Invocation>,
 ): Promise<CliTermination<Contract>> {
   const issuedOutcomeFacts = new WeakSet<object>();
+  const resultContract = outputMode.resultContract;
+  const success = resultContract.success;
   const successOutcome =
-    compiled.success.kind === "completion"
+    success.kind === "completion"
       ? {
           completion: () =>
             createCompletionFact(compiled.id, issuedOutcomeFacts),
         }
-      : compiled.success.kind === "data"
+      : success.kind === "data"
         ? {
             data: Object.freeze(
               Object.fromEntries(
-                Object.keys(compiled.success.variants).map((variant) => [
+                Object.keys(success.variants).map((variant) => [
                   variant,
                   (payload: unknown) =>
                     createDataFact(
@@ -500,7 +606,7 @@ async function executeApplicationResult<Contract extends CliContract>(
         : {
             record: Object.freeze(
               Object.fromEntries(
-                Object.keys(compiled.success.records).map((variant) => [
+                Object.keys(success.records).map((variant) => [
                   variant,
                   (payload: unknown) =>
                     createStreamRecordFact(
@@ -519,7 +625,7 @@ async function executeApplicationResult<Contract extends CliContract>(
     ...successOutcome,
     failure: Object.freeze(
       Object.fromEntries(
-        Object.keys(compiled.failures).map((variant) => [
+        Object.keys(resultContract.failures).map((variant) => [
           variant,
           (payload: unknown) =>
             createFailureFact(
@@ -532,30 +638,30 @@ async function executeApplicationResult<Contract extends CliContract>(
       ),
     ),
   });
-  if (typeof compiled.handler !== "function") {
+  if (typeof resultContract.handler !== "function") {
     throw new ContractExecutionError([{ code: "invalidCliContract" }]);
   }
-  const handlerResult: unknown = compiled.handler({
+  const handlerResult: unknown = resultContract.handler({
     input,
     dependencies: options.dependencies,
     outcome,
   });
-  if (compiled.success.kind === "stream") {
+  if (success.kind === "stream") {
     const generator = requireAsyncGenerator(handlerResult, compiled.id);
     return executeStreamResult(
       compiled,
+      outputMode,
       generator,
       issuedOutcomeFacts,
       options,
-      outputFormat,
     );
   }
   const result = await handlerResult;
   const projected = projectApplicationFact(
     compiled,
+    outputMode,
     result,
     issuedOutcomeFacts,
-    outputFormat,
     "atomic",
   );
   await writeProjectedOutput(options.write, projected.output);
@@ -563,6 +669,7 @@ async function executeApplicationResult<Contract extends CliContract>(
     kind: "applicationResult",
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令来自当前 Contract 的编译树，泛型身份在此恢复。
     command: compiled.id as CliContractRoot<Contract>,
+    outputMode: outputMode.id,
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 结果经该命令的结果模式验证并由本次执行签发。
     result: projected.result as CliContractResult<Contract>,
     exitCode: projected.exitCode,
@@ -612,22 +719,25 @@ async function writeCliOutput(
   }
 }
 
-async function executeStreamResult<Contract extends CliContract>(
+async function executeStreamResult<
+  Contract extends AnyCliContract,
+  Invocation extends CliInvocation<NoInfer<Contract>>,
+>(
   compiled: CompiledExecutable,
+  outputMode: CompiledOutputMode,
   generator: RuntimeStreamGenerator,
   issuedOutcomeFacts: WeakSet<object>,
-  options: ExecuteCliOptions<Contract>,
-  outputFormat: "structured" | "text",
+  options: ExecuteCliOptions<Contract, Invocation>,
 ): Promise<CliTermination<Contract>> {
-  if (compiled.success.kind !== "stream") {
+  if (outputMode.resultContract.success.kind !== "stream") {
     throw new ContractExecutionError([{ code: "invalidCliContract" }]);
   }
   let active = true;
   try {
-    if (outputFormat === "structured") {
+    if (outputMode.format === "structured") {
       await writeCliOutput(options.write, {
         destination: "stdout",
-        chunk: `${JSON.stringify(createStreamHeaderEnvelope(compiled.id))}\n`,
+        chunk: `${JSON.stringify(createStreamHeaderEnvelope(compiled.id, outputMode.id))}\n`,
       });
     }
     for (;;) {
@@ -635,9 +745,9 @@ async function executeStreamResult<Contract extends CliContract>(
       if (!step.done) {
         const projected = projectApplicationFact(
           compiled,
+          outputMode,
           step.value,
           issuedOutcomeFacts,
-          outputFormat,
           "record",
         );
         await writeProjectedOutput(options.write, projected.output);
@@ -646,9 +756,9 @@ async function executeStreamResult<Contract extends CliContract>(
       active = false;
       const projected = projectApplicationFact(
         compiled,
+        outputMode,
         step.value,
         issuedOutcomeFacts,
-        outputFormat,
         "terminal",
       );
       await writeProjectedOutput(options.write, projected.output);
@@ -656,6 +766,7 @@ async function executeStreamResult<Contract extends CliContract>(
         kind: "applicationResult",
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令来自当前 Contract 的编译树，泛型身份在此恢复。
         command: compiled.id as CliContractRoot<Contract>,
+        outputMode: outputMode.id,
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 结果经该命令的结果模式验证并由本次执行签发。
         result: projected.result as CliContractResult<Contract>,
         exitCode: projected.exitCode,
@@ -688,9 +799,9 @@ type ProjectedApplicationFact = Readonly<{
 
 function projectApplicationFact(
   compiled: CompiledExecutable,
+  outputMode: CompiledOutputMode,
   value: unknown,
   issuedOutcomeFacts: WeakSet<object>,
-  outputFormat: "structured" | "text",
   phase: "atomic" | "record" | "terminal",
 ): ProjectedApplicationFact {
   if (!isIssuedOutcomeFact(value, issuedOutcomeFacts)) {
@@ -698,7 +809,10 @@ function projectApplicationFact(
   }
   const result = value;
   if (phase === "record") {
-    if (result.kind !== "record" || compiled.success.kind !== "stream") {
+    if (
+      result.kind !== "record" ||
+      outputMode.resultContract.success.kind !== "stream"
+    ) {
       throwExecutionIssue({
         code: "outcomeKindMismatch",
         command: compiled.id,
@@ -706,7 +820,7 @@ function projectApplicationFact(
         received: result.kind,
       });
     }
-    const record = compiled.success.records[result.variant];
+    const record = outputMode.resultContract.success.records[result.variant];
     if (record === undefined) {
       throwExecutionIssue({
         code: "undeclaredOutcomeVariant",
@@ -721,13 +835,13 @@ function projectApplicationFact(
       variant: result.variant,
     });
     const chunk =
-      outputFormat === "structured"
+      outputMode.format === "structured"
         ? `${JSON.stringify(createStreamRecordEnvelope(result.variant, data))}\n`
         : encodeRecordText(presentStreamRecordText(record.text, data));
     return { result, output: { destination: "stdout", chunk }, exitCode: 0 };
   }
   if (phase === "terminal" && result.kind === "streamSuccess") {
-    if (compiled.success.kind !== "stream") {
+    if (outputMode.resultContract.success.kind !== "stream") {
       throwExecutionIssue({
         code: "outcomeKindMismatch",
         command: compiled.id,
@@ -736,10 +850,10 @@ function projectApplicationFact(
       });
     }
     let chunk: string | undefined;
-    if (outputFormat === "structured")
+    if (outputMode.format === "structured")
       chunk = `${JSON.stringify(createStreamSuccessEnvelope())}\n`;
     else {
-      const presenter = compiled.success.text;
+      const presenter = outputMode.resultContract.success.text;
       if (typeof presenter !== "function")
         throw new ContractExecutionError([{ code: "invalidCliContract" }]);
       chunk = encodeTerminalText(presenter());
@@ -760,7 +874,7 @@ function projectApplicationFact(
     });
   }
   if (result.kind === "failure") {
-    const failure = compiled.failures[result.variant];
+    const failure = outputMode.resultContract.failures[result.variant];
     if (failure === undefined) {
       throwExecutionIssue({
         code: "undeclaredOutcomeVariant",
@@ -780,7 +894,7 @@ function projectApplicationFact(
       data,
       issuedOutcomeFacts,
     );
-    if (outputFormat === "text") {
+    if (outputMode.format === "text") {
       const presenter = failure.text;
       if (typeof presenter !== "function") {
         throw new ContractExecutionError([{ code: "invalidCliContract" }]);
@@ -798,12 +912,12 @@ function projectApplicationFact(
       result: normalized,
       output: {
         destination: "stderr",
-        chunk: `${JSON.stringify(createFailureEnvelope(compiled.id, result.variant, data))}\n`,
+        chunk: `${JSON.stringify(createFailureEnvelope(compiled.id, outputMode.id, result.variant, data))}\n`,
       },
       exitCode: failure.exitCode,
     };
   }
-  if (compiled.success.kind === "completion") {
+  if (outputMode.resultContract.success.kind === "completion") {
     if (result.kind !== "completion") {
       throwExecutionIssue({
         code: "outcomeKindMismatch",
@@ -812,8 +926,8 @@ function projectApplicationFact(
         received: result.kind,
       });
     }
-    if (outputFormat === "text") {
-      const presenter = compiled.success.text;
+    if (outputMode.format === "text") {
+      const presenter = outputMode.resultContract.success.text;
       if (typeof presenter !== "function") {
         throw new ContractExecutionError([{ code: "invalidCliContract" }]);
       }
@@ -829,12 +943,15 @@ function projectApplicationFact(
       result,
       output: {
         destination: "stdout",
-        chunk: `${JSON.stringify(createCompletionEnvelope(compiled.id))}\n`,
+        chunk: `${JSON.stringify(createCompletionEnvelope(compiled.id, outputMode.id))}\n`,
       },
       exitCode: 0,
     };
   }
-  if (compiled.success.kind !== "data" || result.kind !== "data") {
+  if (
+    outputMode.resultContract.success.kind !== "data" ||
+    result.kind !== "data"
+  ) {
     throwExecutionIssue({
       code: "outcomeKindMismatch",
       command: compiled.id,
@@ -843,7 +960,7 @@ function projectApplicationFact(
     });
   }
 
-  const variant = compiled.success.variants[result.variant];
+  const variant = outputMode.resultContract.success.variants[result.variant];
   if (variant === undefined) {
     throwExecutionIssue({
       code: "undeclaredOutcomeVariant",
@@ -863,7 +980,7 @@ function projectApplicationFact(
     data,
     issuedOutcomeFacts,
   );
-  if (outputFormat === "text") {
+  if (outputMode.format === "text") {
     const presenter = variant.text;
     if (typeof presenter !== "function") {
       throw new ContractExecutionError([{ code: "invalidCliContract" }]);
@@ -881,7 +998,7 @@ function projectApplicationFact(
     result: normalized,
     output: {
       destination: "stdout",
-      chunk: `${JSON.stringify(createDataEnvelope(compiled.id, result.variant, data))}\n`,
+      chunk: `${JSON.stringify(createDataEnvelope(compiled.id, outputMode.id, result.variant, data))}\n`,
     },
     exitCode: variant.exitCode,
   };
@@ -900,7 +1017,7 @@ function projectAtomicData(
   value: unknown,
   target: Exclude<ExecutionSchemaTarget, { readonly location: "input" }>,
 ): JsonValue {
-  const validation = validateSynchronously(schema, value, target);
+  const validation = validateContractSchemaSynchronously(schema, value, target);
   if (validation.issues !== undefined) {
     throwExecutionIssue({
       code: "outputSchemaRejected",
@@ -921,123 +1038,6 @@ function projectAtomicData(
   }
 }
 
-function validateSynchronously(
-  schema: ContractSchema,
-  value: unknown,
-  target: ExecutionSchemaTarget,
-): StandardSchemaV1.Result<unknown> {
-  const result = schema["~standard"].validate(value);
-  if (isPromise(result)) {
-    throwExecutionIssue({
-      code: "asynchronousSchemaValidation",
-      ...target,
-      expected: "synchronousStandardResult",
-      received: "promise",
-    });
-  }
-  if (!isStandardResult(result)) {
-    throwExecutionIssue({
-      code: "invalidStandardResult",
-      ...target,
-      expected: "standardResult",
-      received: describeValueKind(result),
-    });
-  }
-  return result;
-}
-
-function describeValueKind(
-  value: unknown,
-): Extract<
-  ContractExecutionIssue,
-  { readonly code: "invalidStandardResult" }
->["received"] {
-  if (value === null) return "null";
-  if (Array.isArray(value)) return "array";
-  return typeof value;
-}
-
 function throwExecutionIssue(issue: ContractExecutionIssue): never {
   throw new ContractExecutionError([issue]);
-}
-
-function isStandardResult(
-  value: unknown,
-): value is StandardSchemaV1.Result<unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-  if (!("issues" in value) || value.issues === undefined) {
-    return "value" in value;
-  }
-  return Array.isArray(value.issues) && value.issues.every(isStandardIssue);
-}
-
-function isStandardIssue(value: unknown): value is StandardSchemaV1.Issue {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !("message" in value) ||
-    typeof value.message !== "string"
-  ) {
-    return false;
-  }
-  if (!("path" in value) || value.path === undefined) {
-    return true;
-  }
-  return (
-    Array.isArray(value.path) &&
-    value.path.every((segment) => {
-      const key =
-        typeof segment === "object" && segment !== null && "key" in segment
-          ? segment.key
-          : segment;
-      return (
-        typeof key === "string" ||
-        typeof key === "number" ||
-        typeof key === "symbol"
-      );
-    })
-  );
-}
-
-function normalizeSchemaIssueEvidence(
-  issue: StandardSchemaV1.Issue,
-): SchemaIssueEvidence {
-  const path = normalizeSchemaPath(issue.path);
-  return Object.freeze(
-    path === undefined
-      ? { message: issue.message }
-      : { message: issue.message, path },
-  );
-}
-
-function normalizeSchemaPath(
-  path: StandardSchemaV1.Issue["path"],
-): readonly (number | string)[] | undefined {
-  if (path === undefined) {
-    return undefined;
-  }
-  const normalized: Array<number | string> = [];
-  for (const segment of path) {
-    const key =
-      typeof segment === "object" && segment !== null ? segment.key : segment;
-    if (
-      typeof key !== "string" &&
-      !(typeof key === "number" && Number.isFinite(key))
-    ) {
-      return undefined;
-    }
-    normalized.push(key);
-  }
-  return Object.freeze(normalized);
-}
-
-function isPromise<Value>(value: unknown): value is Promise<Value> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "then" in value &&
-    typeof value.then === "function"
-  );
 }

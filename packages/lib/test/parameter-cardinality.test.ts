@@ -5,18 +5,24 @@ import {
   ContractDefinitionError,
   defineCli,
   executeCli,
-  helpCapability,
-  outputCapability,
   parseCliInvocation,
   type CliContractRawInput,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
+import { englishHelpCapability } from "./english-help.ts";
+
 function createArchiveCli() {
+  const sharedInput0 = z.object({
+    source: z.string(),
+    files: z.array(z.string()).optional(),
+    tag: z.array(z.string()).optional(),
+    color: z.boolean().optional(),
+  });
   return defineCli()({
     root: "archiveFiles",
-    help: helpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability(),
+
     usageFailureExitCode: 64,
     commands: {
       archiveFiles: {
@@ -45,15 +51,24 @@ function createArchiveCli() {
             description: "彩色输出",
           },
         },
-        input: z.object({
-          source: z.string(),
-          files: z.array(z.string()).optional(),
-          tag: z.array(z.string()).optional(),
-          color: z.boolean().optional(),
-        }),
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        input: sharedInput0,
+
+        outputs: defineCli().outputModes(
+          "archiveFiles",
+          sharedInput0,
+          (mode) => ({
+            default: "structured",
+            modes: {
+              structured: mode.atomic({
+                description: "结构化输出",
+                format: "structured",
+                success: { kind: "completion" },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              }),
+            },
+          }),
+        ),
       },
     },
   });
@@ -93,26 +108,26 @@ void test("repeatable、variadic positional 与 negated flag 形成固定 raw �
         tag: ["first", "second"],
         color: false,
       },
-      outputFormat: "structured",
+      outputMode: "structured",
     },
   );
   assert.deepEqual(parseCliInvocation(cli, ["source.txt", "--color"]), {
     kind: "parsed",
     command: "archiveFiles",
     input: { source: "source.txt", color: true },
-    outputFormat: "structured",
+    outputMode: "structured",
   });
   assert.deepEqual(parseCliInvocation(cli, ["source.txt"]), {
     kind: "parsed",
     command: "archiveFiles",
     input: { source: "source.txt" },
-    outputFormat: "structured",
+    outputMode: "structured",
   });
   assert.deepEqual(parseCliInvocation(cli, ["source.txt", "--tag", "only"]), {
     kind: "parsed",
     command: "archiveFiles",
     input: { source: "source.txt", tag: ["only"] },
-    outputFormat: "structured",
+    outputMode: "structured",
   });
   assert.deepEqual(
     parseCliInvocation(cli, ["source.txt", "--", "--first", "-second"]),
@@ -120,7 +135,7 @@ void test("repeatable、variadic positional 与 negated flag 形成固定 raw �
       kind: "parsed",
       command: "archiveFiles",
       input: { source: "source.txt", files: ["--first", "-second"] },
-      outputFormat: "structured",
+      outputMode: "structured",
     },
   );
   assert.deepEqual(
@@ -129,7 +144,7 @@ void test("repeatable、variadic positional 与 negated flag 形成固定 raw �
       kind: "parsed",
       command: "archiveFiles",
       input: { source: "source.txt", tag: ["-leading", "plain"] },
-      outputFormat: "structured",
+      outputMode: "structured",
     },
   );
   assert.deepEqual(parseCliInvocation(cli, ["source.txt", "-t", "-leading"]), {
@@ -146,16 +161,22 @@ void test("repeatable、variadic positional 与 negated flag 形成固定 raw �
     usage: {
       command: "archiveFiles",
       synopsis:
-        "archive-files <source> [<files...>] [--tag <tag>]... [--color|--no-color]",
+        "archive-files [--output <mode>] <source> [<files...>] [--tag <tag>]... [--color|--no-color]",
     },
   });
 });
 
 function createDiagnosticCli() {
+  const sharedInput1 = z.object({
+    source: z.string(),
+    mode: z.string(),
+    force: z.boolean().optional(),
+    color: z.boolean().optional(),
+  });
   return defineCli()({
     root: "diagnose",
-    help: helpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability(),
+
     usageFailureExitCode: 64,
     commands: {
       diagnose: {
@@ -183,15 +204,20 @@ function createDiagnosticCli() {
             description: "彩色输出",
           },
         },
-        input: z.object({
-          source: z.string(),
-          mode: z.string(),
-          force: z.boolean().optional(),
-          color: z.boolean().optional(),
-        }),
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        input: sharedInput1,
+
+        outputs: defineCli().outputModes("diagnose", sharedInput1, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -201,7 +227,8 @@ void test("无歧义解析后按字段声明顺序聚合必填、重复与正负
   const cli = createDiagnosticCli();
   const usage = {
     command: "diagnose",
-    synopsis: "diagnose <source> --mode <mode> [--force] [--color|--no-color]",
+    synopsis:
+      "diagnose [--output <mode>] <source> --mode <mode> [--force] [--color|--no-color]",
   } as const;
 
   assert.deepEqual(
@@ -314,7 +341,7 @@ void test("cardinality 事实同源投影到 grammar、usage、help 与 manifest
   );
   assert.equal(
     cli.grammar.root.usage.synopsis,
-    "archive-files <source> [<files...>] [--tag <tag>]... [--color|--no-color]",
+    "archive-files [--output <mode>] <source> [<files...>] [--tag <tag>]... [--color|--no-color]",
   );
 
   const writes: string[] = [];
@@ -326,15 +353,22 @@ void test("cardinality 事实同源投影到 grammar、usage、help 与 manifest
     },
   });
   assert.deepEqual(writes, [
-    "归档文件\n\n  archive-files <source> [<files...>] [--tag <tag>]... [--color|--no-color]\n\n  <source>\n    源文件\n  [<files...>]\n    附加文件\n\n  [--tag, -t <tag>]...\n    归档标签\n  [--color, --no-color]\n    彩色输出\n  --help\n",
+    '归档文件\n\n  archive-files [--output <mode>] <source> [<files...>] [--tag <tag>]... [--color|--no-color]\n\n  <source>\n    源文件\n  [<files...>]\n    附加文件\n\n  [--tag, -t <tag>]...\n    归档标签\n  [--color, --no-color]\n    彩色输出\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured (atomic, structured)\n    结构化输出\n',
   ]);
 });
 
 void test("defineCli 拒绝 variadic 后续 positional 与非法或冲突 negated spelling", () => {
+  const sharedInput2 = z.object({
+    files: z.array(z.string()).optional(),
+    after: z.string().optional(),
+    color: z.boolean().optional(),
+    quiet: z.boolean().optional(),
+    verbose: z.boolean().optional(),
+  });
   const definition = {
     root: "invalidCardinality",
-    help: helpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability(),
+
     usageFailureExitCode: 64,
     commands: {
       invalidCardinality: {
@@ -362,16 +396,24 @@ void test("defineCli 拒绝 variadic 后续 positional 与非法或冲突 negate
             description: "详细",
           },
         },
-        input: z.object({
-          files: z.array(z.string()).optional(),
-          after: z.string().optional(),
-          color: z.boolean().optional(),
-          quiet: z.boolean().optional(),
-          verbose: z.boolean().optional(),
-        }),
-        success: { kind: "completion" },
-        failures: {},
-        handler: () => undefined,
+        input: sharedInput2,
+
+        outputs: defineCli().outputModes(
+          "invalidCardinality",
+          sharedInput2,
+          (mode) => ({
+            default: "structured",
+            modes: {
+              structured: mode.atomic({
+                description: "结构化输出",
+                format: "structured",
+                success: { kind: "completion" },
+                failures: {},
+                handler: () => undefined as never,
+              }),
+            },
+          }),
+        ),
       },
     },
   };

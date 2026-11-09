@@ -1,19 +1,25 @@
 import type { JsonObject, JsonValue } from "#/contract-schema";
+import { embedSchemaResource } from "#/schema-resource";
 
-const schemaVersion = "2" as const;
+const schemaVersion = "3" as const;
 
 export function createCompletionEnvelope<Command extends string>(
   command: Command,
+  outputMode: string,
 ) {
   return Object.freeze({
     schemaVersion,
     command,
+    outputMode,
     kind: "completion" as const,
   });
 }
 
-export function createCompletionWireSchema(command: string): JsonObject {
-  const envelope = createCompletionEnvelope(command);
+export function createCompletionWireSchema(
+  command: string,
+  outputMode: string,
+): JsonObject {
+  const envelope = createCompletionEnvelope(command, outputMode);
   return createEnvelopeSchema(envelope, {});
 }
 
@@ -21,25 +27,31 @@ export function createDataEnvelope<
   Command extends string,
   Variant extends string,
   Data,
->(command: Command, variant: Variant, data: Data) {
-  return createAtomicEnvelope(command, "data", variant, data);
+>(command: Command, outputMode: string, variant: Variant, data: Data) {
+  return createAtomicEnvelope(command, outputMode, "data", variant, data);
 }
 
 export function createDataWireSchema(
   command: string,
+  outputMode: string,
   variant: string,
   dataSchema: JsonObject,
 ): JsonObject {
-  const envelope = createDataEnvelope(command, variant, null);
-  return createEnvelopeSchema(envelope, { data: dataSchema });
+  const envelope = createDataEnvelope(command, outputMode, variant, null);
+  return createEnvelopeSchema(envelope, {
+    data: embedSchemaResource(
+      dataSchema,
+      `data:${command}:${outputMode}:${variant}`,
+    ),
+  });
 }
 
 export function createFailureEnvelope<
   Command extends string,
   Variant extends string,
   Data,
->(command: Command, variant: Variant, data: Data) {
-  return createAtomicEnvelope(command, "failure", variant, data);
+>(command: Command, outputMode: string, variant: Variant, data: Data) {
+  return createAtomicEnvelope(command, outputMode, "failure", variant, data);
 }
 
 function createAtomicEnvelope<
@@ -47,10 +59,17 @@ function createAtomicEnvelope<
   Kind extends "data" | "failure",
   Variant extends string,
   Data,
->(command: Command, kind: Kind, variant: Variant, data: Data) {
+>(
+  command: Command,
+  outputMode: string,
+  kind: Kind,
+  variant: Variant,
+  data: Data,
+) {
   return Object.freeze({
     schemaVersion,
     command,
+    outputMode,
     kind,
     variant,
     data,
@@ -59,17 +78,29 @@ function createAtomicEnvelope<
 
 export function createFailureWireSchema(
   command: string,
+  outputMode: string,
   variant: string,
   dataSchema: JsonObject,
 ): JsonObject {
-  const envelope = createFailureEnvelope(command, variant, null);
-  return createEnvelopeSchema(envelope, { data: dataSchema });
+  const envelope = createFailureEnvelope(command, outputMode, variant, null);
+  return createEnvelopeSchema(envelope, {
+    data: embedSchemaResource(
+      dataSchema,
+      `failure:${command}:${outputMode}:${variant}`,
+    ),
+  });
 }
 
 export function createStreamHeaderEnvelope<Command extends string>(
   command: Command,
+  outputMode: string,
 ) {
-  return Object.freeze({ schemaVersion, command, kind: "stream" as const });
+  return Object.freeze({
+    schemaVersion,
+    command,
+    outputMode,
+    kind: "stream" as const,
+  });
 }
 
 export function createStreamRecordEnvelope<Variant extends string, Data>(
@@ -83,16 +114,27 @@ export function createStreamSuccessEnvelope() {
   return Object.freeze({ kind: "streamSuccess" as const });
 }
 
-export function createStreamHeaderWireSchema(command: string): JsonObject {
-  return createEnvelopeSchema(createStreamHeaderEnvelope(command), {});
+export function createStreamHeaderWireSchema(
+  command: string,
+  outputMode: string,
+): JsonObject {
+  return createEnvelopeSchema(
+    createStreamHeaderEnvelope(command, outputMode),
+    {},
+  );
 }
 
 export function createStreamRecordWireSchema(
+  command: string,
+  outputMode: string,
   variant: string,
   dataSchema: JsonObject,
 ): JsonObject {
   return createEnvelopeSchema(createStreamRecordEnvelope(variant, null), {
-    data: dataSchema,
+    data: embedSchemaResource(
+      dataSchema,
+      `record:${command}:${outputMode}:${variant}`,
+    ),
   });
 }
 
@@ -213,11 +255,11 @@ function usageIssueSchemas(): JsonObject[] {
   };
   const outputOccurrence = objectSchema(
     {
-      format: { enum: ["structured", "text"] },
+      mode: string,
       option: string,
       position,
     },
-    ["position", "option", "format"],
+    ["position", "option", "mode"],
   );
 
   return [
@@ -226,7 +268,7 @@ function usageIssueSchemas(): JsonObject[] {
       negativeOccurrences: occurrences(1),
       positiveOccurrences: occurrences(1),
     }),
-    issueSchema("conflictingOutputFormat", {
+    issueSchema("conflictingOutputMode", {
       occurrences: { items: outputOccurrence, minItems: 2, type: "array" },
     }),
     {
@@ -277,10 +319,24 @@ function usageIssueSchemas(): JsonObject[] {
       position,
       value: string,
     }),
-    issueSchema("invalidOutputFormat", {
+    issueSchema("invalidOutputMode", {
+      available: { items: string, minItems: 1, type: "array" },
       option: string,
       position,
       received: { oneOf: [string, { type: "null" }] },
+    }),
+    issueSchema("invalidSchemaQuery", {
+      option: { const: "--schema" },
+      position,
+      reason: {
+        enum: [
+          "invalidSyntax",
+          "unknownPart",
+          "unknownOutputMode",
+          "unsupportedPart",
+        ],
+      },
+      target: { oneOf: [string, { type: "null" }] },
     }),
     issueSchema("missingOptionValue", {
       field: string,

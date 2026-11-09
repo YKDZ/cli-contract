@@ -15,22 +15,25 @@
     }
   },
   "scripts": {
+    "authoring:fixture:example": "cat src/index.ts",
     "build": "tsc -p tsconfig.build.json --pretty false",
-    "format:check": "oxfmt --list-different --config ../../oxfmt.config.ts .",
-    "format:write": "oxfmt --write --config ../../oxfmt.config.ts .",
-    "lint": "oxlint --quiet --format=unix --config ../../oxlint.config.ts --ignore-pattern node_modules .",
-    "lint:fix": "oxlint --format=unix --config ../../oxlint.config.ts . --fix",
+    "format:check": "oxfmt --list-different .",
+    "format:write": "oxfmt --write .",
+    "lint": "oxlint --quiet --format=unix --ignore-pattern node_modules .",
+    "lint:fix": "oxlint --format=unix . --fix",
+    "release:verify": "node --conditions=source scripts/verify-consumer.ts",
     "start": "node src/main.ts",
     "test": "node --test test/*.test.ts",
     "test:e2e": "node --test test/*.e2e.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
+    "verify:published": "node --conditions=source scripts/verify-consumer.ts --published"
   },
   "dependencies": {
     "@ykdz/cli-contract": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@cli-contract/typescript-config": "workspace:*",
+    "@cli-contract/tooling-config": "workspace:*",
     "@types/node": "catalog:",
     "@ykdz/cli-contract-testing": "workspace:*",
     "oxfmt": "catalog:",
@@ -39,6 +42,6 @@
     "typescript-7": "catalog:"
   },
   "engines": {
-    "node": "24"
+    "node": "^26.13.0"
   }
 }
