@@ -2,6 +2,79 @@
   "extends": ["//"],
   "tags": ["contract-example"],
   "tasks": {
-    "typecheck": { "dependsOn": ["^build"] }
+    "authoring:fixture:example": {
+      "inputs": [],
+      "outputs": [],
+      "cache": false,
+      "tags": ["work:on-demand"]
+    },
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": [],
+      "outputs": ["dist/**"],
+      "cache": false,
+      "tags": ["work:preparation"]
+    },
+    "format:check": {
+      "inputs": [],
+      "outputs": [],
+      "tags": ["quality:light"]
+    },
+    "format:write": {
+      "dependsOn": ["lint:fix"],
+      "inputs": [],
+      "outputs": [],
+      "cache": false,
+      "tags": ["work:repair"]
+    },
+    "lint": {
+      "dependsOn": [],
+      "inputs": [],
+      "outputs": [],
+      "tags": ["quality:light"]
+    },
+    "lint:fix": {
+      "inputs": [],
+      "outputs": [],
+      "cache": false,
+      "tags": ["work:repair"]
+    },
+    "release:verify": {
+      "inputs": [],
+      "outputs": [],
+      "cache": false,
+      "tags": ["work:release"]
+    },
+    "start": {
+      "inputs": [],
+      "outputs": [],
+      "cache": false,
+      "tags": ["work:development"]
+    },
+    "test": {
+      "dependsOn": ["build"],
+      "inputs": [],
+      "outputs": [],
+      "tags": ["quality:light"]
+    },
+    "test:e2e": {
+      "dependsOn": ["build"],
+      "inputs": [],
+      "outputs": [],
+      "cache": false,
+      "tags": ["quality:heavy"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "inputs": [],
+      "outputs": [],
+      "tags": ["quality:light"]
+    },
+    "verify:published": {
+      "inputs": [],
+      "outputs": [],
+      "cache": false,
+      "tags": ["work:on-demand"]
+    }
   }
 }

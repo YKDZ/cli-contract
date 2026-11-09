@@ -5,7 +5,6 @@ import {
   ContractDefinitionError,
   defineCli,
   executeCli,
-  outputCapability,
   parseCliInvocation,
   text,
 } from "@ykdz/cli-contract";
@@ -15,10 +14,12 @@ import { englishHelpCapability } from "./english-help.ts";
 
 function createWorkspaceCli() {
   const define = defineCli();
+  const sharedInput1 = z.object({});
+  const sharedInput0 = z.object({ name: z.string() });
   return define({
     root: "workspace",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       workspace: {
@@ -44,25 +45,45 @@ function createWorkspaceCli() {
         fields: {
           name: { kind: "positional", description: "包名" },
         },
-        input: z.object({ name: z.string() }),
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ input, outcome }) => {
-          input satisfies { name: string };
-          // @ts-expect-error completion 命令不暴露 data 构造器。
-          void outcome.data;
-          return outcome.completion();
-        },
+        input: sharedInput0,
+
+        outputs: define.outputModes("addPackage", sharedInput0, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ input, outcome }) => {
+                input satisfies { name: string };
+                // @ts-expect-error completion 命令不暴露 data 构造器。
+                void outcome.data;
+                return outcome.completion();
+              },
+            }),
+          },
+        })),
       }),
       ...define.command("listPackages")({
         kind: "command",
         parent: "package",
         name: "list",
         description: "列出包",
-        input: z.object({}),
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        input: sharedInput1,
+
+        outputs: define.outputModes("listPackages", sharedInput1, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       }),
     },
   });
@@ -75,13 +96,13 @@ void test("命令路径通过可见名称或 alias 选择叶命令", () => {
     kind: "parsed",
     command: "addPackage",
     input: { name: "core" },
-    outputFormat: "structured",
+    outputMode: "structured",
   });
   assert.deepEqual(parseCliInvocation(cli, ["pkg", "a", "core"]), {
     kind: "parsed",
     command: "addPackage",
     input: { name: "core" },
-    outputFormat: "structured",
+    outputMode: "structured",
   });
 });
 
@@ -187,7 +208,7 @@ void test("defineCli 聚合拒绝无效 parent、环与同级 spelling 冲突", 
   const definition = {
     root: "workspace",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       workspace: { kind: "rootGroup", name: "workspace", description: "根" },
@@ -248,7 +269,7 @@ void test("defineCli 聚合拒绝无效 parent、环与同级 spelling 冲突", 
       defineCli()({
         root: "invalidRoot",
         help: englishHelpCapability(),
-        output: outputCapability({ defaultFormat: "structured" }),
+
         usageFailureExitCode: 64,
         commands: {
           invalidRoot: {
@@ -256,7 +277,7 @@ void test("defineCli 聚合拒绝无效 parent、环与同级 spelling 冲突", 
             parent: "missing",
             name: "invalid-root",
             description: "非法根",
-            handler: () => undefined,
+            handler: () => undefined as never,
           },
           child: {
             kind: "commandGroup",

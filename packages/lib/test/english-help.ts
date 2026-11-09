@@ -1,4 +1,8 @@
-import { helpCapability } from "@ykdz/cli-contract";
+import {
+  helpCapability,
+  type HelpCapabilityDefinition,
+  type HelpFactWording,
+} from "@ykdz/cli-contract";
 
 export const englishHelpWording = {
   commandPlaceholder: "command",
@@ -19,6 +23,18 @@ export const englishHelpWording = {
   countBetween: "{fields} between {min} and {max}",
 } as const;
 
-export function englishHelpCapability() {
-  return helpCapability({ wording: englishHelpWording });
+type EnglishHelpCapabilityDefinition = Omit<
+  HelpCapabilityDefinition,
+  "wording"
+> & {
+  readonly wording?: Partial<HelpFactWording>;
+};
+
+export function englishHelpCapability(
+  definition: EnglishHelpCapabilityDefinition = {},
+) {
+  return helpCapability({
+    ...definition,
+    wording: { ...englishHelpWording, ...definition.wording },
+  });
 }

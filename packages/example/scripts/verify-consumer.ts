@@ -1,14 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { cp, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   installedRuntimeDevDependencies,
-  repositoryRoot,
   runCommand,
-  verifyInstalledRuntime,
   withInstalledConsumer,
-} from "./installed-consumer.ts";
+} from "@cli-contract/tooling-config/release-consumer";
+import coreMetadata from "@ykdz/cli-contract/package.json" with { type: "json" };
 
 interface Manifest {
   name: string;
@@ -19,56 +19,29 @@ interface Manifest {
   devDependencies?: Record<string, string>;
 }
 
-export interface CandidateTarballs {
+export interface PackedTarballs {
   readonly coreTarball: string;
   readonly testingTarball: string;
 }
 
-const exampleRoot = resolve(repositoryRoot, "packages/example");
-const configPackage = "@cli-contract/typescript-config";
+const exampleRoot = resolve(import.meta.dirname, "..");
+const configPackage = "@cli-contract/tooling-config";
+const corePackage = "@ykdz/cli-contract";
+const testingPackage = "@ykdz/cli-contract-testing";
 
 export async function verifyExample(
-  candidate?: CandidateTarballs,
+  packed?: PackedTarballs,
   argv?: readonly string[],
 ): Promise<void> {
   const example = await manifestAt(exampleRoot);
   if (!example.scripts) throw new TypeError("示例包缺少 scripts");
-  const core = await manifestAt(resolve(repositoryRoot, "packages/lib"));
-  const testing = await manifestAt(resolve(repositoryRoot, "packages/testing"));
-  if (!core.version || core.version !== testing.version)
-    throw new Error("公共包版本必须一致");
-  if (!candidate) {
-    const tag = runCommand("git", [
-      "describe",
-      "--exact-match",
-      "--tags",
-      "HEAD",
-    ]).trim();
-    if (tag !== `v${core.version}`)
-      throw new Error("请在对应发布 tag 上运行 npm 示例");
-    const modified = runCommand("git", [
-      "status",
-      "--porcelain",
-      "--",
-      "packages/example",
-      "packages/lib/package.json",
-      "packages/testing/package.json",
-      "packages/typescript-config",
-      "pnpm-lock.yaml",
-      "scripts/verify-example.ts",
-      "scripts/installed-consumer.ts",
-      "scripts/fixtures/installed-runtime.ts",
-    ]);
-    if (modified.trim())
-      throw new Error(
-        "发布版本体验要求示例及其依赖配置与 tag 一致；请先保存或撤回相关修改",
-      );
-  }
+  const coreVersion = coreMetadata.version;
+  if (typeof coreVersion !== "string")
+    throw new Error("公共 core 包元数据缺少版本");
+  if (packed === undefined) verifyPublishedSource(coreVersion);
   const replacements: Record<string, string> = {
-    [core.name]: candidate ? `file:${candidate.coreTarball}` : core.version,
-    [testing.name]: candidate
-      ? `file:${candidate.testingTarball}`
-      : core.version,
+    [corePackage]: packed ? `file:${packed.coreTarball}` : coreVersion,
+    [testingPackage]: packed ? `file:${packed.testingTarball}` : coreVersion,
   };
   const manifest = {
     ...example,
@@ -87,30 +60,42 @@ export async function verifyExample(
         recursive: true,
       });
     }
-    // 展平共享配置，让临时项目保持相同严格性，同时脱离 workspace。
+    // 展平 Node 配置，让临时项目与 workspace 使用相同编译选项。
     const config = JSON.parse(
       await readFile(resolve(exampleRoot, "tsconfig.json"), "utf8"),
     );
-    const base = JSON.parse(
+    const baseConfig = JSON.parse(
       await readFile(
-        resolve(exampleRoot, "node_modules", configPackage, "base.json"),
+        fileURLToPath(import.meta.resolve(`${configPackage}/base.json`)),
         "utf8",
       ),
     );
+    const nodeConfig = JSON.parse(
+      await readFile(
+        fileURLToPath(import.meta.resolve(`${configPackage}/node.json`)),
+        "utf8",
+      ),
+    );
+    const { extends: _baseExtends, ...base } = baseConfig;
+    const { extends: _nodeExtends, ...node } = nodeConfig;
     const { extends: _extends, ...local } = config;
     await writeFile(
       resolve(project, "tsconfig.json"),
       JSON.stringify({
         ...base,
+        ...node,
         ...local,
-        compilerOptions: { ...base.compilerOptions, ...local.compilerOptions },
+        compilerOptions: {
+          ...base.compilerOptions,
+          ...node.compilerOptions,
+          ...local.compilerOptions,
+        },
       }),
     );
     await cp(
       resolve(exampleRoot, "tsconfig.build.json"),
       resolve(project, "tsconfig.build.json"),
     );
-    await verifyInstalledRuntime(project);
     for (const task of ["typecheck", "build", "test", "test:e2e"]) {
       process.stderr.write(
         runCommand("npm", ["run", "--silent", task], project),
@@ -122,9 +107,39 @@ export async function verifyExample(
         stdio: "inherit",
       });
       if (result.error) throw result.error;
-      process.exitCode = result.status ?? 1;
+      if (result.status !== 0)
+        throw new Error(`示例进程以状态 ${result.status ?? "unknown"} 退出`);
     }
   });
+}
+
+function verifyPublishedSource(version: string): void {
+  const modifiedExample = runCommand(
+    "git",
+    ["status", "--porcelain", "--untracked-files=all", "--", "."],
+    exampleRoot,
+  );
+  if (modifiedExample.trim().length > 0) {
+    throw new Error(
+      "发布后示例验收要求示例包与发布源码一致；请从对应 Changesets 原生包 tag 的干净工作区运行",
+    );
+  }
+
+  const tagsAtHead = new Set(
+    runCommand("git", ["tag", "--points-at", "HEAD"], exampleRoot)
+      .split("\n")
+      .filter((tag) => tag.length > 0),
+  );
+  const requiredTags = [
+    `${corePackage}@${version}`,
+    `${testingPackage}@${version}`,
+  ];
+  const missingTags = requiredTags.filter((tag) => !tagsAtHead.has(tag));
+  if (missingTags.length > 0) {
+    throw new Error(
+      `发布后示例验收要求 HEAD 位于对应 Changesets 原生包 tag：${missingTags.join("、")}`,
+    );
+  }
 }
 
 async function manifestAt(directory: string): Promise<Manifest> {
@@ -196,10 +211,12 @@ async function installedDependencies(
 }
 
 if (import.meta.main) {
-  const args = process.argv
-    .slice(2)
-    .filter((arg, index) => !(index === 0 && arg === "--"));
-  const candidate =
+  const rawArgs = process.argv.slice(2);
+  const values = rawArgs[0] === "--" ? rawArgs.slice(1) : rawArgs;
+  const separator = values.indexOf("--");
+  const args = separator === -1 ? values : values.slice(0, separator);
+  const cliArgs = separator === -1 ? [] : values.slice(separator + 1);
+  const packed =
     args.length === 4 &&
     args[0] === "--core" &&
     args[2] === "--testing" &&
@@ -208,10 +225,9 @@ if (import.meta.main) {
       ? { coreTarball: resolve(args[1]), testingTarball: resolve(args[3]) }
       : undefined;
   const published = args[0] === "--published";
-  if (!candidate && !published)
+  if ((!packed && !published) || (published && args.length !== 1))
     throw new Error(
-      "用法：verify-example --core <tgz> --testing <tgz> 或 --published [CLI 参数]",
+      "用法：release:verify --core <tgz> --testing <tgz> 或 verify:published [CLI 参数]",
     );
-  const cliArgs = args[1] === "--" ? args.slice(2) : args.slice(1);
-  await verifyExample(candidate, published ? cliArgs : undefined);
+  await verifyExample(packed, published ? cliArgs : undefined);
 }

@@ -1,0 +1,43 @@
+name: Changesets 版本 PR
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: 生成版本 PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: 检出主分支
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: 读取 Node 版本
+        id: node-runtime
+        run: echo "runtime=node@$(jq -er '.engines.node' package.json)" >> "$GITHUB_OUTPUT"
+      - name: 安装 pnpm 与 Node.js
+        uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
+        with:
+          runtime: ${{ steps.node-runtime.outputs.runtime }}
+          install: false
+          cache: true
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+      - name: 计算版本并生成版本 PR
+        uses: changesets/action/version@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: pnpm exec changeset version
+          pr-base-branch: main

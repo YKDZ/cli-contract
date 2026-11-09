@@ -6,18 +6,18 @@ import {
   defineCli,
   executeCli,
   helpCapability,
-  outputCapability,
   parseCliInvocation,
   text,
   versionCapability,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
-import { englishHelpWording } from "./english-help.ts";
+import { englishHelpCapability, englishHelpWording } from "./english-help.ts";
 
 function createAliasedHierarchy(onRun: () => void = () => undefined) {
   const define = defineCli();
   const supplement = text.lines(["先完成准备。", "", "随后执行任务。"]);
+  const sharedInput0 = z.object({});
   const cli = define({
     root: "workspace",
     help: helpCapability({
@@ -32,7 +32,7 @@ function createAliasedHierarchy(onRun: () => void = () => undefined) {
         supplement: "补充",
       },
     }),
-    output: outputCapability({ defaultFormat: "structured", text: true }),
+
     usageFailureExitCode: 64,
     commands: {
       workspace: {
@@ -52,13 +52,23 @@ function createAliasedHierarchy(onRun: () => void = () => undefined) {
         parent: "tasks",
         name: "run",
         description: "运行任务",
-        input: z.object({}),
-        success: { kind: "completion", text: () => text.silent },
-        failures: {},
-        handler: ({ outcome }) => {
-          onRun();
-          return outcome.completion();
-        },
+        input: sharedInput0,
+
+        outputs: define.outputModes("runTask", sharedInput0, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => {
+                onRun();
+                return outcome.completion();
+              },
+            }),
+          },
+        })),
       }),
     },
   });
@@ -127,8 +137,8 @@ void test("根级 -h 配置机械投影到 controls、各节点 parser 与完整
     invocation: parseCliInvocation(cli, [
       "task",
       "run",
-      "--output-format",
-      "text",
+      "--output",
+      "structured",
       "-h",
       "ignored",
     ]),
@@ -142,7 +152,7 @@ void test("根级 -h 配置机械投影到 controls、各节点 parser 与完整
     {
       destination: "stdout",
       chunk:
-        '运行任务\n\n用法\n  workspace task run\n\n选项\n  --help, -h\n  --output-format <structured|text> (choices: "structured", "text") (default: "structured")\n',
+        '运行任务\n\n用法\n  workspace task run [--output <mode>]\n\n选项\n  --help, -h\n  --output <mode> (choices: "structured") (default: "structured")\n  structured (atomic, structured)\n    结构化输出\n',
     },
   ]);
   assert.deepEqual(termination, {
@@ -165,7 +175,7 @@ void test("根级 -h 配置机械投影到 controls、各节点 parser 与完整
     {
       destination: "stdout",
       chunk:
-        '任务\n\n用法\n  workspace task <command>\n\n命令\n  run\n    运行任务\n\n选项\n  --help, -h\n  --output-format <structured|text> (choices: "structured", "text") (default: "structured")\n',
+        "任务\n\n用法\n  workspace task <command>\n\n命令\n  run\n    运行任务\n\n选项\n  --help, -h\n",
     },
   ]);
   assert.deepEqual(groupTermination, {
@@ -183,15 +193,16 @@ void test("根级 -h 配置机械投影到 controls、各节点 parser 与完整
     },
   });
   assert.deepEqual(rootWrites, [
-    '工作区\n\n用法\n  workspace <command>\n\n命令\n  task <command>\n    任务\n\n选项\n  --help, -h\n  --output-format <structured|text> (choices: "structured", "text") (default: "structured")\n\n补充\n  先完成准备。\n\n  随后执行任务。\n',
+    "工作区\n\n用法\n  workspace <command>\n\n命令\n  task <command>\n    任务\n\n选项\n  --help, -h\n\n补充\n  先完成准备。\n\n  随后执行任务。\n",
   ]);
 });
 
 void test("未启用短别名时 -h 保留给字段且帮助不注入补充", () => {
+  const sharedInput1 = z.object({ help: z.boolean().optional() });
   const cli = defineCli()({
     root: "quiet",
-    help: helpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability(),
+
     usageFailureExitCode: 64,
     commands: {
       quiet: {
@@ -206,40 +217,66 @@ void test("未启用短别名时 -h 保留给字段且帮助不注入补充", ()
             description: "应用字段",
           },
         },
-        input: z.object({ help: z.boolean().optional() }),
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        input: sharedInput1,
+
+        outputs: defineCli().outputModes("quiet", sharedInput1, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
 
-  assert.deepEqual(cli.grammar.controls.help, { longOption: "--help" });
+  assert.equal(cli.grammar.controls.help.longOption, "--help");
+  assert.equal(cli.grammar.controls.help.shortAlias, undefined);
+  assert.equal(
+    cli.grammar.controls.help.wording?.choices,
+    englishHelpWording.choices,
+  );
   assert.equal(cli.grammar.root.helpSupplement, undefined);
   assert.equal(cli.manifest.commands.quiet.helpSupplement, undefined);
   assert.deepEqual(parseCliInvocation(cli, ["-h"]), {
     kind: "parsed",
     command: "quiet",
     input: { help: true },
-    outputFormat: "structured",
+    outputMode: "structured",
   });
 });
 
 void test("缺席标题只省略标题行，空段落不注入默认文案", async () => {
+  const sharedInput2 = z.object({});
   const cli = defineCli()({
     root: "minimal",
-    help: helpCapability({ headings: { usage: "用法" } }),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability({ headings: { usage: "用法" } }),
+
     usageFailureExitCode: 64,
     commands: {
       minimal: {
         kind: "rootCommand",
         name: "minimal",
         description: "最小命令",
-        input: z.object({}),
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        input: sharedInput2,
+
+        outputs: defineCli().outputModes("minimal", sharedInput2, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -251,7 +288,9 @@ void test("缺席标题只省略标题行，空段落不注入默认文案", asy
       writes.push(chunk);
     },
   });
-  assert.deepEqual(writes, ["最小命令\n\n用法\n  minimal\n\n  --help\n"]);
+  assert.deepEqual(writes, [
+    '最小命令\n\n用法\n  minimal [--output <mode>]\n\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured (atomic, structured)\n    结构化输出\n',
+  ]);
   assert.doesNotMatch(
     writes.join(""),
     /^(?:命令|参数|选项|约束|补充|显示帮助)$/m,
@@ -273,6 +312,7 @@ void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补
   }
 
   const define = defineCli();
+  const sharedInput3 = z.object({ help: z.boolean().optional() });
   assert.throws(
     () =>
       define({
@@ -281,7 +321,7 @@ void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补
           shortAlias: "-h",
           wording: englishHelpWording,
         }),
-        output: outputCapability({ defaultFormat: "structured" }),
+
         usageFailureExitCode: 64,
         commands: {
           workspace: {
@@ -308,10 +348,24 @@ void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补
                 description: "帮助",
               },
             },
-            input: z.object({ help: z.boolean().optional() }),
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
+            input: sharedInput3,
+
+            outputs: define.outputModes(
+              "listPackages",
+              sharedInput3,
+              (mode) => ({
+                default: "structured",
+                modes: {
+                  structured: mode.atomic({
+                    description: "结构化输出",
+                    format: "structured",
+                    success: { kind: "completion" },
+                    failures: {},
+                    handler: ({ outcome }) => outcome.completion(),
+                  }),
+                },
+              }),
+            ),
           }),
         },
       }),
@@ -330,6 +384,12 @@ void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补
     },
   );
 
+  const sharedInput0 = z.object({
+    help: z.boolean().optional(),
+    version: z.boolean().optional(),
+    format: z.boolean().optional(),
+    json: z.boolean().optional(),
+  });
   assert.throws(
     () =>
       defineCli()({
@@ -342,11 +402,7 @@ void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补
           value: text.line("1.0.0"),
           shortAlias: "-V",
         }),
-        output: outputCapability({
-          defaultFormat: "structured",
-          text: true,
-          compatibilityFlags: { "--json": "structured" },
-        }),
+
         usageFailureExitCode: 64,
         commands: {
           conflict: {
@@ -368,20 +424,40 @@ void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补
               },
               format: {
                 kind: "flag",
-                longOption: "--output-format",
+                longOption: "--output",
                 description: "格式",
               },
-              json: { kind: "flag", longOption: "--json", description: "JSON" },
+              json: {
+                kind: "flag",
+                longOption: "--json",
+                description: "JSON",
+              },
             },
-            input: z.object({
-              help: z.boolean().optional(),
-              version: z.boolean().optional(),
-              format: z.boolean().optional(),
-              json: z.boolean().optional(),
-            }),
-            success: { kind: "completion", text: () => text.silent },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
+            input: sharedInput0,
+
+            outputs: defineCli().outputModes(
+              "conflict",
+              sharedInput0,
+              (mode) => ({
+                default: "structured",
+                modes: {
+                  structured: mode.atomic({
+                    description: "结构化输出",
+                    format: "structured",
+                    success: { kind: "completion" },
+                    failures: {},
+                    handler: ({ outcome }) => outcome.completion(),
+                  }),
+                  text: mode.atomic({
+                    description: "文本输出",
+                    format: "text",
+                    success: { kind: "completion", text: () => text.silent },
+                    failures: {},
+                    handler: ({ outcome }) => outcome.completion(),
+                  }),
+                },
+              }),
+            ),
           },
         },
       }),
@@ -406,27 +482,21 @@ void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补
           code: "fieldOptionConflictsWithControl",
           command: "conflict",
           field: "format",
-          spelling: "--output-format",
-          control: "outputFormat",
-        },
-        {
-          code: "fieldOptionConflictsWithControl",
-          command: "conflict",
-          field: "json",
-          spelling: "--json",
-          control: "outputFormat",
+          spelling: "--output",
+          control: "outputMode",
         },
       ]);
       return true;
     },
   );
 
+  const sharedInput4 = z.object({});
   assert.throws(
     () =>
       defineCli()({
         root: "forged",
-        help: helpCapability(),
-        output: outputCapability({ defaultFormat: "structured" }),
+        help: englishHelpCapability(),
+
         usageFailureExitCode: 64,
         commands: {
           forged: {
@@ -435,10 +505,24 @@ void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补
             description: "伪造",
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证帮助配置拒绝。
             helpSupplement: { kind: "lines", lines: ["伪造"] } as never,
-            input: z.object({}),
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
+            input: sharedInput4,
+
+            outputs: defineCli().outputModes(
+              "forged",
+              sharedInput4,
+              (mode) => ({
+                default: "structured",
+                modes: {
+                  structured: mode.atomic({
+                    description: "结构化输出",
+                    format: "structured",
+                    success: { kind: "completion" },
+                    failures: {},
+                    handler: ({ outcome }) => outcome.completion(),
+                  }),
+                },
+              }),
+            ),
           },
         },
       }),

@@ -1,9 +1,5 @@
 import { toStandardJsonSchema } from "@valibot/to-json-schema";
-import {
-  defineCli,
-  helpCapability,
-  outputCapability,
-} from "@ykdz/cli-contract";
+import { defineCli, helpCapability } from "@ykdz/cli-contract";
 import * as v from "valibot";
 import { z } from "zod";
 
@@ -24,7 +20,7 @@ const zodInput = z.object({
 const zodCli = defineCli()({
   root: "zodSchemaInput",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     zodSchemaInput: {
@@ -59,29 +55,41 @@ const zodCli = defineCli()({
         },
       },
       input: zodInput,
-      success: { kind: "completion" },
-      failures: {},
-      handler({ input, outcome }) {
-        input.mode satisfies "safe" | "force";
-        input.tags satisfies ("red" | "green")[] | undefined;
-        input.readonlyTags satisfies readonly ("small" | "large")[] | undefined;
-        input.defaultMode satisfies "fast" | "slow";
-        input.limit satisfies number;
-        // @ts-expect-error enum Output 不得扩宽为任意字符串。
-        const invalidMode: "other" = input.mode;
-        // @ts-expect-error array enum Output 不得扩宽为任意元素。
-        const invalidTag: "other" = input.tags?.[0];
-        // @ts-expect-error readonly array Output 不得获得 mutable 方法。
-        input.readonlyTags?.push("small");
-        // @ts-expect-error default 的 Output 不得扩宽为任意字符串。
-        const invalidDefault: "other" = input.defaultMode;
-        // @ts-expect-error handler 使用 schema Output，不能回退成原始字符串。
-        input.limit satisfies string;
-        void invalidMode;
-        void invalidTag;
-        void invalidDefault;
-        return outcome.completion();
-      },
+
+      outputs: defineCli().outputModes("zodSchemaInput", zodInput, (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode.atomic({
+            description: "结构化输出",
+            format: "structured",
+            success: { kind: "completion" },
+            failures: {},
+            handler({ input, outcome }) {
+              input.mode satisfies "safe" | "force";
+              input.tags satisfies ("red" | "green")[] | undefined;
+              input.readonlyTags satisfies
+                | readonly ("small" | "large")[]
+                | undefined;
+              input.defaultMode satisfies "fast" | "slow";
+              input.limit satisfies number;
+              // @ts-expect-error enum Output 不得扩宽为任意字符串。
+              const invalidMode: "other" = input.mode;
+              // @ts-expect-error array enum Output 不得扩宽为任意元素。
+              const invalidTag: "other" = input.tags?.[0];
+              // @ts-expect-error readonly array Output 不得获得 mutable 方法。
+              input.readonlyTags?.push("small");
+              // @ts-expect-error default 的 Output 不得扩宽为任意字符串。
+              const invalidDefault: "other" = input.defaultMode;
+              // @ts-expect-error handler 使用 schema Output，不能回退成原始字符串。
+              input.limit satisfies string;
+              void invalidMode;
+              void invalidTag;
+              void invalidDefault;
+              return outcome.completion();
+            },
+          }),
+        },
+      })),
     },
   },
 });
@@ -97,7 +105,7 @@ const valibotInput = toStandardJsonSchema(
 const valibotCli = defineCli()({
   root: "valibotSchemaInput",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     valibotSchemaInput: {
@@ -122,23 +130,37 @@ const valibotCli = defineCli()({
         },
       },
       input: valibotInput,
-      success: { kind: "completion" },
-      failures: {},
-      handler({ input, outcome }) {
-        input.mode satisfies "safe" | "force";
-        input.tags satisfies ("red" | "green")[] | undefined;
-        input.defaultMode satisfies "fast" | "slow";
-        // @ts-expect-error enum Output 不得扩宽为任意字符串。
-        const invalidMode: "other" = input.mode;
-        // @ts-expect-error array enum Output 不得扩宽为任意元素。
-        const invalidTag: "other" = input.tags?.[0];
-        // @ts-expect-error default 的 Output 不得扩宽为任意字符串。
-        const invalidDefault: "other" = input.defaultMode;
-        void invalidMode;
-        void invalidTag;
-        void invalidDefault;
-        return outcome.completion();
-      },
+
+      outputs: defineCli().outputModes(
+        "valibotSchemaInput",
+        valibotInput,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler({ input, outcome }) {
+                input.mode satisfies "safe" | "force";
+                input.tags satisfies ("red" | "green")[] | undefined;
+                input.defaultMode satisfies "fast" | "slow";
+                // @ts-expect-error enum Output 不得扩宽为任意字符串。
+                const invalidMode: "other" = input.mode;
+                // @ts-expect-error array enum Output 不得扩宽为任意元素。
+                const invalidTag: "other" = input.tags?.[0];
+                // @ts-expect-error default 的 Output 不得扩宽为任意字符串。
+                const invalidDefault: "other" = input.defaultMode;
+                void invalidMode;
+                void invalidTag;
+                void invalidDefault;
+                return outcome.completion();
+              },
+            }),
+          },
+        }),
+      ),
     },
   },
 });

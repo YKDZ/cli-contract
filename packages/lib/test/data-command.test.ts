@@ -7,13 +7,14 @@ import {
   ContractExecutionError,
   defineCli,
   executeCli,
-  helpCapability,
-  outputCapability,
   parseCliInvocation,
   type ContractSchema,
 } from "@ykdz/cli-contract";
 import * as v from "valibot";
 import { z } from "zod";
+
+import { englishHelpCapability } from "./english-help.ts";
+import { omitPayloadRootResourceId } from "./schema-test-helpers.ts";
 
 type RawGreetingInput = Readonly<{ readonly name: string }>;
 type GreetingInput = Readonly<{ readonly name: string }>;
@@ -49,8 +50,8 @@ function createDataCli(
 ) {
   return defineCli()({
     root: "greet",
-    help: helpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability(),
+
     usageFailureExitCode: 64,
     commands: {
       greet: {
@@ -65,22 +66,34 @@ function createDataCli(
           },
         },
         input: inputSchema,
-        success: {
-          kind: "data",
-          variants: {
-            greeting: {
-              description: "生成的问候",
-              schema: dataSchema,
-              exitCode: 7,
-            },
+
+        outputs: defineCli().outputModes("greet", inputSchema, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: {
+                kind: "data",
+                variants: {
+                  greeting: {
+                    description: "生成的问候",
+                    schema: dataSchema,
+                    exitCode: 7,
+                  },
+                },
+              },
+              failures: {},
+              handler({ input, dependencies, outcome }) {
+                onInput(input);
+                assert.equal(dependencies, undefined);
+                return outcome.data.greeting({
+                  message: `Hello, ${input.name}!`,
+                });
+              },
+            }),
           },
-        },
-        failures: {},
-        handler({ input, dependencies, outcome }) {
-          onInput(input);
-          assert.equal(dependencies, undefined);
-          return outcome.data.greeting({ message: `Hello, ${input.name}!` });
-        },
+        })),
       },
     },
   });
@@ -106,9 +119,25 @@ void test("value option 经模式变换后产生具名 data 结果", async () =>
         required: true,
       },
     ],
-    usage: { command: "greet", synopsis: "greet --name <name>" },
+    outputs: {
+      selector: "--output",
+      default: "structured",
+      modes: {
+        structured: {
+          description: "结构化输出",
+          delivery: "atomic",
+          format: "structured",
+        },
+      },
+    },
+    usage: {
+      command: "greet",
+      synopsis: "greet [--output <mode>] --name <name>",
+    },
   });
-  assert.deepEqual(cli.manifest.commands.greet.success, {
+  const structuredMode = cli.manifest.commands.greet.outputs.modes.structured;
+  assert.ok(structuredMode);
+  assert.deepEqual(structuredMode.success, {
     kind: "data",
     variants: {
       greeting: {
@@ -119,17 +148,29 @@ void test("value option 经模式变换后产生具名 data 结果", async () =>
       },
     },
   });
-  assert.deepEqual(cli.manifest.wire.data?.greeting, {
+  const structuredWire = cli.manifest.wire.structured;
+  assert.ok(structuredWire);
+  const wireData = structuredWire.data?.greeting;
+  assert.ok(wireData);
+  assert.deepEqual(omitPayloadRootResourceId(wireData), {
     $schema: "https://json-schema.org/draft/2020-12/schema",
     additionalProperties: false,
     properties: {
-      schemaVersion: { const: "2" },
+      schemaVersion: { const: "3" },
       command: { const: "greet" },
+      outputMode: { const: "structured" },
       kind: { const: "data" },
       variant: { const: "greeting" },
       data: greetingDataOutputJsonSchema,
     },
-    required: ["schemaVersion", "command", "kind", "variant", "data"],
+    required: [
+      "schemaVersion",
+      "command",
+      "outputMode",
+      "kind",
+      "variant",
+      "data",
+    ],
     type: "object",
   });
 
@@ -137,7 +178,7 @@ void test("value option 经模式变换后产生具名 data 结果", async () =>
     kind: "parsed",
     command: "greet",
     input: { name: "Ada" },
-    outputFormat: "structured",
+    outputMode: "structured",
   });
 
   const termination = await executeCli(cli, {
@@ -153,12 +194,13 @@ void test("value option 经模式变换后产生具名 data 结果", async () =>
     {
       destination: "stdout",
       chunk:
-        '{"schemaVersion":"2","command":"greet","kind":"data","variant":"greeting","data":{"message":"Hello, ADA!"}}\n',
+        '{"schemaVersion":"3","command":"greet","outputMode":"structured","kind":"data","variant":"greeting","data":{"message":"Hello, ADA!"}}\n',
     },
   ]);
   assert.deepEqual(termination, {
     kind: "applicationResult",
     command: "greet",
+    outputMode: "structured",
     result: {
       kind: "data",
       command: "greet",
@@ -192,7 +234,7 @@ void test("输入模式正常拒绝产生 inputRejected 且不执行 handler", a
     {
       destination: "stderr",
       chunk:
-        '{"schemaVersion":"2","command":"greet","kind":"usageFailure","issues":[{"code":"inputRejected","evidence":[{"message":"name 不能为空","path":["name"]}]}],"usage":"greet --name <name>","helpArgv":["greet","--help"]}\n',
+        '{"schemaVersion":"3","command":"greet","kind":"usageFailure","issues":[{"code":"inputRejected","evidence":[{"message":"name 不能为空","path":["name"]}]}],"usage":"greet [--output <mode>] --name <name>","helpArgv":["greet","--help"]}\n',
     },
   ]);
   assert.deepEqual(termination, {
@@ -253,7 +295,7 @@ void test("原生 Zod 失败携带额外 value 仍产生 inputRejected", async (
     {
       destination: "stderr",
       chunk:
-        '{"schemaVersion":"2","command":"greet","kind":"usageFailure","issues":[{"code":"inputRejected","evidence":[{"message":"name 不能为空","path":["name"]}]}],"usage":"greet --name <name>","helpArgv":["greet","--help"]}\n',
+        '{"schemaVersion":"3","command":"greet","kind":"usageFailure","issues":[{"code":"inputRejected","evidence":[{"message":"name 不能为空","path":["name"]}]}],"usage":"greet [--output <mode>] --name <name>","helpArgv":["greet","--help"]}\n',
     },
   ]);
   assert.deepEqual(termination.issues, [
@@ -307,7 +349,7 @@ for (const { label, withValue } of [
       {
         destination: "stderr",
         chunk:
-          '{"schemaVersion":"2","command":"greet","kind":"usageFailure","issues":[{"code":"inputRejected","evidence":[]}],"usage":"greet --name <name>","helpArgv":["greet","--help"]}\n',
+          '{"schemaVersion":"3","command":"greet","kind":"usageFailure","issues":[{"code":"inputRejected","evidence":[]}],"usage":"greet [--output <mode>] --name <name>","helpArgv":["greet","--help"]}\n',
       },
     ]);
     assert.deepEqual(termination, {

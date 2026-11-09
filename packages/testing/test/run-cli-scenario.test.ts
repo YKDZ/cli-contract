@@ -5,7 +5,6 @@ import {
   CliWriteError,
   defineCli,
   helpCapability,
-  outputCapability,
   text,
   type ContractSchema,
   type EmptyCliInput,
@@ -88,40 +87,86 @@ const inspectCommand = define.command("inspect")({
     },
   },
   input: inspectInputSchema,
-  success: {
-    kind: "data",
-    variants: {
-      found: {
-        description: "检查结果",
-        schema: inspectDataSchema,
-        exitCode: 0,
-        text: (data: InspectData) => text.line(`已检查 ${data.message}`),
-      },
+
+  outputs: define.outputModes("inspect", inspectInputSchema, (mode) => ({
+    default: "structured",
+    modes: {
+      structured: mode.atomic({
+        description: "结构化输出",
+        format: "structured",
+        success: {
+          kind: "data",
+          variants: {
+            found: {
+              description: "检查结果",
+              schema: inspectDataSchema,
+              exitCode: 0,
+            },
+          },
+        },
+        failures: {
+          unavailable: {
+            description: "服务不可用",
+            schema: inspectDataSchema,
+            exitCode: 9,
+          },
+          denied: {
+            description: "拒绝检查",
+            schema: inspectDataSchema,
+            exitCode: 10,
+          },
+        },
+        handler: ({ dependencies, input, outcome }) => {
+          if (input.target === "private") {
+            return outcome.failure.denied({ message: input.target });
+          }
+          if (!dependencies.serviceAvailable) {
+            return outcome.failure.unavailable({ message: input.target });
+          }
+          return outcome.data.found({ message: input.target });
+        },
+      }),
+      text: mode.atomic({
+        description: "文本输出",
+        format: "text",
+        success: {
+          kind: "data",
+          variants: {
+            found: {
+              description: "检查结果",
+              schema: inspectDataSchema,
+              exitCode: 0,
+              text: (data: InspectData) => text.line(`已检查 ${data.message}`),
+            },
+          },
+        },
+        failures: {
+          unavailable: {
+            description: "服务不可用",
+            schema: inspectDataSchema,
+            exitCode: 9,
+            text: (data: InspectData) =>
+              text.line(`服务不可用 ${data.message}`),
+          },
+          denied: {
+            description: "拒绝检查",
+            schema: inspectDataSchema,
+            exitCode: 10,
+            text: (data: InspectData) => text.line(`拒绝检查 ${data.message}`),
+          },
+        },
+        handler: ({ dependencies, input, outcome }) => {
+          if (input.target === "private") {
+            return outcome.failure.denied({ message: input.target });
+          }
+          if (!dependencies.serviceAvailable) {
+            return outcome.failure.unavailable({ message: input.target });
+          }
+          return outcome.data.found({ message: input.target });
+        },
+      }),
     },
-  },
-  failures: {
-    unavailable: {
-      description: "服务不可用",
-      schema: inspectDataSchema,
-      exitCode: 9,
-      text: (data: InspectData) => text.line(`服务不可用 ${data.message}`),
-    },
-    denied: {
-      description: "拒绝检查",
-      schema: inspectDataSchema,
-      exitCode: 10,
-      text: (data: InspectData) => text.line(`拒绝检查 ${data.message}`),
-    },
-  },
-  handler: ({ dependencies, input, outcome }) => {
-    if (input.target === "private") {
-      return outcome.failure.denied({ message: input.target });
-    }
-    if (!dependencies.serviceAvailable) {
-      return outcome.failure.unavailable({ message: input.target });
-    }
-    return outcome.data.found({ message: input.target });
-  },
+  })),
 });
 
 const watchCommand = define.command("watch")({
@@ -131,33 +176,71 @@ const watchCommand = define.command("watch")({
   description: "观察目标",
   fields: {},
   input: emptyInputSchema,
-  success: {
-    kind: "stream",
-    records: {
-      item: {
-        description: "观察记录",
-        schema: watchDataSchema,
-        text: (data: WatchData) => text.line(data.message),
-      },
+
+  outputs: define.outputModes("watch", emptyInputSchema, (mode) => ({
+    default: "structured",
+    modes: {
+      structured: mode.stream({
+        description: "结构化输出",
+        format: "structured",
+        success: {
+          kind: "stream",
+          records: {
+            item: {
+              description: "观察记录",
+              schema: watchDataSchema,
+            },
+          },
+        },
+        failures: {
+          interrupted: {
+            description: "观察中断",
+            schema: watchDataSchema,
+            exitCode: 11,
+          },
+        },
+        async *handler({ dependencies, outcome }) {
+          yield outcome.record.item({ message: "第一条" });
+          if (!dependencies.serviceAvailable) {
+            return outcome.failure.interrupted({ message: "服务不可用" });
+          }
+          yield outcome.record.item({ message: "第二条" });
+          return outcome.streamSuccess();
+        },
+      }),
+      text: mode.stream({
+        description: "文本流",
+        format: "text",
+        success: {
+          kind: "stream",
+          text: () => text.silent,
+          records: {
+            item: {
+              description: "观察记录",
+              schema: watchDataSchema,
+              text: (data: WatchData) => text.line(data.message),
+            },
+          },
+        },
+        failures: {
+          interrupted: {
+            description: "观察中断",
+            schema: watchDataSchema,
+            exitCode: 11,
+            text: (data: WatchData) => text.line(`观察中断 ${data.message}`),
+          },
+        },
+        async *handler({ dependencies, outcome }) {
+          yield outcome.record.item({ message: "第一条" });
+          if (!dependencies.serviceAvailable) {
+            return outcome.failure.interrupted({ message: "服务不可用" });
+          }
+          yield outcome.record.item({ message: "第二条" });
+          return outcome.streamSuccess();
+        },
+      }),
     },
-    text: () => text.silent,
-  },
-  failures: {
-    interrupted: {
-      description: "观察中断",
-      schema: watchDataSchema,
-      exitCode: 11,
-      text: (data: WatchData) => text.line(`观察中断 ${data.message}`),
-    },
-  },
-  async *handler({ dependencies, outcome }) {
-    yield outcome.record.item({ message: "第一条" });
-    if (!dependencies.serviceAvailable) {
-      return outcome.failure.interrupted({ message: "服务不可用" });
-    }
-    yield outcome.record.item({ message: "第二条" });
-    return outcome.streamSuccess();
-  },
+  })),
 });
 
 const statusCommand = define.command("status")({
@@ -167,9 +250,19 @@ const statusCommand = define.command("status")({
   description: "读取状态",
   fields: {},
   input: emptyInputSchema,
-  success: { kind: "completion", text: () => text.silent },
-  failures: {},
-  handler: ({ outcome }) => outcome.completion(),
+
+  outputs: define.outputModes("status", emptyInputSchema, (mode) => ({
+    default: "structured",
+    modes: {
+      structured: mode.atomic({
+        description: "结构化输出",
+        format: "structured",
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      }),
+    },
+  })),
 });
 
 /** 仓库唯一的正向 consumer fixture。 */
@@ -183,7 +276,7 @@ const consumerFixture = {
         default: "（默认：{value}）",
       },
     }),
-    output: outputCapability({ defaultFormat: "structured", text: true }),
+
     usageFailureExitCode: 64,
     commands: {
       consumer: {
@@ -331,7 +424,7 @@ void test("唯一 consumer fixture 贯通 argv、输入、success、failure 与 
   assert.equal(structuredSuccess.termination.exitCode, 0);
   assert.equal(
     structuredSuccess.stdout,
-    '{"schemaVersion":"2","command":"inspect","kind":"data","variant":"found","data":{"message":"public"}}\n',
+    '{"schemaVersion":"3","command":"inspect","outputMode":"structured","kind":"data","variant":"found","data":{"message":"public"}}\n',
   );
   assert.equal(structuredSuccess.stderr, "");
 
@@ -344,12 +437,12 @@ void test("唯一 consumer fixture 贯通 argv、输入、success、failure 与 
   assert.equal(structuredFailure.stdout, "");
   assert.equal(
     structuredFailure.stderr,
-    '{"schemaVersion":"2","command":"inspect","kind":"failure","variant":"unavailable","data":{"message":"remote"}}\n',
+    '{"schemaVersion":"3","command":"inspect","outputMode":"structured","kind":"failure","variant":"unavailable","data":{"message":"remote"}}\n',
   );
 
   const textSuccess = await runCliScenario({
     cliContract: consumerFixture.cli,
-    argv: ["inspect", "--output-format", "text", "--target", "public"],
+    argv: ["inspect", "--output", "text", "--target", "public"],
     dependencies: { serviceAvailable: true },
   });
   assert.equal(textSuccess.stdout, "已检查 public\n");
@@ -357,7 +450,7 @@ void test("唯一 consumer fixture 贯通 argv、输入、success、failure 与 
 
   const textFailure = await runCliScenario({
     cliContract: consumerFixture.cli,
-    argv: ["inspect", "--output-format", "text", "--target", "private"],
+    argv: ["inspect", "--output", "text", "--target", "private"],
     dependencies: { serviceAvailable: true },
   });
   assert.equal(textFailure.stdout, "");
@@ -372,7 +465,8 @@ void test("capture 保留 structured 与 text stream 的生产事件顺序和终
   assert.deepEqual(structured.writes, [
     {
       destination: "stdout",
-      chunk: '{"schemaVersion":"2","command":"watch","kind":"stream"}\n',
+      chunk:
+        '{"schemaVersion":"3","command":"watch","outputMode":"structured","kind":"stream"}\n',
     },
     {
       destination: "stdout",
@@ -387,13 +481,14 @@ void test("capture 保留 structured 与 text stream 的生产事件顺序和终
   assert.deepEqual(structured.termination, {
     kind: "applicationResult",
     command: "watch",
+    outputMode: "structured",
     result: { kind: "streamSuccess", command: "watch" },
     exitCode: 0,
   });
 
   const textStream = await runCliScenario({
     cliContract: consumerFixture.cli,
-    argv: ["watch", "--output-format", "text"],
+    argv: ["watch", "--output", "text"],
     dependencies: { serviceAvailable: true },
   });
   assert.deepEqual(textStream.writes, [
@@ -403,6 +498,7 @@ void test("capture 保留 structured 与 text stream 的生产事件顺序和终
   assert.deepEqual(textStream.termination, {
     kind: "applicationResult",
     command: "watch",
+    outputMode: "text",
     result: { kind: "streamSuccess", command: "watch" },
     exitCode: 0,
   });

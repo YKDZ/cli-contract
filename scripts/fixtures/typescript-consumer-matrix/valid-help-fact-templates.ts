@@ -1,8 +1,4 @@
-import {
-  defineCli,
-  helpCapability,
-  outputCapability,
-} from "@ykdz/cli-contract";
+import { defineCli, helpCapability } from "@ykdz/cli-contract";
 import { z } from "zod";
 
 const help = helpCapability({
@@ -46,10 +42,11 @@ const suffixHelp = helpCapability({
     countAtMost: "至多提供 {max} 项：{fields}",
   },
 });
+const sharedInput0 = z.object({ token: z.string().optional() });
 const validSuffixCount = defineCli()({
   root: "validSuffixCount",
   help: suffixHelp,
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     validSuffixCount: {
@@ -63,21 +60,36 @@ const validSuffixCount = defineCli()({
           description: "令牌",
         },
       },
-      input: z.object({ token: z.string().optional() }),
+      input: sharedInput0,
       usageConstraints: [
         { kind: "count", fields: validSuffixCountFields, max: 1 },
       ],
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "validSuffixCount",
+        sharedInput0,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
 
+const sharedInput1 = z.object({ token: z.boolean().optional() });
 const validNegatedOptionWithoutAlias = defineCli()({
   root: "validNegatedOption",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     validNegatedOption: {
@@ -92,10 +104,24 @@ const validNegatedOptionWithoutAlias = defineCli()({
           description: "令牌",
         },
       },
-      input: z.object({ token: z.boolean().optional() }),
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+      input: sharedInput1,
+
+      outputs: defineCli().outputModes(
+        "validNegatedOption",
+        sharedInput1,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });

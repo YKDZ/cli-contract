@@ -1,8 +1,4 @@
-import {
-  defineCli,
-  helpCapability,
-  outputCapability,
-} from "@ykdz/cli-contract";
+import { defineCli, helpCapability } from "@ykdz/cli-contract";
 import { z } from "zod";
 
 const invalidFact:
@@ -18,6 +14,7 @@ const invalidFact:
     : { kind: "equals", field: "mode", value: "safe", typo: true };
 
 const define = defineCli();
+const sharedInput0 = z.object({ mode: z.enum(["safe", "force"]).optional() });
 const inspect = define.command("inspect")({
   kind: "command",
   parent: "tool",
@@ -30,11 +27,21 @@ const inspect = define.command("inspect")({
       description: "模式",
     },
   },
-  input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+  input: sharedInput0,
   usageConstraints: [{ kind: "forbiddenCombination", all: [invalidFact] }],
-  success: { kind: "completion" },
-  failures: {},
-  handler: ({ outcome }) => outcome.completion(),
+
+  outputs: define.outputModes("inspect", sharedInput0, (mode) => ({
+    default: "structured",
+    modes: {
+      structured: mode.atomic({
+        description: "结构化输出",
+        format: "structured",
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      }),
+    },
+  })),
 });
 
 export const cli = define({
@@ -48,7 +55,7 @@ export const cli = define({
       forbiddenCombination: "禁配事实 {facts}",
     },
   }),
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     tool: { kind: "rootGroup", name: "tool", description: "工具" },

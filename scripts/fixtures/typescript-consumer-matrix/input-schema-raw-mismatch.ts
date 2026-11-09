@@ -1,16 +1,13 @@
-import {
-  defineCli,
-  helpCapability,
-  outputCapability,
-} from "@ykdz/cli-contract";
+import { defineCli, helpCapability } from "@ykdz/cli-contract";
 import { z } from "zod";
 
 const define = defineCli();
 
+const sharedInput0 = z.object({ count: z.number() });
 define({
   root: "workspace",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     workspace: {
@@ -30,18 +27,29 @@ define({
           description: "数量",
         },
       },
-      input: z.object({ count: z.number() }),
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+      input: sharedInput0,
+
+      outputs: define.outputModes("inspect", sharedInput0, (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode.atomic({
+            description: "结构化输出",
+            format: "structured",
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          }),
+        },
+      })),
     }),
   },
 });
 
+const sharedInput1 = z.object({ count: z.number() });
 defineCli()({
   root: "rootInspect",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     rootInspect: {
@@ -55,18 +63,29 @@ defineCli()({
           description: "数量",
         },
       },
-      input: z.object({ count: z.number() }),
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+      input: sharedInput1,
+
+      outputs: defineCli().outputModes("rootInspect", sharedInput1, (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode.atomic({
+            description: "结构化输出",
+            format: "structured",
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          }),
+        },
+      })),
     },
   },
 });
 
+const sharedInput2 = z.object({ enabled: z.string() });
 defineCli()({
   root: "rootEnabled",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     rootEnabled: {
@@ -80,18 +99,29 @@ defineCli()({
           description: "启用",
         },
       },
-      input: z.object({ enabled: z.string() }),
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+      input: sharedInput2,
+
+      outputs: defineCli().outputModes("rootEnabled", sharedInput2, (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode.atomic({
+            description: "结构化输出",
+            format: "structured",
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          }),
+        },
+      })),
     },
   },
 });
 
+const sharedInput3 = z.object({ tags: z.array(z.number()) });
 defineCli()({
   root: "rootTags",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     rootTags: {
@@ -105,10 +135,20 @@ defineCli()({
           description: "标签",
         },
       },
-      input: z.object({ tags: z.array(z.number()) }),
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+      input: sharedInput3,
+
+      outputs: defineCli().outputModes("rootTags", sharedInput3, (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode.atomic({
+            description: "结构化输出",
+            format: "structured",
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          }),
+        },
+      })),
     },
   },
 });

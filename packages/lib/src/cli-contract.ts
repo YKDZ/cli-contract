@@ -2,7 +2,8 @@ import {
   compileAtomicVariants,
   type RuntimeAtomicVariant,
 } from "#/atomic-variant-compiler";
-import type { CommandUsage } from "#/cli-invocation";
+import { validateCliInput } from "#/cli-input-validation";
+import { parseCliInvocation, type CommandUsage } from "#/cli-invocation";
 import {
   ContractDefinitionError,
   type ContractDefinitionIssue,
@@ -25,10 +26,10 @@ import { copySingleLineText, isSingleLineText } from "#/description";
 import type { reservedFieldNames } from "#/field-identity";
 import { deepFreeze, isPlainRecord } from "#/json-value";
 import type {
-  AtomicTextPresenter,
   CompletionFact,
   CompletionTextPresenter,
   CompletionOutcome,
+  DataVariantDefinition,
   DataFactUnion,
   DataOutcome,
   DataVariantDefinitions,
@@ -39,7 +40,7 @@ import type {
   TextLine,
   TextLines,
   StreamOutcome,
-  StreamTextPresenter,
+  StreamRecordDefinition,
   StreamRecordDefinitions,
   StreamRecordFactUnion,
   StreamSuccessFact,
@@ -106,12 +107,29 @@ export type {
 } from "#/outcome-fact";
 
 const cliContractType = Symbol("CliContract.type");
+const outputModesType = Symbol("OutputModes.type");
 const helpCapabilities = new WeakSet<object>();
+const schemaCapabilities = new WeakSet<object>();
 const invalidHelpFactWordingValues = new WeakMap<
   object,
   ReadonlyMap<string, unknown>
 >();
-const outputCapabilities = new WeakSet<object>();
+const outputModes = new WeakSet<object>();
+const outputModeMetadata = new WeakMap<
+  object,
+  Readonly<{
+    readonly command: string;
+    readonly input: ContractSchema;
+  }>
+>();
+const outputModeDefinitions = new WeakSet<object>();
+const outputModeDefinitionMetadata = new WeakMap<
+  object,
+  Readonly<{
+    readonly command: string;
+    readonly input: ContractSchema;
+  }>
+>();
 const versionCapabilities = new WeakSet<object>();
 const compiledCliContracts = new WeakMap<object, RuntimeCompiledCli>();
 
@@ -121,7 +139,7 @@ const definitionPropertyKeys = {
     "root",
     "help",
     "version",
-    "output",
+    "schema",
     "usageFailureExitCode",
     "commands",
   ],
@@ -141,11 +159,10 @@ const definitionPropertyKeys = {
     "aliases",
     "description",
     "helpSupplement",
+    "examples",
     "fields",
     "input",
-    "success",
-    "failures",
-    "handler",
+    "outputs",
     "usageConstraints",
   ],
   field: {
@@ -159,19 +176,26 @@ const definitionPropertyKeys = {
     option: ["kind", "longOption", "shortAlias", "description"],
     positional: ["kind", "description"],
   },
+  example: ["input", "outputMode"],
   usage: usageConstraintDefinitionPropertyKeys,
-  success: {
-    completion: ["kind", "text"],
-    data: ["kind", "variants"],
-    stream: ["kind", "records", "text"],
-  },
   atomicVariant: ["description", "schema", "exitCode", "text"],
   streamRecord: ["description", "schema", "text"],
   capability: {
     help: ["shortAlias", "headings", "wording"],
     version: ["value", "description", "shortAlias"],
-    output: ["defaultFormat", "text", "compatibilityFlags"],
+    schema: ["description"],
   },
+  outputModes: ["default", "modes"],
+  outputMode: [
+    "delivery",
+    "description",
+    "format",
+    "success",
+    "failures",
+    "handler",
+  ],
+  atomicSuccess: ["kind", "text", "variants"],
+  streamSuccess: ["kind", "text", "records"],
 } as const;
 
 export interface HelpCapability {
@@ -193,6 +217,8 @@ export interface HelpHeadings {
   readonly arguments?: string;
   readonly options?: string;
   readonly constraints?: string;
+  readonly schema?: string;
+  readonly examples?: string;
   readonly supplement?: string;
 }
 
@@ -290,30 +316,724 @@ export interface VersionCapabilityDefinition {
   readonly shortAlias?: "-V";
 }
 
-export type OutputFormat = "structured" | "text";
-
-export interface OutputCapability<
-  Formats extends readonly OutputFormat[] = readonly OutputFormat[],
-> {
-  readonly kind: "outputCapability";
-  readonly defaultFormat: Formats[number];
-  readonly formats: Formats;
-  readonly compatibilityFlags: Readonly<Record<string, OutputFormat>>;
-  readonly [cliContractType]: "output";
+/** 根级契约发现能力；说明文案一次装配后会投影到全树帮助。 */
+export interface SchemaCapability {
+  readonly kind: "schemaCapability";
+  readonly longOption: "--schema";
+  readonly description: string;
+  readonly [cliContractType]: "schema";
 }
 
-type OutputCapabilityDefinition = Readonly<{
-  readonly defaultFormat: OutputFormat;
-  readonly text?: boolean;
-  readonly compatibilityFlags?: Readonly<Record<`--${string}`, OutputFormat>>;
+export interface SchemaCapabilityDefinition {
+  readonly description: TextLine;
+}
+
+export type OutputFormat = "structured" | "text";
+export type OutputDelivery = "atomic" | "stream";
+
+/** 与可执行命令同位的调用样本；省略 outputMode 表示采用命令默认方式。 */
+export interface CommandExampleDefinition<
+  Input = unknown,
+  OutputMode extends string = string,
+> {
+  readonly input: Input;
+  readonly outputMode?: OutputMode;
+}
+
+type CommandExampleInputContext = Readonly<
+  Record<string, boolean | string | [string, ...string[]]>
+>;
+
+type CommandDefinitionExampleContext = Readonly<{
+  readonly examples?: readonly CommandExampleDefinition<CommandExampleInputContext>[];
 }>;
 
-type OutputFormatsFor<Definition extends OutputCapabilityDefinition> =
-  Definition["defaultFormat"] extends "text"
-    ? readonly ["structured", "text"]
-    : Definition["text"] extends true
-      ? readonly ["structured", "text"]
-      : readonly ["structured"];
+type OutputFormatTextEnabled<Format extends OutputFormat> =
+  Format extends "text" ? true : false;
+
+type OutputModeSetDeclaration = Readonly<{
+  readonly default?: string;
+  readonly modes: Readonly<Record<string, unknown>>;
+}>;
+
+type OutputModeKeys<Modes> = Extract<keyof Modes, string>;
+
+type OutputModeDefaultContract<Definition> =
+  Definition extends Readonly<{
+    readonly modes: infer Modes;
+    readonly default: infer Default;
+  }>
+    ? IsUnion<OutputModeKeys<Modes>> extends true
+      ? Default extends OutputModeKeys<Modes>
+        ? unknown
+        : ContractTypeError<
+            "invalidDefaultOutputMode",
+            Readonly<{ readonly default: Default }>
+          >
+      : Default extends OutputModeKeys<Modes>
+        ? unknown
+        : ContractTypeError<
+            "invalidDefaultOutputMode",
+            Readonly<{ readonly default: Default }>
+          >
+    : Definition extends Readonly<{ readonly modes: infer Modes }>
+      ? IsUnion<OutputModeKeys<Modes>> extends true
+        ? ContractTypeError<
+            "invalidDefaultOutputMode",
+            Readonly<{ readonly default: undefined }>
+          >
+        : unknown
+      : ContractTypeError<
+          "invalidOutputModes",
+          Readonly<{ readonly reason: "missingModes" }>
+        >;
+
+export interface OutputModesDefinition<
+  Command extends string = string,
+  InputSchema extends ContractSchema = ContractSchema,
+  Modes extends Readonly<Record<string, OutputModeDefinition>> = Readonly<
+    Record<string, OutputModeDefinition>
+  >,
+  Default extends OutputModeKeys<Modes> = OutputModeKeys<Modes>,
+> {
+  readonly default: Default;
+  readonly modes: Modes;
+  readonly [outputModesType]: Readonly<{
+    readonly command: Command;
+    readonly input: InputSchema;
+  }>;
+}
+
+export interface AtomicOutputModeDefinition<
+  Command extends string,
+  InputSchema extends ContractSchema,
+  Format extends OutputFormat,
+  Success,
+  Failures extends object,
+> {
+  readonly delivery: "atomic";
+  readonly description: string;
+  readonly format: Format;
+  readonly success: Success;
+  readonly failures: Failures;
+  readonly handler: unknown;
+  readonly [cliContractType]: Readonly<{
+    readonly command: Command;
+    readonly input: InputSchema;
+  }>;
+}
+
+export interface StreamOutputModeDefinition<
+  Command extends string,
+  InputSchema extends ContractSchema,
+  Format extends OutputFormat,
+  Records extends StreamRecordDefinitions,
+  Failures extends object,
+> {
+  readonly delivery: "stream";
+  readonly description: string;
+  readonly format: Format;
+  readonly success: Readonly<{
+    readonly kind: "stream";
+    readonly records: Records;
+    readonly text?: CompletionTextPresenter;
+  }>;
+  readonly failures: Failures;
+  readonly handler: unknown;
+  readonly [cliContractType]: Readonly<{
+    readonly command: Command;
+    readonly input: InputSchema;
+  }>;
+}
+
+export type OutputModeDefinition =
+  | AtomicOutputModeDefinition<
+      string,
+      ContractSchema,
+      OutputFormat,
+      | Readonly<{ readonly kind: "completion" }>
+      | Readonly<{
+          readonly kind: "data";
+          readonly variants: DataVariantDefinitions;
+        }>,
+      object
+    >
+  | StreamOutputModeDefinition<
+      string,
+      ContractSchema,
+      OutputFormat,
+      StreamRecordDefinitions,
+      object
+    >;
+
+export type OutputModeMap = Readonly<Record<string, OutputModeDefinition>>;
+
+type AtomicModeFailures<
+  _Command extends string,
+  Schemas extends VariantSchemaMap,
+  TextEnabled extends boolean,
+> = FailureVariantDefinitionsForSchemas<Schemas, TextEnabled>;
+
+type AtomicModeFailuresContract<
+  Command extends string,
+  Schemas extends VariantSchemaMap,
+  TextEnabled extends boolean,
+> = AtomicModeFailures<Command, Schemas, TextEnabled> &
+  ClosedAtomicVariants<AtomicModeFailures<Command, Schemas, TextEnabled>> &
+  FailureVariantTextContract<
+    Command,
+    AtomicModeFailures<Command, Schemas, TextEnabled>,
+    TextEnabled
+  >;
+
+type AtomicModeDataSuccess<
+  _Command extends string,
+  Schemas extends VariantSchemaMap,
+  TextEnabled extends boolean,
+> = Readonly<{
+  readonly kind: "data";
+  readonly variants: DataVariantDefinitionsForSchemas<Schemas, TextEnabled>;
+}>;
+
+type AtomicModeDataSuccessContract<
+  Command extends string,
+  Schemas extends VariantSchemaMap,
+  TextEnabled extends boolean,
+> = AtomicModeDataSuccess<Command, Schemas, TextEnabled> &
+  Readonly<{
+    readonly variants: ClosedAtomicVariants<
+      DataVariantDefinitionsForSchemas<Schemas, TextEnabled>
+    > &
+      DataVariantTextContract<
+        Command,
+        DataVariantDefinitionsForSchemas<Schemas, TextEnabled>,
+        TextEnabled
+      >;
+  }>;
+
+type StreamRecordDefinitionsForSchemas<
+  Schemas extends VariantSchemaMap,
+  TextEnabled extends boolean,
+> = Readonly<{
+  readonly [Variant in keyof Schemas]: Schemas[Variant] extends ContractSchema
+    ? StreamRecordDefinition<
+        ContractSchemaInput<Schemas[Variant]>,
+        TextEnabled,
+        ContractSchemaOutput<Schemas[Variant]>
+      > &
+        Readonly<{ readonly schema: Schemas[Variant] }>
+    : never;
+}>;
+
+type StreamModeRecords<
+  _Command extends string,
+  Schemas extends VariantSchemaMap,
+  TextEnabled extends boolean,
+> = StreamRecordDefinitionsForSchemas<Schemas, TextEnabled>;
+
+type StreamModeRecordsContract<
+  Command extends string,
+  Schemas extends VariantSchemaMap,
+  TextEnabled extends boolean,
+> = StreamModeRecords<Command, Schemas, TextEnabled> &
+  ClosedStreamRecords<StreamRecordDefinitionsForSchemas<Schemas, TextEnabled>> &
+  StreamRecordNameContract<
+    Command,
+    StreamRecordDefinitionsForSchemas<Schemas, TextEnabled>
+  > &
+  StreamRecordTextContract<
+    Command,
+    StreamRecordDefinitionsForSchemas<Schemas, TextEnabled>,
+    TextEnabled
+  >;
+
+type StreamModeFailures<
+  Command extends string,
+  Schemas extends VariantSchemaMap,
+  TextEnabled extends boolean,
+> = AtomicModeFailures<Command, Schemas, TextEnabled>;
+
+type StreamModeFailuresContract<
+  Command extends string,
+  Schemas extends VariantSchemaMap,
+  TextEnabled extends boolean,
+> = AtomicModeFailuresContract<Command, Schemas, TextEnabled>;
+
+type ClosedRawAtomicSuccess<Success> = RejectUnknownProperties<
+  Success,
+  Success extends { readonly kind: "completion" }
+    ? "kind" | "text"
+    : "kind" | "text" | "variants"
+> &
+  (Success extends { readonly kind: "data"; readonly variants: infer Variants }
+    ? { readonly variants: ClosedAtomicVariants<Variants> }
+    : unknown);
+
+export interface OutputModeFactory<
+  Command extends string,
+  Dependencies,
+  InputSchema extends ContractSchema,
+> {
+  readonly atomic: {
+    <
+      const Format extends OutputFormat,
+      const RawDefinition extends object,
+      const RawSuccess extends object,
+      const RawFailures extends object,
+      const Failures extends VariantSchemaMap = Readonly<Record<never, never>>,
+    >(
+      definition: RawDefinition &
+        Readonly<{
+          readonly description: string;
+          readonly format: Format;
+          readonly success: Readonly<{
+            readonly kind: "completion";
+            readonly text?: CompletionTextPresenter;
+          }> &
+            RawSuccess;
+          readonly failures: AtomicModeFailures<Command, Failures, boolean> &
+            RawFailures;
+          readonly handler: (
+            context: Readonly<{
+              readonly input: ContractSchemaOutput<InputSchema>;
+              readonly dependencies: Dependencies;
+              readonly outcome: CompletionOutcome<Command> &
+                FailureOutcome<
+                  Command,
+                  AtomicModeFailures<Command, Failures, boolean>
+                >;
+            }>,
+          ) =>
+            | CompletionFact<Command>
+            | FailureFactUnion<
+                Command,
+                AtomicModeFailures<Command, Failures, boolean>
+              >
+            | Promise<
+                | CompletionFact<Command>
+                | FailureFactUnion<
+                    Command,
+                    AtomicModeFailures<Command, Failures, boolean>
+                  >
+              >;
+        }> &
+        RejectUnknownProperties<
+          NoInfer<RawDefinition>,
+          Exclude<
+            (typeof definitionPropertyKeys.outputMode)[number],
+            "delivery"
+          >
+        > &
+        Readonly<{
+          readonly success: ClosedRawAtomicSuccess<NoInfer<RawSuccess>>;
+          readonly failures: ClosedAtomicVariants<NoInfer<RawFailures>>;
+        }> &
+        Readonly<{
+          readonly failures: AtomicModeFailuresContract<
+            Command,
+            NoInfer<Failures>,
+            boolean
+          >;
+        }>,
+    ): AtomicOutputModeDefinition<
+      Command,
+      InputSchema,
+      Format,
+      RawSuccess,
+      RawFailures
+    >;
+    <
+      const Format extends OutputFormat,
+      const RawDefinition extends object,
+      const RawSuccess extends object,
+      const RawFailures extends object,
+      const Schemas extends VariantSchemaMap,
+      const Failures extends VariantSchemaMap = Readonly<Record<never, never>>,
+    >(
+      definition: RawDefinition &
+        Readonly<{
+          readonly description: string;
+          readonly format: Format;
+          readonly success: AtomicModeDataSuccess<Command, Schemas, boolean> &
+            RawSuccess;
+          readonly failures: AtomicModeFailures<Command, Failures, boolean> &
+            RawFailures;
+          readonly handler: (
+            context: Readonly<{
+              readonly input: ContractSchemaOutput<InputSchema>;
+              readonly dependencies: Dependencies;
+              readonly outcome: DataOutcome<
+                Command,
+                DataVariantDefinitionsForSchemas<Schemas, boolean>
+              > &
+                FailureOutcome<
+                  Command,
+                  AtomicModeFailures<Command, Failures, boolean>
+                >;
+            }>,
+          ) =>
+            | DataFactUnion<
+                Command,
+                DataVariantDefinitionsForSchemas<Schemas, boolean>
+              >
+            | FailureFactUnion<
+                Command,
+                AtomicModeFailures<Command, Failures, boolean>
+              >
+            | Promise<
+                | DataFactUnion<
+                    Command,
+                    DataVariantDefinitionsForSchemas<Schemas, boolean>
+                  >
+                | FailureFactUnion<
+                    Command,
+                    AtomicModeFailures<Command, Failures, boolean>
+                  >
+              >;
+        }> &
+        RejectUnknownProperties<
+          NoInfer<RawDefinition>,
+          Exclude<
+            (typeof definitionPropertyKeys.outputMode)[number],
+            "delivery"
+          >
+        > &
+        Readonly<{
+          readonly success: ClosedRawAtomicSuccess<NoInfer<RawSuccess>>;
+          readonly failures: ClosedAtomicVariants<NoInfer<RawFailures>>;
+        }> &
+        Readonly<{
+          readonly success: AtomicModeDataSuccessContract<
+            Command,
+            NoInfer<Schemas>,
+            boolean
+          >;
+          readonly failures: AtomicModeFailuresContract<
+            Command,
+            NoInfer<Failures>,
+            boolean
+          >;
+        }>,
+    ): AtomicOutputModeDefinition<
+      Command,
+      InputSchema,
+      Format,
+      RawSuccess,
+      RawFailures
+    >;
+  };
+  readonly stream: <
+    const Format extends OutputFormat,
+    const RawDefinition extends object,
+    const RawSuccess extends object,
+    const Schemas extends VariantSchemaMap,
+    const Failures extends VariantSchemaMap = Readonly<Record<never, never>>,
+  >(
+    definition: RawDefinition &
+      Readonly<{
+        readonly description: string;
+        readonly format: Format;
+        readonly success: Readonly<{
+          readonly kind: "stream";
+          readonly records: StreamModeRecords<
+            Command,
+            Schemas,
+            OutputFormatTextEnabled<Format> extends false ? false : boolean
+          >;
+        }> &
+          RawSuccess &
+          (OutputFormatTextEnabled<Format> extends true
+            ? Readonly<{ readonly text?: CompletionTextPresenter }>
+            : Readonly<{ readonly text?: never }>);
+        readonly failures: StreamModeFailures<
+          Command,
+          Failures,
+          OutputFormatTextEnabled<Format>
+        >;
+        readonly handler: (
+          context: StreamHandlerContext<
+            Command,
+            Dependencies,
+            ContractSchemaOutput<InputSchema>,
+            StreamModeRecords<
+              Command,
+              Schemas,
+              OutputFormatTextEnabled<Format> extends false ? false : boolean
+            >,
+            StreamModeFailures<
+              Command,
+              Failures,
+              OutputFormatTextEnabled<Format>
+            >
+          >,
+        ) => AsyncGenerator<
+          StreamRecordFactUnion<
+            Command,
+            StreamModeRecords<
+              Command,
+              Schemas,
+              OutputFormatTextEnabled<Format> extends false ? false : boolean
+            >
+          >,
+          | StreamSuccessFact<Command>
+          | FailureFactUnion<
+              Command,
+              StreamModeFailures<
+                Command,
+                Failures,
+                OutputFormatTextEnabled<Format>
+              >
+            >,
+          void
+        >;
+      }> &
+      RejectUnknownProperties<
+        NoInfer<RawDefinition>,
+        Exclude<(typeof definitionPropertyKeys.outputMode)[number], "delivery">
+      > &
+      Readonly<{
+        readonly success: ClosedRawStreamSuccess<NoInfer<RawSuccess>>;
+      }> &
+      Readonly<{
+        readonly success: Readonly<{
+          readonly records: StreamModeRecordsContract<
+            Command,
+            NoInfer<Schemas>,
+            OutputFormatTextEnabled<Format> extends false ? false : boolean
+          >;
+        }> &
+          (OutputFormatTextEnabled<Format> extends true
+            ? Readonly<{ readonly text?: CompletionTextPresenter }>
+            : Readonly<{ readonly text?: never }>);
+        readonly failures: StreamModeFailuresContract<
+          Command,
+          NoInfer<Failures>,
+          OutputFormatTextEnabled<Format>
+        >;
+      }>,
+  ) => Omit<
+    StreamOutputModeDefinition<
+      Command,
+      InputSchema,
+      Format,
+      RawStreamRecords<RawSuccess>,
+      StreamModeFailures<Command, Failures, OutputFormatTextEnabled<Format>>
+    >,
+    "success"
+  > &
+    Readonly<{ readonly success: RawSuccess }>;
+}
+
+type OutputModesDefault<Definition> =
+  Definition extends Readonly<{
+    readonly modes: infer Modes;
+    readonly default?: infer Default;
+  }>
+    ? Exclude<Default, undefined> extends never
+      ? OutputModeKeys<Modes>
+      : Extract<Exclude<Default, undefined>, OutputModeKeys<Modes>>
+    : never;
+
+type ModeVariantNames<Command extends string, Mode> =
+  Mode extends Readonly<{
+    readonly success: Readonly<{
+      readonly kind: "data";
+      readonly variants: infer Variants;
+    }>;
+  }>
+    ? InvalidVariantNames<Variants> extends never
+      ? ModeFailureNames<Command, Mode>
+      : DataVariantNameContract<Command, Variants>
+    : ModeFailureNames<Command, Mode>;
+
+type ModeFailureNames<Command extends string, Mode> =
+  Mode extends Readonly<{ readonly failures: infer Failures }>
+    ? FailureVariantNameContract<Command, Failures>
+    : unknown;
+
+// 原子方式的呈现器覆盖按具名方式映射检查，以便诊断直接关联对应声明。
+type VariantsWithText<Variants> = {
+  [Variant in keyof Variants & string]: "text" extends keyof Variants[Variant]
+    ? Variant
+    : never;
+}[keyof Variants & string];
+type VariantPresenterContract<
+  Command extends string,
+  Location extends "data" | "failure",
+  Variants,
+  Format,
+> = Format extends "text"
+  ? NamedVariantTextContract<Command, Location, Variants, true, never>
+  : VariantsWithText<Variants> extends never
+    ? unknown
+    : ContractTypeError<
+        "unexpectedTextPresenter",
+        Readonly<{
+          readonly command: Command;
+          readonly location: Location;
+          readonly variant: VariantsWithText<Variants>;
+          readonly unexpected: "text";
+        }>
+      >;
+type SuccessPresenterContract<
+  Command extends string,
+  Success,
+  Format,
+> = Success extends { readonly kind: "completion" }
+  ? Format extends "text"
+    ? Success extends { readonly text: unknown }
+      ? unknown
+      : ContractTypeError<
+          "missingTextPresenter",
+          Readonly<{
+            readonly command: Command;
+            readonly location: "completion";
+            readonly missing: "text";
+          }>
+        >
+    : "text" extends keyof Success
+      ? ContractTypeError<
+          "unexpectedTextPresenter",
+          Readonly<{
+            readonly command: Command;
+            readonly location: "completion";
+            readonly unexpected: "text";
+          }>
+        >
+      : unknown
+  : Success extends { readonly kind: "data"; readonly variants: infer Variants }
+    ? VariantPresenterContract<Command, "data", Variants, Format>
+    : unknown;
+type AtomicPresenterContract<Command extends string, Mode> = Mode extends {
+  readonly delivery: "atomic";
+  readonly format: infer Format;
+  readonly success: infer Success;
+  readonly failures: infer Failures;
+}
+  ? SuccessPresenterContract<
+      Command,
+      Success,
+      Format
+    > extends ContractTypeError<string, unknown>
+    ? SuccessPresenterContract<Command, Success, Format>
+    : VariantPresenterContract<Command, "failure", Failures, Format>
+  : unknown;
+type RawStreamRecords<Success> = Success extends {
+  readonly records: infer Records extends StreamRecordDefinitions;
+}
+  ? Records
+  : never;
+type ClosedRawStreamSuccess<Success> = RejectUnknownProperties<
+  Success,
+  "kind" | "records" | "text"
+> &
+  (Success extends { readonly records: infer Records }
+    ? { readonly records: ClosedStreamRecords<Records> }
+    : unknown);
+type StreamPresenterContract<Command extends string, Mode> = Mode extends {
+  readonly delivery: "stream";
+  readonly format: "text";
+  readonly success: infer Success;
+}
+  ? Success extends { readonly records: infer Records }
+    ? MissingVariantTextPresenters<Records> extends never
+      ? Success extends { readonly text: unknown }
+        ? unknown
+        : ContractTypeError<
+            "missingTextPresenter",
+            Readonly<{
+              readonly command: Command;
+              readonly location: "streamSuccess";
+              readonly missing: "text";
+            }>
+          >
+      : StreamRecordTextContract<Command, Records, true>
+    : unknown
+  : unknown;
+
+type LocalModeContract<Command extends string, Mode> =
+  ModeVariantNames<Command, Mode> extends ContractTypeError<string, unknown>
+    ? ModeVariantNames<Command, Mode>
+    : Mode extends { readonly delivery: "stream" }
+      ? StreamPresenterContract<Command, Mode>
+      : AtomicPresenterContract<Command, Mode>;
+
+type OutputModesVariantNames<Command extends string, Definition> =
+  Definition extends Readonly<{ readonly modes: infer Modes }>
+    ? Readonly<{
+        readonly modes: {
+          readonly [Mode in keyof Modes]: LocalModeContract<
+            Command,
+            Modes[Mode]
+          >;
+        };
+      }>
+    : unknown;
+
+type OutputModesTypeContract<Definition> =
+  OutputModeDefaultContract<Definition> &
+    (Definition extends Readonly<{ readonly modes: infer Modes }>
+      ? [keyof Modes] extends [never]
+        ? ContractTypeError<
+            "invalidOutputModes",
+            Readonly<{ readonly reason: "emptyModes" }>
+          >
+        : Exclude<Modes[keyof Modes], OutputModeDefinition> extends never
+          ? unknown
+          : ContractTypeError<
+              "invalidOutputModes",
+              Readonly<{ readonly reason: "invalidMode" }>
+            >
+      : never);
+
+type AtomicOutputModeResult<Command extends string, Mode> =
+  Mode extends Readonly<{
+    readonly delivery: "atomic";
+    readonly success: infer Success;
+    readonly failures: infer Failures extends object;
+  }>
+    ? Success extends Readonly<{ readonly kind: "completion" }>
+      ? CompletionFact<Command> | FailureFactUnion<Command, Failures, "output">
+      : Success extends Readonly<{
+            readonly kind: "data";
+            readonly variants: infer Variants extends DataVariantDefinitions;
+          }>
+        ?
+            | DataFactUnion<Command, Variants, "output">
+            | FailureFactUnion<Command, Failures, "output">
+        : never
+    : never;
+
+type StreamOutputModeResult<Command extends string, Mode> =
+  Mode extends Readonly<{
+    readonly delivery: "stream";
+    readonly failures: infer Failures extends object;
+  }>
+    ? StreamSuccessFact<Command> | FailureFactUnion<Command, Failures, "output">
+    : never;
+
+type OutputModesResult<Command extends string, Outputs> =
+  Outputs extends Readonly<{ readonly modes: infer Modes }>
+    ? {
+        [Mode in keyof Modes]:
+          | AtomicOutputModeResult<Command, Modes[Mode]>
+          | StreamOutputModeResult<Command, Modes[Mode]>;
+      }[keyof Modes]
+    : never;
+
+type OutputModesFromDeclaration<
+  Command extends string,
+  InputSchema extends ContractSchema,
+  Definition,
+> =
+  Definition extends Readonly<{ readonly modes: infer Modes }>
+    ? OutputModesDefinition<
+        Command,
+        InputSchema,
+        Extract<Modes, OutputModeMap>,
+        Extract<OutputModesDefault<Definition>, OutputModeKeys<Modes>>
+      >
+    : never;
 
 type LowercaseLetter =
   | "a"
@@ -838,30 +1558,6 @@ type ClosedUsageConstraints<
     : never
   : unknown;
 
-type ClosedSuccessDefinition<Success> =
-  Success extends Readonly<{
-    readonly kind: "data";
-    readonly variants: infer Variants;
-  }>
-    ? RejectUnknownProperties<
-        Success,
-        (typeof definitionPropertyKeys.success.data)[number]
-      > &
-        Readonly<{ readonly variants: ClosedAtomicVariants<Variants> }>
-    : Success extends Readonly<{
-          readonly kind: "stream";
-          readonly records: infer Records;
-        }>
-      ? RejectUnknownProperties<
-          Success,
-          (typeof definitionPropertyKeys.success.stream)[number]
-        > &
-          Readonly<{ readonly records: ClosedStreamRecords<Records> }>
-      : RejectUnknownProperties<
-          Success,
-          (typeof definitionPropertyKeys.success.completion)[number]
-        >;
-
 type ClosedCommandDefinition<
   Definition,
   Command extends string = string,
@@ -869,12 +1565,6 @@ type ClosedCommandDefinition<
   Definition,
   (typeof definitionPropertyKeys.command)[number]
 > &
-  (Definition extends Readonly<{ readonly success: infer Success }>
-    ? Readonly<{ readonly success: ClosedSuccessDefinition<Success> }>
-    : unknown) &
-  (Definition extends Readonly<{ readonly failures: infer Failures }>
-    ? Readonly<{ readonly failures: ClosedAtomicVariants<Failures> }>
-    : unknown) &
   (Definition extends Readonly<{ readonly fields: infer Fields }>
     ? Readonly<{ readonly fields: ClosedFieldDefinitions<Fields> }>
     : unknown) &
@@ -1255,31 +1945,6 @@ export interface StreamHandlerContext<
     FailureOutcome<Command, Failures>;
 }
 
-type CompletionSuccessDefinition<
-  Command extends string,
-  TextEnabled extends boolean,
-> = TextEnabled extends true
-  ?
-      | Readonly<{
-          readonly kind: "completion";
-          readonly text: CompletionTextPresenter;
-        }>
-      | (Readonly<{ readonly kind: "completion" }> &
-          ContractTypeError<
-            "missingTextPresenter",
-            Readonly<{
-              readonly command: Command;
-              readonly location: "completion";
-              readonly missing: "text";
-            }>
-          >)
-  : TextEnabled extends false
-    ? Readonly<{ readonly kind: "completion"; readonly text?: never }>
-    : Readonly<{
-        readonly kind: "completion";
-        readonly text?: CompletionTextPresenter;
-      }>;
-
 type MissingVariantTextPresenters<Variants> = {
   [Variant in keyof Variants & string]: Variants[Variant] extends Readonly<{
     readonly text: unknown;
@@ -1322,44 +1987,34 @@ type DataVariantTextContract<
   DataVariantDefinitions<false>
 >;
 
-type AtomicTextPresenterContract<Payload, TextEnabled extends boolean> = [
-  TextEnabled,
-] extends [true]
-  ? Readonly<{ readonly text: AtomicTextPresenter<Payload> }>
-  : [TextEnabled] extends [false]
-    ? Readonly<{ readonly text?: never }>
-    : Readonly<{ readonly text?: AtomicTextPresenter<Payload> }>;
-
 type AtomicVariantDefinitionForSchema<
   Schema extends ContractSchema,
   TextEnabled extends boolean,
-> = Readonly<{
-  readonly description: string;
-  readonly schema: Schema;
-  readonly exitCode: number;
-}> &
-  AtomicTextPresenterContract<ContractSchemaOutput<Schema>, TextEnabled>;
+> = DataVariantDefinition<
+  ContractSchemaInput<Schema>,
+  TextEnabled,
+  ContractSchemaOutput<Schema>
+> &
+  Readonly<{ readonly schema: Schema }>;
 
-type VariantSchemaMap = Record<string, ContractSchema>;
+type VariantSchemaMap = object;
 
 type DataVariantDefinitionsForSchemas<
   Schemas extends VariantSchemaMap,
   TextEnabled extends boolean,
 > = Readonly<{
-  readonly [Variant in keyof Schemas]: AtomicVariantDefinitionForSchema<
-    Schemas[Variant],
-    TextEnabled
-  >;
+  readonly [Variant in keyof Schemas]: Schemas[Variant] extends ContractSchema
+    ? AtomicVariantDefinitionForSchema<Schemas[Variant], TextEnabled>
+    : never;
 }>;
 
 type FailureVariantDefinitionsForSchemas<
   Schemas extends VariantSchemaMap,
   TextEnabled extends boolean,
 > = Readonly<{
-  readonly [Variant in keyof Schemas]: AtomicVariantDefinitionForSchema<
-    Schemas[Variant],
-    TextEnabled
-  >;
+  readonly [Variant in keyof Schemas]: Schemas[Variant] extends ContractSchema
+    ? AtomicVariantDefinitionForSchema<Schemas[Variant], TextEnabled>
+    : never;
 }>;
 
 type FailureVariantTextContract<
@@ -1399,178 +2054,19 @@ type StreamRecordNameContract<Command extends string, Records> =
         }>
       >;
 
-type StreamRecordDefinitionForSchema<
-  Schema extends ContractSchema,
-  TextEnabled extends boolean,
-> = Readonly<{
-  readonly description: string;
-  readonly schema: Schema;
-}> &
-  ([TextEnabled] extends [false]
-    ? Readonly<{ readonly text?: never }>
-    : Readonly<{
-        readonly text?: StreamTextPresenter<ContractSchemaOutput<Schema>>;
-      }>);
-
-type StreamRecordDefinitionsForSchemas<
-  Schemas extends VariantSchemaMap,
-  TextEnabled extends boolean,
-> = Readonly<{
-  readonly [Variant in keyof Schemas]: StreamRecordDefinitionForSchema<
-    Schemas[Variant],
-    TextEnabled
-  >;
-}>;
-
-export interface CompletionRootCommandDefinition<
-  Command extends string,
-  Dependencies,
-  Failures extends FailureVariantDefinitions = Readonly<Record<never, never>>,
-  Fields extends FieldDefinitions = Readonly<Record<never, never>>,
-  InputSchema extends ContractSchema = ContractSchema<EmptyCliInput>,
-  TextEnabled extends boolean = boolean,
+export interface RootCommandDefinition<
+  Command extends string = string,
+  _Dependencies = unknown,
 > {
   readonly kind: "rootCommand";
   readonly name: string;
   readonly description: string;
   readonly helpSupplement?: TextLines;
-  readonly fields?: CheckedFieldDefinitions<Fields, Command> &
-    FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
-    FieldIdentityContract<Command, Fields>;
-  readonly input: InputSchema &
-    RawFieldInputContract<Command, Fields, InputSchema>;
-  readonly success: CompletionSuccessDefinition<Command, TextEnabled>;
-  readonly failures: Failures &
-    ClosedAtomicVariants<Failures> &
-    FailureVariantNameContract<Command, Failures> &
-    FailureVariantTextContract<Command, Failures, TextEnabled>;
-  readonly handler: (
-    context: CompletionHandlerContext<
-      Command,
-      Dependencies,
-      Failures,
-      ContractSchemaOutput<InputSchema>
-    >,
-  ) =>
-    | CompletionFact<Command>
-    | FailureFactUnion<Command, Failures>
-    | Promise<CompletionFact<Command> | FailureFactUnion<Command, Failures>>;
+  readonly examples?: readonly CommandExampleDefinition[];
+  readonly fields?: FieldDefinitions;
+  readonly input: ContractSchema;
+  readonly outputs: OutputModesDefinition<Command>;
 }
-
-export interface DataRootCommandDefinition<
-  Command extends string,
-  Dependencies,
-  Fields extends FieldDefinitions,
-  InputSchema extends ContractSchema,
-  Variants extends DataVariantDefinitions,
-  Failures extends FailureVariantDefinitions,
-> {
-  readonly kind: "rootCommand";
-  readonly name: string;
-  readonly description: string;
-  readonly helpSupplement?: TextLines;
-  readonly fields: CheckedFieldDefinitions<Fields, Command> &
-    FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
-    FieldIdentityContract<Command, Fields>;
-  readonly input: InputSchema &
-    RawFieldInputContract<Command, Fields, InputSchema>;
-  readonly success: Readonly<{
-    readonly kind: "data";
-    readonly variants: Variants &
-      ClosedAtomicVariants<Variants> &
-      DataVariantNameContract<Command, Variants>;
-  }>;
-  readonly failures: Failures &
-    ClosedAtomicVariants<Failures> &
-    FailureVariantNameContract<Command, Failures>;
-  readonly handler: (
-    context: DataHandlerContext<
-      Command,
-      Dependencies,
-      ContractSchemaOutput<InputSchema>,
-      Variants,
-      Failures
-    >,
-  ) =>
-    | DataFactUnion<Command, Variants>
-    | FailureFactUnion<Command, Failures>
-    | Promise<
-        DataFactUnion<Command, Variants> | FailureFactUnion<Command, Failures>
-      >;
-}
-
-export interface StreamRootCommandDefinition<
-  Command extends string,
-  Dependencies,
-  Fields extends FieldDefinitions,
-  InputSchema extends ContractSchema,
-  Records extends StreamRecordDefinitions,
-  Failures extends FailureVariantDefinitions,
-  TextEnabled extends boolean = boolean,
-> {
-  readonly kind: "rootCommand";
-  readonly name: string;
-  readonly description: string;
-  readonly helpSupplement?: TextLines;
-  readonly fields?: CheckedFieldDefinitions<Fields, Command> &
-    FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
-    FieldIdentityContract<Command, Fields>;
-  readonly input: InputSchema &
-    RawFieldInputContract<Command, Fields, InputSchema>;
-  readonly success: Readonly<{
-    readonly kind: "stream";
-    readonly records: Records &
-      StreamRecordDefinitions<TextEnabled> &
-      ClosedStreamRecords<Records> &
-      StreamRecordNameContract<Command, Records>;
-  }> &
-    (TextEnabled extends true
-      ? Readonly<{ readonly text: CompletionTextPresenter }>
-      : TextEnabled extends false
-        ? Readonly<{ readonly text?: never }>
-        : Readonly<{ readonly text?: CompletionTextPresenter }>);
-  readonly failures: Failures &
-    ClosedAtomicVariants<Failures> &
-    FailureVariantNameContract<Command, Failures>;
-  readonly handler: (
-    context: StreamHandlerContext<
-      Command,
-      Dependencies,
-      ContractSchemaOutput<InputSchema>,
-      Records,
-      Failures
-    >,
-  ) => AsyncGenerator<
-    StreamRecordFactUnion<Command, Records>,
-    StreamSuccessFact<Command> | FailureFactUnion<Command, Failures>,
-    void
-  >;
-}
-
-export type RootCommandDefinition<Command extends string, Dependencies> =
-  | CompletionRootCommandDefinition<
-      Command,
-      Dependencies,
-      FailureVariantDefinitions,
-      FieldDefinitions,
-      ContractSchema
-    >
-  | DataRootCommandDefinition<
-      Command,
-      Dependencies,
-      FieldDefinitions,
-      ContractSchema,
-      DataVariantDefinitions,
-      FailureVariantDefinitions
-    >
-  | StreamRootCommandDefinition<
-      Command,
-      Dependencies,
-      FieldDefinitions,
-      ContractSchema,
-      StreamRecordDefinitions,
-      FailureVariantDefinitions
-    >;
 
 export interface RootGroupDefinition {
   readonly kind: "rootGroup";
@@ -1616,64 +2112,20 @@ export type CommandCombination<
 export type ExecutableCommandDefinition<
   Command extends string = string,
   Dependencies = unknown,
-> =
-  | (Omit<
-      CompletionRootCommandDefinition<
-        Command,
-        Dependencies,
-        FailureVariantDefinitions,
-        FieldDefinitions,
-        ContractSchema
-      >,
-      "kind"
-    > &
-      HierarchyCommandFacts)
-  | (Omit<
-      DataRootCommandDefinition<
-        Command,
-        Dependencies,
-        FieldDefinitions,
-        ContractSchema,
-        DataVariantDefinitions,
-        FailureVariantDefinitions
-      >,
-      "kind"
-    > &
-      HierarchyCommandFacts)
-  | (Omit<
-      StreamRootCommandDefinition<
-        Command,
-        Dependencies,
-        FieldDefinitions,
-        ContractSchema,
-        StreamRecordDefinitions,
-        FailureVariantDefinitions
-      >,
-      "kind"
-    > &
-      HierarchyCommandFacts);
+> = Omit<RootCommandDefinition<Command, Dependencies>, "kind"> &
+  HierarchyCommandFacts;
 
 export type CommandNodeDefinition =
   | CommandGroupDefinition
+  | RootCommandDefinition
   | (HierarchyCommandFacts &
       Readonly<{
         readonly name: string;
         readonly description: string;
         readonly fields?: unknown;
         readonly input: ContractSchema;
-        readonly success:
-          | Readonly<{ readonly kind: "completion" }>
-          | Readonly<{
-              readonly kind: "data";
-              readonly variants: DataVariantDefinitions;
-            }>
-          | Readonly<{
-              readonly kind: "stream";
-              readonly records: StreamRecordDefinitions;
-              readonly text?: CompletionTextPresenter;
-            }>;
-        readonly failures: FailureVariantDefinitions;
-        readonly handler: unknown;
+        readonly outputs: OutputModesDefinition;
+        readonly examples?: readonly CommandExampleDefinition[];
       }>)
   | RootGroupDefinition;
 
@@ -1695,35 +2147,12 @@ type HierarchyRawInput<Commands> = {
 type HierarchyResult<Commands> = {
   [Command in keyof Commands]: Commands[Command] extends Readonly<{
     readonly kind: "command";
-    readonly success: Readonly<{
-      readonly kind: "data";
-      readonly variants: infer Variants extends DataVariantDefinitions;
-    }>;
-    readonly failures: infer Failures extends FailureVariantDefinitions;
+    readonly outputs: infer Outputs extends OutputModesDefinition<
+      Extract<Command, string>
+    >;
   }>
-    ?
-        | DataFactUnion<Extract<Command, string>, Variants>
-        | FailureFactUnion<Extract<Command, string>, Failures>
-    : Commands[Command] extends Readonly<{
-          readonly kind: "command";
-          readonly success: Readonly<{ readonly kind: "completion" }>;
-          readonly failures: infer Failures extends FailureVariantDefinitions;
-        }>
-      ?
-          | CompletionFact<Extract<Command, string>>
-          | FailureFactUnion<Extract<Command, string>, Failures>
-      : Commands[Command] extends Readonly<{
-            readonly kind: "command";
-            readonly success: Readonly<{
-              readonly kind: "stream";
-              readonly records: StreamRecordDefinitions;
-            }>;
-            readonly failures: infer Failures extends FailureVariantDefinitions;
-          }>
-        ?
-            | StreamSuccessFact<Extract<Command, string>>
-            | FailureFactUnion<Extract<Command, string>, Failures>
-        : never;
+    ? OutputModesResult<Extract<Command, string>, Outputs>
+    : never;
 }[keyof Commands];
 
 type HierarchyCommandFields<Node> =
@@ -3019,99 +3448,19 @@ type RootCliDefinitionBase<Root extends string> = RootIdentityContract<Root> & {
   readonly root: Root;
   readonly help: HelpCapability;
   readonly version?: VersionCapability;
-  readonly output: OutputCapability;
+  readonly schema?: SchemaCapability;
   readonly usageFailureExitCode: number;
 };
 
-export type CompletionRootCliDefinition<
+export type RootCliDefinition<
   Root extends string,
   Dependencies,
-  Failures extends FailureVariantDefinitions = Readonly<Record<never, never>>,
-  Fields extends FieldDefinitions = Readonly<Record<never, never>>,
-  InputSchema extends ContractSchema = ContractSchema<EmptyCliInput>,
-  TextEnabled extends boolean = boolean,
 > = RootCliDefinitionBase<Root> &
   Readonly<{
     readonly commands: Readonly<{
-      readonly [Command in Root]: CompletionRootCommandDefinition<
-        Command,
-        Dependencies,
-        Failures,
-        Fields,
-        InputSchema,
-        TextEnabled
-      >;
+      readonly [Command in Root]: RootCommandDefinition<Command, Dependencies>;
     }>;
   }>;
-
-export type DataRootCliDefinition<
-  Root extends string,
-  Dependencies,
-  Fields extends FieldDefinitions,
-  InputSchema extends ContractSchema,
-  Variants extends DataVariantDefinitions,
-  Failures extends FailureVariantDefinitions,
-> = RootCliDefinitionBase<Root> &
-  Readonly<{
-    readonly commands: Readonly<{
-      readonly [Command in Root]: DataRootCommandDefinition<
-        Command,
-        Dependencies,
-        Fields,
-        InputSchema,
-        Variants,
-        Failures
-      >;
-    }>;
-  }>;
-
-export type StreamRootCliDefinition<
-  Root extends string,
-  Dependencies,
-  Fields extends FieldDefinitions,
-  InputSchema extends ContractSchema,
-  Records extends StreamRecordDefinitions,
-  Failures extends FailureVariantDefinitions,
-  TextEnabled extends boolean = boolean,
-> = RootCliDefinitionBase<Root> &
-  Readonly<{
-    readonly commands: Readonly<{
-      readonly [Command in Root]: StreamRootCommandDefinition<
-        Command,
-        Dependencies,
-        Fields,
-        InputSchema,
-        Records,
-        Failures,
-        TextEnabled
-      >;
-    }>;
-  }>;
-
-export type RootCliDefinition<Root extends string, Dependencies> =
-  | CompletionRootCliDefinition<
-      Root,
-      Dependencies,
-      FailureVariantDefinitions,
-      FieldDefinitions,
-      ContractSchema
-    >
-  | DataRootCliDefinition<
-      Root,
-      Dependencies,
-      FieldDefinitions,
-      ContractSchema,
-      DataVariantDefinitions,
-      FailureVariantDefinitions
-    >
-  | StreamRootCliDefinition<
-      Root,
-      Dependencies,
-      FieldDefinitions,
-      ContractSchema,
-      StreamRecordDefinitions,
-      FailureVariantDefinitions
-    >;
 
 interface FieldGrammarBase<Field extends string> {
   readonly key: Field;
@@ -3173,7 +3522,23 @@ export interface RootCommandGrammar<Root extends string> {
   readonly helpSupplement?: readonly string[];
   readonly fields: readonly FieldGrammar[];
   readonly usageConstraints?: readonly UsageConstraintGrammar[];
+  readonly outputs: OutputModesGrammar;
   readonly usage: CommandUsage<Root>;
+}
+
+export interface OutputModesGrammar {
+  readonly selector: "--output";
+  readonly default: string;
+  readonly modes: Readonly<
+    Record<
+      string,
+      Readonly<{
+        readonly description: string;
+        readonly delivery: OutputDelivery;
+        readonly format: OutputFormat;
+      }>
+    >
+  >;
 }
 
 interface GroupGrammarBase<Command extends string> {
@@ -3205,6 +3570,7 @@ export interface ExecutableCommandGrammar<
   readonly parent: string;
   readonly fields: readonly FieldGrammar[];
   readonly usageConstraints?: readonly UsageConstraintGrammar[];
+  readonly outputs: OutputModesGrammar;
 }
 
 export type CommandGrammar<Command extends string = string> =
@@ -3236,11 +3602,9 @@ export interface CliGrammar<
       readonly value: string;
       readonly description?: string;
     }>;
-    readonly output: Readonly<{
-      readonly defaultFormat: OutputFormat;
-      readonly formats: readonly OutputFormat[];
-      readonly selector?: "--output-format";
-      readonly compatibilityFlags?: Readonly<Record<string, OutputFormat>>;
+    readonly schema?: Readonly<{
+      readonly longOption: "--schema";
+      readonly description: string;
     }>;
   }>;
 }
@@ -3269,16 +3633,29 @@ export type CommandSuccessManifest =
       readonly text?: Readonly<{ readonly recordFraming: "fragment" }>;
     }>;
 
+export interface OutputModeManifest {
+  readonly description: string;
+  readonly delivery: OutputDelivery;
+  readonly format: OutputFormat;
+  readonly success: CommandSuccessManifest;
+  readonly failures: Readonly<Record<string, FailureVariantManifest>>;
+}
+
+export interface OutputModesManifest {
+  readonly default: string;
+  readonly modes: Readonly<Record<string, OutputModeManifest>>;
+}
+
 export interface RootCommandManifest {
   readonly kind: "rootCommand";
   readonly name: string;
   readonly description: string;
   readonly helpSupplement?: readonly string[];
+  readonly examples?: readonly CommandExampleManifest[];
   readonly fields: readonly FieldGrammar[];
   readonly usageConstraints?: readonly UsageConstraintGrammar[];
   readonly input: SchemaManifest;
-  readonly success: CommandSuccessManifest;
-  readonly failures: Readonly<Record<string, FailureVariantManifest>>;
+  readonly outputs: OutputModesManifest;
 }
 
 export interface CommandGroupManifest {
@@ -3300,13 +3677,20 @@ export interface ExecutableCommandManifest extends Omit<
   readonly helpSupplement?: readonly string[];
 }
 
+/** 经正式解析和输入验证的示例事实；shell 为包含根命令名的 POSIX 调用行。 */
+export interface CommandExampleManifest {
+  readonly argv: readonly string[];
+  readonly shell: string;
+  readonly outputMode?: string;
+}
+
 export type { CountUsageConstraintGrammar, UsageConstraintGrammar };
 
 export interface CliManifest<
   Root extends string,
   RootKind extends CliRootKind = CliRootKind,
 > {
-  readonly schemaVersion: "4";
+  readonly schemaVersion: "5";
   readonly root: Root;
   readonly commands: RootKind extends "rootGroup"
     ? Readonly<Record<string, CommandGroupManifest | ExecutableCommandManifest>>
@@ -3321,7 +3705,7 @@ export interface CliManifest<
     : CommandWireManifest;
 }
 
-export interface CommandWireManifest {
+export interface OutputModeWireManifest {
   readonly completion?: JsonObject;
   readonly data?: Readonly<Record<string, JsonObject>>;
   readonly failure?: Readonly<Record<string, JsonObject>>;
@@ -3332,6 +3716,10 @@ export interface CommandWireManifest {
     readonly line: JsonObject;
   }>;
 }
+
+export type CommandWireManifest = Readonly<
+  Record<string, OutputModeWireManifest>
+>;
 
 type HierarchyGrammarNode<Command extends string, Node> =
   Node extends Readonly<{
@@ -3387,7 +3775,7 @@ type HierarchyExecutableKeys<Commands> = {
 }[keyof Commands];
 
 export interface HierarchyCliManifest<Root extends string, Commands> {
-  readonly schemaVersion: "4";
+  readonly schemaVersion: "5";
   readonly root: Root;
   readonly commands: Readonly<{
     [Command in keyof Commands]: HierarchyManifestNode<Commands[Command]>;
@@ -3427,6 +3815,17 @@ export interface CliContract<
   }>;
 }
 
+export type AnyCliContract = Readonly<{
+  readonly [cliContractType]: Readonly<{
+    readonly dependencies: unknown;
+    readonly rawInput: unknown;
+    readonly result: OutcomeFact;
+    readonly root: string;
+    readonly commands: string;
+    readonly usageFacts: unknown;
+  }>;
+}>;
+
 export type CliContractUsageFacts<Contract> =
   Contract extends Readonly<{
     readonly [cliContractType]: Readonly<{
@@ -3437,123 +3836,36 @@ export type CliContractUsageFacts<Contract> =
     : never;
 
 export type CliContractDependencies<Contract> =
-  Contract extends CliContract<
-    infer _Root,
-    infer Dependencies,
-    unknown,
-    OutcomeFact,
-    CliRootKind,
-    infer _Commands
-  >
+  Contract extends Readonly<{
+    readonly [cliContractType]: Readonly<{
+      readonly dependencies: infer Dependencies;
+    }>;
+  }>
     ? Dependencies
     : never;
 
 export type CliContractRawInput<Contract> =
-  Contract extends CliContract<
-    infer _Root,
-    unknown,
-    infer RawInput,
-    OutcomeFact,
-    CliRootKind,
-    infer _Commands
-  >
+  Contract extends Readonly<{
+    readonly [cliContractType]: Readonly<{ readonly rawInput: infer RawInput }>;
+  }>
     ? RawInput
     : never;
 
 export type CliContractResult<Contract> =
-  Contract extends CliContract<
-    infer _Root,
-    unknown,
-    unknown,
-    infer Result,
-    CliRootKind,
-    infer _Commands
-  >
+  Contract extends Readonly<{
+    readonly [cliContractType]: Readonly<{ readonly result: infer Result }>;
+  }>
     ? Result
     : never;
 
 export type CliContractRoot<Contract> =
-  Contract extends CliContract<
-    infer Root,
-    unknown,
-    unknown,
-    OutcomeFact,
-    CliRootKind,
-    infer Commands
-  >
-    ? [Commands] extends [never]
-      ? Root
-      : Extract<keyof Commands, string>
-    : never;
-
-type HasTextPresenter<Value> =
-  Value extends Readonly<{ readonly text: unknown }> ? true : false;
-
-type PresentTextVariants<Variants> = {
-  [Variant in keyof Variants & string]: HasTextPresenter<
-    Variants[Variant]
-  > extends true
-    ? Variant
-    : never;
-}[keyof Variants & string];
-
-type UnexpectedVariantTextIssue<
-  Command extends string,
-  Location extends "data" | "failure" | "record",
-  Variants,
-> = [PresentTextVariants<Variants>] extends [never]
-  ? never
-  : ContractTypeError<
-      "unexpectedTextPresenter",
-      Readonly<{
-        readonly command: Command;
-        readonly location: Location;
-        readonly variant: PresentTextVariants<Variants>;
-        readonly unexpected: "text";
-      }>
-    >;
-
-type UnexpectedSuccessTextIssue<
-  Command extends string,
-  Location extends "completion" | "streamSuccess",
-  Success,
-> =
-  HasTextPresenter<Success> extends true
-    ? ContractTypeError<
-        "unexpectedTextPresenter",
-        Readonly<{
-          readonly command: Command;
-          readonly location: Location;
-          readonly unexpected: "text";
-        }>
-      >
-    : never;
-
-type UnexpectedHierarchyTextIssues<Commands> = {
-  [Command in keyof Commands & string]: Commands[Command] extends Readonly<{
-    readonly kind: "command" | "rootCommand";
-    readonly success: infer Success;
-    readonly failures: infer Failures;
+  Contract extends Readonly<{
+    readonly [cliContractType]: Readonly<{
+      readonly commands: infer Commands;
+    }>;
   }>
-    ? Success extends Readonly<{ readonly kind: "completion" }>
-      ?
-          | UnexpectedSuccessTextIssue<Command, "completion", Success>
-          | UnexpectedVariantTextIssue<Command, "failure", Failures>
-      : Success extends Readonly<{ readonly variants: infer Variants }>
-        ?
-            | UnexpectedVariantTextIssue<Command, "data", Variants>
-            | UnexpectedVariantTextIssue<Command, "failure", Failures>
-        : Success extends Readonly<{
-              readonly kind: "stream";
-              readonly records: infer Records;
-            }>
-          ?
-              | UnexpectedSuccessTextIssue<Command, "streamSuccess", Success>
-              | UnexpectedVariantTextIssue<Command, "record", Records>
-              | UnexpectedVariantTextIssue<Command, "failure", Failures>
-          : never
+    ? Extract<Commands, string>
     : never;
-}[keyof Commands & string];
 
 type HierarchyUsageValidation<Commands> = [
   InvalidCommandUsageConstraintIssues<Commands>,
@@ -3563,102 +3875,12 @@ type HierarchyUsageValidation<Commands> = [
     : readonly [HierarchyInputIssues<Commands>]
   : readonly [InvalidCommandUsageConstraintIssues<Commands>];
 
-type HierarchyCommandTextContract<Command extends string, Definition> =
-  Definition extends Readonly<{
-    readonly success: infer Success;
-    readonly failures: infer Failures;
-  }>
-    ? Success extends Readonly<{ readonly kind: "completion" }>
-      ? FailureVariantTextContract<Command, Failures, true> &
-          (HasTextPresenter<Success> extends true
-            ? unknown
-            : ContractTypeError<
-                "missingTextPresenter",
-                Readonly<{
-                  readonly command: Command;
-                  readonly location: "completion";
-                  readonly missing: "text";
-                }>
-              >)
-      : Success extends Readonly<{
-            readonly kind: "data";
-            readonly variants: infer Variants;
-          }>
-        ? DataVariantTextContract<Command, Variants, true> &
-            FailureVariantTextContract<Command, Failures, true>
-        : Success extends Readonly<{
-              readonly kind: "stream";
-              readonly records: infer Records;
-            }>
-          ? StreamRecordTextContract<Command, Records, true> &
-              FailureVariantTextContract<Command, Failures, true> &
-              (HasTextPresenter<Success> extends true
-                ? unknown
-                : ContractTypeError<
-                    "missingTextPresenter",
-                    Readonly<{
-                      readonly command: Command;
-                      readonly location: "streamSuccess";
-                      readonly missing: "text";
-                    }>
-                  >)
-          : unknown
-    : unknown;
-
-type HierarchyTextIssues<Commands> = {
-  [
-    Command in keyof Commands & string
-  ]: Commands[Command] extends HierarchyCommandTextContract<
-    Command,
-    Commands[Command]
-  >
-    ? never
-    : HierarchyCommandTextContract<Command, Commands[Command]>;
-}[keyof Commands & string];
-
-type HierarchyTextValidation<Commands> = [
-  HierarchyTextIssues<Commands>,
-] extends [never]
-  ? unknown
-  : HierarchyTextIssues<Commands>;
-
-type HierarchyOutputValidation<Commands, Output extends OutputCapability> =
-  Output extends OutputCapability<infer Formats>
-    ? [Formats] extends [readonly ["structured", "text"]]
-      ? [HierarchyTextIssues<Commands>] extends [never]
-        ? HierarchyUsageValidation<Commands>
-        : readonly [HierarchyTextIssues<Commands>]
-      : [Formats] extends [readonly ["structured"]]
-        ? [UnexpectedHierarchyTextIssues<Commands>] extends [never]
-          ? HierarchyUsageValidation<Commands>
-          : readonly [UnexpectedHierarchyTextIssues<Commands>]
-        : HierarchyUsageValidation<Commands>
-    : HierarchyUsageValidation<Commands>;
-
 type ValidationIntersection<Validation extends readonly unknown[]> =
   Validation extends readonly []
     ? unknown
     : Validation extends readonly [infer Error]
       ? Error
       : never;
-
-type HierarchyContract<Commands, Output extends OutputCapability> = [
-  TextEnabledForOutput<Output>,
-] extends [true]
-  ? HierarchyTextValidation<Commands> &
-      ValidationIntersection<HierarchyUsageValidation<Commands>>
-  : ValidationIntersection<HierarchyOutputValidation<Commands, Output>>;
-
-type TextEnabledForOutput<Output extends OutputCapability> =
-  Output extends OutputCapability<infer Formats>
-    ? [Formats] extends [never]
-      ? boolean
-      : [Formats] extends [readonly ["structured", "text"]]
-        ? true
-        : [Formats] extends [readonly ["structured"]]
-          ? false
-          : boolean
-    : boolean;
 
 type EmptyRawObject = Readonly<Record<never, never>>;
 
@@ -3690,63 +3912,6 @@ type RootFallbackRawFieldInputContract<
     : MissingRootFallbackFieldsContract<Command, InputSchema>
   : RawFieldInputContract<Command, Fields, InputSchema>;
 
-type RootFallbackKind = "completion" | "data" | "stream";
-
-type RootFallbackHandlerContext<
-  Command extends string,
-  Dependencies,
-  InputSchema extends ContractSchema,
-  Variants extends DataVariantDefinitions,
-  Records extends StreamRecordDefinitions,
-  Failures extends FailureVariantDefinitions,
-  Kind extends RootFallbackKind,
-> = {
-  readonly completion: CompletionHandlerContext<
-    Command,
-    Dependencies,
-    Failures,
-    ContractSchemaOutput<InputSchema>
-  >;
-  readonly data: DataHandlerContext<
-    Command,
-    Dependencies,
-    ContractSchemaOutput<InputSchema>,
-    Variants,
-    Failures
-  >;
-  readonly stream: StreamHandlerContext<
-    Command,
-    Dependencies,
-    ContractSchemaOutput<InputSchema>,
-    Records,
-    Failures
-  >;
-}[Kind];
-
-type RootFallbackHandlerResult<
-  Command extends string,
-  Variants extends DataVariantDefinitions,
-  Records extends StreamRecordDefinitions,
-  Failures extends FailureVariantDefinitions,
-  Kind extends RootFallbackKind,
-> = {
-  readonly completion:
-    | CompletionFact<Command>
-    | FailureFactUnion<Command, Failures>
-    | Promise<CompletionFact<Command> | FailureFactUnion<Command, Failures>>;
-  readonly data:
-    | DataFactUnion<Command, Variants>
-    | FailureFactUnion<Command, Failures>
-    | Promise<
-        DataFactUnion<Command, Variants> | FailureFactUnion<Command, Failures>
-      >;
-  readonly stream: AsyncGenerator<
-    StreamRecordFactUnion<Command, Records>,
-    StreamSuccessFact<Command> | FailureFactUnion<Command, Failures>,
-    void
-  >;
-}[Kind];
-
 type RootNodeFromCommands<Root extends string, Commands> =
   Commands extends Readonly<Record<Root, infer Node>> ? Node : never;
 
@@ -3759,241 +3924,183 @@ type RootCommandRawInput<Root extends string, Commands> =
 
 type RootCommandResult<Root extends string, Commands> =
   RootNodeFromCommands<Root, Commands> extends Readonly<{
-    readonly success: infer Success;
-    readonly failures: infer Failures extends FailureVariantDefinitions;
+    readonly outputs: infer Outputs;
   }>
-    ? Success extends Readonly<{ readonly kind: "completion" }>
-      ? CompletionFact<Root> | FailureFactUnion<Root, Failures>
-      : Success extends Readonly<{
-            readonly kind: "data";
-            readonly variants: infer Variants extends DataVariantDefinitions;
-          }>
-        ? DataFactUnion<Root, Variants> | FailureFactUnion<Root, Failures>
-        : Success extends Readonly<{ readonly kind: "stream" }>
-          ? StreamSuccessFact<Root> | FailureFactUnion<Root, Failures>
-          : never
+    ? OutputModesResult<Root, Outputs>
     : never;
 
-type RootFallbackCliDefinition<
-  Root extends string,
-  _Dependencies,
+type ExampleFields<Node> =
+  Node extends Readonly<{
+    readonly fields: infer Fields extends FieldDefinitions;
+  }>
+    ? Fields
+    : Readonly<Record<never, never>>;
+
+type CommandExampleOutputModeContract<
+  Command extends string,
+  Outputs,
+  Example,
+> = "outputMode" extends keyof Example
+  ? Example extends Readonly<{ readonly outputMode?: infer Mode }>
+    ? Exclude<Mode, undefined> extends OutputModeKeys<
+        NoInfer<Outputs> extends Readonly<{ readonly modes: infer Modes }>
+          ? Modes
+          : never
+      >
+      ? unknown
+      : ContractTypeError<
+          "invalidCommandExampleOutputMode",
+          Readonly<{
+            readonly command: Command;
+            readonly outputMode: Exclude<Mode, undefined>;
+            readonly available: OutputModeKeys<
+              NoInfer<Outputs> extends Readonly<{ readonly modes: infer Modes }>
+                ? Modes
+                : never
+            >;
+          }>
+        >
+    : unknown
+  : unknown;
+
+type CommandExampleContract<
+  Command extends string,
+  Example,
   Fields extends FieldDefinitions,
   InputSchema extends ContractSchema,
-  VariantSchemas extends VariantSchemaMap,
-  Variants,
-  RecordSchemas extends VariantSchemaMap,
-  Records,
-  FailureSchemas extends VariantSchemaMap,
-  Failures,
-  TextEnabled extends boolean,
-> = RootCliDefinitionBase<Root> &
-  Readonly<{
-    readonly commands: Readonly<{
-      readonly [Command in Root]: Readonly<{
-        readonly kind: "rootCommand";
-        readonly name: string;
-        readonly description: string;
-        readonly helpSupplement?: TextLines;
-      }> &
+  Outputs,
+> =
+  Example extends Readonly<{ readonly input: infer Input }>
+    ? Example &
+        RejectUnknownProperties<
+          Example,
+          (typeof definitionPropertyKeys.example)[number]
+        > &
         Readonly<{
-          readonly input: InputSchema &
-            RootFallbackRawFieldInputContract<Command, Fields, InputSchema>;
-          readonly failures: Failures &
-            FailureVariantDefinitionsForSchemas<FailureSchemas, boolean> &
-            FailureVariantNameContract<Command, Failures> &
-            FailureVariantTextContract<Command, Failures, TextEnabled>;
+          readonly input: Input &
+            ContractSchemaInput<NoInfer<InputSchema>> &
+            RawFieldInput<NoInfer<Fields>> &
+            RejectUnknownProperties<
+              Input,
+              Extract<keyof NoInfer<Fields>, string>
+            >;
         }> &
-        (
-          | Readonly<{
-              readonly fields: CheckedFieldDefinitions<Fields, Command> &
-                FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
-                FieldIdentityContract<Command, Fields>;
-              readonly success: Readonly<{
-                readonly kind: "data";
-                readonly variants: Variants &
-                  DataVariantDefinitionsForSchemas<VariantSchemas, boolean> &
-                  DataVariantNameContract<Command, Variants> &
-                  DataVariantTextContract<Command, Variants, TextEnabled>;
-              }>;
-            }>
-          | Readonly<{
-              readonly fields?: CheckedFieldDefinitions<Fields, Command> &
-                FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
-                FieldIdentityContract<Command, Fields>;
-              readonly success: CompletionSuccessDefinition<Root, TextEnabled>;
-            }>
-          | Readonly<{
-              readonly fields?: CheckedFieldDefinitions<Fields, Command> &
-                FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
-                FieldIdentityContract<Command, Fields>;
-              readonly success:
-                | (Readonly<{
-                    readonly kind: "stream";
-                    readonly records: Records &
-                      StreamRecordDefinitionsForSchemas<
-                        RecordSchemas,
-                        boolean
-                      > &
-                      StreamRecordNameContract<Command, Records>;
-                    readonly text: CompletionTextPresenter;
-                  }> &
-                    StreamRecordTextContract<Command, Records, TextEnabled>)
-                | (Readonly<{
-                    readonly kind: "stream";
-                    readonly records: Records &
-                      StreamRecordDefinitionsForSchemas<
-                        RecordSchemas,
-                        boolean
-                      > &
-                      StreamRecordNameContract<Command, Records>;
-                    readonly text?: never;
-                  }> &
-                    ([TextEnabled] extends [true]
-                      ? ContractTypeError<
-                          "missingTextPresenter",
-                          Readonly<{
-                            readonly command: Command;
-                            readonly location: "streamSuccess";
-                            readonly missing: "text";
-                          }>
-                        >
-                      : unknown));
-            }>
-        );
-    }>;
-  }>;
-
-type RootFallbackHandlerDefinition<
-  Root extends string,
-  Dependencies,
-  InputSchema extends ContractSchema,
-  Variants extends DataVariantDefinitions,
-  Records extends StreamRecordDefinitions,
-  Failures extends FailureVariantDefinitions,
-  Kind extends RootFallbackKind,
-> = Readonly<{
-  readonly commands: Readonly<{
-    readonly [Command in Root]: Readonly<{
-      readonly success: Readonly<{ readonly kind: Kind }>;
-      readonly handler: (
-        context: RootFallbackHandlerContext<
-          Command,
-          Dependencies,
-          InputSchema,
-          Variants,
-          Records,
-          Failures,
-          NoInfer<Kind>
-        >,
-      ) => RootFallbackHandlerResult<
-        Command,
-        Variants,
-        Records,
-        Failures,
-        NoInfer<Kind>
+        CommandExampleOutputModeContract<Command, Outputs, Example>
+    : ContractTypeError<
+        "invalidCommandExampleShape",
+        Readonly<{ readonly command: Command; readonly member: "input" }>
       >;
-    }>;
-  }>;
-}>;
 
-type RootFallbackNodeDefinition<
-  Root extends string,
-  Dependencies,
+type CommandExamplesContract<
+  Command extends string,
+  Node,
   Fields extends FieldDefinitions,
   InputSchema extends ContractSchema,
-  VariantSchemas extends VariantSchemaMap,
-  Variants,
-  RecordSchemas extends VariantSchemaMap,
-  Records,
-  FailureSchemas extends VariantSchemaMap,
-  Failures,
-  TextEnabled extends boolean,
-  Kind extends RootFallbackKind,
-> = (RootFallbackCliDefinition<
-  Root,
-  Dependencies,
-  Fields,
-  InputSchema,
-  VariantSchemas,
-  Variants,
-  RecordSchemas,
-  Records,
-  FailureSchemas,
-  Failures,
-  TextEnabled
-> &
-  RootFallbackHandlerDefinition<
-    Root,
-    Dependencies,
-    InputSchema,
-    DataVariantDefinitionsForSchemas<VariantSchemas, boolean>,
-    StreamRecordDefinitionsForSchemas<RecordSchemas, boolean>,
-    FailureVariantDefinitionsForSchemas<FailureSchemas, boolean>,
-    Kind
-  >)["commands"][Root];
+  Outputs,
+> =
+  Node extends Readonly<{
+    readonly examples: infer Examples extends readonly unknown[];
+  }>
+    ? Readonly<{
+        readonly examples: readonly CommandExampleContract<
+          Command,
+          Examples[number],
+          NoInfer<Fields>,
+          NoInfer<InputSchema>,
+          NoInfer<Outputs>
+        >[];
+      }>
+    : unknown;
+
+type ExecutableNodeContract<Command extends string, Node> =
+  Node extends Readonly<{
+    readonly kind: "command" | "rootCommand";
+    readonly input: infer InputSchema extends ContractSchema;
+    readonly outputs: infer Outputs;
+  }>
+    ? Outputs extends OutputModesDefinition<Command, InputSchema>
+      ? Node extends Readonly<{
+          readonly fields: infer Fields extends FieldDefinitions;
+        }>
+        ? Readonly<{
+            readonly fields: CheckedFieldDefinitions<Fields, Command> &
+              FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
+              FieldIdentityContract<Command, Fields>;
+          }> &
+            RawFieldInputContract<Command, Fields, InputSchema> &
+            CommandExamplesContract<Command, Node, Fields, InputSchema, Outputs>
+        : Readonly<{ readonly fields?: never }> &
+            RootFallbackRawFieldInputContract<
+              Command,
+              FieldDefinitions,
+              InputSchema
+            > &
+            CommandExamplesContract<
+              Command,
+              Node,
+              ExampleFields<Node>,
+              InputSchema,
+              Outputs
+            >
+      : ContractTypeError<
+          "outputModesMustMatchCommand",
+          Readonly<{ readonly command: Command }>
+        >
+    : never;
+
+type ExecutableNodesContract<Commands> = {
+  [Command in keyof Commands & string]: Commands[Command] extends Readonly<{
+    readonly kind: "command" | "rootCommand";
+  }>
+    ? ExecutableNodeContract<Command, Commands[Command]>
+    : unknown;
+};
 
 /* oxlint-disable typescript/no-unnecessary-type-parameters -- 公共签名的泛型参与嵌套契约约束，不能按单次出现次数机械删除。 */
 export interface DefineCli<Dependencies> {
-  /**
-   * 为命令组创建可执行后代，再把返回记录展开到同一个 `commands` 对象中交给
-   * `defineCli()` 装配。后代只声明自己的输入和结果；根级 output 的全树约束在最终
-   * 装配处统一判定。
-   */
+  /** 为命令组创建可执行后代，再把返回记录展开到最终命令树中统一装配。 */
   readonly command: <const Command extends string>(
     command: Command,
   ) => DefineCommand<Command, Dependencies>;
 
   /**
-   * 装配根命令或命令组。命令组的后代在 `commands` 中合并后统一检查
-   * 根级 output 与每个结果位置的关系；静态事实在这里被拒绝，动态值
-   * 继续由定义期的闭合问题说明原因。
+   * 为一个可执行命令定义共享输入下的具名输出方式。每种方式由独立的 atomic 或 stream
+   * 契约构造器创建；输入模式也传入此处，以便处理器明确使用同一命令的验证后输入类型。
    */
+  readonly outputModes: <
+    const Command extends string,
+    InputSchema extends ContractSchema,
+    const Definition extends OutputModeSetDeclaration,
+  >(
+    command: Command,
+    input: InputSchema,
+    build: (
+      mode: OutputModeFactory<Command, Dependencies, InputSchema>,
+    ) => Definition &
+      OutputModesTypeContract<Definition> &
+      OutputModesVariantNames<Command, NoInfer<Definition>>,
+  ) => OutputModesFromDeclaration<Command, InputSchema, Definition>;
+
   <
     const Root extends string,
-    const Fields extends FieldDefinitions,
-    InputSchema extends ContractSchema,
-    const VariantSchemas extends VariantSchemaMap,
-    const Variants,
-    const RecordSchemas extends VariantSchemaMap,
-    const Records,
-    const FailureSchemas extends VariantSchemaMap,
-    const Failures,
-    const Output extends OutputCapability,
-    const Kind extends RootFallbackKind,
-    const Commands,
+    const Commands extends Readonly<Record<string, CommandNodeDefinition>>,
     const Definition extends object,
   >(
     definition: Definition &
       ClosedRootDefinition<Definition> &
       RootCliDefinitionBase<Root> &
       Readonly<{
-        readonly output: Output;
         readonly commands: Commands &
           ClosedRootCommands<Commands> &
+          ExecutableNodesContract<Commands> &
           Readonly<
             Record<
               Root,
-              | RootFallbackNodeDefinition<
-                  Root,
-                  Dependencies,
-                  Fields,
-                  InputSchema,
-                  VariantSchemas,
-                  Variants,
-                  RecordSchemas,
-                  Records,
-                  FailureSchemas,
-                  Failures,
-                  boolean,
-                  Kind
-                >
-              | RootGroupDefinition
+              RootGroupDefinition | RootCommandDefinition<Root, Dependencies>
             >
           >;
       }> &
-      (Commands extends Readonly<Record<Root, { readonly kind: "rootGroup" }>>
-        ? HierarchyCliDefinition<Root> & HierarchyContract<Commands, Output>
-        : ValidationIntersection<HierarchyOutputValidation<Commands, Output>>),
+      ValidationIntersection<HierarchyUsageValidation<Commands>>,
   ): Commands extends Readonly<Record<Root, { readonly kind: "rootGroup" }>>
     ? CliContract<
         Root,
@@ -4016,72 +4123,18 @@ export interface DefineCli<Dependencies> {
 }
 /* oxlint-enable typescript/no-unnecessary-type-parameters */
 
-type ActualFailureDefinitions<Failures> =
-  Failures extends FailureVariantDefinitions ? Failures : never;
-
-type RootFallbackFieldsProperty<
-  Command extends string,
-  Fields extends FieldDefinitions,
-  InputSchema extends ContractSchema,
-> =
-  | Readonly<{
-      readonly fields: CheckedFieldDefinitions<Fields, Command> &
-        FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
-        FieldIdentityContract<Command, Fields>;
-      readonly success: Readonly<{ readonly kind: "data" | "stream" }>;
-    }>
-  | Readonly<{
-      readonly fields?: CheckedFieldDefinitions<Fields, Command> &
-        FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
-        FieldIdentityContract<Command, Fields>;
-      readonly success: Readonly<{ readonly kind: "completion" }>;
-    }>;
-
 /* oxlint-disable typescript/no-unnecessary-type-parameters -- 公共命令签名用泛型连接字段、模式、结果与 handler。 */
 /** 为具名叶命令生成可展开到根契约 `commands` 的定义。 */
 export interface DefineCommand<Command extends string, Dependencies> {
   <
-    const Definition extends object,
+    const Definition extends object & CommandDefinitionExampleContext,
     const Parent extends string,
-    const Fields extends FieldDefinitions,
-    InputSchema extends ContractSchema,
-    const VariantSchemas extends VariantSchemaMap,
-    const Variants,
-    const RecordSchemas extends VariantSchemaMap,
-    const Records,
-    const FailureSchemas extends VariantSchemaMap,
-    const Failures,
-    const Kind extends RootFallbackKind,
   >(
     definition: Definition &
       ClosedCommandDefinition<Definition, Command> &
-      Omit<
-        RootFallbackCliDefinition<
-          Command,
-          Dependencies,
-          Fields,
-          InputSchema,
-          VariantSchemas,
-          Variants,
-          RecordSchemas,
-          Records,
-          FailureSchemas,
-          Failures,
-          boolean
-        >["commands"][Command],
-        "kind" | "fields"
-      > &
-      RootFallbackFieldsProperty<Command, Fields, InputSchema> &
-      RootFallbackHandlerDefinition<
-        Command,
-        Dependencies,
-        InputSchema,
-        Variants extends DataVariantDefinitions ? Variants : never,
-        Records extends StreamRecordDefinitions ? Records : never,
-        ActualFailureDefinitions<Failures>,
-        Kind
-      >["commands"][Command] &
-      HierarchyCommandFactsDefinition<Parent>,
+      Omit<ExecutableCommandDefinition<Command, Dependencies>, "kind"> &
+      HierarchyCommandFactsDefinition<Parent> &
+      ExecutableNodeContract<Command, Definition>,
   ): CommandCombination<Command, Definition, Parent>;
 }
 /* oxlint-enable typescript/no-unnecessary-type-parameters */
@@ -4091,6 +4144,18 @@ interface RuntimeCompiledCli {
   readonly root: string;
   readonly usageFailureExitCode: number;
   readonly commands: Readonly<Record<string, RuntimeCompiledCommand>>;
+}
+
+interface EncodedCommandExample {
+  readonly manifest: CommandExampleManifest;
+  readonly rawInput: Readonly<Record<string, unknown>>;
+  readonly expectedOutputMode: string;
+}
+
+interface PendingCommandExampleValidation {
+  readonly command: string;
+  readonly input: ContractSchema;
+  readonly examples: readonly EncodedCommandExample[];
 }
 
 type RuntimeCompiledSuccess =
@@ -4104,6 +4169,43 @@ type RuntimeCompiledSuccess =
       readonly records: Readonly<Record<string, RuntimeStreamRecord>>;
       readonly text?: unknown;
     }>;
+
+interface RuntimeCompiledResultContract {
+  readonly success: RuntimeCompiledSuccess;
+  readonly failures: Readonly<Record<string, RuntimeAtomicVariant>>;
+  readonly handler: unknown;
+}
+
+interface CompiledResultContract {
+  readonly runtime: RuntimeCompiledResultContract;
+  readonly manifest: Readonly<{
+    readonly success: CommandSuccessManifest;
+    readonly failures: Readonly<Record<string, FailureVariantManifest>>;
+  }>;
+  readonly wire: OutputModeWireManifest;
+}
+
+interface RuntimeCompiledOutputMode {
+  readonly id: string;
+  readonly description: string;
+  readonly delivery: OutputDelivery;
+  readonly format: OutputFormat;
+  readonly resultContract: RuntimeCompiledResultContract;
+}
+
+interface RuntimeOutputModeDefinition {
+  readonly delivery: OutputDelivery;
+  readonly description: string;
+  readonly format: OutputFormat;
+  readonly success: RuntimeCompiledSuccess;
+  readonly failures: FailureVariantDefinitions;
+  readonly handler: unknown;
+}
+
+interface RuntimeOutputModesDefinition {
+  readonly default: string;
+  readonly modes: Readonly<Record<string, RuntimeOutputModeDefinition>>;
+}
 
 interface RuntimeCompiledCommandBase {
   readonly id: string;
@@ -4124,9 +4226,9 @@ export interface RuntimeCompiledExecutable extends RuntimeCompiledCommandBase {
   readonly fields: readonly FieldGrammar[];
   readonly usageConstraints: readonly UsageConstraintGrammar[];
   readonly input: ContractSchema;
-  readonly success: RuntimeCompiledSuccess;
-  readonly failures: Readonly<Record<string, RuntimeAtomicVariant>>;
-  readonly handler: unknown;
+  readonly defaultOutputMode: string;
+  readonly outputModes: Readonly<Record<string, RuntimeCompiledOutputMode>>;
+  readonly examples?: readonly CommandExampleManifest[];
 }
 
 type RuntimeCompiledCommand = RuntimeCompiledGroup | RuntimeCompiledExecutable;
@@ -4147,19 +4249,8 @@ type RuntimeExecutableDefinition = Readonly<{
   readonly usageConstraints?: readonly UsageConstraint[];
   readonly fields?: FieldDefinitions;
   readonly input: ContractSchema;
-  readonly success:
-    | Readonly<{ readonly kind: "completion" }>
-    | Readonly<{
-        readonly kind: "data";
-        readonly variants: DataVariantDefinitions;
-      }>
-    | Readonly<{
-        readonly kind: "stream";
-        readonly records: StreamRecordDefinitions;
-        readonly text?: CompletionTextPresenter;
-      }>;
-  readonly failures: FailureVariantDefinitions;
-  readonly handler: unknown;
+  readonly outputs: RuntimeOutputModesDefinition;
+  readonly examples?: readonly CommandExampleDefinition[];
 }>;
 
 type RuntimeGroupDefinition = Readonly<{
@@ -4247,6 +4338,8 @@ function copyHelpHeadings(value: unknown): HelpHeadings {
     "arguments",
     "options",
     "constraints",
+    "schema",
+    "examples",
     "supplement",
   ]);
   const headings: Record<string, string> = {};
@@ -4390,6 +4483,34 @@ export function versionCapability<
   return capability;
 }
 
+/**
+ * 在根契约显式装配全树契约发现。说明文案由作者提供一次；核心负责查询事实、帮助和响应。
+ */
+export function schemaCapability<
+  const Definition extends SchemaCapabilityDefinition,
+>(
+  definition: Definition &
+    RejectUnknownProperties<
+      Definition,
+      (typeof definitionPropertyKeys.capability.schema)[number]
+    >,
+): SchemaCapability {
+  assertKnownCapabilityOptions(
+    definition,
+    definitionPropertyKeys.capability.schema,
+    "schema",
+  );
+  const description = copyVersionTextLine(definition.description);
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- schemaCapability 由本工厂签发并登记到 WeakSet。
+  const capability = Object.freeze({
+    kind: "schemaCapability" as const,
+    longOption: "--schema" as const,
+    description,
+  }) as SchemaCapability;
+  schemaCapabilities.add(capability);
+  return capability;
+}
+
 function copyVersionTextLine(value: unknown): string {
   if (
     typeof value !== "object" ||
@@ -4424,6 +4545,9 @@ function compileControls(definition: RuntimeCliDefinition) {
   const version = isVersionCapability(definition.version)
     ? definition.version
     : undefined;
+  const schema = isSchemaCapability(definition.schema)
+    ? definition.schema
+    : undefined;
   return deepFreeze({
     help: {
       longOption: definition.help.longOption,
@@ -4451,56 +4575,15 @@ function compileControls(definition: RuntimeCliDefinition) {
               : { description: version.description }),
           },
         }),
-    output: {
-      defaultFormat: definition.output.defaultFormat,
-      formats: definition.output.formats,
-      ...(definition.output.formats.includes("text")
-        ? { selector: "--output-format" as const }
-        : {}),
-      ...(Object.keys(definition.output.compatibilityFlags).length === 0
-        ? {}
-        : { compatibilityFlags: definition.output.compatibilityFlags }),
-    },
+    ...(schema === undefined
+      ? {}
+      : {
+          schema: {
+            longOption: "--schema" as const,
+            description: schema.description,
+          },
+        }),
   });
-}
-
-/**
- * 在根契约显式装配一次应用结果的输出格式能力，并自动覆盖整棵命令树。
- * 它把 selector 与兼容 flag 保留为调用控制，不进入命令 input 或 handler；帮助、版本
- * 与用法失败使用各自固定投影。`defaultFormat`、text 支持和兼容映射必须由消费者
- * 显式选择，不能在命令节点另行装配格式或输出 profile。
- */
-export function outputCapability<
-  const Definition extends OutputCapabilityDefinition,
->(
-  definition: Definition &
-    RejectUnknownProperties<
-      Definition,
-      (typeof definitionPropertyKeys.capability.output)[number]
-    >,
-): OutputCapability<OutputFormatsFor<Definition>> {
-  assertKnownCapabilityOptions(
-    definition,
-    definitionPropertyKeys.capability.output,
-    "output",
-  );
-  const formats =
-    definition.defaultFormat === "text" || definition.text === true
-      ? (["structured", "text"] as const)
-      : (["structured"] as const);
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- outputCapability 由本工厂签发并登记到 WeakSet，类型品牌不在运行时输出。
-  const capability = Object.freeze({
-    kind: "outputCapability" as const,
-    defaultFormat: definition.defaultFormat,
-    formats: Object.freeze(formats),
-    compatibilityFlags: Object.freeze(
-      definition.compatibilityFlags === undefined
-        ? {}
-        : definition.compatibilityFlags,
-    ),
-  }) as OutputCapability<OutputFormatsFor<Definition>>;
-  outputCapabilities.add(capability);
-  return capability;
 }
 
 function assertKnownCapabilityOptions(
@@ -4516,9 +4599,7 @@ function assertKnownCapabilityOptions(
 }
 
 /**
- * 定义一个闭合 CLI 契约。根级 help 与 output 能力在此处一次装配，并据此约束根命令的结果投影；
- * 最终根装配会逐个检查整棵命令树的 completion、data/failure variant、stream record 与 stream success
- * 是否满足 text 能力要求的同位 presenter；structured-only 禁止 presenter，`define.command()` 组合也在此检查。
+ * 定义一个闭合 CLI 契约。各可执行命令声明具名输出方式及其结果投影。
  * 动态声明仍会在定义期报告 `ContractDefinitionError`，不能以它替代静态可判定声明的类型检查。
  * @see {@link https://github.com/YKDZ/cli-contract/tree/main/packages/example | 端到端示例}
  */
@@ -4534,6 +4615,43 @@ export function defineCli<Dependencies = undefined>(): DefineCli<Dependencies> {
           ...definition,
         }),
       }),
+  });
+  Object.defineProperty(define, "outputModes", {
+    configurable: true,
+    value: (
+      command: string,
+      input: ContractSchema,
+      build: (mode: {
+        readonly atomic: (definition: object) => object;
+        readonly stream: (definition: object) => object;
+      }) => OutputModeSetDeclaration,
+    ) => {
+      const issueMode = (definition: object, delivery: OutputDelivery) => {
+        const mode = Object.freeze({ ...definition, delivery });
+        outputModeDefinitions.add(mode);
+        outputModeDefinitionMetadata.set(mode, { command, input });
+        return mode;
+      };
+      const modes = build({
+        atomic: (definition) => issueMode(definition, "atomic"),
+        stream: (definition) => issueMode(definition, "stream"),
+      });
+      const modeNames = Object.keys(modes.modes);
+      const hasDefault = Object.hasOwn(modes, "default");
+      const outputDefinition = Object.freeze({
+        ...(hasDefault
+          ? { default: Reflect.get(modes, "default") }
+          : modeNames.length === 1
+            ? { default: modeNames[0] }
+            : {}),
+        modes: Object.freeze({ ...modes.modes }),
+      });
+      if (typeof outputDefinition === "object" && outputDefinition !== null) {
+        outputModes.add(outputDefinition);
+        outputModeMetadata.set(outputDefinition, { command, input });
+      }
+      return outputDefinition;
+    },
   });
   return define;
 }
@@ -4552,13 +4670,6 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
       issues,
       invalidHelpFactWordingValues.get(definition.help),
     );
-  }
-  if (isTextOutputEnabled(definition.output)) {
-    for (const slot of ["choices", "default"] as const) {
-      if (helpWording?.[slot] === undefined) {
-        reportMissingHelpFactTemplate(issues, definition.root, slot);
-      }
-    }
   }
   let orderedIds: readonly string[];
   if (isHierarchy) {
@@ -4591,6 +4702,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
     RootCommandManifest | CommandGroupManifest | ExecutableCommandManifest
   > = {};
   const wire: Record<string, CommandWireManifest> = {};
+  const examplesToValidate: PendingCommandExampleValidation[] = [];
 
   for (const id of orderedIds) {
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- orderedIds 来自已验证的命令键或根键。
@@ -4646,26 +4758,15 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
 
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令组分支已继续下一轮；其余节点按可执行定义编译。
     const executable = node as RuntimeExecutableDefinition;
-    if (typeof executable.handler !== "function") {
-      issues.push({ code: "invalidCommandHandler", command: id });
-    }
     const input = compileContractSchema(
       executable.input,
       { command: id, location: "input" },
       issues,
     );
-    const compiledSuccess = compileSuccess(
+    const compiledOutputs = compileOutputModes(
       id,
-      executable.success,
-      isTextOutputEnabled(definition.output),
-      issues,
-    );
-    const compiledFailures = compileFailures(id, executable.failures, issues);
-    collectTextPresenterIssues(
-      id,
-      isTextOutputEnabled(definition.output),
-      executable.success,
-      executable.failures,
+      executable.input,
+      executable.outputs,
       issues,
     );
     const fields =
@@ -4677,6 +4778,36 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
             id,
             issues,
           );
+    const compiledExamples = compileCommandExamples(
+      id,
+      executable.examples,
+      fields,
+      commandPathTokens(id, definition.commands),
+      compiledOutputs.default,
+      compiledOutputs.runtime,
+      issues,
+    );
+    const manifestExamples =
+      compiledExamples === undefined
+        ? undefined
+        : Object.freeze(
+            compiledExamples.map(({ manifest: example }) => example),
+          );
+    if (compiledExamples !== undefined) {
+      examplesToValidate.push({
+        command: id,
+        input: executable.input,
+        examples: compiledExamples,
+      });
+    }
+    if (Object.keys(compiledOutputs.runtime).length > 0) {
+      if (helpWording?.choices === undefined) {
+        reportMissingHelpFactTemplate(issues, id, "choices");
+      }
+      if (helpWording?.default === undefined) {
+        reportMissingHelpFactTemplate(issues, id, "default");
+      }
+    }
     if (
       fields.some((field) => field.choices !== undefined) &&
       helpWording?.choices === undefined
@@ -4712,6 +4843,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
       synopsis: createUsageSynopsis(
         commandPath(id, definition.commands),
         fields,
+        true,
       ),
     });
     runtimeCommands[id] = Object.freeze({
@@ -4726,9 +4858,9 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
       usageConstraints,
       usage,
       input: executable.input,
-      success: compiledSuccess.runtime,
-      failures: compiledFailures.runtime,
-      handler: executable.handler,
+      defaultOutputMode: compiledOutputs.default,
+      outputModes: compiledOutputs.runtime,
+      ...(manifestExamples === undefined ? {} : { examples: manifestExamples }),
     });
     if (executable.kind === "command") {
       grammarNodes.push(
@@ -4743,6 +4875,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
           ...(helpSupplement === undefined ? {} : { helpSupplement }),
           fields,
           ...(usageConstraints.length === 0 ? {} : { usageConstraints }),
+          outputs: compiledOutputs.grammar,
           usage,
         }),
       );
@@ -4751,11 +4884,11 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
     const manifestDetails = {
       description: executable.description,
       ...(helpSupplement === undefined ? {} : { helpSupplement }),
+      ...(manifestExamples === undefined ? {} : { examples: manifestExamples }),
       fields,
       ...(usageConstraints.length === 0 ? {} : { usageConstraints }),
       input: usageCompilation.inputProjection,
-      success: compiledSuccess.manifest,
-      failures: compiledFailures.manifest,
+      outputs: compiledOutputs.manifest,
     };
     manifestCommands[id] =
       executable.kind === "command"
@@ -4772,12 +4905,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
             name: executable.name,
             ...manifestDetails,
           });
-    wire[id] = deepFreeze({
-      ...compiledSuccess.wire,
-      ...(Object.keys(compiledFailures.wire).length === 0
-        ? {}
-        : { failure: compiledFailures.wire }),
-    });
+    wire[id] = compiledOutputs.wire;
   }
   if (issues.length > 0)
     throw new ContractDefinitionError(
@@ -4803,6 +4931,10 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
         ...(rootCommand.usageConstraints.length === 0
           ? {}
           : { usageConstraints: rootCommand.usageConstraints }),
+        outputs: outputModesGrammar(
+          rootCommand.outputModes,
+          rootCommand.defaultOutputMode,
+        ),
         usage: rootCommand.usage,
       }
     : {
@@ -4822,7 +4954,7 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
     controls,
   });
   const manifest = deepFreeze({
-    schemaVersion: "4" as const,
+    schemaVersion: "5" as const,
     root: definition.root,
     commands: manifestCommands,
     controls,
@@ -4850,7 +4982,417 @@ function compileCli(definition: RuntimeCliDefinition): CliContract {
     usageFailureExitCode: definition.usageFailureExitCode,
     commands: deepFreeze(runtimeCommands),
   });
+  validateCommandExamples(contract, examplesToValidate, issues);
+  if (issues.length > 0) {
+    compiledCliContracts.delete(contract);
+    throw new ContractDefinitionError(
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- issues.length 已检查为正数。
+      issues as [ContractDefinitionIssue, ...ContractDefinitionIssue[]],
+    );
+  }
   return contract;
+}
+
+function compileCommandExamples(
+  command: string,
+  examples: unknown,
+  fields: readonly FieldGrammar[],
+  pathTokens: readonly string[],
+  defaultOutputMode: string,
+  availableModes: Readonly<Record<string, RuntimeCompiledOutputMode>>,
+  issues: ContractDefinitionIssue[],
+): readonly EncodedCommandExample[] | undefined {
+  if (examples === undefined) return undefined;
+  if (!Array.isArray(examples)) {
+    issues.push({
+      code: "invalidCommandExample",
+      command,
+      index: 0,
+      reason: "invalidShape",
+    });
+    return undefined;
+  }
+  if (examples.length === 0) return undefined;
+
+  const encoded: EncodedCommandExample[] = [];
+  const fieldByKey = new Map(fields.map((field) => [field.key, field]));
+  examples.forEach((example, index) => {
+    if (!isPlainRecord(example)) {
+      issues.push({
+        code: "invalidCommandExample",
+        command,
+        index,
+        reason: "invalidShape",
+      });
+      return;
+    }
+    const inputDescriptor = Object.getOwnPropertyDescriptor(example, "input");
+    if (
+      inputDescriptor === undefined ||
+      !("value" in inputDescriptor) ||
+      !isPlainRecord(inputDescriptor.value)
+    ) {
+      issues.push({
+        code: "invalidCommandExample",
+        command,
+        index,
+        reason: "invalidShape",
+      });
+      return;
+    }
+
+    const rawInput: Record<string, unknown> = Object.create(null);
+    for (const fieldKey of Reflect.ownKeys(inputDescriptor.value)) {
+      if (typeof fieldKey !== "string" || !fieldByKey.has(fieldKey)) {
+        issues.push({
+          code: "invalidCommandExample",
+          command,
+          index,
+          reason: "unknownField",
+          field: String(fieldKey),
+        });
+        return;
+      }
+      const valueDescriptor = Object.getOwnPropertyDescriptor(
+        inputDescriptor.value,
+        fieldKey,
+      );
+      if (valueDescriptor === undefined || !("value" in valueDescriptor)) {
+        issues.push({
+          code: "invalidCommandExample",
+          command,
+          index,
+          reason: "unencodableFieldValue",
+          field: fieldKey,
+        });
+        return;
+      }
+      rawInput[fieldKey] = valueDescriptor.value;
+    }
+
+    const hasFixedOutputMode = Object.hasOwn(example, "outputMode");
+    const outputModeDescriptor = hasFixedOutputMode
+      ? Object.getOwnPropertyDescriptor(example, "outputMode")
+      : undefined;
+    const outputModeValue =
+      outputModeDescriptor !== undefined && "value" in outputModeDescriptor
+        ? outputModeDescriptor.value
+        : undefined;
+    if (
+      hasFixedOutputMode &&
+      (typeof outputModeValue !== "string" ||
+        !Object.hasOwn(availableModes, outputModeValue))
+    ) {
+      issues.push({
+        code: "invalidCommandExample",
+        command,
+        index,
+        reason: "invalidOutputMode",
+        received:
+          typeof outputModeValue === "string"
+            ? outputModeValue
+            : String(outputModeValue),
+      });
+      return;
+    }
+    const fixedOutputMode =
+      hasFixedOutputMode && typeof outputModeValue === "string"
+        ? outputModeValue
+        : undefined;
+    const expectedOutputMode = fixedOutputMode ?? defaultOutputMode;
+    const encodedFields = encodeCommandExampleFields(
+      command,
+      index,
+      rawInput,
+      fields,
+      issues,
+    );
+    if (encodedFields === undefined) return;
+
+    const outputSelector =
+      fixedOutputMode !== undefined ? [`--output=${fixedOutputMode}`] : [];
+    const argv = Object.freeze([
+      ...pathTokens.slice(1),
+      ...outputSelector,
+      ...encodedFields.options,
+      ...(encodedFields.positionals.length === 0
+        ? []
+        : ["--", ...encodedFields.positionals]),
+    ]);
+    const shellTokens = [
+      ...pathTokens,
+      ...outputSelector,
+      ...encodedFields.options,
+    ];
+    if (encodedFields.positionals.length > 0) {
+      shellTokens.push("--", ...encodedFields.positionals);
+    }
+    if (shellTokens.some((token) => !isPosixArgvToken(token))) {
+      issues.push({
+        code: "invalidCommandExample",
+        command,
+        index,
+        reason: "unencodableFieldValue",
+      });
+      return;
+    }
+    const manifest: CommandExampleManifest = deepFreeze({
+      argv,
+      shell: shellTokens.map(quotePosixShellToken).join(" "),
+      ...(fixedOutputMode === undefined ? {} : { outputMode: fixedOutputMode }),
+    });
+    encoded.push({
+      manifest,
+      rawInput: Object.freeze(rawInput),
+      expectedOutputMode,
+    });
+  });
+  return encoded.length === 0 ? undefined : Object.freeze(encoded);
+}
+
+function encodeCommandExampleFields(
+  command: string,
+  index: number,
+  rawInput: Readonly<Record<string, unknown>>,
+  fields: readonly FieldGrammar[],
+  issues: ContractDefinitionIssue[],
+):
+  | Readonly<{
+      readonly options: readonly string[];
+      readonly positionals: readonly string[];
+    }>
+  | undefined {
+  const options: string[] = [];
+  const positionals: string[] = [];
+  for (const field of fields) {
+    if (!Object.hasOwn(rawInput, field.key)) continue;
+    const value = rawInput[field.key];
+    if (field.kind === "flag") {
+      if (value === true) {
+        options.push(field.longOption);
+      } else if (value === false && field.negatedLongOption !== undefined) {
+        options.push(field.negatedLongOption);
+      } else {
+        reportUnencodableCommandExampleField(issues, command, index, field.key);
+        return undefined;
+      }
+      continue;
+    }
+    if (field.kind === "valueOption") {
+      if (typeof value !== "string" || !isPosixArgvToken(value)) {
+        reportUnencodableCommandExampleField(issues, command, index, field.key);
+        return undefined;
+      }
+      options.push(`${field.longOption}=${value}`);
+      continue;
+    }
+    if (field.kind === "repeatableOption") {
+      if (!isNonEmptyStringArray(value)) {
+        reportUnencodableCommandExampleField(issues, command, index, field.key);
+        return undefined;
+      }
+      for (const item of value) {
+        if (!isPosixArgvToken(item)) {
+          reportUnencodableCommandExampleField(
+            issues,
+            command,
+            index,
+            field.key,
+          );
+          return undefined;
+        }
+        options.push(`${field.longOption}=${item}`);
+      }
+      continue;
+    }
+    if (field.kind === "positional") {
+      if (typeof value !== "string" || !isPosixArgvToken(value)) {
+        reportUnencodableCommandExampleField(issues, command, index, field.key);
+        return undefined;
+      }
+      positionals.push(value);
+      continue;
+    }
+    if (!isNonEmptyStringArray(value)) {
+      reportUnencodableCommandExampleField(issues, command, index, field.key);
+      return undefined;
+    }
+    for (const item of value) {
+      if (!isPosixArgvToken(item)) {
+        reportUnencodableCommandExampleField(issues, command, index, field.key);
+        return undefined;
+      }
+      positionals.push(item);
+    }
+  }
+  return Object.freeze({
+    options: Object.freeze(options),
+    positionals: Object.freeze(positionals),
+  });
+}
+
+function reportUnencodableCommandExampleField(
+  issues: ContractDefinitionIssue[],
+  command: string,
+  index: number,
+  field: string,
+): void {
+  issues.push({
+    code: "invalidCommandExample",
+    command,
+    index,
+    reason: "unencodableFieldValue",
+    field,
+  });
+}
+
+function isNonEmptyStringArray(value: unknown): value is readonly string[] {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  for (let index = 0; index < value.length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    if (
+      descriptor === undefined ||
+      !("value" in descriptor) ||
+      typeof descriptor.value !== "string"
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isPosixArgvToken(value: string): boolean {
+  if (value.includes("\0")) return false;
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+      index += 1;
+    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function quotePosixShellToken(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function validateCommandExamples(
+  contract: CliContract,
+  pending: readonly PendingCommandExampleValidation[],
+  issues: ContractDefinitionIssue[],
+): void {
+  for (const commandExamples of pending) {
+    for (const [index, example] of commandExamples.examples.entries()) {
+      const invocation = parseCliInvocation(contract, example.manifest.argv);
+      if (invocation.kind !== "parsed") {
+        issues.push({
+          code: "invalidCommandExample",
+          command: commandExamples.command,
+          index,
+          reason: "parseDidNotComplete",
+          received: invocation.kind,
+          ...(invocation.kind === "usageFailure"
+            ? { usageIssues: invocation.issues }
+            : {}),
+        });
+        continue;
+      }
+      if (invocation.command !== commandExamples.command) {
+        issues.push({
+          code: "invalidCommandExample",
+          command: commandExamples.command,
+          index,
+          reason: "wrongCommand",
+          expected: commandExamples.command,
+          received: invocation.command,
+        });
+        continue;
+      }
+      if (invocation.outputMode !== example.expectedOutputMode) {
+        issues.push({
+          code: "invalidCommandExample",
+          command: commandExamples.command,
+          index,
+          reason: "wrongOutputMode",
+          expected: example.expectedOutputMode,
+          received: invocation.outputMode,
+        });
+        continue;
+      }
+      const mismatchedFields = rawInputMismatchFields(
+        example.rawInput,
+        invocation.input,
+      );
+      if (mismatchedFields.length > 0) {
+        issues.push({
+          code: "invalidCommandExample",
+          command: commandExamples.command,
+          index,
+          reason: "rawInputMismatch",
+          mismatchedFields,
+        });
+        continue;
+      }
+      const validation = validateCliInput(
+        commandExamples.input,
+        invocation.input,
+        commandExamples.command,
+      );
+      if (validation.kind === "rejected") {
+        issues.push({
+          code: "invalidCommandExample",
+          command: commandExamples.command,
+          index,
+          reason: "inputRejected",
+          evidence: validation.evidence,
+        });
+      }
+    }
+  }
+}
+
+function rawInputMismatchFields(
+  expected: Readonly<Record<string, unknown>>,
+  received: Readonly<Record<string, unknown>>,
+): readonly string[] {
+  const keys = new Set<PropertyKey>([
+    ...Reflect.ownKeys(expected),
+    ...Reflect.ownKeys(received),
+  ]);
+  const mismatched = [...keys].filter((key) => {
+    const expectedDescriptor = Object.getOwnPropertyDescriptor(expected, key);
+    const receivedDescriptor = Object.getOwnPropertyDescriptor(received, key);
+    if (
+      (expectedDescriptor === undefined) !==
+      (receivedDescriptor === undefined)
+    ) {
+      return true;
+    }
+    if (expectedDescriptor === undefined || receivedDescriptor === undefined) {
+      return false;
+    }
+    if (!("value" in expectedDescriptor) || !("value" in receivedDescriptor)) {
+      return true;
+    }
+    const expectedValue = expectedDescriptor.value;
+    const receivedValue = receivedDescriptor.value;
+    if (Array.isArray(expectedValue) || Array.isArray(receivedValue)) {
+      return (
+        !Array.isArray(expectedValue) ||
+        !Array.isArray(receivedValue) ||
+        expectedValue.length !== receivedValue.length ||
+        expectedValue.some(
+          (value, index) => !Object.is(value, receivedValue[index]),
+        )
+      );
+    }
+    return !Object.is(expectedValue, receivedValue);
+  });
+  return Object.freeze(mismatched.map(String).toSorted());
 }
 
 function reportMissingHelpFactTemplate(
@@ -4959,59 +5501,88 @@ function collectUnknownDefinitionProperties(
         }
       }
     }
+    if (Array.isArray(node.examples)) {
+      node.examples.forEach((example, index) => {
+        collectUnknownProperties(
+          example,
+          [...path, "examples", String(index)],
+          definitionPropertyKeys.example,
+          issues,
+        );
+      });
+    }
     collectUnknownUsageConstraintDefinitionProperties(
       node.usageConstraints,
       [...path, "usageConstraints"],
       issues,
     );
-    if (isPlainRecord(node.success)) {
-      const successPath = [...path, "success"];
-      const success = node.success;
-      if (success.kind === "completion") {
-        collectUnknownProperties(
-          success,
-          successPath,
-          definitionPropertyKeys.success.completion,
-          issues,
-        );
-      } else if (success.kind === "data") {
-        collectUnknownProperties(
-          success,
-          successPath,
-          definitionPropertyKeys.success.data,
-          issues,
-        );
-        collectUnknownVariantProperties(
-          success.variants,
-          [...successPath, "variants"],
-          definitionPropertyKeys.atomicVariant,
-          issues,
-        );
-      } else if (success.kind === "stream") {
-        collectUnknownProperties(
-          success,
-          successPath,
-          definitionPropertyKeys.success.stream,
-          issues,
-        );
-        collectUnknownVariantProperties(
-          success.records,
-          [...successPath, "records"],
-          definitionPropertyKeys.streamRecord,
-          issues,
-        );
-      }
-    }
-    collectUnknownVariantProperties(
-      node.failures,
-      [...path, "failures"],
-      definitionPropertyKeys.atomicVariant,
+    if (!isPlainRecord(node.outputs)) continue;
+    const outputsPath = [...path, "outputs"];
+    collectUnknownProperties(
+      node.outputs,
+      outputsPath,
+      definitionPropertyKeys.outputModes,
       issues,
     );
+    if (!isPlainRecord(node.outputs.modes)) continue;
+    for (const [modeName, rawMode] of Object.entries(node.outputs.modes)) {
+      const modePath = [...outputsPath, "modes", modeName];
+      if (!isPlainRecord(rawMode)) continue;
+      collectUnknownProperties(
+        rawMode,
+        modePath,
+        definitionPropertyKeys.outputMode,
+        issues,
+      );
+      const success = rawMode.success;
+      if (isPlainRecord(success)) {
+        const successPath = [...modePath, "success"];
+        if (success.kind === "completion") {
+          collectUnknownProperties(
+            success,
+            successPath,
+            ["kind", "text"],
+            issues,
+          );
+        } else if (success.kind === "data") {
+          collectUnknownProperties(
+            success,
+            successPath,
+            definitionPropertyKeys.atomicSuccess,
+            issues,
+          );
+          collectUnknownVariantProperties(
+            success.variants,
+            [...successPath, "variants"],
+            definitionPropertyKeys.atomicVariant,
+            issues,
+          );
+        } else if (success.kind === "stream") {
+          collectUnknownProperties(
+            success,
+            successPath,
+            definitionPropertyKeys.streamSuccess,
+            issues,
+          );
+          collectUnknownVariantProperties(
+            success.records,
+            [...successPath, "records"],
+            definitionPropertyKeys.streamRecord,
+            issues,
+          );
+        }
+      }
+      collectUnknownVariantProperties(
+        rawMode.failures,
+        [...modePath, "failures"],
+        definitionPropertyKeys.atomicVariant,
+        issues,
+      );
+    }
   }
 }
 
-export function getCompiledCli(contract: CliContract): RuntimeCompiledCli {
+export function getCompiledCli(contract: AnyCliContract): RuntimeCompiledCli {
   const compiled = compiledCliContracts.get(contract);
   if (compiled === undefined) {
     throw new ContractExecutionError([{ code: "invalidCliContract" }]);
@@ -5081,44 +5652,11 @@ function collectCliBaseIssues(
   ) {
     issues.push({ code: "invalidCapability", capability: "version" });
   }
-  if (!outputCapabilities.has(definition.output)) {
-    issues.push({ code: "invalidCapability", capability: "output" });
-  } else if (
-    !definition.output.formats.includes(definition.output.defaultFormat)
+  if (
+    definition.schema !== undefined &&
+    !schemaCapabilities.has(definition.schema)
   ) {
-    issues.push({
-      code: "invalidOutputFormat",
-      expected: "structured|text",
-      received:
-        typeof definition.output.defaultFormat === "string"
-          ? definition.output.defaultFormat
-          : null,
-    });
-  } else if (!isPlainRecord(definition.output.compatibilityFlags)) {
-    issues.push({
-      code: "invalidOutputCompatibilityFlags",
-      received: outputCompatibilityFlagsKind(
-        definition.output.compatibilityFlags,
-      ),
-    });
-  } else {
-    for (const [flag, format] of Object.entries(
-      definition.output.compatibilityFlags,
-    )) {
-      if (
-        !/^--[a-z0-9]+(?:-[a-z0-9]+)*$/.test(flag) ||
-        flag === "--help" ||
-        flag === "--output-format" ||
-        (isVersionCapability(definition.version) && flag === "--version") ||
-        !definition.output.formats.includes(format)
-      ) {
-        issues.push({
-          code: "invalidOutputCompatibilityFlag",
-          flag,
-          received: typeof format === "string" ? format : null,
-        });
-      }
-    }
+    issues.push({ code: "invalidCapability", capability: "schema" });
   }
   if (
     !Number.isInteger(definition.usageFailureExitCode) ||
@@ -5318,6 +5856,7 @@ export function usageFailureHelpArgv(
 
 function compileFailures(
   command: string,
+  outputMode: string,
   failures: FailureVariantDefinitions,
   issues: ContractDefinitionIssue[],
 ): Readonly<{
@@ -5330,7 +5869,8 @@ function compileFailures(
     "failure",
     failures,
     1,
-    createFailureWireSchema,
+    (command, variant, schema) =>
+      createFailureWireSchema(command, outputMode, variant, schema),
     issues,
   );
   return {
@@ -5340,10 +5880,290 @@ function compileFailures(
   };
 }
 
+function compileOutputModes(
+  command: string,
+  input: ContractSchema,
+  definition: RuntimeOutputModesDefinition,
+  issues: ContractDefinitionIssue[],
+): Readonly<{
+  readonly default: string;
+  readonly runtime: Readonly<Record<string, RuntimeCompiledOutputMode>>;
+  readonly manifest: OutputModesManifest;
+  readonly wire: CommandWireManifest;
+  readonly grammar: OutputModesGrammar;
+}> {
+  const outputObject = definition as object;
+  const metadata = outputModeMetadata.get(outputObject);
+  if (!outputModes.has(outputObject)) {
+    issues.push({
+      code: "invalidOutputModes",
+      command,
+      reason: "notFactoryOutputModes",
+    });
+  } else if (metadata === undefined || metadata.command !== command) {
+    issues.push({
+      code: "invalidOutputModes",
+      command,
+      reason: "mismatchedCommand",
+    });
+  } else if (metadata.input !== input) {
+    issues.push({
+      code: "invalidOutputModes",
+      command,
+      reason: "mismatchedInput",
+    });
+  }
+
+  const rawModes: unknown = definition.modes;
+  if (!isPlainRecord(rawModes)) {
+    issues.push({
+      code: "invalidOutputModes",
+      command,
+      reason: "emptyModes",
+    });
+  }
+  const entries = isPlainRecord(rawModes) ? Object.entries(rawModes) : [];
+  if (entries.length === 0) {
+    issues.push({
+      code: "invalidOutputModes",
+      command,
+      reason: "emptyModes",
+    });
+  }
+  const names = entries.map(([name]) => name);
+  const requestedDefault: unknown = definition.default;
+  const hasDefault = Object.hasOwn(definition, "default");
+  const defaultMode = hasDefault
+    ? typeof requestedDefault === "string" && names.includes(requestedDefault)
+      ? requestedDefault
+      : undefined
+    : names.length === 1
+      ? names[0]
+      : undefined;
+  if (defaultMode === undefined) {
+    issues.push({
+      code: "invalidDefaultOutputMode",
+      command,
+      received: typeof requestedDefault === "string" ? requestedDefault : null,
+    });
+  }
+
+  const runtime: Record<string, RuntimeCompiledOutputMode> = {};
+  const manifestModes: Record<string, OutputModeManifest> = {};
+  const wire: Record<string, OutputModeWireManifest> = {};
+  for (const [modeName, rawMode] of entries) {
+    if (!/^[a-z][A-Za-z0-9]*$/.test(modeName)) {
+      issues.push({
+        code: "invalidOutputMode",
+        command,
+        mode: modeName,
+        reason: "invalidName",
+      });
+    }
+    if (!isPlainRecord(rawMode)) {
+      issues.push({
+        code: "invalidOutputMode",
+        command,
+        mode: modeName,
+        reason: "invalidSuccess",
+      });
+      continue;
+    }
+    const mode = rawMode;
+    const modeMetadata = outputModeDefinitionMetadata.get(mode);
+    if (
+      !outputModeDefinitions.has(mode) ||
+      modeMetadata === undefined ||
+      modeMetadata.command !== command ||
+      modeMetadata.input !== input
+    ) {
+      issues.push({
+        code: "invalidOutputMode",
+        command,
+        mode: modeName,
+        reason: "invalidSuccess",
+      });
+      continue;
+    }
+    if (!isSingleLineText(mode.description)) {
+      issues.push({
+        code: "invalidOutputMode",
+        command,
+        mode: modeName,
+        reason: "invalidDescription",
+      });
+    }
+    const delivery = mode.delivery;
+    if (delivery !== "atomic" && delivery !== "stream") {
+      issues.push({
+        code: "invalidOutputMode",
+        command,
+        mode: modeName,
+        reason: "invalidDelivery",
+      });
+      continue;
+    }
+    const format = mode.format;
+    if (format !== "structured" && format !== "text") {
+      issues.push({
+        code: "invalidOutputMode",
+        command,
+        mode: modeName,
+        reason: "invalidFormat",
+      });
+      continue;
+    }
+    if (typeof mode.handler !== "function") {
+      issues.push({
+        code: "invalidOutputMode",
+        command,
+        mode: modeName,
+        reason: "missingHandler",
+      });
+    }
+    if (!isPlainRecord(mode.failures)) {
+      issues.push({
+        code: "invalidOutputMode",
+        command,
+        mode: modeName,
+        reason: "invalidFailures",
+      });
+      continue;
+    }
+    if (!isPlainRecord(mode.success)) {
+      issues.push({
+        code: "invalidOutputMode",
+        command,
+        mode: modeName,
+        reason: "invalidSuccess",
+      });
+      continue;
+    }
+    const successKind = mode.success.kind;
+    if (
+      (delivery === "atomic" &&
+        successKind !== "completion" &&
+        successKind !== "data") ||
+      (delivery === "stream" && successKind !== "stream")
+    ) {
+      issues.push({
+        code: "invalidOutputMode",
+        command,
+        mode: modeName,
+        reason: "invalidSuccess",
+      });
+      continue;
+    }
+
+    const runtimeMode = mode as unknown as RuntimeOutputModeDefinition;
+    const description = isSingleLineText(mode.description)
+      ? mode.description
+      : "";
+    const resultContract = compileResultContract(
+      command,
+      modeName,
+      runtimeMode,
+      format === "text",
+      issues,
+    );
+    runtime[modeName] = Object.freeze({
+      id: modeName,
+      description,
+      delivery,
+      format,
+      resultContract: resultContract.runtime,
+    });
+    manifestModes[modeName] = deepFreeze({
+      description,
+      delivery,
+      format,
+      success: resultContract.manifest.success,
+      failures: resultContract.manifest.failures,
+    });
+    wire[modeName] = resultContract.wire;
+  }
+
+  const resolvedDefault = defaultMode ?? "";
+  const frozenRuntime = deepFreeze(runtime);
+  return deepFreeze({
+    default: resolvedDefault,
+    runtime: frozenRuntime,
+    manifest: { default: resolvedDefault, modes: manifestModes },
+    wire,
+    grammar: outputModesGrammar(frozenRuntime, resolvedDefault),
+  });
+}
+
+function outputModesGrammar(
+  modes: Readonly<Record<string, RuntimeCompiledOutputMode>>,
+  defaultMode: string,
+): OutputModesGrammar {
+  return deepFreeze({
+    selector: "--output" as const,
+    default: defaultMode,
+    modes: Object.fromEntries(
+      Object.entries(modes).map(([name, mode]) => [
+        name,
+        {
+          description: mode.description,
+          delivery: mode.delivery,
+          format: mode.format,
+        },
+      ]),
+    ),
+  });
+}
+
+function compileResultContract(
+  command: string,
+  outputMode: string,
+  definition: RuntimeOutputModeDefinition,
+  textEnabled: boolean,
+  issues: ContractDefinitionIssue[],
+): CompiledResultContract {
+  const success = compileSuccess(
+    command,
+    outputMode,
+    definition.success,
+    textEnabled,
+    issues,
+  );
+  const failures = compileFailures(
+    command,
+    outputMode,
+    definition.failures,
+    issues,
+  );
+  collectTextPresenterIssues(
+    command,
+    textEnabled,
+    definition.success,
+    definition.failures,
+    issues,
+  );
+  return deepFreeze({
+    runtime: {
+      success: success.runtime,
+      failures: failures.runtime,
+      handler: definition.handler,
+    },
+    manifest: {
+      success: success.manifest,
+      failures: failures.manifest,
+    },
+    wire: {
+      ...success.wire,
+      ...(Object.keys(failures.wire).length === 0
+        ? {}
+        : { failure: failures.wire }),
+    },
+  });
+}
+
 function collectTextPresenterIssues(
   command: string,
   textEnabled: boolean,
-  success: RuntimeExecutableDefinition["success"],
+  success: RuntimeCompiledSuccess,
   failures: FailureVariantDefinitions,
   issues: ContractDefinitionIssue[],
 ): void {
@@ -5397,13 +6217,9 @@ function collectTextPresenterIssues(
   }
 }
 
-function isTextOutputEnabled(output: unknown): boolean {
-  return isOutputCapability(output) && output.formats.includes("text");
-}
-
-function isOutputCapability(value: unknown): value is OutputCapability {
+function isSchemaCapability(value: unknown): value is SchemaCapability {
   return (
-    typeof value === "object" && value !== null && outputCapabilities.has(value)
+    typeof value === "object" && value !== null && schemaCapabilities.has(value)
   );
 }
 
@@ -5421,8 +6237,12 @@ function collectControlFieldConflicts(
   definition: RuntimeCliDefinition,
   issues: ContractDefinitionIssue[],
 ): void {
-  const controls = new Map<string, "help" | "outputFormat" | "version">([
+  const controls = new Map<
+    string,
+    "help" | "outputMode" | "version" | "schema"
+  >([
     ["--help", "help"],
+    ["--output", "outputMode"],
   ]);
   if (
     helpCapabilities.has(definition.help) &&
@@ -5430,23 +6250,15 @@ function collectControlFieldConflicts(
   ) {
     controls.set(definition.help.shortAlias, "help");
   }
-  if (
-    outputCapabilities.has(definition.output) &&
-    isPlainRecord(definition.output.compatibilityFlags)
-  ) {
-    for (const spelling of Object.keys(definition.output.compatibilityFlags)) {
-      controls.set(spelling, "outputFormat");
-    }
-    if (definition.output.formats.includes("text")) {
-      controls.set("--output-format", "outputFormat");
-    }
-  }
   if (isVersionCapability(definition.version)) {
     const version = definition.version;
     controls.set("--version", "version");
     if (version.shortAlias !== undefined) {
       controls.set(version.shortAlias, "version");
     }
+  }
+  if (isSchemaCapability(definition.schema)) {
+    controls.set("--schema", "schema");
   }
   for (const field of fields) {
     if (field.kind === "positional" || field.kind === "variadicPositional") {
@@ -5472,21 +6284,16 @@ function collectControlFieldConflicts(
   }
 }
 
-function outputCompatibilityFlagsKind(value: unknown): string {
-  if (value === null) return "null";
-  if (Array.isArray(value)) return "array";
-  return typeof value;
-}
-
 function collectTextPresenterIssue(
   command: string,
   textEnabled: boolean,
   location: "completion" | "data" | "failure" | "record" | "streamSuccess",
-  definition: Readonly<Record<string, unknown>>,
+  definition: object,
   issues: ContractDefinitionIssue[],
   variant?: string,
 ): void {
-  const hasPresenter = typeof definition.text === "function";
+  const hasPresenter =
+    "text" in definition && typeof definition.text === "function";
   if (textEnabled === hasPresenter) return;
   issues.push({
     code: textEnabled ? "missingTextPresenter" : "unexpectedTextPresenter",
@@ -5498,13 +6305,14 @@ function collectTextPresenterIssue(
 
 function compileSuccess(
   command: string,
-  success: RuntimeExecutableDefinition["success"],
+  outputMode: string,
+  success: RuntimeCompiledSuccess,
   textEnabled: boolean,
   issues: ContractDefinitionIssue[],
 ): Readonly<{
-  readonly runtime: RuntimeCompiledExecutable["success"];
+  readonly runtime: RuntimeCompiledSuccess;
   readonly manifest: CommandSuccessManifest;
-  readonly wire: CliManifest<string>["wire"];
+  readonly wire: OutputModeWireManifest;
 }> {
   if (success.kind === "completion") {
     return {
@@ -5514,7 +6322,7 @@ function compileSuccess(
       }),
       manifest: Object.freeze({ kind: "completion" }),
       wire: Object.freeze({
-        completion: deepFreeze(createCompletionWireSchema(command)),
+        completion: deepFreeze(createCompletionWireSchema(command, outputMode)),
       }),
     };
   }
@@ -5524,12 +6332,16 @@ function compileSuccess(
     if (Object.keys(records.runtime).length === 0) {
       issues.push({ code: "missingStreamRecord", command });
     }
-    const header = deepFreeze(createStreamHeaderWireSchema(command));
+    const header = deepFreeze(
+      createStreamHeaderWireSchema(command, outputMode),
+    );
     const terminal = deepFreeze(createStreamSuccessWireSchema());
     const recordWire = Object.fromEntries(
       Object.entries(records.wire).map(([variant, schema]) => [
         variant,
-        deepFreeze(createStreamRecordWireSchema(variant, schema)),
+        deepFreeze(
+          createStreamRecordWireSchema(command, outputMode, variant, schema),
+        ),
       ]),
     ) as Readonly<Record<string, JsonObject>>;
     return deepFreeze({
@@ -5564,7 +6376,8 @@ function compileSuccess(
     "data",
     success.variants,
     0,
-    createDataWireSchema,
+    (command, variant, schema) =>
+      createDataWireSchema(command, outputMode, variant, schema),
     issues,
   );
   if (Object.keys(variants.runtime).length === 0) {
@@ -5584,10 +6397,13 @@ function compileSuccess(
 function createUsageSynopsis(
   commandName: string,
   fields: readonly FieldGrammar[],
+  outputSelectable = false,
 ): string {
-  return [commandName, ...fields.map((field) => formatFieldUsage(field))].join(
-    " ",
-  );
+  return [
+    commandName,
+    ...(outputSelectable ? ["[--output <mode>]"] : []),
+    ...fields.map((field) => formatFieldUsage(field)),
+  ].join(" ");
 }
 
 export function formatFieldUsage(

@@ -1,18 +1,11 @@
 {
-  "extends": "@cli-contract/typescript-config/base.json",
+  "extends": "@cli-contract/tooling-config/node.json",
   "compilerOptions": {
-    "declaration": true,
-    "erasableSyntaxOnly": true,
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
     "paths": {
       "#/*": ["./src/*.ts"],
       "@ykdz/cli-contract": ["./src/index.ts"],
       "@ykdz/cli-contract/node": ["./src/node.ts"]
-    },
-    "rewriteRelativeImportExtensions": true,
-    "target": "es2023",
-    "types": ["node"]
+    }
   },
   "include": ["src/**/*.ts", "test/**/*.ts"]
 }

@@ -3,7 +3,6 @@ import type { Writable } from "node:stream";
 import {
   defineCli,
   helpCapability,
-  outputCapability,
   text,
   type ContractSchema,
   type DataVariantDefinition,
@@ -63,9 +62,26 @@ const complete = define.command("complete")({
   description: "完成任务",
   fields: {},
   input: emptyInput,
-  success: { kind: "completion", text: () => text.lines(["完成", ""]) },
-  failures: {},
-  handler: ({ outcome }) => outcome.completion(),
+
+  outputs: define.outputModes("complete", emptyInput, (mode) => ({
+    default: "structured",
+    modes: {
+      structured: mode.atomic({
+        description: "结构化输出",
+        format: "structured",
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      }),
+      text: mode.atomic({
+        description: "文本输出",
+        format: "text",
+        success: { kind: "completion", text: () => text.lines(["完成", ""]) },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      }),
+    },
+  })),
 });
 
 const inspect = define.command("inspect")({
@@ -81,29 +97,64 @@ const inspect = define.command("inspect")({
     },
   },
   input: inspectInput,
-  success: {
-    kind: "data",
-    variants: {
-      found: {
-        description: "找到目标",
-        schema: payload,
-        exitCode: 0,
-        text: (value: Payload) => text.lines(["找到", value.message]),
-      },
+
+  outputs: define.outputModes("inspect", inspectInput, (mode) => ({
+    default: "structured",
+    modes: {
+      structured: mode.atomic({
+        description: "结构化输出",
+        format: "structured",
+        success: {
+          kind: "data",
+          variants: {
+            found: {
+              description: "找到目标",
+              schema: payload,
+              exitCode: 0,
+            },
+          },
+        },
+        failures: {
+          unavailable: {
+            description: "服务不可用",
+            schema: payload,
+            exitCode: 9,
+          },
+        },
+        handler: ({ dependencies, outcome }) =>
+          dependencies.available
+            ? outcome.data.found({ message: "public" })
+            : outcome.failure.unavailable({ message: "remote" }),
+      }),
+      text: mode.atomic({
+        description: "文本输出",
+        format: "text",
+        success: {
+          kind: "data",
+          variants: {
+            found: {
+              description: "找到目标",
+              schema: payload,
+              exitCode: 0,
+              text: (value: Payload) => text.lines(["找到", value.message]),
+            },
+          },
+        },
+        failures: {
+          unavailable: {
+            description: "服务不可用",
+            schema: payload,
+            exitCode: 9,
+            text: (value: Payload) => text.lines(["不可用", value.message]),
+          },
+        },
+        handler: ({ dependencies, outcome }) =>
+          dependencies.available
+            ? outcome.data.found({ message: "public" })
+            : outcome.failure.unavailable({ message: "remote" }),
+      }),
     },
-  },
-  failures: {
-    unavailable: {
-      description: "服务不可用",
-      schema: payload,
-      exitCode: 9,
-      text: (value: Payload) => text.lines(["不可用", value.message]),
-    },
-  },
-  handler: ({ dependencies, outcome }) =>
-    dependencies.available
-      ? outcome.data.found({ message: "public" })
-      : outcome.failure.unavailable({ message: "remote" }),
+  })),
 });
 
 const watch = define.command("watch")({
@@ -113,28 +164,56 @@ const watch = define.command("watch")({
   description: "观察目标",
   fields: {},
   input: emptyInput,
-  success: {
-    kind: "stream",
-    records: {
-      item: {
-        description: "观察记录",
-        schema: payload,
-        text: (value: Payload) => text.line(value.message),
-      },
+
+  outputs: define.outputModes("watch", emptyInput, (mode) => ({
+    default: "structured",
+    modes: {
+      structured: mode.stream({
+        description: "结构化输出",
+        format: "structured",
+        success: {
+          kind: "stream",
+          records: {
+            item: {
+              description: "观察记录",
+              schema: payload,
+            },
+          },
+        },
+        failures: {},
+        async *handler({ outcome }) {
+          yield outcome.record.item({ message: "第一条" });
+          return outcome.streamSuccess();
+        },
+      }),
+      text: mode.stream({
+        description: "文本输出",
+        format: "text",
+        success: {
+          kind: "stream",
+          records: {
+            item: {
+              description: "观察记录",
+              schema: payload,
+              text: (value: Payload) => text.line(value.message),
+            },
+          },
+          text: () => text.lines(["观察完成", ""]),
+        },
+        failures: {},
+        async *handler({ outcome }) {
+          yield outcome.record.item({ message: "第一条" });
+          return outcome.streamSuccess();
+        },
+      }),
     },
-    text: () => text.lines(["观察完成", ""]),
-  },
-  failures: {},
-  async *handler({ outcome }) {
-    yield outcome.record.item({ message: "第一条" });
-    return outcome.streamSuccess();
-  },
+  })),
 });
 
 const cli = define({
   root: "consumer",
   help: helpCapability({ shortAlias: "-h" }),
-  output: outputCapability({ defaultFormat: "structured", text: true }),
+
   usageFailureExitCode: 64,
   commands: {
     consumer: {

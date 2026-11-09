@@ -1,70 +1,86 @@
-name: Release
+name: 发布 npm 包
 
 on:
   workflow_dispatch:
 
-permissions:
-  contents: write
-  id-token: write
+permissions: {}
 
 concurrency:
-  group: release
+  group: npm-publication-${{ github.repository }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
-  publish:
-    name: Publish verified release candidate
+  pack:
+    name: 验收并打包
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    outputs:
+      pack-dir-artifact-id: ${{ steps.pack.outputs.pack-dir-artifact-id }}
     steps:
-      - name: Checkout event commit
+      - name: 检出源码
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
           persist-credentials: false
-          ref: ${{ github.sha }}
-      - name: Set up pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - name: 读取 Node 版本
+        id: node-runtime
+        run: echo "runtime=node@$(jq -er '.engines.node' package.json)" >> "$GITHUB_OUTPUT"
+      - name: 安装 pnpm 与 Node.js
+        uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
         with:
-          cache: pnpm
-          node-version: 24
-      - name: Install dependencies
+          runtime: ${{ steps.node-runtime.outputs.runtime }}
+          install: false
+          cache: true
+      - name: 安装依赖
         run: pnpm install --frozen-lockfile
-      - name: Verify release tag and package versions
-        env:
-          EVENT_SHA: ${{ github.sha }}
-          RELEASE_REF: ${{ github.ref }}
-        run: node --conditions=source scripts/validate-release-tag.ts "$RELEASE_REF" "$EVENT_SHA"
-      - name: Install supported npm
-        run: npm install --global npm@11.5.1
-      - name: Show npm version
-        run: npm --version
-      - name: Verify release candidate
-        id: candidate
-        shell: bash
-        run: |
-          candidate_directory="$(mktemp -d)"
-          candidate_result="$(pnpm --silent candidate:verify -- --output-dir "$candidate_directory")"
-          core_tarball="$(jq --raw-output '.coreTarball' <<<"$candidate_result")"
-          testing_tarball="$(jq --raw-output '.testingTarball' <<<"$candidate_result")"
-          test -f "$core_tarball"
-          test -f "$testing_tarball"
-          printf 'core_tarball=%s\n' "$core_tarball" >> "$GITHUB_OUTPUT"
-          printf 'testing_tarball=%s\n' "$testing_tarball" >> "$GITHUB_OUTPUT"
-      - name: Publish core package
-        env:
-          CORE_TARBALL: ${{ steps.candidate.outputs.core_tarball }}
-        run: npm publish "$CORE_TARBALL" --access public --tag latest --registry https://registry.npmjs.org
-      - name: Publish testing package
-        env:
-          TESTING_TARBALL: ${{ steps.candidate.outputs.testing_tarball }}
-        run: npm publish "$TESTING_TARBALL" --access public --tag latest --registry https://registry.npmjs.org
-      - name: Create GitHub Release
-        env:
-          CORE_TARBALL: ${{ steps.candidate.outputs.core_tarball }}
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
-          TESTING_TARBALL: ${{ steps.candidate.outputs.testing_tarball }}
-        run: gh release create "$RELEASE_TAG" "$CORE_TARBALL" "$TESTING_TARBALL" --verify-tag
+      - name: 检查源码
+        run: pnpm run check
+      - name: 按依赖顺序构建
+        run: pnpm exec turbo run build
+      - name: 打包未发布版本
+        id: pack
+        uses: changesets/action/pack@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+      - name: 下载同批制品进行消费验收
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ steps.pack.outputs.pack-dir-artifact-id }}
+          path: ${{ runner.temp }}/changesets-pack
+      - name: 验收 Changesets 原生制品
+        run: pnpm product:verify -- --pack-dir "$RUNNER_TEMP/changesets-pack"
+
+  publish:
+    name: 发布 npm 包和 GitHub Release
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    needs: pack
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: npm
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: 读取 Node 版本
+        id: node-runtime
+        run: echo "runtime=node@$(jq -er '.engines.node' package.json)" >> "$GITHUB_OUTPUT"
+      - name: 安装 pnpm 与 Node.js
+        uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
+        with:
+          runtime: ${{ steps.node-runtime.outputs.runtime }}
+          install: false
+          cache: false
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: 发布已验收制品
+        uses: changesets/action/publish@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pack-dir-artifact-id: ${{ needs.pack.outputs.pack-dir-artifact-id }}
+          create-github-releases: true
+          push-git-tags: true

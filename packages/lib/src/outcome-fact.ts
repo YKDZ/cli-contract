@@ -288,52 +288,84 @@ function encodeApplicationText(
 }
 
 export type DataVariantDefinition<
-  Payload = unknown,
+  Input = unknown,
   TextEnabled extends boolean = boolean,
+  Output = Input,
 > = {
   readonly description: string;
-  readonly schema: ContractSchema<Payload>;
+  readonly schema: ContractSchema<Input, Output>;
   readonly exitCode: number;
 } & (TextEnabled extends true
-  ? Readonly<{ readonly text: AtomicTextPresenter<Payload> }>
+  ? Readonly<{ readonly text: AtomicTextPresenter<Output> }>
   : TextEnabled extends false
     ? Readonly<{ readonly text?: never }>
-    : Readonly<{ readonly text?: AtomicTextPresenter<Payload> }>);
+    : Readonly<{ readonly text?: AtomicTextPresenter<Output> }>);
 
-export type DataVariantDefinitions<TextEnabled extends boolean = boolean> =
-  Readonly<Record<string, DataVariantDefinition<unknown, TextEnabled>>>;
+export type DataVariantDefinitions<_TextEnabled extends boolean = boolean> =
+  Readonly<
+    Record<
+      string,
+      Readonly<{
+        readonly description: string;
+        readonly schema: ContractSchema;
+        readonly exitCode: number;
+        readonly text?: unknown;
+      }>
+    >
+  >;
 
 export type StreamRecordDefinition<
-  Payload = unknown,
+  Input = unknown,
   TextEnabled extends boolean = boolean,
+  Output = Input,
 > = Readonly<{
   readonly description: string;
-  readonly schema: ContractSchema<Payload>;
+  readonly schema: ContractSchema<Input, Output>;
 }> &
   (TextEnabled extends true
-    ? Readonly<{ readonly text: StreamTextPresenter<Payload> }>
+    ? Readonly<{ readonly text: StreamTextPresenter<Output> }>
     : TextEnabled extends false
       ? Readonly<{ readonly text?: never }>
-      : Readonly<{ readonly text?: StreamTextPresenter<Payload> }>);
+      : Readonly<{ readonly text?: StreamTextPresenter<Output> }>);
 
-export type StreamRecordDefinitions<TextEnabled extends boolean = boolean> =
-  Readonly<Record<string, StreamRecordDefinition<unknown, TextEnabled>>>;
+export type StreamRecordDefinitions<_TextEnabled extends boolean = boolean> =
+  Readonly<
+    Record<
+      string,
+      Readonly<{
+        readonly description: string;
+        readonly schema: ContractSchema;
+        readonly text?: unknown;
+      }>
+    >
+  >;
 
 export type FailureVariantDefinition<
-  Payload = unknown,
+  Input = unknown,
   TextEnabled extends boolean = boolean,
+  Output = Input,
 > = {
   readonly description: string;
-  readonly schema: ContractSchema<Payload>;
+  readonly schema: ContractSchema<Input, Output>;
   readonly exitCode: number;
 } & (TextEnabled extends true
-  ? Readonly<{ readonly text: AtomicTextPresenter<Payload> }>
+  ? Readonly<{ readonly text: AtomicTextPresenter<Output> }>
   : TextEnabled extends false
     ? Readonly<{ readonly text?: never }>
-    : Readonly<{ readonly text?: AtomicTextPresenter<Payload> }>);
+    : Readonly<{ readonly text?: AtomicTextPresenter<Output> }>);
 
-export type FailureVariantDefinitions<TextEnabled extends boolean = boolean> =
-  Readonly<Record<string, FailureVariantDefinition<unknown, TextEnabled>>>;
+export type FailureVariantDefinitions<_TextEnabled extends boolean = boolean> =
+  Readonly<
+    Record<
+      string,
+      Readonly<{
+        readonly description: string;
+        readonly schema: ContractSchema;
+        readonly exitCode: number;
+        readonly text?: unknown;
+      }>
+    >
+  >;
 
 export interface CompletionFact<Command extends string = string> {
   readonly kind: "completion";
@@ -394,17 +426,22 @@ export interface CompletionOutcome<Command extends string> {
   completion(): CompletionFact<Command>;
 }
 
-type DataVariantPayload<Variant> =
-  Variant extends DataVariantDefinition<infer Payload> ? Payload : never;
+type DataVariantPayload<Variant, Phase extends "input" | "output" = "input"> =
+  Variant extends DataVariantDefinition<infer Input, boolean, infer Output>
+    ? Phase extends "input"
+      ? Input
+      : Output
+    : never;
 
 export type DataFactUnion<
   Command extends string,
   Variants extends DataVariantDefinitions,
+  Phase extends "input" | "output" = "input",
 > = {
   readonly [Variant in keyof Variants & string]: DataFact<
     Command,
     Variant,
-    DataVariantPayload<Variants[Variant]>
+    DataVariantPayload<Variants[Variant], Phase>
   >;
 }[keyof Variants & string];
 
@@ -423,23 +460,31 @@ export type DataOutcome<
   }>;
 }>;
 
-type FailureVariantPayload<Variant> =
-  Variant extends FailureVariantDefinition<infer Payload> ? Payload : never;
+type FailureVariantPayload<
+  Variant,
+  Phase extends "input" | "output" = "input",
+> =
+  Variant extends FailureVariantDefinition<infer Input, boolean, infer Output>
+    ? Phase extends "input"
+      ? Input
+      : Output
+    : never;
 
 export type FailureFactUnion<
   Command extends string,
-  Failures extends FailureVariantDefinitions,
+  Failures extends object,
+  Phase extends "input" | "output" = "input",
 > = {
   readonly [Variant in keyof Failures & string]: FailureFact<
     Command,
     Variant,
-    FailureVariantPayload<Failures[Variant]>
+    FailureVariantPayload<Failures[Variant], Phase>
   >;
 }[keyof Failures & string];
 
 export type FailureOutcome<
   Command extends string,
-  Failures extends FailureVariantDefinitions,
+  Failures extends object,
 > = Readonly<{
   readonly failure: Readonly<{
     [Variant in keyof Failures]: (
@@ -452,17 +497,22 @@ export type FailureOutcome<
   }>;
 }>;
 
-type StreamRecordPayload<Variant> =
-  Variant extends StreamRecordDefinition<infer Payload> ? Payload : never;
+type StreamRecordPayload<Variant, Phase extends "input" | "output" = "input"> =
+  Variant extends StreamRecordDefinition<infer Input, boolean, infer Output>
+    ? Phase extends "input"
+      ? Input
+      : Output
+    : never;
 
 export type StreamRecordFactUnion<
   Command extends string,
   Records extends StreamRecordDefinitions,
+  Phase extends "input" | "output" = "input",
 > = {
   readonly [Variant in keyof Records & string]: StreamRecordFact<
     Command,
     Variant,
-    StreamRecordPayload<Records[Variant]>
+    StreamRecordPayload<Records[Variant], Phase>
   >;
 }[keyof Records & string];
 

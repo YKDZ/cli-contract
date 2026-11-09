@@ -1,39 +1,35 @@
 import {
   executeCli,
   parseCliInvocation,
-  type CliContract,
+  type AnyCliContract,
   type CliContractDependencies,
   type CliContractResult,
   type CliOutput,
   type CliTermination,
-  type OutcomeFact,
 } from "@ykdz/cli-contract";
 
-/** 从契约命令闭集投影出的可执行命令身份。 */
-export type CliScenarioCommand<Contract extends CliContract> =
-  Contract extends CliContract<
-    infer Root,
-    unknown,
-    unknown,
-    OutcomeFact,
-    "rootCommand" | "rootGroup",
-    infer Commands
-  >
-    ? [Commands] extends [never]
-      ? Root
-      : {
-          [Command in keyof Commands]: Commands[Command] extends Readonly<{
-            readonly kind: "command";
-          }>
-            ? Command
-            : never;
-        }[keyof Commands] &
-          string
+type ContractManifestCommands<Contract> =
+  Contract extends Readonly<{
+    readonly manifest: Readonly<{ readonly commands: infer Commands }>;
+  }>
+    ? Commands
     : never;
+
+/** 从契约命令闭集投影出的可执行命令身份。 */
+export type CliScenarioCommand<Contract extends AnyCliContract> = {
+  [
+    Command in keyof ContractManifestCommands<Contract>
+  ]: ContractManifestCommands<Contract>[Command] extends Readonly<{
+    readonly kind: "command" | "rootCommand";
+  }>
+    ? Command
+    : never;
+}[keyof ContractManifestCommands<Contract>] &
+  string;
 
 /** 某个可执行命令已声明的失败身份。 */
 export type CliFailureScenarioKey<
-  Contract extends CliContract,
+  Contract extends AnyCliContract,
   Command extends CliScenarioCommand<Contract>,
 > = Extract<
   CliContractResult<Contract>,
@@ -41,17 +37,17 @@ export type CliFailureScenarioKey<
 >["variant"];
 
 /** 场景仅描述如何触发一次调用，不参与生产契约。 */
-export interface CliScenario<Contract extends CliContract> {
+export interface CliScenario<Contract extends AnyCliContract> {
   readonly argv: readonly string[];
   readonly dependencies: CliContractDependencies<NoInfer<Contract>>;
 }
 
 /** 每个可执行命令各有一个触发场景的闭合集合。 */
-export type CliCommandScenarioMap<Contract extends CliContract> = Readonly<{
+export type CliCommandScenarioMap<Contract extends AnyCliContract> = Readonly<{
   [Command in CliScenarioCommand<Contract>]: CliScenario<Contract>;
 }>;
 
-type CliFailureScenarioCommand<Contract extends CliContract> = {
+type CliFailureScenarioCommand<Contract extends AnyCliContract> = {
   [Command in CliScenarioCommand<Contract>]: [
     CliFailureScenarioKey<Contract, Command>,
   ] extends [never]
@@ -60,7 +56,7 @@ type CliFailureScenarioCommand<Contract extends CliContract> = {
 }[CliScenarioCommand<Contract>];
 
 /** 仅包含声明了失败变体的命令；没有失败的命令不需要伪键。 */
-export type CliFailureScenarioMap<Contract extends CliContract> = Readonly<{
+export type CliFailureScenarioMap<Contract extends AnyCliContract> = Readonly<{
   [Command in CliFailureScenarioCommand<Contract>]: Readonly<{
     [
       Failure in CliFailureScenarioKey<Contract, Command>
@@ -99,7 +95,7 @@ type FailureScenarioMapContract<Expected, Actual> = ScenarioMapContract<
  * 该 helper 不执行或保存契约；返回值就是调用方提供的场景表。
  */
 export function defineCommandScenarios<
-  const Contract extends CliContract,
+  const Contract extends AnyCliContract,
   const Scenarios extends CliCommandScenarioMap<NoInfer<Contract>>,
 >(
   cliContract: Contract,
@@ -115,7 +111,7 @@ export function defineCommandScenarios<
  * 没有失败变体的命令不会出现在该映射中。
  */
 export function defineFailureScenarios<
-  const Contract extends CliContract,
+  const Contract extends AnyCliContract,
   const Scenarios extends CliFailureScenarioMap<NoInfer<Contract>>,
 >(
   cliContract: Contract,
@@ -130,7 +126,7 @@ export function defineFailureScenarios<
 }
 
 /** 一次受控 CLI 调用的规范化观测。 */
-export interface CliScenarioCapture<Contract extends CliContract> {
+export interface CliScenarioCapture<Contract extends AnyCliContract> {
   /** 按生产写入发生顺序捕获的全部输出。 */
   readonly writes: readonly CliOutput[];
   /** 标准输出的 chunk。 */
@@ -145,7 +141,7 @@ export interface CliScenarioCapture<Contract extends CliContract> {
   readonly termination: CliTermination<Contract>;
 }
 
-export interface RunCliScenarioOptions<Contract extends CliContract> {
+export interface RunCliScenarioOptions<Contract extends AnyCliContract> {
   readonly cliContract: Contract;
   readonly argv: readonly string[];
   readonly dependencies: CliContractDependencies<NoInfer<Contract>>;
@@ -156,7 +152,7 @@ export interface RunCliScenarioOptions<Contract extends CliContract> {
 /**
  * 通过生产 parser 与执行内核运行一次调用，并在内存中原子捕获其可观察结果。
  */
-export async function runCliScenario<const Contract extends CliContract>(
+export async function runCliScenario<const Contract extends AnyCliContract>(
   options: RunCliScenarioOptions<Contract>,
 ): Promise<CliScenarioCapture<Contract>> {
   const writes: CliOutput[] = [];

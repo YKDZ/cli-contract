@@ -1,7 +1,6 @@
 import {
   defineCli,
   helpCapability,
-  outputCapability,
   text,
   type CliContract,
   type CliContractResult,
@@ -27,7 +26,7 @@ const define = defineCli<Readonly<{}>>();
 const contract = define({
   root: "consumer",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
+
   usageFailureExitCode: 64,
   commands: {
     consumer: {
@@ -36,9 +35,26 @@ const contract = define({
       description: "根入口",
       fields: {},
       input: emptyInput,
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: define.outputModes("consumer", emptyInput, (mode) => ({
+        default: "text",
+        modes: {
+          structured: mode.atomic({
+            description: "结构化输出",
+            format: "structured",
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          }),
+          text: mode.atomic({
+            description: "文本输出",
+            format: "text",
+            success: { kind: "completion", text: () => text.silent },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          }),
+        },
+      })),
     },
   },
 });
@@ -49,7 +65,7 @@ void publicContract;
 const textCompletionWithoutField = defineCli()({
   root: "emptyTextCompletion",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+
   usageFailureExitCode: 64,
   commands: {
     emptyTextCompletion: {
@@ -57,9 +73,30 @@ const textCompletionWithoutField = defineCli()({
       name: "empty-text-completion",
       description: "无字段的文本 completion",
       input: emptyInput,
-      success: { kind: "completion", text: () => text.silent },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "emptyTextCompletion",
+        emptyInput,
+        (mode) => ({
+          default: "text",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+            text: mode.atomic({
+              description: "文本输出",
+              format: "text",
+              success: { kind: "completion", text: () => text.silent },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
@@ -73,7 +110,7 @@ void textCompletionResult;
 const optionalCompletionWithoutField = defineCli()({
   root: "optionalTextCompletion",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+
   usageFailureExitCode: 64,
   commands: {
     optionalTextCompletion: {
@@ -81,9 +118,30 @@ const optionalCompletionWithoutField = defineCli()({
       name: "optional-text-completion",
       description: "可选字段的文本 completion",
       input: optionalCountInput,
-      success: { kind: "completion", text: () => text.silent },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "optionalTextCompletion",
+        optionalCountInput,
+        (mode) => ({
+          default: "text",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+            text: mode.atomic({
+              description: "文本输出",
+              format: "text",
+              success: { kind: "completion", text: () => text.silent },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
@@ -92,7 +150,7 @@ void optionalCompletionWithoutField;
 const unionCompletionAcceptingEmpty = defineCli()({
   root: "unionTextCompletion",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+
   usageFailureExitCode: 64,
   commands: {
     unionTextCompletion: {
@@ -100,9 +158,30 @@ const unionCompletionAcceptingEmpty = defineCli()({
       name: "union-text-completion",
       description: "可接受空对象的联合 completion",
       input: eitherAcceptsEmptyInput,
-      success: { kind: "completion", text: () => text.silent },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "unionTextCompletion",
+        eitherAcceptsEmptyInput,
+        (mode) => ({
+          default: "text",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+            text: mode.atomic({
+              description: "文本输出",
+              format: "text",
+              success: { kind: "completion", text: () => text.silent },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
@@ -111,7 +190,7 @@ void unionCompletionAcceptingEmpty;
 const completeNamedVariants = defineCli()({
   root: "completeNamedVariants",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+
   usageFailureExitCode: 64,
   commands: {
     completeNamedVariants: {
@@ -126,49 +205,102 @@ const completeNamedVariants = defineCli()({
         },
       },
       input: textInput,
-      success: {
-        kind: "data",
-        variants: {
-          accepted: {
-            description: "已接受",
-            schema: messagePayload,
-            exitCode: 0,
-            text: (payload) => {
-              payload.message satisfies string;
-              return text.line(payload.message);
-            },
+
+      outputs: defineCli().outputModes(
+        "completeNamedVariants",
+        textInput,
+        (mode) => ({
+          default: "text",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: {
+                kind: "data",
+                variants: {
+                  accepted: {
+                    description: "已接受",
+                    schema: messagePayload,
+                    exitCode: 0,
+                  },
+                  deferred: {
+                    description: "已延后",
+                    schema: messagePayload,
+                    exitCode: 0,
+                  },
+                },
+              },
+              failures: {
+                unavailable: {
+                  description: "不可用",
+                  schema: messagePayload,
+                  exitCode: 9,
+                },
+              },
+              handler: ({ outcome }) => {
+                const accepted = outcome.data.accepted({
+                  message: "已接受请求",
+                });
+                accepted.variant satisfies "accepted";
+                const unavailable = outcome.failure.unavailable({
+                  message: "暂不可用",
+                });
+                unavailable.variant satisfies "unavailable";
+                return accepted;
+              },
+            }),
+            text: mode.atomic({
+              description: "文本输出",
+              format: "text",
+              success: {
+                kind: "data",
+                variants: {
+                  accepted: {
+                    description: "已接受",
+                    schema: messagePayload,
+                    exitCode: 0,
+                    text: (payload) => {
+                      payload.message satisfies string;
+                      return text.line(payload.message);
+                    },
+                  },
+                  deferred: {
+                    description: "已延后",
+                    schema: messagePayload,
+                    exitCode: 0,
+                    text: (payload) => {
+                      payload.message satisfies string;
+                      return text.line(payload.message);
+                    },
+                  },
+                },
+              },
+              failures: {
+                unavailable: {
+                  description: "不可用",
+                  schema: messagePayload,
+                  exitCode: 9,
+                  text: (payload) => {
+                    payload.message satisfies string;
+                    return text.line(payload.message);
+                  },
+                },
+              },
+              handler: ({ outcome }) => {
+                const accepted = outcome.data.accepted({
+                  message: "已接受请求",
+                });
+                accepted.variant satisfies "accepted";
+                const unavailable = outcome.failure.unavailable({
+                  message: "暂不可用",
+                });
+                unavailable.variant satisfies "unavailable";
+                return accepted;
+              },
+            }),
           },
-          deferred: {
-            description: "已延后",
-            schema: messagePayload,
-            exitCode: 0,
-            text: (payload) => {
-              payload.message satisfies string;
-              return text.line(payload.message);
-            },
-          },
-        },
-      },
-      failures: {
-        unavailable: {
-          description: "不可用",
-          schema: messagePayload,
-          exitCode: 9,
-          text: (payload) => {
-            payload.message satisfies string;
-            return text.line(payload.message);
-          },
-        },
-      },
-      handler: ({ outcome }) => {
-        const accepted = outcome.data.accepted({ message: "已接受请求" });
-        accepted.variant satisfies "accepted";
-        const unavailable = outcome.failure.unavailable({
-          message: "暂不可用",
-        });
-        unavailable.variant satisfies "unavailable";
-        return accepted;
-      },
+        }),
+      ),
     },
   },
 });
@@ -177,7 +309,7 @@ void completeNamedVariants;
 const completeCompletionFailures = defineCli()({
   root: "completeCompletionFailures",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+
   usageFailureExitCode: 64,
   commands: {
     completeCompletionFailures: {
@@ -185,37 +317,71 @@ const completeCompletionFailures = defineCli()({
       name: "complete-completion-failures",
       description: "completion 的完整 failure presenter",
       input: emptyInput,
-      success: { kind: "completion", text: () => text.silent },
-      failures: {
-        unavailable: {
-          description: "不可用",
-          schema: messagePayload,
-          exitCode: 9,
-          text: (payload) => {
-            payload.message satisfies string;
-            return text.line(payload.message);
+
+      outputs: defineCli().outputModes(
+        "completeCompletionFailures",
+        emptyInput,
+        (mode) => ({
+          default: "text",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {
+                unavailable: {
+                  description: "不可用",
+                  schema: messagePayload,
+                  exitCode: 9,
+                },
+              },
+              handler: ({ outcome }) => {
+                const completion = outcome.completion();
+                completion.kind satisfies "completion";
+                const unavailable = outcome.failure.unavailable({
+                  message: "暂不可用",
+                });
+                unavailable.variant satisfies "unavailable";
+                return completion;
+              },
+            }),
+            text: mode.atomic({
+              description: "文本输出",
+              format: "text",
+              success: { kind: "completion", text: () => text.silent },
+              failures: {
+                unavailable: {
+                  description: "不可用",
+                  schema: messagePayload,
+                  exitCode: 9,
+                  text: (payload) => {
+                    payload.message satisfies string;
+                    return text.line(payload.message);
+                  },
+                },
+              },
+              handler: ({ outcome }) => {
+                const completion = outcome.completion();
+                completion.kind satisfies "completion";
+                const unavailable = outcome.failure.unavailable({
+                  message: "暂不可用",
+                });
+                unavailable.variant satisfies "unavailable";
+                return completion;
+              },
+            }),
           },
-        },
-      },
-      handler: ({ outcome }) => {
-        const completion = outcome.completion();
-        completion.kind satisfies "completion";
-        const unavailable = outcome.failure.unavailable({
-          message: "暂不可用",
-        });
-        unavailable.variant satisfies "unavailable";
-        return completion;
-      },
+        }),
+      ),
     },
   },
 });
 void completeCompletionFailures;
 
-// @ts-expect-error 每个 data 变体都必须声明 text presenter。
 defineCli()({
   root: "missingDataVariantText",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+
   usageFailureExitCode: 64,
   commands: {
     missingDataVariantText: {
@@ -230,37 +396,73 @@ defineCli()({
         },
       },
       input: textInput,
-      success: {
-        kind: "data",
-        variants: {
-          accepted: {
-            description: "已接受",
-            schema: messagePayload,
-            exitCode: 0,
-            text: (payload) => {
-              payload.message satisfies string;
-              return text.line(payload.message);
-            },
+
+      outputs: defineCli().outputModes(
+        "missingDataVariantText",
+        textInput,
+        (mode) => ({
+          default: "text",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: {
+                kind: "data",
+                variants: {
+                  accepted: {
+                    description: "已接受",
+                    schema: messagePayload,
+                    exitCode: 0,
+                  },
+                  deferred: {
+                    description: "已延后",
+                    schema: messagePayload,
+                    exitCode: 0,
+                  },
+                },
+              },
+              failures: {},
+              handler: ({ outcome }) =>
+                outcome.data.accepted({ message: "已接受请求" }),
+            }),
+            // @ts-expect-error 文本方式的每个 data 变体都必须声明 presenter。
+            text: mode.atomic({
+              description: "文本输出",
+              format: "text",
+              success: {
+                kind: "data",
+                variants: {
+                  accepted: {
+                    description: "已接受",
+                    schema: messagePayload,
+                    exitCode: 0,
+                    text: (payload: z.output<typeof messagePayload>) => {
+                      payload.message satisfies string;
+                      return text.line(payload.message);
+                    },
+                  },
+                  deferred: {
+                    description: "已延后",
+                    schema: messagePayload,
+                    exitCode: 0,
+                  },
+                },
+              },
+              failures: {},
+              handler: ({ outcome }) =>
+                outcome.data.accepted({ message: "已接受请求" }),
+            }),
           },
-          deferred: {
-            description: "已延后",
-            schema: messagePayload,
-            exitCode: 0,
-          },
-        },
-      },
-      failures: {},
-      handler: ({ outcome }) =>
-        outcome.data.accepted({ message: "已接受请求" }),
+        }),
+      ),
     },
   },
 });
 
-// @ts-expect-error 每个 failure 变体都必须声明 text presenter。
 defineCli()({
   root: "missingDataFailureText",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+
   usageFailureExitCode: 64,
   commands: {
     missingDataFailureText: {
@@ -275,47 +477,89 @@ defineCli()({
         },
       },
       input: textInput,
-      success: {
-        kind: "data",
-        variants: {
-          accepted: {
-            description: "已接受",
-            schema: messagePayload,
-            exitCode: 0,
-            text: (payload) => {
-              payload.message satisfies string;
-              return text.line(payload.message);
-            },
+
+      outputs: defineCli().outputModes(
+        "missingDataFailureText",
+        textInput,
+        (mode) => ({
+          default: "text",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: {
+                kind: "data",
+                variants: {
+                  accepted: {
+                    description: "已接受",
+                    schema: messagePayload,
+                    exitCode: 0,
+                  },
+                },
+              },
+              failures: {
+                unavailable: {
+                  description: "不可用",
+                  schema: messagePayload,
+                  exitCode: 9,
+                },
+                forbidden: {
+                  description: "禁止",
+                  schema: messagePayload,
+                  exitCode: 13,
+                },
+              },
+              handler: ({ outcome }) =>
+                outcome.data.accepted({ message: "已接受请求" }),
+            }),
+            // @ts-expect-error 文本方式的 failure 变体必须声明 presenter。
+            text: mode.atomic({
+              description: "文本输出",
+              format: "text",
+              success: {
+                kind: "data",
+                variants: {
+                  accepted: {
+                    description: "已接受",
+                    schema: messagePayload,
+                    exitCode: 0,
+                    text: (payload: z.output<typeof messagePayload>) => {
+                      payload.message satisfies string;
+                      return text.line(payload.message);
+                    },
+                  },
+                },
+              },
+              failures: {
+                unavailable: {
+                  description: "不可用",
+                  schema: messagePayload,
+                  exitCode: 9,
+                  text: (payload: z.output<typeof messagePayload>) => {
+                    payload.message satisfies string;
+                    return text.line(payload.message);
+                  },
+                },
+                forbidden: {
+                  description: "禁止",
+                  schema: messagePayload,
+                  exitCode: 13,
+                },
+              },
+              handler: ({ outcome }) =>
+                outcome.data.accepted({ message: "已接受请求" }),
+            }),
           },
-        },
-      },
-      failures: {
-        unavailable: {
-          description: "不可用",
-          schema: messagePayload,
-          exitCode: 9,
-          text: (payload) => {
-            payload.message satisfies string;
-            return text.line(payload.message);
-          },
-        },
-        forbidden: {
-          description: "禁止",
-          schema: messagePayload,
-          exitCode: 13,
-        },
-      },
-      handler: ({ outcome }) =>
-        outcome.data.accepted({ message: "已接受请求" }),
+        }),
+      ),
     },
   },
 });
 
-// @ts-expect-error completion 的 failure 变体也必须声明 text presenter。
 defineCli()({
   root: "missingCompletionFailureText",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+
   usageFailureExitCode: 64,
   commands: {
     missingCompletionFailureText: {
@@ -323,24 +567,57 @@ defineCli()({
       name: "missing-completion-failure-text",
       description: "completion 的遗漏 failure presenter",
       input: emptyInput,
-      success: { kind: "completion", text: () => text.silent },
-      failures: {
-        unavailable: {
-          description: "不可用",
-          schema: messagePayload,
-          exitCode: 9,
-          text: (payload) => {
-            payload.message satisfies string;
-            return text.line(payload.message);
+
+      outputs: defineCli().outputModes(
+        "missingCompletionFailureText",
+        emptyInput,
+        (mode) => ({
+          default: "text",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {
+                unavailable: {
+                  description: "不可用",
+                  schema: messagePayload,
+                  exitCode: 9,
+                },
+                forbidden: {
+                  description: "禁止",
+                  schema: messagePayload,
+                  exitCode: 13,
+                },
+              },
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+            // @ts-expect-error 文本方式的 completion failure 变体必须声明 presenter。
+            text: mode.atomic({
+              description: "文本输出",
+              format: "text",
+              success: { kind: "completion", text: () => text.silent },
+              failures: {
+                unavailable: {
+                  description: "不可用",
+                  schema: messagePayload,
+                  exitCode: 9,
+                  text: (payload) => {
+                    payload.message satisfies string;
+                    return text.line(payload.message);
+                  },
+                },
+                forbidden: {
+                  description: "禁止",
+                  schema: messagePayload,
+                  exitCode: 13,
+                },
+              },
+              handler: ({ outcome }) => outcome.completion(),
+            }),
           },
-        },
-        forbidden: {
-          description: "禁止",
-          schema: messagePayload,
-          exitCode: 13,
-        },
-      },
-      handler: ({ outcome }) => outcome.completion(),
+        }),
+      ),
     },
   },
 });
@@ -348,27 +625,47 @@ defineCli()({
 defineCli()({
   root: "missingRawField",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+
   usageFailureExitCode: 64,
   commands: {
+    // @ts-expect-error 没有 raw 字段时输入模式不能要求 count。
     missingRawField: {
       kind: "rootCommand",
       name: "missing-raw-field",
       description: "缺少 raw 字段",
-      // @ts-expect-error 未声明字段时输入模式不能要求 raw count。
       input: countInput,
-      success: { kind: "completion", text: () => text.silent },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "missingRawField",
+        countInput,
+        (mode) => ({
+          default: "text",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+            text: mode.atomic({
+              description: "文本输出",
+              format: "text",
+              success: { kind: "completion", text: () => text.silent },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
 
-// @ts-expect-error completion 缺少 text presenter 必须在真实 defineCli 入口被拒绝。
 defineCli()({
   root: "missingCompletion",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+
   usageFailureExitCode: 64,
   commands: {
     missingCompletion: {
@@ -376,9 +673,31 @@ defineCli()({
       name: "missing-completion",
       description: "缺少 completion presenter",
       input: emptyInput,
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "missingCompletion",
+        emptyInput,
+        (mode) => ({
+          default: "text",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+            // @ts-expect-error 文本 completion 必须声明当前方式的 presenter。
+            text: mode.atomic({
+              description: "文本输出",
+              format: "text",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
@@ -386,18 +705,39 @@ defineCli()({
 defineCli()({
   root: "missingUnionRawField",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+
   usageFailureExitCode: 64,
   commands: {
+    // @ts-expect-error 没有对应 raw 字段时联合输入不能要求 count 或 name。
     missingUnionRawField: {
       kind: "rootCommand",
       name: "missing-union-raw-field",
       description: "互异必需字段的联合输入",
-      // @ts-expect-error 未声明字段时联合输入不能要求 count 或 name。
       input: requiredEitherInput,
-      success: { kind: "completion", text: () => text.silent },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli().outputModes(
+        "missingUnionRawField",
+        requiredEitherInput,
+        (mode) => ({
+          default: "text",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+            text: mode.atomic({
+              description: "文本输出",
+              format: "text",
+              success: { kind: "completion", text: () => text.silent },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
@@ -405,7 +745,7 @@ defineCli()({
 const textCompletionWithField = defineCli()({
   root: "textCompletion",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+
   usageFailureExitCode: 64,
   commands: {
     textCompletion: {
@@ -420,12 +760,32 @@ const textCompletionWithField = defineCli()({
         },
       },
       input: textInput,
-      success: { kind: "completion", text: () => text.silent },
-      failures: {},
-      handler: ({ input, outcome }) => {
-        input.name satisfies string | undefined;
-        return outcome.completion();
-      },
+
+      outputs: defineCli().outputModes("textCompletion", textInput, (mode) => ({
+        default: "text",
+        modes: {
+          structured: mode.atomic({
+            description: "结构化输出",
+            format: "structured",
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ input, outcome }) => {
+              input.name satisfies string | undefined;
+              return outcome.completion();
+            },
+          }),
+          text: mode.atomic({
+            description: "文本输出",
+            format: "text",
+            success: { kind: "completion", text: () => text.silent },
+            failures: {},
+            handler: ({ input, outcome }) => {
+              input.name satisfies string | undefined;
+              return outcome.completion();
+            },
+          }),
+        },
+      })),
     },
   },
 });
@@ -434,7 +794,7 @@ void textCompletionWithField;
 defineCli()({
   root: "completionCannotReturnData",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+
   usageFailureExitCode: 64,
   commands: {
     completionCannotReturnData: {
@@ -442,21 +802,44 @@ defineCli()({
       name: "completion-cannot-return-data",
       description: "completion 结果闭合",
       input: emptyInput,
-      success: { kind: "completion", text: () => text.silent },
-      failures: {},
-      handler: ({ outcome }) => {
-        // @ts-expect-error completion handler 不接受 data 结果类别。
-        return outcome.data.value({ value: "nope" });
-      },
+
+      outputs: defineCli().outputModes(
+        "completionCannotReturnData",
+        emptyInput,
+        (mode) => ({
+          default: "text",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => {
+                // @ts-expect-error completion handler 不接受 data 结果类别。
+                return outcome.data.value({ value: "nope" });
+              },
+            }),
+            text: mode.atomic({
+              description: "文本输出",
+              format: "text",
+              success: { kind: "completion", text: () => text.silent },
+              failures: {},
+              handler: ({ outcome }) => {
+                // @ts-expect-error completion handler 不接受 data 结果类别。
+                return outcome.data.value({ value: "nope" });
+              },
+            }),
+          },
+        }),
+      ),
     },
   },
 });
 
-// @ts-expect-error 带字段的 completion 缺少 text presenter 必须在真实 defineCli 入口被拒绝。
 defineCli()({
   root: "missingCompletionWithField",
   help: helpCapability(),
-  output: outputCapability({ defaultFormat: "text" }),
+
   usageFailureExitCode: 64,
   commands: {
     missingCompletionWithField: {
@@ -471,12 +854,37 @@ defineCli()({
         },
       },
       input: textInput,
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ input, outcome }) => {
-        input.name satisfies string | undefined;
-        return outcome.completion();
-      },
+
+      outputs: defineCli().outputModes(
+        "missingCompletionWithField",
+        textInput,
+        (mode) => ({
+          default: "text",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ input, outcome }) => {
+                input.name satisfies string | undefined;
+                return outcome.completion();
+              },
+            }),
+            // @ts-expect-error 文本 completion 必须声明当前方式的 presenter。
+            text: mode.atomic({
+              description: "文本输出",
+              format: "text",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ input, outcome }) => {
+                input.name satisfies string | undefined;
+                return outcome.completion();
+              },
+            }),
+          },
+        }),
+      ),
     },
   },
 });

@@ -1,15 +1,21 @@
 import {
   getCompiledCli,
   isCompiledExecutable,
-  type CliContract,
   type CliContractRawInput,
   type CliContractRoot,
+  type AnyCliContract,
   type CliContractUsageFacts,
   type FieldDefinitions,
   type RuntimeCompiledExecutable,
   type WhenUsageConstraint,
   type UsageFact,
 } from "#/cli-contract";
+import {
+  canonicalCommandPath,
+  queryCliContract,
+  type ContractQueryDocument,
+  type ContractQueryFailureReason,
+} from "#/contract-discovery";
 import { ContractExecutionError } from "#/contract-execution-error";
 import { evaluateUsageConstraints } from "#/usage-constraint";
 
@@ -24,7 +30,7 @@ export interface ParsedInvocation<Command extends string, Input = unknown> {
   readonly kind: "parsed";
   readonly command: Command;
   readonly input: Input;
-  readonly outputFormat: "structured" | "text";
+  readonly outputMode: string;
 }
 
 export interface HelpRequest<Command extends string> {
@@ -35,6 +41,12 @@ export interface HelpRequest<Command extends string> {
 export interface VersionRequest<Command extends string> {
   readonly kind: "version";
   readonly command: Command;
+}
+
+export interface SchemaRequest<Command extends string> {
+  readonly kind: "schema";
+  readonly command: Command;
+  readonly document: ContractQueryDocument;
 }
 
 export interface UnexpectedPositionalIssue {
@@ -246,21 +258,21 @@ type ContractConditionalUsageIssue<
     : never;
 
 export type CliUsageIssue<
-  Contract extends CliContract = CliContract,
+  Contract extends AnyCliContract = AnyCliContract,
   Command extends string = CliContractRoot<Contract>,
 > =
   | Exclude<UsageIssue, { readonly code: "conditionalConstraintViolation" }>
   | ContractConditionalUsageIssue<Contract, Command>;
 
 export type NonEmptyCliUsageIssues<
-  Contract extends CliContract = CliContract,
+  Contract extends AnyCliContract = AnyCliContract,
   Command extends string = CliContractRoot<Contract>,
 > = readonly [
   CliUsageIssue<Contract, Command>,
   ...CliUsageIssue<Contract, Command>[],
 ];
 
-type UsageFailuresForContract<Contract extends CliContract> = {
+type UsageFailuresForContract<Contract extends AnyCliContract> = {
   [Command in CliContractRoot<Contract>]: UsageFailure<
     Command,
     NonEmptyCliUsageIssues<Contract, Command>
@@ -285,43 +297,57 @@ export interface InvalidFieldChoiceIssue {
   readonly choices: readonly string[];
 }
 
-export interface InvalidOutputFormatIssue {
-  readonly code: "invalidOutputFormat";
+export interface InvalidOutputModeIssue {
+  readonly code: "invalidOutputMode";
   readonly position: number;
   readonly option: string;
   readonly received: string | null;
+  readonly available: readonly string[];
 }
 
-export interface ConflictingOutputFormatIssue {
-  readonly code: "conflictingOutputFormat";
+export interface InvalidSchemaQueryIssue {
+  readonly code: "invalidSchemaQuery";
+  readonly position: number;
+  readonly option: "--schema";
+  readonly target: string | null;
+  readonly reason:
+    | "invalidSyntax"
+    | "unknownPart"
+    | "unknownOutputMode"
+    | "unsupportedPart";
+}
+
+export interface ConflictingOutputModeIssue {
+  readonly code: "conflictingOutputMode";
   readonly occurrences: readonly [
     Readonly<{
       readonly position: number;
       readonly option: string;
-      readonly format: "structured" | "text";
+      readonly mode: string;
     }>,
     Readonly<{
       readonly position: number;
       readonly option: string;
-      readonly format: "structured" | "text";
+      readonly mode: string;
     }>,
     ...Readonly<{
       readonly position: number;
       readonly option: string;
-      readonly format: "structured" | "text";
+      readonly mode: string;
     }>[],
   ];
 }
 
 export type UsageIssue =
   | ConflictingFlagIssue
-  | ConflictingOutputFormatIssue
+  | ConflictingOutputModeIssue
   | CountConstraintViolationIssue
   | ForbiddenCombinationViolationIssue
   | ConditionalConstraintViolationIssue
   | InputRejectedIssue
   | InvalidFieldChoiceIssue
-  | InvalidOutputFormatIssue
+  | InvalidOutputModeIssue
+  | InvalidSchemaQueryIssue
   | MissingOptionValueIssue
   | MissingRequiredFieldIssue
   | RepeatedOptionIssue
@@ -347,26 +373,27 @@ export interface UsageFailure<
 }
 
 /** 解析器签发的闭合调用事实，只能交还产生它的同一个契约执行；不要自行拼装。 */
-export type CliInvocation<Contract extends CliContract = CliContract> =
+export type CliInvocation<Contract extends AnyCliContract = AnyCliContract> =
   UnboundCliInvocation<Contract> & {
     readonly [cliInvocationType]: Contract;
   };
 
-type UnboundCliInvocation<Contract extends CliContract> =
+type UnboundCliInvocation<Contract extends AnyCliContract> =
   | ParsedInvocation<CliContractRoot<Contract>, CliContractRawInput<Contract>>
   | HelpRequest<CliContractRoot<Contract>>
   | VersionRequest<CliContractRoot<Contract>>
+  | SchemaRequest<CliContractRoot<Contract>>
   | UsageFailuresForContract<Contract>;
 
 /**
  * 将宿主提供的参数 token 同步、无副作用地解析为同一契约的调用事实。
  * 参数从命令路径或字段开始，不包含 Node 可执行文件和脚本路径；来源与 shell 拆词由宿主负责。
  *
- * 解析器检查调用语法与用法约束，保留帮助、版本和用法失败等闭合分支；
+ * 解析器检查调用语法与用法约束，保留帮助、版本、发现和用法失败等闭合分支；
  * 已解析的 raw input 尚未经过契约模式验证。它不读取进程或环境，不执行 handler，也不写输出。
  * 将返回值交给 {@link executeCli}，由执行内核完成后续验证与投影。
  */
-export function parseCliInvocation<const Contract extends CliContract>(
+export function parseCliInvocation<const Contract extends AnyCliContract>(
   cliContract: Contract,
   argv: readonly string[],
 ): CliInvocation<Contract> {
@@ -374,7 +401,7 @@ export function parseCliInvocation<const Contract extends CliContract>(
   const input: Record<string, boolean | string | string[]> = {};
   const occurrencesByField = new Map<string, ParsedOptionOccurrence[]>();
   const valueOccurrencesByField = new Map<string, FieldValueOccurrence[]>();
-  const outputOccurrences: OutputFormatOccurrence[] = [];
+  const outputOccurrences: OutputModeOccurrence[] = [];
   let selected = compiled.commands[compiled.root];
   if (selected === undefined)
     throw new ContractExecutionError([{ code: "invalidCliContract" }]);
@@ -390,31 +417,14 @@ export function parseCliInvocation<const Contract extends CliContract>(
     }
     const eager = detectEagerControl(compiled, token);
     if (eager !== undefined) {
-      return bindInvocation(cliContract, {
-        kind: eager,
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令 id 来自当前 Contract 编译结果，泛型身份在此恢复。
-        command: selected.id as CliContractRoot<Contract>,
-      });
-    }
-    const output = consumeOutputControl(
-      compiled,
-      argv,
-      position,
-      outputOccurrences,
-    );
-    if (output.kind === "issue") {
-      return usageFailure(
+      return handleEagerControl(
         cliContract,
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令 id 来自当前 Contract 编译结果，泛型身份在此恢复。
-        selected.id as CliContractRoot<Contract>,
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- usage 与同一已编译命令一同产生，泛型身份在此恢复。
-        selected.usage as CommandUsage<CliContractRoot<Contract>>,
-        output.issue,
+        compiled,
+        selected,
+        eager,
+        token,
+        position,
       );
-    }
-    if (output.kind === "consumed") {
-      position = output.nextPosition;
-      continue;
     }
     if (token.startsWith("-") && token !== "-") {
       const option = consumeOption(
@@ -495,14 +505,19 @@ export function parseCliInvocation<const Contract extends CliContract>(
       ? detectEagerControl(compiled, token)
       : undefined;
     if (eager !== undefined) {
-      return bindInvocation(cliContract, {
-        kind: eager,
-        command,
-      });
+      return handleEagerControl(
+        cliContract,
+        compiled,
+        selected,
+        eager,
+        token,
+        position,
+      );
     }
     if (optionsEnabled) {
       const output = consumeOutputControl(
         compiled,
+        selected,
         argv,
         position,
         outputOccurrences,
@@ -575,38 +590,98 @@ export function parseCliInvocation<const Contract extends CliContract>(
     command,
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- raw input 由此 Contract 的字段语法解析并冻结，泛型形状在此恢复。
     input: freezeRawInput(input) as CliContractRawInput<Contract>,
-    outputFormat:
-      outputOccurrences[0]?.format ??
-      compiled.contract.grammar.controls.output.defaultFormat,
+    outputMode: outputOccurrences[0]?.mode ?? selected.defaultOutputMode,
   });
 }
 
-type OutputFormatOccurrence = Readonly<{
+type OutputModeOccurrence = Readonly<{
   readonly position: number;
   readonly option: string;
-  readonly format: "structured" | "text";
+  readonly mode: string;
 }>;
 
 function detectEagerControl(
   compiled: ReturnType<typeof getCompiledCli>,
   token: string,
-): "help" | "version" | undefined {
+): "help" | "version" | "schema" | undefined {
   const help = compiled.contract.grammar.controls.help;
   if (token === help.longOption || token === help.shortAlias) {
     return "help";
   }
   const version = compiled.contract.grammar.controls.version;
-  return version !== undefined &&
+  if (
+    version !== undefined &&
     (token === version.longOption || token === version.shortAlias)
-    ? "version"
+  ) {
+    return "version";
+  }
+  const schema = compiled.contract.grammar.controls.schema;
+  return schema !== undefined &&
+    (token === schema.longOption || token.startsWith(`${schema.longOption}=`))
+    ? "schema"
     : undefined;
+}
+
+function handleEagerControl<Contract extends AnyCliContract>(
+  cliContract: Contract,
+  compiled: ReturnType<typeof getCompiledCli>,
+  command: ReturnType<typeof getCompiledCli>["commands"][string],
+  control: "help" | "version" | "schema",
+  token: string,
+  position: number,
+): CliInvocation<Contract> {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令来自当前 Contract 的编译树。
+  const commandId = command.id as CliContractRoot<Contract>;
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 用法与同一已编译命令一同产生。
+  const usage = command.usage as CommandUsage<CliContractRoot<Contract>>;
+  if (control !== "schema") {
+    return bindInvocation(cliContract, { kind: control, command: commandId });
+  }
+
+  const target =
+    token === "--schema" ? undefined : token.slice("--schema=".length);
+  const document = queryCliContract(
+    cliContract,
+    canonicalCommandPath(compiled.commands, command.id),
+    target,
+  );
+  if (document.kind === "queryFailure") {
+    return usageFailure(cliContract, commandId, usage, {
+      code: "invalidSchemaQuery",
+      position,
+      option: "--schema",
+      target: target ?? null,
+      reason: schemaQueryFailureReason(document.reason),
+    });
+  }
+  return bindInvocation(cliContract, {
+    kind: "schema",
+    command: commandId,
+    document,
+  });
+}
+
+function schemaQueryFailureReason(
+  reason: ContractQueryFailureReason,
+): InvalidSchemaQueryIssue["reason"] {
+  switch (reason) {
+    case "invalidSyntax":
+    case "unknownPart":
+    case "unknownOutputMode":
+    case "unsupportedPart":
+      return reason;
+    case "discoveryNotInstalled":
+    case "unknownCommandPath":
+      return "unsupportedPart";
+  }
 }
 
 function consumeOutputControl(
   compiled: ReturnType<typeof getCompiledCli>,
+  executable: RuntimeCompiledExecutable,
   argv: readonly string[],
   position: number,
-  occurrences: OutputFormatOccurrence[],
+  occurrences: OutputModeOccurrence[],
 ):
   | Readonly<{ readonly kind: "notControl" }>
   | Readonly<{ readonly kind: "consumed"; readonly nextPosition: number }>
@@ -614,8 +689,7 @@ function consumeOutputControl(
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 调用点均传入当前位置的 argv token，公共类型保证字符串。
   const token = argv[position] as string;
   const option = readOptionToken(token);
-  const output = compiled.contract.grammar.controls.output;
-  if (output.selector === option.spelling) {
+  if (option.spelling === "--output") {
     const nextToken = argv[position + 1];
     if (
       option.value === undefined &&
@@ -625,77 +699,54 @@ function consumeOutputControl(
       return { kind: "consumed", nextPosition: position + 1 };
     }
     const value = option.value ?? argv[position + 1];
-    if (
-      value === undefined ||
-      !isOutputFormat(value) ||
-      !output.formats.includes(value)
-    ) {
+    const available = Object.keys(executable.outputModes);
+    if (value === undefined || !Object.hasOwn(executable.outputModes, value)) {
       return {
         kind: "issue",
         issue: {
-          code: "invalidOutputFormat",
+          code: "invalidOutputMode",
           position,
           option: option.spelling,
           received: value ?? null,
+          available: Object.freeze(available),
         },
       };
     }
     const nextPosition =
       option.value === undefined ? position + 2 : position + 1;
-    return selectOutputFormat(
+    return selectOutputMode(
       occurrences,
       {
         position,
         option: option.spelling,
-        format: value,
+        mode: value,
       },
       nextPosition,
     );
   }
-  const format = output.compatibilityFlags?.[option.spelling];
-  if (format === undefined) return { kind: "notControl" };
-  if (option.value !== undefined) {
-    return {
-      kind: "issue",
-      issue: {
-        code: "invalidOutputFormat",
-        position,
-        option: option.spelling,
-        received: option.value,
-      },
-    };
-  }
-  return selectOutputFormat(
-    occurrences,
-    { position, option: option.spelling, format },
-    position + 1,
-  );
+  return { kind: "notControl" };
 }
 
-function isOutputFormat(value: unknown): value is "structured" | "text" {
-  return value === "structured" || value === "text";
-}
-
-function selectOutputFormat(
-  occurrences: OutputFormatOccurrence[],
-  occurrence: OutputFormatOccurrence,
+function selectOutputMode(
+  occurrences: OutputModeOccurrence[],
+  occurrence: OutputModeOccurrence,
   nextPosition: number,
 ):
   | Readonly<{ readonly kind: "consumed"; readonly nextPosition: number }>
   | Readonly<{
       readonly kind: "issue";
-      readonly issue: ConflictingOutputFormatIssue;
+      readonly issue: ConflictingOutputModeIssue;
     }> {
   occurrences.push(occurrence);
   if (occurrences.length === 1) return { kind: "consumed", nextPosition };
   return {
     kind: "issue",
     issue: {
-      code: "conflictingOutputFormat",
+      code: "conflictingOutputMode",
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 此前已排除单次出现，冲突证据至少有两项。
       occurrences: Object.freeze([
         ...occurrences,
-      ]) as ConflictingOutputFormatIssue["occurrences"],
+      ]) as ConflictingOutputModeIssue["occurrences"],
     },
   };
 }
@@ -991,12 +1042,7 @@ function longOptionsInScope(
     ...(compiled.contract.grammar.controls.version === undefined
       ? []
       : [compiled.contract.grammar.controls.version.longOption]),
-    ...(compiled.contract.grammar.controls.output.selector === undefined
-      ? []
-      : [compiled.contract.grammar.controls.output.selector]),
-    ...Object.keys(
-      compiled.contract.grammar.controls.output.compatibilityFlags ?? {},
-    ),
+    "--output",
   ];
 }
 
@@ -1074,7 +1120,7 @@ function damerauLevenshteinDistance(left: string, right: string): number {
   return matrix[left.length + 1]![right.length + 1]!;
 }
 
-function unexpectedPositional<Contract extends CliContract>(
+function unexpectedPositional<Contract extends AnyCliContract>(
   contract: Contract,
   command: CliContractRoot<Contract>,
   usage: CommandUsage<CliContractRoot<Contract>>,
@@ -1088,7 +1134,7 @@ function unexpectedPositional<Contract extends CliContract>(
   });
 }
 
-function usageFailure<Contract extends CliContract>(
+function usageFailure<Contract extends AnyCliContract>(
   contract: Contract,
   command: CliContractRoot<Contract>,
   usage: CommandUsage<CliContractRoot<Contract>>,
@@ -1097,7 +1143,7 @@ function usageFailure<Contract extends CliContract>(
   return usageFailureFromIssues(contract, command, usage, [issue]);
 }
 
-function usageFailureFromIssues<Contract extends CliContract>(
+function usageFailureFromIssues<Contract extends AnyCliContract>(
   contract: Contract,
   command: CliContractRoot<Contract>,
   usage: CommandUsage<CliContractRoot<Contract>>,
@@ -1121,7 +1167,7 @@ export function invocationBelongsTo(
   return invocationContracts.get(invocation) === contract;
 }
 
-function bindInvocation<Contract extends CliContract>(
+function bindInvocation<Contract extends AnyCliContract>(
   contract: Contract,
   invocation: UnboundCliInvocation<Contract>,
 ): CliInvocation<Contract> {

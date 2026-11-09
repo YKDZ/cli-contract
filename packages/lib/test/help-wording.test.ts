@@ -6,14 +6,18 @@ import {
   defineCli,
   executeCli,
   helpCapability,
-  outputCapability,
   parseCliInvocation,
   text,
   type HelpCapabilityDefinition,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
+import { englishHelpWording } from "./english-help.ts";
+
 void test("帮助事实模板表达候选值和默认值，保留 schema 中的值", async () => {
+  const sharedInput0 = z.object({
+    mode: z.enum(["safe", "force"]).default("safe"),
+  });
   const cli = defineCli()({
     root: "choose",
     help: helpCapability({
@@ -22,7 +26,7 @@ void test("帮助事实模板表达候选值和默认值，保留 schema 中的�
         default: "（预设：{value}）",
       },
     }),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       choose: {
@@ -36,10 +40,20 @@ void test("帮助事实模板表达候选值和默认值，保留 schema 中的�
             description: "模式",
           },
         },
-        input: z.object({ mode: z.enum(["safe", "force"]).default("safe") }),
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        input: sharedInput0,
+
+        outputs: defineCli().outputModes("choose", sharedInput0, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -112,12 +126,13 @@ void test("帮助文案中未知槽位与已知模板问题同次聚合", () => 
 
 void test("仅已知模板错误仍在根装配时与叶约束问题聚合", () => {
   const helpDefinition: HelpCapabilityDefinition = JSON.parse(
-    '{"wording":{"choices":"候选 {choises}"}}',
+    '{"wording":{"choices":"候选 {choises}","default":"默认 {value}"}}',
   );
+  const sharedInput1 = z.object({ mode: z.enum(["safe", "force"]).optional() });
   const definition = {
     root: "choose",
     help: helpCapability(helpDefinition),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       choose: {
@@ -131,16 +146,28 @@ void test("仅已知模板错误仍在根装配时与叶约束问题聚合", () 
             description: "模式",
           },
         },
-        input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+        input: sharedInput1,
         usageConstraints: [
           {
             kind: "forbiddenCombination",
             all: [{ kind: "present", field: "missing" }],
           },
         ],
-        success: { kind: "completion" },
-        failures: {},
-        handler() {},
+
+        outputs: defineCli().outputModes("choose", sharedInput1, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler() {
+                return undefined as never;
+              },
+            }),
+          },
+        })),
       },
     },
   };
@@ -173,12 +200,15 @@ void test("仅已知模板错误仍在根装配时与叶约束问题聚合", () 
 });
 
 void test("已声明帮助事实缺少模板时在定义期报告命令与槽位", () => {
+  const sharedInput0 = z.object({
+    mode: z.enum(["safe", "force"]).default("safe"),
+  });
   assert.throws(
     () =>
       defineCli()({
         root: "choose",
         help: helpCapability(),
-        output: outputCapability({ defaultFormat: "structured" }),
+
         usageFailureExitCode: 64,
         commands: {
           choose: {
@@ -192,9 +222,7 @@ void test("已声明帮助事实缺少模板时在定义期报告命令与槽位
                 description: "模式",
               },
             },
-            input: z.object({
-              mode: z.enum(["safe", "force"]).default("safe"),
-            }),
+            input: sharedInput0,
             usageConstraints: [
               {
                 kind: "when",
@@ -220,9 +248,23 @@ void test("已声明帮助事实缺少模板时在定义期报告命令与槽位
                 ],
               },
             ],
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
+
+            outputs: defineCli().outputModes(
+              "choose",
+              sharedInput0,
+              (mode) => ({
+                default: "structured",
+                modes: {
+                  structured: mode.atomic({
+                    description: "结构化输出",
+                    format: "structured",
+                    success: { kind: "completion" },
+                    failures: {},
+                    handler: ({ outcome }) => outcome.completion(),
+                  }),
+                },
+              }),
+            ),
           },
         },
       }),
@@ -265,17 +307,61 @@ void test("已声明帮助事实缺少模板时在定义期报告命令与槽位
   );
 });
 
+void test("输出方式的候选与默认事实缺少作者模板时在定义期报告", () => {
+  const define = defineCli();
+  const input = z.object({});
+
+  assert.throws(
+    () =>
+      define({
+        root: "show",
+        help: helpCapability(),
+        usageFailureExitCode: 64,
+        commands: {
+          show: {
+            kind: "rootCommand",
+            name: "show",
+            description: "显示",
+            input,
+            outputs: define.outputModes("show", input, (mode) => ({
+              default: "json",
+              modes: {
+                json: mode.atomic({
+                  description: "结构化输出",
+                  format: "structured",
+                  success: { kind: "completion" },
+                  failures: {},
+                  handler: ({ outcome }) => outcome.completion(),
+                }),
+              },
+            })),
+          },
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        { code: "missingHelpFactTemplate", command: "show", slot: "choices" },
+        { code: "missingHelpFactTemplate", command: "show", slot: "default" },
+      ]);
+      return true;
+    },
+  );
+});
+
 void test("空效果分支不要求对应帮助槽位", async () => {
+  const sharedInput2 = z.object({ mode: z.string().optional() });
   const cli = defineCli()({
     root: "choose",
     help: helpCapability({
       wording: {
+        ...englishHelpWording,
         whenOtherwise: "当并非全部满足 {facts} 时，{otherwise}",
         forbid: "不能提供 {fields}",
         present: "存在 {field}",
       },
     }),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       choose: {
@@ -289,7 +375,7 @@ void test("空效果分支不要求对应帮助槽位", async () => {
             description: "模式",
           },
         },
-        input: z.object({ mode: z.string().optional() }),
+        input: sharedInput2,
         usageConstraints: [
           {
             kind: "when",
@@ -298,9 +384,19 @@ void test("空效果分支不要求对应帮助槽位", async () => {
             otherwise: { forbid: ["mode"] },
           },
         ],
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+
+        outputs: defineCli().outputModes("choose", sharedInput2, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -320,12 +416,13 @@ void test("动态帮助事实模板在根装配时聚合报告非法槽位", () 
     choices: "（可选值：{unknown}）",
     default: "默认值\n{value}",
   };
+  const sharedInput3 = z.object({ mode: z.enum(["safe", "force"]).optional() });
   assert.throws(
     () =>
       defineCli()({
         root: "choose",
         help: helpCapability({ wording }),
-        output: outputCapability({ defaultFormat: "structured" }),
+
         usageFailureExitCode: 64,
         commands: {
           choose: {
@@ -339,10 +436,24 @@ void test("动态帮助事实模板在根装配时聚合报告非法槽位", () 
                 description: "模式",
               },
             },
-            input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
+            input: sharedInput3,
+
+            outputs: defineCli().outputModes(
+              "choose",
+              sharedInput3,
+              (mode) => ({
+                default: "structured",
+                modes: {
+                  structured: mode.atomic({
+                    description: "结构化输出",
+                    format: "structured",
+                    success: { kind: "completion" },
+                    failures: {},
+                    handler: ({ outcome }) => outcome.completion(),
+                  }),
+                },
+              }),
+            ),
           },
         },
       }),
@@ -373,24 +484,31 @@ void test("帮助模板错误保留非法原值并继续聚合定义期问题", 
   const helpDefinition: HelpCapabilityDefinition = JSON.parse(
     '{"wording":{"choices":42,"default":null,"countExactly":{},"whenOnMatch":"满足 {unknown}"}}',
   );
+  const sharedInput4 = z.object({});
   const definition = {
     root: "choose",
     help: helpCapability(helpDefinition),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 0,
     commands: {
       choose: {
         kind: "rootCommand",
         name: "选择模式",
         description: "选择模式",
-        input: z.object({}),
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({
-          outcome,
-        }: {
-          readonly outcome: { completion(): unknown };
-        }) => outcome.completion(),
+        input: sharedInput4,
+
+        outputs: defineCli().outputModes("choose", sharedInput4, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   };
@@ -447,25 +565,46 @@ void test("命令组占位词静态与动态判断同界", () => {
   ] as const;
 
   for (const { received, reason } of invalidTemplates) {
-    const wording: { readonly commandPlaceholder: string } = {
+    const wording: {
+      readonly commandPlaceholder: string;
+      readonly choices: string;
+      readonly default: string;
+    } = {
       commandPlaceholder: received,
+      choices: englishHelpWording.choices,
+      default: englishHelpWording.default,
     };
+    const sharedInput5 = z.object({});
     assert.throws(
       () =>
         defineCli()({
           root: "choose",
           help: helpCapability({ wording }),
-          output: outputCapability({ defaultFormat: "structured" }),
+
           usageFailureExitCode: 64,
           commands: {
             choose: {
               kind: "rootCommand",
               name: "choose",
               description: "选择模式",
-              input: z.object({}),
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
+              input: sharedInput5,
+
+              outputs: defineCli().outputModes(
+                "choose",
+                sharedInput5,
+                (mode) => ({
+                  default: "structured",
+                  modes: {
+                    structured: mode.atomic({
+                      description: "结构化输出",
+                      format: "structured",
+                      success: { kind: "completion" },
+                      failures: {},
+                      handler: ({ outcome }) => outcome.completion(),
+                    }),
+                  },
+                }),
+              ),
             },
           },
         }),
@@ -488,12 +627,18 @@ void test("命令组占位词静态与动态判断同界", () => {
 
 void test("命令组缺少占位词时在定义期报告根身份", () => {
   const define = defineCli();
+  const sharedInput6 = z.object({});
   assert.throws(
     () =>
       define({
         root: "tool",
-        help: helpCapability(),
-        output: outputCapability({ defaultFormat: "structured" }),
+        help: helpCapability({
+          wording: {
+            choices: englishHelpWording.choices,
+            default: englishHelpWording.default,
+          },
+        }),
+
         usageFailureExitCode: 64,
         commands: {
           tool: { kind: "rootGroup", name: "tool", description: "工具" },
@@ -502,10 +647,20 @@ void test("命令组缺少占位词时在定义期报告根身份", () => {
             parent: "tool",
             name: "run",
             description: "运行",
-            input: z.object({}),
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
+            input: sharedInput6,
+
+            outputs: define.outputModes("run", sharedInput6, (mode) => ({
+              default: "structured",
+              modes: {
+                structured: mode.atomic({
+                  description: "结构化输出",
+                  format: "structured",
+                  success: { kind: "completion" },
+                  failures: {},
+                  handler: ({ outcome }) => outcome.completion(),
+                }),
+              },
+            })),
           }),
         },
       }),
@@ -525,10 +680,17 @@ void test("命令组缺少占位词时在定义期报告根身份", () => {
 
 void test("命令组占位词贯穿帮助、用法失败和契约清单", async () => {
   const define = defineCli();
+  const sharedInput7 = z.object({});
   const cli = define({
     root: "tool",
-    help: helpCapability({ wording: { commandPlaceholder: "命令" } }),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: helpCapability({
+      wording: {
+        commandPlaceholder: "命令",
+        choices: englishHelpWording.choices,
+        default: englishHelpWording.default,
+      },
+    }),
+
     usageFailureExitCode: 64,
     commands: {
       tool: { kind: "rootGroup", name: "tool", description: "工具" },
@@ -543,16 +705,26 @@ void test("命令组占位词贯穿帮助、用法失败和契约清单", async 
         parent: "jobs",
         name: "run",
         description: "运行任务",
-        input: z.object({}),
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        input: sharedInput7,
+
+        outputs: define.outputModes("run", sharedInput7, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       }),
     },
   });
 
   assert.equal(cli.grammar.root.usage.synopsis, "tool <命令>");
-  assert.equal(cli.manifest.schemaVersion, "4");
+  assert.equal(cli.manifest.schemaVersion, "5");
   assert.ok(
     JSON.stringify(cli.manifest.usageFailure.wire).includes("tool <命令>"),
   );
@@ -575,10 +747,17 @@ void test("命令组占位词贯穿帮助、用法失败和契约清单", async 
 });
 
 void test("条件分支模板表达全称条件，并允许各槽位调整词序", async () => {
+  const sharedInput1 = z.object({
+    auth: z.string().optional(),
+    token: z.string().optional(),
+    quiet: z.boolean().optional(),
+    force: z.boolean().optional(),
+  });
   const cli = defineCli()({
     root: "publish",
     help: helpCapability({
       wording: {
+        ...englishHelpWording,
         whenOnMatch: "当全部满足 {facts} 时，{onMatch}",
         whenOtherwise: "当并非全部满足 {facts} 时，{otherwise}",
         whenOnMatchOtherwise:
@@ -591,7 +770,7 @@ void test("条件分支模板表达全称条件，并允许各槽位调整词序
         countAtMost: "{fields} 的数量不超过 {max}",
       },
     }),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       publish: {
@@ -638,15 +817,20 @@ void test("条件分支模板表达全称条件，并允许各槽位调整词序
             ],
           },
         ],
-        input: z.object({
-          auth: z.string().optional(),
-          token: z.string().optional(),
-          quiet: z.boolean().optional(),
-          force: z.boolean().optional(),
-        }),
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        input: sharedInput1,
+
+        outputs: defineCli().outputModes("publish", sharedInput1, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -670,6 +854,7 @@ void test("条件分支模板表达全称条件，并允许各槽位调整词序
 });
 
 void test("输出格式控制复用候选值和默认值模板", async () => {
+  const sharedInput8 = z.object({});
   const cli = defineCli()({
     root: "show",
     help: helpCapability({
@@ -678,17 +863,34 @@ void test("输出格式控制复用候选值和默认值模板", async () => {
         default: "（默认：{value}）",
       },
     }),
-    output: outputCapability({ defaultFormat: "text" }),
+
     usageFailureExitCode: 64,
     commands: {
       show: {
         kind: "rootCommand",
         name: "show",
         description: "显示",
-        input: z.object({}),
-        success: { kind: "completion", text: () => text.silent },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        input: sharedInput8,
+
+        outputs: defineCli().outputModes("show", sharedInput8, (mode) => ({
+          default: "text",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+            text: mode.atomic({
+              description: "文本输出",
+              format: "text",
+              success: { kind: "completion", text: () => text.silent },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -702,37 +904,62 @@ void test("输出格式控制复用候选值和默认值模板", async () => {
   });
   assert.match(
     writes.join(""),
-    /--output-format <structured\|text> （候选："structured", "text"） （默认："text"）/,
+    /--output <mode> （候选："structured", "text"） （默认："text"）/,
   );
 });
 
-void test("输出格式控制需要的模板缺失时定义失败", () => {
-  assert.throws(
-    () =>
-      defineCli()({
-        root: "show",
-        help: helpCapability(),
-        output: outputCapability({ defaultFormat: "text" }),
-        usageFailureExitCode: 64,
-        commands: {
-          show: {
-            kind: "rootCommand",
-            name: "show",
-            description: "显示",
-            input: z.object({}),
-            success: { kind: "completion", text: () => text.silent },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
+void test("输出方式帮助列出根作者提供的候选值与默认值文案", async () => {
+  const sharedInput9 = z.object({});
+  const cli = defineCli()({
+    root: "show",
+    help: helpCapability({
+      wording: {
+        choices: "candidates {choices}",
+        default: "primary {value}",
+      },
+    }),
+
+    usageFailureExitCode: 64,
+    commands: {
+      show: {
+        kind: "rootCommand",
+        name: "show",
+        description: "显示",
+        input: sharedInput9,
+
+        outputs: defineCli().outputModes("show", sharedInput9, (mode) => ({
+          default: "text",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+            text: mode.atomic({
+              description: "文本输出",
+              format: "text",
+              success: { kind: "completion", text: () => text.silent },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
           },
-        },
-      }),
-    (error: unknown) => {
-      assert.ok(error instanceof ContractDefinitionError);
-      assert.deepEqual(error.issues, [
-        { code: "missingHelpFactTemplate", command: "show", slot: "choices" },
-        { code: "missingHelpFactTemplate", command: "show", slot: "default" },
-      ]);
-      return true;
+        })),
+      },
     },
+  });
+  const writes: string[] = [];
+  await executeCli(cli, {
+    invocation: parseCliInvocation(cli, ["--help"]),
+    dependencies: undefined,
+    write: ({ chunk }) => {
+      writes.push(chunk);
+    },
+  });
+  assert.match(
+    writes.join(""),
+    /--output <mode> candidates "structured", "text" primary "text"/,
   );
+  assert.doesNotMatch(writes.join(""), /输出方式/);
 });

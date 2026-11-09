@@ -1,7 +1,6 @@
 import {
   defineCli,
   helpCapability,
-  outputCapability,
   type CliContract,
   type ContractSchema,
   type EmptyCliInput,
@@ -31,8 +30,13 @@ declare const inspectInput: ContractSchema<
 
 const cli = defineCli<Readonly<{ readonly service: string }>>()({
   root: "typed",
-  help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
+  help: helpCapability({
+    wording: {
+      choices: "(choices: {choices})",
+      default: "(default: {value})",
+    },
+  }),
+
   usageFailureExitCode: 64,
   commands: {
     typed: {
@@ -40,9 +44,23 @@ const cli = defineCli<Readonly<{ readonly service: string }>>()({
       name: "typed",
       description: "类型 fixture",
       input: emptyInput,
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
+
+      outputs: defineCli<Readonly<{ readonly service: string }>>().outputModes(
+        "typed",
+        emptyInput,
+        (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        }),
+      ),
     },
   },
 });
@@ -100,9 +118,19 @@ const replayScenarioCommand = defineScenarioCli.command("replay")({
       onMatch: { require: ["token"] },
     },
   ],
-  success: { kind: "completion" },
-  failures: {},
-  handler: ({ outcome }) => outcome.completion(),
+
+  outputs: defineScenarioCli.outputModes("replay", replayInput, (mode) => ({
+    default: "structured",
+    modes: {
+      structured: mode.atomic({
+        description: "结构化输出",
+        format: "structured",
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      }),
+    },
+  })),
 });
 const inspectScenarioCommand = defineScenarioCli.command("inspect")({
   kind: "command",
@@ -129,14 +157,29 @@ const inspectScenarioCommand = defineScenarioCli.command("inspect")({
       onMatch: { forbid: ["token"] },
     },
   ],
-  success: { kind: "completion" },
-  failures: {},
-  handler: ({ outcome }) => outcome.completion(),
+
+  outputs: defineScenarioCli.outputModes("inspect", inspectInput, (mode) => ({
+    default: "structured",
+    modes: {
+      structured: mode.atomic({
+        description: "结构化输出",
+        format: "structured",
+        success: { kind: "completion" },
+        failures: {},
+        handler: ({ outcome }) => outcome.completion(),
+      }),
+    },
+  })),
 });
 const scenarioCli = defineScenarioCli({
   root: "tool",
-  help: helpCapability(),
-  output: outputCapability({ defaultFormat: "structured" }),
+  help: helpCapability({
+    wording: {
+      choices: "(choices: {choices})",
+      default: "(default: {value})",
+    },
+  }),
+
   usageFailureExitCode: 64,
   commands: {
     tool: { kind: "rootGroup", name: "tool", description: "工具" },

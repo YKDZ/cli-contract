@@ -11,6 +11,7 @@ import type { ContractSchema, JsonObject } from "#/contract-schema";
 import { isSingleLineText } from "#/description";
 import { invalidFieldIdentityReason } from "#/field-identity";
 import { copyJsonObject, deepFreeze } from "#/json-value";
+import { findUnresolvedSchemaReferences } from "#/schema-resource";
 
 export function compileContractSchema(
   schema: ContractSchema,
@@ -80,12 +81,36 @@ export function compileContractSchema(
   if (inputSchema === undefined || outputSchema === undefined) {
     return undefined;
   }
+  collectUnresolvedReferences(inputSchema, target, "input", issues);
+  collectUnresolvedReferences(outputSchema, target, "output", issues);
   checkDraft202012(inputSchema, target, "input", issues);
   checkDraft202012(outputSchema, target, "output", issues);
   checkInputDefaults(inputSchema, outputSchema, target, issues);
   return issues.length === initialIssueCount
     ? { inputSchema, outputSchema }
     : undefined;
+}
+
+function collectUnresolvedReferences(
+  schema: JsonObject,
+  target: SchemaDefinitionTarget,
+  projection: "input" | "output",
+  issues: ContractDefinitionIssue[],
+): void {
+  const identity = [
+    target.command,
+    target.location,
+    "variant" in target ? target.variant : "input",
+    projection,
+  ].join(":");
+  for (const reference of findUnresolvedSchemaReferences(schema, identity)) {
+    issues.push({
+      code: "schemaReferenceNotSelfContained",
+      ...target,
+      projection,
+      reference,
+    });
+  }
 }
 
 export function projectFieldDescriptions(

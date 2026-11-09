@@ -6,7 +6,6 @@ import {
   ContractDefinitionError,
   defineCli,
   executeCli,
-  outputCapability,
   parseCliInvocation,
   type JsonObject,
 } from "@ykdz/cli-contract";
@@ -41,7 +40,7 @@ void test("CLI 描述覆盖 Zod 的复制 schema、wire 与 help，且不进入�
   const cli = defineCli()({
     root: "describe",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       describe: {
@@ -56,20 +55,34 @@ void test("CLI 描述覆盖 Zod 的复制 schema、wire 与 help，且不进入�
           },
         },
         input,
-        success: {
-          kind: "data",
-          variants: {
-            found: { description: "CLI data", schema: payload, exitCode: 0 },
+
+        outputs: defineCli().outputModes("describe", input, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: {
+                kind: "data",
+                variants: {
+                  found: {
+                    description: "CLI data",
+                    schema: payload,
+                    exitCode: 0,
+                  },
+                },
+              },
+              failures: {
+                unavailable: {
+                  description: "CLI failure",
+                  schema: payload,
+                  exitCode: 9,
+                },
+              },
+              handler: ({ outcome }) => outcome.data.found({ value: "Ada" }),
+            }),
           },
-        },
-        failures: {
-          unavailable: {
-            description: "CLI failure",
-            schema: payload,
-            exitCode: 9,
-          },
-        },
-        handler: ({ outcome }) => outcome.data.found({ value: "Ada" }),
+        })),
       },
     },
   });
@@ -85,41 +98,53 @@ void test("CLI 描述覆盖 Zod 的复制 schema、wire 与 help，且不进入�
     readObjectProperty(command.input.outputSchema, "name").description,
     "CLI field",
   );
-  assert.equal(command.success.kind, "data");
-  if (command.success.kind !== "data") assert.fail("应为 data command");
+  const structuredMode = command.outputs.modes.structured;
+  assert.ok(structuredMode);
+  const structuredWire = cli.manifest.wire.structured;
+  assert.ok(structuredWire);
+  assert.equal(structuredMode.success.kind, "data");
+  if (structuredMode.success.kind !== "data") assert.fail("应为 data command");
   assert.equal(
-    command.success.variants.found?.inputSchema.description,
+    structuredMode.success.variants.found?.inputSchema.description,
     "CLI data",
   );
   assert.equal(
-    command.success.variants.found?.outputSchema.description,
+    structuredMode.success.variants.found?.outputSchema.description,
     "CLI data",
   );
   assert.equal(
-    command.failures.unavailable?.inputSchema.description,
+    structuredMode.failures.unavailable?.inputSchema.description,
     "CLI failure",
   );
   assert.equal(
-    command.failures.unavailable?.outputSchema.description,
+    structuredMode.failures.unavailable?.outputSchema.description,
     "CLI failure",
   );
   assert.equal(
-    readObjectProperty(cli.manifest.wire.data?.found ?? {}, "data").description,
+    readObjectProperty(structuredWire.data?.found ?? {}, "data").description,
     "CLI data",
   );
   assert.equal(
-    readObjectProperty(cli.manifest.wire.failure?.unavailable ?? {}, "data")
+    readObjectProperty(structuredWire.failure?.unavailable ?? {}, "data")
       .description,
     "CLI failure",
   );
   assert.ok(Object.isFrozen(command.input.inputSchema));
-  assert.ok(Object.isFrozen(command.success.variants.found?.outputSchema));
+  assert.ok(
+    Object.isFrozen(
+      structuredMode.success.kind === "data"
+        ? structuredMode.success.variants.found?.outputSchema
+        : undefined,
+    ),
+  );
   assert.ok(Object.isFrozen(cli.grammar));
   assert.ok(Object.isFrozen(cli.manifest));
   assert.ok(Object.isFrozen(cli.manifest.wire));
   assert.notEqual(command.input.inputSchema, inputExported);
   assert.notEqual(
-    command.success.variants.found?.outputSchema,
+    structuredMode.success.kind === "data"
+      ? structuredMode.success.variants.found?.outputSchema
+      : undefined,
     payloadExported,
   );
   assert.equal(Object.isFrozen(input), false);
@@ -147,11 +172,12 @@ void test("CLI 描述覆盖 Zod 的复制 schema、wire 与 help，且不进入�
     },
   });
   assert.deepEqual(writes, [
-    '{"schemaVersion":"2","command":"describe","kind":"data","variant":"found","data":{"value":"Ada"}}\n',
+    '{"schemaVersion":"3","command":"describe","outputMode":"structured","kind":"data","variant":"found","data":{"value":"Ada"}}\n',
   ]);
   assert.deepEqual(termination, {
     kind: "applicationResult",
     command: "describe",
+    outputMode: "structured",
     result: {
       kind: "data",
       command: "describe",
@@ -170,7 +196,7 @@ void test("Valibot 的公开 schema 投影同样被复制并由字段描述覆�
   const cli = defineCli()({
     root: "valibot",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       valibot: {
@@ -185,9 +211,19 @@ void test("Valibot 的公开 schema 投影同样被复制并由字段描述覆�
           },
         },
         input,
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+
+        outputs: defineCli().outputModes("valibot", input, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -220,7 +256,7 @@ void test("层级 stream runtime 不冻结 Valibot schema 引用", () => {
   const cli = define({
     root: "workspace",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       workspace: {
@@ -235,15 +271,25 @@ void test("层级 stream runtime 不冻结 Valibot schema 引用", () => {
         name: "watch",
         description: "Watch",
         input,
-        success: {
-          kind: "stream",
-          records: { item: { description: "Item", schema: payload } },
-        },
-        failures: {},
-        async *handler() {
-          yield undefined;
-          return undefined;
-        },
+
+        outputs: define.outputModes("watch", input, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.stream({
+              description: "结构化输出",
+              format: "structured",
+              success: {
+                kind: "stream",
+                records: { item: { description: "Item", schema: payload } },
+              },
+              failures: {},
+              async *handler() {
+                yield undefined as never;
+                return undefined as never;
+              },
+            }),
+          },
+        })),
       } as never),
     },
   } as never);
@@ -262,12 +308,13 @@ void test("动态非法描述按声明位置聚合为闭合定义问题", () => 
   const nul: string = "bad\0text";
   const payload = z.object({ value: z.string() });
 
+  const sharedInput0 = z.object({ name: z.string() });
   assert.throws(
     () =>
       defineCli()({
         root: "invalid",
         help: englishHelpCapability(),
-        output: outputCapability({ defaultFormat: "structured" }),
+
         usageFailureExitCode: 64,
         commands: {
           invalid: {
@@ -281,21 +328,40 @@ void test("动态非法描述按声明位置聚合为闭合定义问题", () => 
                 description: lineBreak,
               },
             },
-            input: z.object({ name: z.string() }),
-            success: {
-              kind: "data",
-              variants: {
-                value: { description: nul, schema: payload, exitCode: 0 },
-              },
-            },
-            failures: {
-              unavailable: {
-                description: lineBreak,
-                schema: payload,
-                exitCode: 0,
-              },
-            },
-            handler: ({ outcome }) => outcome.data.value({ value: "unused" }),
+            input: sharedInput0,
+
+            outputs: defineCli().outputModes(
+              "invalid",
+              sharedInput0,
+              (mode) => ({
+                default: "structured",
+                modes: {
+                  structured: mode.atomic({
+                    description: "结构化输出",
+                    format: "structured",
+                    success: {
+                      kind: "data",
+                      variants: {
+                        value: {
+                          description: nul,
+                          schema: payload,
+                          exitCode: 0,
+                        },
+                      },
+                    },
+                    failures: {
+                      unavailable: {
+                        description: lineBreak,
+                        schema: payload,
+                        exitCode: 0,
+                      },
+                    },
+                    handler: ({ outcome }) =>
+                      outcome.data.value({ value: "unused" }),
+                  }),
+                },
+              }),
+            ),
           },
         },
       }),
@@ -343,30 +409,45 @@ void test("动态非法描述按声明位置聚合为闭合定义问题", () => 
     },
   );
 
+  const sharedInput1 = z.object({});
   assert.throws(
     () =>
       defineCli()({
         root: "invalidStream",
         help: englishHelpCapability(),
-        output: outputCapability({ defaultFormat: "structured" }),
+
         usageFailureExitCode: 64,
         commands: {
           invalidStream: {
             kind: "rootCommand",
             name: "invalid-stream",
             description: "valid command",
-            input: z.object({}),
-            success: {
-              kind: "stream",
-              records: {
-                item: { description: lineBreak, schema: payload },
-              },
-            },
-            failures: {},
-            async *handler({ outcome }) {
-              yield outcome.record.item({ value: "unused" });
-              return outcome.streamSuccess();
-            },
+            input: sharedInput1,
+
+            outputs: defineCli().outputModes(
+              "invalidStream",
+              sharedInput1,
+              (mode) => ({
+                default: "structured",
+                modes: {
+                  structured: mode.stream({
+                    description: "结构化输出",
+                    format: "structured",
+                    success: {
+                      kind: "stream",
+                      records: {
+                        item: { description: lineBreak, schema: payload },
+                      },
+                    },
+                    failures: {},
+                    async *handler({ outcome }) {
+                      yield outcome.record.item({ value: "unused" });
+                      return outcome.streamSuccess();
+                    },
+                  }),
+                },
+              }),
+            ),
           },
         },
       }),
@@ -444,7 +525,7 @@ void test("字段 description 在 schema 兼容性和 kind 早退前独立聚合
         defineCli()({
           root: "invalidField",
           help: englishHelpCapability(),
-          output: outputCapability({ defaultFormat: "structured" }),
+
           usageFailureExitCode: 64,
           commands: {
             invalidField: {
@@ -453,9 +534,23 @@ void test("字段 description 在 schema 兼容性和 kind 早退前独立聚合
               description: "Invalid field",
               fields: { enabled: candidate.field },
               input: candidate.input,
-              success: { kind: "completion" },
-              failures: {},
-              handler: () => undefined,
+
+              outputs: defineCli().outputModes(
+                "invalidField",
+                candidate.input,
+                (mode) => ({
+                  default: "structured",
+                  modes: {
+                    structured: mode.atomic({
+                      description: "结构化输出",
+                      format: "structured",
+                      success: { kind: "completion" },
+                      failures: {},
+                      handler: () => undefined as never,
+                    }),
+                  },
+                }),
+              ),
             },
           },
         } as never),
@@ -479,38 +574,53 @@ void test("字段 description 在 schema 兼容性和 kind 早退前独立聚合
 
 void test("stream record 描述覆盖 payload wire，且 frame 不重复描述", async () => {
   const payload = z.object({ value: z.string() }).describe("vendor record");
+  const sharedInput2 = z.object({});
   const cli = defineCli()({
     root: "stream",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       stream: {
         kind: "rootCommand",
         name: "stream",
         description: "Stream command",
-        input: z.object({}),
-        success: {
-          kind: "stream",
-          records: {
-            item: { description: "CLI record", schema: payload },
+        input: sharedInput2,
+
+        outputs: defineCli().outputModes("stream", sharedInput2, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.stream({
+              description: "结构化输出",
+              format: "structured",
+              success: {
+                kind: "stream",
+                records: {
+                  item: { description: "CLI record", schema: payload },
+                },
+              },
+              failures: {},
+              async *handler({ outcome }) {
+                yield outcome.record.item({ value: "one" });
+                return outcome.streamSuccess();
+              },
+            }),
           },
-        },
-        failures: {},
-        async *handler({ outcome }) {
-          yield outcome.record.item({ value: "one" });
-          return outcome.streamSuccess();
-        },
+        })),
       },
     },
   });
-  const success = cli.manifest.commands.stream.success;
+  const streamMode = cli.manifest.commands.stream.outputs.modes.structured;
+  assert.ok(streamMode);
+  const streamWire = cli.manifest.wire.structured;
+  assert.ok(streamWire);
+  const success = streamMode.success;
   assert.equal(success.kind, "stream");
   if (success.kind !== "stream") assert.fail("应为 stream command");
   assert.equal(success.records.item?.inputSchema.description, "CLI record");
   assert.equal(success.records.item?.outputSchema.description, "CLI record");
   assert.equal(
-    readObjectProperty(cli.manifest.wire.stream?.records.item ?? {}, "data")
+    readObjectProperty(streamWire.stream?.records.item ?? {}, "data")
       .description,
     "CLI record",
   );
@@ -524,7 +634,7 @@ void test("stream record 描述覆盖 payload wire，且 frame 不重复描述",
     },
   });
   assert.deepEqual(writes, [
-    '{"schemaVersion":"2","command":"stream","kind":"stream"}\n',
+    '{"schemaVersion":"3","command":"stream","outputMode":"structured","kind":"stream"}\n',
     '{"kind":"record","variant":"item","data":{"value":"one"}}\n',
     '{"kind":"streamSuccess"}\n',
   ]);

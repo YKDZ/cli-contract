@@ -9,40 +9,47 @@ import {
   defineCli,
   executeCli,
   helpCapability,
-  outputCapability,
   parseCliInvocation,
   text,
-  type OutputCapability,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
 import { englishHelpCapability } from "./english-help.ts";
 
+const invalidValueInput = z.object({ name: z.string() });
+
 function createCompletionCli(onRun: () => Promise<void> | void) {
+  const sharedInput0 = z.object({});
   return defineCli()({
     root: "fixture",
-    help: helpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability(),
+
     usageFailureExitCode: 64,
     commands: {
       fixture: {
         kind: "rootCommand",
         name: "fixture",
         description: "fixture command",
-        input: z.object({}),
-        success: { kind: "completion" },
-        failures: {},
-        handler: async ({ outcome }) => {
-          await onRun();
-          return outcome.completion();
-        },
+        input: sharedInput0,
+
+        outputs: defineCli().outputModes("fixture", sharedInput0, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: async ({ outcome }) => {
+                await onRun();
+                return outcome.completion();
+              },
+            }),
+          },
+        })),
       },
     },
   });
-}
-
-function createDynamicTextOutput(): OutputCapability {
-  return outputCapability({ defaultFormat: "text" });
 }
 
 void test("错配契约的 invocation 以闭合执行问题拒绝", async () => {
@@ -159,30 +166,41 @@ void test("handler 抛出的开放异常保持原始身份", async () => {
 void test("文本呈现器中的非字符串构造错误保持原身份并不写出", async () => {
   const privateText = "包装文本不应泄漏";
   let constructionError: unknown;
+  const sharedInput1 = z.object({});
   const cli = defineCli()({
     root: "fixture",
     help: englishHelpCapability(),
-    output: createDynamicTextOutput(),
+
     usageFailureExitCode: 64,
     commands: {
       fixture: {
         kind: "rootCommand",
         name: "fixture",
         description: "fixture command",
-        input: z.object({}),
-        success: {
-          kind: "completion",
-          text: () => {
-            try {
-              return text.line(new String(privateText) as never);
-            } catch (error) {
-              constructionError = error;
-              throw error;
-            }
+        input: sharedInput1,
+
+        outputs: defineCli().outputModes("fixture", sharedInput1, (mode) => ({
+          default: "text",
+          modes: {
+            text: mode.atomic({
+              description: "文本输出",
+              format: "text",
+              success: {
+                kind: "completion",
+                text: () => {
+                  try {
+                    return text.line(new String(privateText) as never);
+                  } catch (error) {
+                    constructionError = error;
+                    throw error;
+                  }
+                },
+              },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
           },
-        },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        })),
       },
     },
   });
@@ -207,25 +225,45 @@ void test("文本呈现器中的非字符串构造错误保持原身份并不写
 
 void test("文本呈现器抛出的异常保持原始身份", async () => {
   const cause = new RangeError("consumer text presenter defect");
+  const sharedInput2 = z.object({});
   const cli = defineCli()({
     root: "fixture",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "text" }),
+
     usageFailureExitCode: 64,
     commands: {
       fixture: {
         kind: "rootCommand",
         name: "fixture",
         description: "fixture command",
-        input: z.object({}),
-        success: {
-          kind: "completion",
-          text: () => {
-            throw cause;
+        input: sharedInput2,
+
+        outputs: defineCli().outputModes("fixture", sharedInput2, (mode) => ({
+          default: "text",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: {
+                kind: "completion",
+              },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+            text: mode.atomic({
+              description: "文本输出",
+              format: "text",
+              success: {
+                kind: "completion",
+                text: () => {
+                  throw cause;
+                },
+              },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
           },
-        },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        })),
       },
     },
   });
@@ -255,8 +293,8 @@ void test("schema validate 抛出的开放异常保持原始身份", async () =>
   };
   const cli = defineCli()({
     root: "fixture",
-    help: helpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability(),
+
     usageFailureExitCode: 64,
     commands: {
       fixture: {
@@ -264,9 +302,19 @@ void test("schema validate 抛出的开放异常保持原始身份", async () =>
         name: "fixture",
         description: "fixture command",
         input: throwingInput,
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+
+        outputs: defineCli().outputModes("fixture", throwingInput, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -286,21 +334,34 @@ void test("schema validate 抛出的开放异常保持原始身份", async () =>
 });
 
 void test("handler 返回未签发对象时以核心执行问题拒绝且不写出", async () => {
+  const sharedInput3 = z.object({});
   const cli = defineCli()({
     root: "fixture",
-    help: helpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability(),
+
     usageFailureExitCode: 64,
     commands: {
       fixture: {
         kind: "rootCommand",
         name: "fixture",
         description: "fixture command",
-        input: z.object({}),
-        success: { kind: "completion" },
-        failures: {},
+        input: sharedInput3,
+
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意伪造契约或返回值，以验证执行边界。
-        handler: () => ({ kind: "completion", command: "fixture" }) as never,
+
+        outputs: defineCli().outputModes("fixture", sharedInput3, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: () =>
+                ({ kind: "completion", command: "fixture" }) as never,
+            }),
+          },
+        })),
       },
     },
   });
@@ -329,7 +390,6 @@ void test("defineCli 一次报告当前声明中的动态无效值", () => {
   const definition = {
     root: "fixture",
     help: {},
-    output: {},
     usageFailureExitCode: 0,
     commands: {
       fixture: {
@@ -343,10 +403,33 @@ void test("defineCli 一次报告当前声明中的动态无效值", () => {
             description: "",
           },
         },
-        input: z.object({ name: z.string() }),
-        success: { kind: "data", variants: {} },
-        failures: {},
-        handler: () => undefined,
+        input: invalidValueInput,
+
+        outputs: defineCli().outputModes(
+          "fixture",
+          invalidValueInput,
+          (mode) => ({
+            default: "structured",
+            modes: {
+              structured: mode.atomic({
+                description: "结构化输出",
+                format: "structured",
+                success: {
+                  kind: "data",
+                  variants: {
+                    found: {
+                      description: "找到",
+                      schema: z.object({ name: z.string() }),
+                      exitCode: 0,
+                    },
+                  },
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.data.found({ name: "结果" }),
+              }),
+            },
+          }),
+        ),
       },
     },
   };
@@ -358,7 +441,6 @@ void test("defineCli 一次报告当前声明中的动态无效值", () => {
       assert.ok(error instanceof ContractDefinitionError);
       assert.deepEqual(error.issues, [
         { code: "invalidCapability", capability: "help" },
-        { code: "invalidCapability", capability: "output" },
         {
           code: "invalidUsageFailureExitCode",
           received: 0,
@@ -376,7 +458,6 @@ void test("defineCli 一次报告当前声明中的动态无效值", () => {
           location: "command",
           received: "",
         },
-        { code: "missingDataVariant", command: "fixture" },
         {
           code: "invalidDescription",
           command: "fixture",
@@ -390,13 +471,24 @@ void test("defineCli 一次报告当前声明中的动态无效值", () => {
           field: "name",
           received: "--Bad_Name",
         },
+        {
+          code: "missingHelpFactTemplate",
+          command: "fixture",
+          slot: "choices",
+        },
+        {
+          code: "missingHelpFactTemplate",
+          command: "fixture",
+          slot: "default",
+        },
       ]);
       return true;
     },
   );
 });
 
-void test("defineCli 在动态启用 text 时仍要求 completion presenter", () => {
+void test("defineCli 拒绝缺少 presenter 的 text completion", () => {
+  const sharedInput4 = z.object({});
   assert.throws(
     () =>
       defineCli()({
@@ -407,17 +499,35 @@ void test("defineCli 在动态启用 text 时仍要求 completion presenter", ()
             default: "(default: {value})",
           },
         }),
-        output: createDynamicTextOutput(),
+
         usageFailureExitCode: 64,
         commands: {
           fixture: {
             kind: "rootCommand",
             name: "fixture",
             description: "fixture command",
-            input: z.object({}),
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
+            input: sharedInput4,
+
+            outputs: defineCli().outputModes(
+              "fixture",
+              sharedInput4,
+              (mode) => ({
+                default: "text",
+                modes: {
+                  text: mode.atomic({
+                    description: "文本输出",
+                    format: "text",
+                    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例以虚假的已声明类型注入运行时缺失，验证动态定义边界。
+                    success: { kind: "completion" } as {
+                      readonly kind: "completion";
+                      readonly text: () => ReturnType<typeof text.line>;
+                    },
+                    failures: {},
+                    handler: ({ outcome }) => outcome.completion(),
+                  }),
+                },
+              }),
+            ),
           },
         },
       }),
@@ -436,10 +546,11 @@ void test("defineCli 在动态启用 text 时仍要求 completion presenter", ()
 });
 
 void test("defineCli 拒绝字段间重复的 canonical long option", () => {
+  const sharedInput5 = z.object({ first: z.string(), second: z.string() });
   const definition = {
     root: "fixture",
-    help: helpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+    help: englishHelpCapability(),
+
     usageFailureExitCode: 64,
     commands: {
       fixture: {
@@ -458,10 +569,20 @@ void test("defineCli 拒绝字段间重复的 canonical long option", () => {
             description: "second value",
           },
         },
-        input: z.object({ first: z.string(), second: z.string() }),
-        success: { kind: "completion" },
-        failures: {},
-        handler: () => undefined,
+        input: sharedInput5,
+
+        outputs: defineCli().outputModes("fixture", sharedInput5, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: () => undefined as never,
+            }),
+          },
+        })),
       },
     },
   };

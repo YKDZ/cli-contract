@@ -7,6 +7,7 @@ import type {
   ContractSchemaInput,
   ContractSchemaOutput,
   StreamRecordFactUnion,
+  TextFragment,
   UsageFactValue,
 } from "@ykdz/cli-contract";
 import { executeCli, parseCliInvocation } from "@ykdz/cli-contract";
@@ -29,8 +30,10 @@ type TailInput = ContractSchemaInput<typeof tailCombination.tail.input>;
 type TailOutput = ContractSchemaOutput<typeof tailCombination.tail.input>;
 type TailRecord = StreamRecordFactUnion<
   "tail",
-  typeof tailCombination.tail.success.records
+  typeof tailCombination.tail.outputs.modes.structured.success.records
 >;
+declare const textFragment: TextFragment;
+void textFragment;
 
 const dependencies: Dependencies = { endpoint: "primary" };
 // @ts-expect-error 依赖值域在生成的声明中仍保持精确。

@@ -35,6 +35,8 @@ async function readFixtures(): Promise<Readonly<Record<string, string>>> {
         "exportable-contract.ts",
         "exportable-contract-reconsumer.ts",
         "schema-input.ts",
+        "typed-command-examples.ts",
+        "public-contract-discovery.ts",
         "valid-help-fact-templates.ts",
       ].map(async (name) => [
         name,
@@ -127,6 +129,8 @@ async function verifyCoreOnly(
       "core-node.ts",
       "core-root.ts",
       "schema-input.ts",
+      "typed-command-examples.ts",
+      "public-contract-discovery.ts",
       "valid-help-fact-templates.ts",
     ]);
     runCommand(
@@ -150,6 +154,8 @@ async function verifyCoreOnly(
         "core-root.ts",
         "core-node.ts",
         "schema-input.ts",
+        "typed-command-examples.ts",
+        "public-contract-discovery.ts",
         "valid-help-fact-templates.ts",
       ]) {
         await compileFixture(project, resolution, fixture);

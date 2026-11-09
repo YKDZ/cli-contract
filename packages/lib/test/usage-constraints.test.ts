@@ -6,7 +6,6 @@ import {
   defineCli,
   executeCli,
   helpCapability,
-  outputCapability,
   parseCliInvocation,
   type CliContract,
   type ContractSchema,
@@ -16,13 +15,20 @@ import {
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { z } from "zod";
 
-import { englishHelpCapability } from "./english-help.ts";
+import { englishHelpCapability, englishHelpWording } from "./english-help.ts";
 
 function createConstrainedCli(handler = () => undefined) {
+  const sharedInput0 = z.object({
+    auth: z.string().optional(),
+    token: z.string().optional(),
+    output: z.string().optional(),
+    quiet: z.boolean().optional(),
+    format: z.string().optional(),
+  });
   return defineCli()({
     root: "publish",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       publish: {
@@ -42,7 +48,7 @@ function createConstrainedCli(handler = () => undefined) {
           },
           output: {
             kind: "valueOption",
-            longOption: "--output",
+            longOption: "--output-file",
             description: "输出文件",
           },
           quiet: {
@@ -71,19 +77,23 @@ function createConstrainedCli(handler = () => undefined) {
             ],
           },
         ],
-        input: z.object({
-          auth: z.string().optional(),
-          token: z.string().optional(),
-          output: z.string().optional(),
-          quiet: z.boolean().optional(),
-          format: z.string().optional(),
-        }),
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => {
-          handler();
-          return outcome.completion();
-        },
+        input: sharedInput0,
+
+        outputs: defineCli().outputModes("publish", sharedInput0, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => {
+                handler();
+                return outcome.completion();
+              },
+            }),
+          },
+        })),
       },
     },
   });
@@ -92,9 +102,15 @@ function createConstrainedCli(handler = () => undefined) {
 function countCliDefinition<
   const Constraints extends readonly UsageConstraint[],
 >(usageConstraints: Constraints, handler = () => undefined) {
+  const sharedInput1 = z.object({
+    auth: z.string().optional().default("匿名"),
+    quiet: z.boolean().optional(),
+    labels: z.array(z.string()).optional(),
+    paths: z.array(z.string()).optional(),
+  });
   return {
     root: "countInputs",
-    help: helpCapability({
+    help: englishHelpCapability({
       wording: {
         default: "（默认值 {value}）",
         countExactly: "{fields} 恰好出现 {count} 项",
@@ -103,7 +119,7 @@ function countCliDefinition<
         countBetween: "{fields} 出现 {min} 到 {max} 项",
       },
     }),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       countInputs: {
@@ -133,19 +149,28 @@ function countCliDefinition<
           },
         },
         usageConstraints,
-        input: z.object({
-          auth: z.string().optional().default("匿名"),
-          quiet: z.boolean().optional(),
-          labels: z.array(z.string()).optional(),
-          paths: z.array(z.string()).optional(),
-        }),
-        success: { kind: "completion" },
-        failures: {},
-        handler: () => {
-          handler();
-          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 用例只验证 parser 失败路径，成功 handler 不会执行。
-          return undefined as never;
-        },
+        input: sharedInput1,
+
+        outputs: defineCli().outputModes(
+          "countInputs",
+          sharedInput1,
+          (mode) => ({
+            default: "structured",
+            modes: {
+              structured: mode.atomic({
+                description: "结构化输出",
+                format: "structured",
+                success: { kind: "completion" },
+                failures: {},
+                handler: () => {
+                  handler();
+                  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 用例只验证 parser 失败路径，成功 handler 不会执行。
+                  return undefined as never;
+                },
+              }),
+            },
+          }),
+        ),
       },
     },
   } as const;
@@ -168,12 +193,16 @@ function createCountCli(handler = () => undefined) {
 }
 
 function createRequiredCountCli() {
+  const sharedInput2 = z.object({
+    target: z.string(),
+    quiet: z.boolean().optional(),
+  });
   return defineCli()({
     root: "requiredCount",
-    help: helpCapability({
+    help: englishHelpCapability({
       wording: { countExactly: "{fields} 恰好出现 {count} 项" },
     }),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       requiredCount: {
@@ -194,13 +223,24 @@ function createRequiredCountCli() {
         usageConstraints: [
           { kind: "count", fields: ["target", "quiet"], min: 2, max: 2 },
         ],
-        input: z.object({
-          target: z.string(),
-          quiet: z.boolean().optional(),
-        }),
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        input: sharedInput2,
+
+        outputs: defineCli().outputModes(
+          "requiredCount",
+          sharedInput2,
+          (mode) => ({
+            default: "structured",
+            modes: {
+              structured: mode.atomic({
+                description: "结构化输出",
+                format: "structured",
+                success: { kind: "completion" },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              }),
+            },
+          }),
+        ),
       },
     },
   });
@@ -209,10 +249,10 @@ function createRequiredCountCli() {
 function createProjectedSchemaCountCli(input: ContractSchema) {
   return defineCli()({
     root: "countProjection",
-    help: helpCapability({
+    help: englishHelpCapability({
       wording: { countExactly: "{fields} 恰好出现 {count} 项" },
     }),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       countProjection: {
@@ -236,9 +276,19 @@ function createProjectedSchemaCountCli(input: ContractSchema) {
           { kind: "count", fields: ["auth", "quiet"], min: 1, max: 1 },
         ],
         input,
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+
+        outputs: defineCli().outputModes("countProjection", input, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -375,7 +425,7 @@ void test("count 按 raw 自有字段计数，false 与重复值只计一项且�
     usage: {
       command: "countInputs",
       synopsis:
-        "count-inputs [--auth <auth>] [--quiet|--no-quiet] [--label <labels>]... [<paths...>]",
+        "count-inputs [--output <mode>] [--auth <auth>] [--quiet|--no-quiet] [--label <labels>]... [<paths...>]",
     },
   });
   const validateUsageWire = new Ajv2020({ strict: false }).compile(
@@ -389,12 +439,12 @@ void test("count 按 raw 自有字段计数，false 与重复值只计一项且�
     absentFields: ["auth", "labels", "paths"],
   };
   const usageFailureWire = {
-    schemaVersion: "2",
+    schemaVersion: "3",
     command: "countInputs",
     kind: "usageFailure",
     issues: [countFailureIssue],
     usage:
-      "count-inputs [--auth <auth>] [--quiet|--no-quiet] [--label <labels>]... [<paths...>]",
+      "count-inputs [--output <mode>] [--auth <auth>] [--quiet|--no-quiet] [--label <labels>]... [<paths...>]",
     helpArgv: ["count-inputs", "--help"],
   };
   assert.equal(validateUsageWire(usageFailureWire), true);
@@ -442,7 +492,7 @@ void test("count 按 raw 自有字段计数，false 与重复值只计一项且�
     usage: {
       command: "countInputs",
       synopsis:
-        "count-inputs [--auth <auth>] [--quiet|--no-quiet] [--label <labels>]... [<paths...>]",
+        "count-inputs [--output <mode>] [--auth <auth>] [--quiet|--no-quiet] [--label <labels>]... [<paths...>]",
     },
   });
 });
@@ -565,12 +615,13 @@ void test("count 投影的模式体积在较宽字段组下保持可用", () => 
     fields.map((name) => ({ name, type: "string" as const })),
     "count-projection-volume",
   );
+  const input = createJsonSchemaContract(inputSchema);
   const cli = defineCli()({
     root: "countVolume",
-    help: helpCapability({
+    help: englishHelpCapability({
       wording: { countExactly: "{fields} 恰好出现 {count} 项" },
     }),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       countVolume: {
@@ -579,10 +630,20 @@ void test("count 投影的模式体积在较宽字段组下保持可用", () => 
         description: "数量模式体积",
         fields: fieldDefinitions,
         usageConstraints: [{ kind: "count", fields, min: 1, max: 1 }],
-        input: createJsonSchemaContract(inputSchema),
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        input,
+
+        outputs: defineCli().outputModes("countVolume", input, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -674,7 +735,7 @@ void test("count 不会把声明必需但缺席的字段预先算作出现", () 
     ],
     usage: {
       command: "requiredCount",
-      synopsis: "required-count <target> [--quiet]",
+      synopsis: "required-count [--output <mode>] <target> [--quiet]",
     },
   });
 });
@@ -1045,7 +1106,7 @@ void test("条件规则与禁配规则按声明顺序聚合，失败不执行 ha
   const invocation = parseCliInvocation(cli, [
     "--auth",
     "basic",
-    "--output",
+    "--output-file",
     "result.txt",
     "--quiet",
     "--format",
@@ -1080,7 +1141,7 @@ void test("条件规则与禁配规则按声明顺序聚合，失败不执行 ha
     usage: {
       command: "publish",
       synopsis:
-        "publish [--auth <auth>] [--token <token>] [--output <output>] [--quiet] [--format <format>]",
+        "publish [--output <mode>] [--auth <auth>] [--token <token>] [--output-file <output>] [--quiet] [--format <format>]",
     },
   });
 
@@ -1095,7 +1156,7 @@ void test("条件规则与禁配规则按声明顺序聚合，失败不执行 ha
   assert.equal(termination.kind, "usageFailure");
   assert.equal(executions, 0);
   assert.deepEqual(writes, [
-    '{"schemaVersion":"2","command":"publish","kind":"usageFailure","issues":[{"code":"countConstraintViolation","min":0,"max":1,"presentFields":["output","quiet"],"absentFields":[]},{"code":"conditionalConstraintViolation","branch":"onMatch","conditions":[{"kind":"present","field":"auth","present":true}],"missingRequiredFields":["token"],"presentForbiddenFields":["output","quiet"]},{"code":"forbiddenCombinationViolation","facts":[{"kind":"equals","field":"format","value":"json"},{"kind":"equals","field":"quiet","value":true}]}],"usage":"publish [--auth <auth>] [--token <token>] [--output <output>] [--quiet] [--format <format>]","helpArgv":["publish","--help"]}\n',
+    '{"schemaVersion":"3","command":"publish","kind":"usageFailure","issues":[{"code":"countConstraintViolation","min":0,"max":1,"presentFields":["output","quiet"],"absentFields":[]},{"code":"conditionalConstraintViolation","branch":"onMatch","conditions":[{"kind":"present","field":"auth","present":true}],"missingRequiredFields":["token"],"presentForbiddenFields":["output","quiet"]},{"code":"forbiddenCombinationViolation","facts":[{"kind":"equals","field":"format","value":"json"},{"kind":"equals","field":"quiet","value":true}]}],"usage":"publish [--output <mode>] [--auth <auth>] [--token <token>] [--output-file <output>] [--quiet] [--format <format>]","helpArgv":["publish","--help"]}\n',
   ]);
   const validateWire = new Ajv2020({ strict: false }).compile(
     cli.manifest.usageFailure.wire,
@@ -1103,7 +1164,7 @@ void test("条件规则与禁配规则按声明顺序聚合，失败不执行 ha
   assert.equal(validateWire(JSON.parse(writes[0]!)), true);
   assert.equal(
     validateWire({
-      schemaVersion: "2",
+      schemaVersion: "3",
       command: "publish",
       kind: "usageFailure",
       issues: [
@@ -1157,10 +1218,14 @@ void test("跨规则的不可达条件分支不会触发全局可满足性拒绝
 });
 
 void test("禁配字段事实同时观察出现与等值，并保留声明顺序", () => {
+  const sharedInput3 = z.object({
+    mode: z.enum(["json", "yaml"]).optional(),
+    quiet: z.boolean().default(true),
+  });
   const cli = defineCli()({
     root: "publish",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       publish: {
@@ -1180,10 +1245,7 @@ void test("禁配字段事实同时观察出现与等值，并保留声明顺序
             description: "静默输出",
           },
         },
-        input: z.object({
-          mode: z.enum(["json", "yaml"]).optional(),
-          quiet: z.boolean().default(true),
-        }),
+        input: sharedInput3,
         usageConstraints: [
           {
             kind: "forbiddenCombination",
@@ -1195,9 +1257,19 @@ void test("禁配字段事实同时观察出现与等值，并保留声明顺序
             ],
           },
         ],
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+
+        outputs: defineCli().outputModes("publish", sharedInput3, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -1218,22 +1290,31 @@ void test("禁配字段事实同时观察出现与等值，并保留声明顺序
     ],
     usage: {
       command: "publish",
-      synopsis: "publish [--mode <mode>] [--quiet|--no-quiet]",
+      synopsis:
+        "publish [--output <mode>] [--mode <mode>] [--quiet|--no-quiet]",
     },
   });
   assert.deepEqual(parseCliInvocation(cli, ["--mode", "json"]), {
     kind: "parsed",
     command: "publish",
     input: { mode: "json" },
-    outputFormat: "structured",
+    outputMode: "structured",
   });
 });
 
 void test("等值事实观察 schema transform 前的 raw Input 值", () => {
+  const sharedInput4 = z.object({
+    mode: z
+      .string()
+      .transform((value) => value.length)
+      .pipe(z.number())
+      .optional(),
+    force: z.boolean().optional(),
+  });
   const cli = defineCli()({
     root: "transformedInput",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       transformedInput: {
@@ -1252,14 +1333,7 @@ void test("等值事实观察 schema transform 前的 raw Input 值", () => {
             description: "强制执行",
           },
         },
-        input: z.object({
-          mode: z
-            .string()
-            .transform((value) => value.length)
-            .pipe(z.number())
-            .optional(),
-          force: z.boolean().optional(),
-        }),
+        input: sharedInput4,
         usageConstraints: [
           {
             kind: "forbiddenCombination",
@@ -1269,9 +1343,23 @@ void test("等值事实观察 schema transform 前的 raw Input 值", () => {
             ],
           },
         ],
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+
+        outputs: defineCli().outputModes(
+          "transformedInput",
+          sharedInput4,
+          (mode) => ({
+            default: "structured",
+            modes: {
+              structured: mode.atomic({
+                description: "结构化输出",
+                format: "structured",
+                success: { kind: "completion" },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              }),
+            },
+          }),
+        ),
       },
     },
   });
@@ -1290,14 +1378,14 @@ void test("等值事实观察 schema transform 前的 raw Input 值", () => {
     ],
     usage: {
       command: "transformedInput",
-      synopsis: "transformed-input [--mode <mode>] [--force]",
+      synopsis: "transformed-input [--output <mode>] [--mode <mode>] [--force]",
     },
   });
   assert.deepEqual(parseCliInvocation(cli, ["--mode", "json"]), {
     kind: "parsed",
     command: "transformedInput",
     input: { mode: "json" },
-    outputFormat: "structured",
+    outputMode: "structured",
   });
 });
 
@@ -1331,7 +1419,7 @@ void test("JSON Schema 语义与 parser 一致并保留引用定义", () => {
   const cli = defineCli()({
     root: "publish",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       publish: {
@@ -1361,9 +1449,19 @@ void test("JSON Schema 语义与 parser 一致并保留引用定义", () => {
             ],
           },
         ],
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+
+        outputs: defineCli().outputModes("publish", schema, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -1392,7 +1490,7 @@ void test("JSON Schema 语义与 parser 一致并保留引用定义", () => {
     cli.manifest.usageFailure.wire,
   );
   const usageFailure = {
-    schemaVersion: "2",
+    schemaVersion: "3",
     command: "publish",
     kind: "usageFailure",
     issues: [
@@ -1456,7 +1554,7 @@ void test("when 的分支 schema 与 parser 对照保留根引用及空效果", 
   const cli = defineCli()({
     root: "conditional",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       conditional: {
@@ -1513,9 +1611,19 @@ void test("when 的分支 schema 与 parser 对照保留根引用及空效果", 
             otherwise: { forbid: ["cursor"] },
           },
         ],
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+
+        outputs: defineCli().outputModes("conditional", schema, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       },
     },
   });
@@ -1637,7 +1745,12 @@ void test("无效 count 不会遮蔽有效 count 所需的帮助模板诊断", (
       { kind: "count", fields: ["auth"], min: invalidMinimum },
       { kind: "count", fields: ["auth"], min: 1 },
     ]),
-    help: helpCapability({ wording: { default: "默认值 {value}" } }),
+    help: helpCapability({
+      wording: {
+        choices: englishHelpWording.choices,
+        default: "默认值 {value}",
+      },
+    }),
   };
 
   assert.throws(
@@ -1677,6 +1790,22 @@ void test("输入 schema 投影缺失时仍收集 count 定义诊断", () => {
   const countDefinition = countCliDefinition([
     { kind: "count", fields: ["auth"], min: 1 },
   ]);
+  const outputs = defineCli().outputModes(
+    "countInputs",
+    missingProjection,
+    (mode) => ({
+      default: "structured",
+      modes: {
+        structured: mode.atomic({
+          description: "结构化输出",
+          format: "structured",
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        }),
+      },
+    }),
+  );
   const definition = {
     ...countDefinition,
     commands: {
@@ -1684,6 +1813,7 @@ void test("输入 schema 投影缺失时仍收集 count 定义诊断", () => {
       countInputs: {
         ...countDefinition.commands.countInputs,
         input: missingProjection,
+        outputs,
       },
     },
   };
@@ -1778,15 +1908,20 @@ void test("同一约束事实投影到 grammar、manifest、Draft 2020-12 与 he
   });
   assert.match(
     writes.join(""),
-    /--help\n\n  output, quiet at most 1\n  when all of auth is present, require token, forbid output, quiet\n  forbidden combination of format="json", quiet=true\n$/,
+    /--help\n  --output <mode> \(choices: "structured"\) \(default: "structured"\)\n  structured \(atomic, structured\)\n    结构化输出\n\n  output, quiet at most 1\n  when all of auth is present, require token, forbid output, quiet\n  forbidden combination of format="json", quiet=true\n$/,
   );
 });
 
 void test("动态 when 校验复用事实和值域规则，并检查分支局部矛盾", () => {
+  const sharedInput5 = z.object({
+    mode: z.enum(["safe", "force"]).optional(),
+    tags: z.array(z.string()).optional(),
+    force: z.boolean().optional(),
+  });
   const definition = {
     root: "invalidConstraints",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       invalidConstraints: {
@@ -1819,14 +1954,24 @@ void test("动态 when 校验复用事实和值域规则，并检查分支局部
             otherwise: { forbid: ["missing"] },
           },
         ],
-        input: z.object({
-          mode: z.enum(["safe", "force"]).optional(),
-          tags: z.array(z.string()).optional(),
-          force: z.boolean().optional(),
-        }),
-        success: { kind: "completion" },
-        failures: {},
-        handler: () => undefined,
+        input: sharedInput5,
+
+        outputs: defineCli().outputModes(
+          "invalidConstraints",
+          sharedInput5,
+          (mode) => ({
+            default: "structured",
+            modes: {
+              structured: mode.atomic({
+                description: "结构化输出",
+                format: "structured",
+                success: { kind: "completion" },
+                failures: {},
+                handler: () => undefined as never,
+              }),
+            },
+          }),
+        ),
       },
     },
   };
@@ -1876,10 +2021,14 @@ void test("动态 when 校验复用事实和值域规则，并检查分支局部
 });
 
 void test("动态 when 聚合空分支、畸形成员及闭合属性诊断", () => {
+  const sharedInput6 = z.object({
+    force: z.boolean().optional(),
+    mode: z.enum(["safe", "force"]).optional(),
+  });
   const definition = {
     root: "invalidShapes",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       invalidShapes: {
@@ -1930,13 +2079,24 @@ void test("动态 when 聚合空分支、畸形成员及闭合属性诊断", () 
             all: [{ kind: "present", field: "mode" }],
           },
         ],
-        input: z.object({
-          force: z.boolean().optional(),
-          mode: z.enum(["safe", "force"]).optional(),
-        }),
-        success: { kind: "completion" },
-        failures: {},
-        handler: () => undefined,
+        input: sharedInput6,
+
+        outputs: defineCli().outputModes(
+          "invalidShapes",
+          sharedInput6,
+          (mode) => ({
+            default: "structured",
+            modes: {
+              structured: mode.atomic({
+                description: "结构化输出",
+                format: "structured",
+                success: { kind: "completion" },
+                failures: {},
+                handler: () => undefined as never,
+              }),
+            },
+          }),
+        ),
       },
     },
   };
@@ -2048,10 +2208,11 @@ void test("动态 when 聚合空分支、畸形成员及闭合属性诊断", () 
 
 void test("层级定义继续聚合叶命令中的独立约束错误", () => {
   const define = defineCli();
+  const sharedInput0 = z.object({ mode: z.enum(["safe", "force"]).optional() });
   const definition = {
     root: "workspace",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       workspace: {
@@ -2071,7 +2232,7 @@ void test("层级定义继续聚合叶命令中的独立约束错误", () => {
             description: "模式",
           },
         },
-        input: z.object({ mode: z.enum(["safe", "force"]).optional() }),
+        input: sharedInput0,
         usageConstraints: [
           {
             kind: "forbiddenCombination",
@@ -2082,9 +2243,21 @@ void test("层级定义继续聚合叶命令中的独立约束错误", () => {
             all: [{ kind: "equals", field: "mode", value: "outside" }],
           },
         ],
-        success: { kind: "completion" },
-        failures: {},
-        handler() {},
+
+        outputs: define.outputModes("probe", sharedInput0, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler() {
+                return undefined as never;
+              },
+            }),
+          },
+        })),
       },
     },
   };
@@ -2124,10 +2297,11 @@ void test("层级定义继续聚合叶命令中的独立约束错误", () => {
 });
 
 void test("defineCli 拒绝同字段上互相矛盾的等值事实", () => {
+  const sharedInput1 = z.object({ mode: z.string().optional() });
   const definition = {
     root: "contradictoryFacts",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       contradictoryFacts: {
@@ -2141,7 +2315,7 @@ void test("defineCli 拒绝同字段上互相矛盾的等值事实", () => {
             description: "模式",
           },
         },
-        input: z.object({ mode: z.string().optional() }),
+        input: sharedInput1,
         usageConstraints: [
           {
             kind: "forbiddenCombination",
@@ -2151,9 +2325,23 @@ void test("defineCli 拒绝同字段上互相矛盾的等值事实", () => {
             ],
           },
         ],
-        success: { kind: "completion" },
-        failures: {},
-        handler: () => undefined,
+
+        outputs: defineCli().outputModes(
+          "contradictoryFacts",
+          sharedInput1,
+          (mode) => ({
+            default: "structured",
+            modes: {
+              structured: mode.atomic({
+                description: "结构化输出",
+                format: "structured",
+                success: { kind: "completion" },
+                failures: {},
+                handler: () => undefined as never,
+              }),
+            },
+          }),
+        ),
       },
     },
   };
@@ -2183,10 +2371,11 @@ void test("defineCli 拒绝同字段上互相矛盾的等值事实", () => {
 });
 
 void test("defineCli 将禁配规则与事实上的未知属性报告为统一身份", () => {
+  const sharedInput2 = z.object({ force: z.boolean().optional() });
   const definition = {
     root: "unknownUsageProperties",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       unknownUsageProperties: {
@@ -2203,10 +2392,24 @@ void test("defineCli 将禁配规则与事实上的未知属性报告为统一�
             all: [{ kind: "present", field: "force", typo: true }],
           },
         ],
-        input: z.object({ force: z.boolean().optional() }),
-        success: { kind: "completion" },
-        failures: {},
-        handler: () => undefined,
+        input: sharedInput2,
+
+        outputs: defineCli().outputModes(
+          "unknownUsageProperties",
+          sharedInput2,
+          (mode) => ({
+            default: "structured",
+            modes: {
+              structured: mode.atomic({
+                description: "结构化输出",
+                format: "structured",
+                success: { kind: "completion" },
+                failures: {},
+                handler: () => undefined as never,
+              }),
+            },
+          }),
+        ),
       },
     },
   };
@@ -2245,10 +2448,11 @@ void test("defineCli 将禁配规则与事实上的未知属性报告为统一�
 });
 
 void test("defineCli 将显式 null 交给 usage constraint collection 守卫", () => {
+  const sharedInput3 = z.object({});
   const definition = {
     root: "nullConstraints",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       nullConstraints: {
@@ -2257,10 +2461,24 @@ void test("defineCli 将显式 null 交给 usage constraint collection 守卫", 
         description: "空约束",
         fields: {},
         usageConstraints: null,
-        input: z.object({}),
-        success: { kind: "completion" },
-        failures: {},
-        handler: () => undefined,
+        input: sharedInput3,
+
+        outputs: defineCli().outputModes(
+          "nullConstraints",
+          sharedInput3,
+          (mode) => ({
+            default: "structured",
+            modes: {
+              structured: mode.atomic({
+                description: "结构化输出",
+                format: "structured",
+                success: { kind: "completion" },
+                failures: {},
+                handler: () => undefined as never,
+              }),
+            },
+          }),
+        ),
       },
     },
   };
@@ -2285,10 +2503,16 @@ void test("defineCli 将显式 null 交给 usage constraint collection 守卫", 
 
 void test("when 成立时按一条规则报告完整条件与全部失败效果", async () => {
   let executions = 0;
+  const sharedInput7 = z.object({
+    mode: z.enum(["live", "replay"]).optional(),
+    cursor: z.string().optional(),
+    token: z.string().optional(),
+    feedback: z.boolean().optional(),
+  });
   const cli = defineCli()({
     root: "replay",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       replay: {
@@ -2317,12 +2541,7 @@ void test("when 成立时按一条规则报告完整条件与全部失败效果"
             description: "反馈",
           },
         },
-        input: z.object({
-          mode: z.enum(["live", "replay"]).optional(),
-          cursor: z.string().optional(),
-          token: z.string().optional(),
-          feedback: z.boolean().optional(),
-        }),
+        input: sharedInput7,
         usageConstraints: [
           {
             kind: "when",
@@ -2334,12 +2553,22 @@ void test("when 成立时按一条规则报告完整条件与全部失败效果"
             otherwise: { forbid: ["token"] },
           },
         ],
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => {
-          executions += 1;
-          return outcome.completion();
-        },
+
+        outputs: defineCli().outputModes("replay", sharedInput7, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => {
+                executions += 1;
+                return outcome.completion();
+              },
+            }),
+          },
+        })),
       },
     },
   });
@@ -2389,10 +2618,14 @@ void test("when 成立时按一条规则报告完整条件与全部失败效果"
 void test("动态效果字段数组只在运行值实际重叠时产生条件失败", () => {
   const required: readonly ("mode" | "token")[] = ["token"];
   const forbidden: readonly ("mode" | "token")[] = ["mode"];
+  const sharedInput8 = z.object({
+    mode: z.string().optional(),
+    token: z.string().optional(),
+  });
   const cli = defineCli()({
     root: "dynamicEffects",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       dynamicEffects: {
@@ -2411,10 +2644,7 @@ void test("动态效果字段数组只在运行值实际重叠时产生条件失
             description: "令牌",
           },
         },
-        input: z.object({
-          mode: z.string().optional(),
-          token: z.string().optional(),
-        }),
+        input: sharedInput8,
         usageConstraints: [
           {
             kind: "when",
@@ -2422,9 +2652,23 @@ void test("动态效果字段数组只在运行值实际重叠时产生条件失
             onMatch: { require: required, forbid: forbidden },
           },
         ],
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+
+        outputs: defineCli().outputModes(
+          "dynamicEffects",
+          sharedInput8,
+          (mode) => ({
+            default: "structured",
+            modes: {
+              structured: mode.atomic({
+                description: "结构化输出",
+                format: "structured",
+                success: { kind: "completion" },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              }),
+            },
+          }),
+        ),
       },
     },
   });
@@ -2443,7 +2687,8 @@ void test("动态效果字段数组只在运行值实际重叠时产生条件失
     ],
     usage: {
       command: "dynamicEffects",
-      synopsis: "dynamic-effects [--mode <mode>] [--token <token>]",
+      synopsis:
+        "dynamic-effects [--output <mode>] [--mode <mode>] [--token <token>]",
     },
   });
 });

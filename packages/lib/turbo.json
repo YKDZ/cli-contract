@@ -1,4 +1,55 @@
 {
   "extends": ["//"],
-  "tags": ["contract-core"]
+  "tags": ["contract-core"],
+  "tasks": {
+    "authoring:fixture:hierarchy-text-coverage": {
+      "inputs": [],
+      "outputs": [],
+      "cache": false,
+      "tags": ["work:on-demand"]
+    },
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": [],
+      "outputs": ["dist/**"],
+      "cache": false,
+      "tags": ["work:preparation"]
+    },
+    "format:check": {
+      "inputs": [],
+      "outputs": [],
+      "tags": ["quality:light"]
+    },
+    "format:write": {
+      "dependsOn": ["lint:fix"],
+      "inputs": [],
+      "outputs": [],
+      "cache": false,
+      "tags": ["work:repair"]
+    },
+    "lint": {
+      "dependsOn": [],
+      "inputs": [],
+      "outputs": [],
+      "tags": ["quality:light"]
+    },
+    "lint:fix": {
+      "inputs": [],
+      "outputs": [],
+      "cache": false,
+      "tags": ["work:repair"]
+    },
+    "test": {
+      "dependsOn": ["build"],
+      "inputs": [],
+      "outputs": [],
+      "tags": ["quality:light"]
+    },
+    "typecheck": {
+      "dependsOn": ["^typecheck", "^build"],
+      "inputs": [],
+      "outputs": [],
+      "tags": ["quality:light"]
+    }
+  }
 }

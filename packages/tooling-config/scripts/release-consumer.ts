@@ -3,13 +3,12 @@ import { copyFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
-export const repositoryRoot = resolve(import.meta.dirname, "..");
 export const installedRuntimeDevDependencies = { ajv: "8.20.0" } as const;
 
 export function runCommand(
   command: string,
   args: readonly string[],
-  cwd = repositoryRoot,
+  cwd = process.cwd(),
   environment: Readonly<Record<string, string>> = {},
 ): string {
   const result = spawnSync(command, args, {
@@ -60,7 +59,5 @@ export async function verifyInstalledRuntime(project: string): Promise<void> {
     resolve(import.meta.dirname, "fixtures/installed-runtime.ts"),
     resolve(project, "installed-runtime.ts"),
   );
-  runCommand("node", ["installed-runtime.ts"], project, {
-    CANDIDATE_REPOSITORY_ROOT: repositoryRoot,
-  });
+  runCommand("node", ["installed-runtime.ts"], project);
 }

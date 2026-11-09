@@ -1,22 +1,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import {
-  defineCli,
-  executeCli,
-  outputCapability,
-  parseCliInvocation,
-} from "@ykdz/cli-contract";
+import { defineCli, executeCli, parseCliInvocation } from "@ykdz/cli-contract";
 import { z } from "zod";
 
 import { englishHelpCapability } from "./english-help.ts";
 
 void test("叶命令独立声明应用选项，清单版本与执行线版本各自保持准确", async () => {
   const define = defineCli();
+  const sharedInput1 = z.object({ region: z.enum(["us", "cn"]).optional() });
+  const sharedInput0 = z.object({ region: z.enum(["us", "eu"]) });
   const cli = define({
     root: "workspace",
     help: englishHelpCapability(),
-    output: outputCapability({ defaultFormat: "structured" }),
+
     usageFailureExitCode: 64,
     commands: {
       workspace: {
@@ -36,10 +33,20 @@ void test("叶命令独立声明应用选项，清单版本与执行线版本各
             description: "区域",
           },
         },
-        input: z.object({ region: z.enum(["us", "eu"]) }),
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        input: sharedInput0,
+
+        outputs: define.outputModes("deploy", sharedInput0, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       }),
       ...define.command("inspect")({
         kind: "command",
@@ -53,15 +60,25 @@ void test("叶命令独立声明应用选项，清单版本与执行线版本各
             description: "区域",
           },
         },
-        input: z.object({ region: z.enum(["us", "cn"]).optional() }),
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
+        input: sharedInput1,
+
+        outputs: define.outputModes("inspect", sharedInput1, (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode.atomic({
+              description: "结构化输出",
+              format: "structured",
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            }),
+          },
+        })),
       }),
     },
   });
 
-  assert.equal(cli.manifest.schemaVersion, "4");
+  assert.equal(cli.manifest.schemaVersion, "5");
   for (const command of ["deploy", "inspect"] as const) {
     const node = cli.grammar.nodes.find(
       (candidate) => candidate.id === command,
@@ -87,13 +104,13 @@ void test("叶命令独立声明应用选项，清单版本与执行线版本各
     kind: "parsed",
     command: "deploy",
     input: { region: "eu" },
-    outputFormat: "structured",
+    outputMode: "structured",
   });
   assert.deepEqual(parseCliInvocation(cli, ["inspect"]), {
     kind: "parsed",
     command: "inspect",
     input: {},
-    outputFormat: "structured",
+    outputMode: "structured",
   });
 
   const writes: string[] = [];
@@ -105,6 +122,6 @@ void test("叶命令独立声明应用选项，清单版本与执行线版本各
     },
   });
   assert.deepEqual(writes, [
-    '{"schemaVersion":"2","command":"deploy","kind":"completion"}\n',
+    '{"schemaVersion":"3","command":"deploy","outputMode":"structured","kind":"completion"}\n',
   ]);
 });
