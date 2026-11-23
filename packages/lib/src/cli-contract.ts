@@ -114,6 +114,10 @@ const invalidHelpFactWordingValues = new WeakMap<
   ReadonlyMap<string, unknown>
 >();
 const boundCommandNodes = new WeakMap<object, RuntimeExecutableDefinition>();
+type UnknownDefinitionPropertyIssue = Extract<
+  ContractDefinitionIssue,
+  { readonly code: "unknownDefinitionProperty" }
+>;
 const outputModes = new WeakSet<object>();
 const outputModeMetadata = new WeakMap<
   object,
@@ -121,6 +125,7 @@ const outputModeMetadata = new WeakMap<
     readonly command: string;
     readonly input: ContractSchema;
     readonly binding: object;
+    readonly unknownProperties: readonly UnknownDefinitionPropertyIssue[];
   }>
 >();
 const outputModeDefinitions = new WeakSet<object>();
@@ -130,20 +135,18 @@ const outputModeDefinitionMetadata = new WeakMap<
     readonly command: string;
     readonly input: ContractSchema;
     readonly binding: object;
-  }>
->();
-// Keep source keys for diagnostics when presentation tables are compiled.
-const outputModeAuthoring = new WeakMap<
-  object,
-  Readonly<{
-    readonly declaration: unknown;
-    readonly presentation: unknown;
-    readonly delivery: OutputDelivery;
-    readonly format: OutputFormat;
+    readonly unknownProperties: readonly UnknownDefinitionPropertyIssue[];
   }>
 >();
 const versionCapabilities = new WeakSet<object>();
 const compiledCliContracts = new WeakMap<object, RuntimeCompiledCli>();
+
+const declaredAtomicVariantProperties = [
+  "description",
+  "schema",
+  "exitCode",
+] as const;
+const declaredStreamRecordProperties = ["description", "schema"] as const;
 
 // 类型约束与定义期检查共用已知属性，避免拼错的声明被静默丢弃。
 const definitionPropertyKeys = {
@@ -190,8 +193,8 @@ const definitionPropertyKeys = {
   },
   example: ["input", "outputMode"],
   usage: usageConstraintDefinitionPropertyKeys,
-  atomicVariant: ["description", "schema", "exitCode", "text"],
-  streamRecord: ["description", "schema", "text"],
+  atomicVariant: [...declaredAtomicVariantProperties, "text"],
+  streamRecord: [...declaredStreamRecordProperties, "text"],
   capability: {
     help: ["shortAlias", "headings", "wording"],
     version: ["value", "description", "shortAlias"],
@@ -505,12 +508,12 @@ type DeclaredAtomicSuccess =
 
 type ClosedDeclaredVariants<Variants> = ClosedVariantDefinitions<
   Variants,
-  "description" | "schema" | "exitCode"
+  (typeof declaredAtomicVariantProperties)[number]
 >;
 
 type ClosedDeclaredRecords<Records> = ClosedVariantDefinitions<
   Records,
-  "description" | "schema"
+  (typeof declaredStreamRecordProperties)[number]
 >;
 
 type ClosedDeclaredSuccess<Success> = RejectUnknownProperties<
@@ -4653,7 +4656,10 @@ function presentVariants(definitions: unknown, presenters: unknown): unknown {
   const presented: Record<string, unknown> = {};
   for (const [name, definition] of Object.entries(definitions)) {
     presented[name] = isPlainRecord(definition)
-      ? Object.freeze({ ...definition, text: Reflect.get(table, name) })
+      ? Object.freeze({
+          ...definition,
+          text: Object.hasOwn(table, name) ? table[name] : undefined,
+        })
       : definition;
   }
   return Object.freeze(presented);
@@ -4723,14 +4729,23 @@ function invokeOutputCallback(
     delivery: OutputDelivery,
   ): RuntimeExecution => {
     const issueMode = (presentation: unknown, format: OutputFormat) => {
-      const mode = buildOutputMode(declaration, presentation, delivery, format);
+      // Check the original keys before pairing variants with presenters. The
+      // callback assigns the mode name later, so keep paths relative to it.
+      const unknownProperties: UnknownDefinitionPropertyIssue[] = [];
+      collectOutputAuthoringProperties(
+        { declaration, presentation, delivery, format },
+        unknownProperties,
+      );
+      const mode =
+        unknownProperties.length === 0
+          ? buildOutputMode(declaration, presentation, delivery, format)
+          : Object.freeze({});
       outputModeDefinitions.add(mode);
-      outputModeDefinitionMetadata.set(mode, { command, input, binding });
-      outputModeAuthoring.set(mode, {
-        declaration,
-        presentation,
-        delivery,
-        format,
+      outputModeDefinitionMetadata.set(mode, {
+        command,
+        input,
+        binding,
+        unknownProperties,
       });
       return mode;
     };
@@ -4744,7 +4759,17 @@ function invokeOutputCallback(
     stream: (declaration) => createExecution(declaration, "stream"),
   });
   const record = isPlainRecord(declared) ? declared : {};
-  const modes = isPlainRecord(record.modes) ? record.modes : {};
+  const unknownProperties: UnknownDefinitionPropertyIssue[] = [];
+  collectUnknownProperties(
+    record,
+    ["commands", command, "outputs"],
+    definitionPropertyKeys.outputModes,
+    unknownProperties,
+  );
+  const declaredModes = Object.hasOwn(record, "modes")
+    ? record.modes
+    : undefined;
+  const modes = isPlainRecord(declaredModes) ? declaredModes : {};
   const modeNames = Object.keys(modes);
   const hasDefault = Object.hasOwn(record, "default");
   const table = Object.freeze({
@@ -4756,7 +4781,7 @@ function invokeOutputCallback(
     modes: Object.freeze({ ...modes }),
   });
   outputModes.add(table);
-  outputModeMetadata.set(table, { command, input, binding });
+  outputModeMetadata.set(table, { command, input, binding, unknownProperties });
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- compileOutputModes validates dynamic entries and emits definition issues.
   return table as unknown as RuntimeOutputModesDefinition;
 }
@@ -5617,12 +5642,14 @@ function collectUnknownVariantProperties(
   }
 }
 
-function collectUnknownPresenterNames(
-  presenters: unknown,
+function collectOutputVariantProperties(
   definitions: unknown,
+  presenters: unknown,
   path: readonly string[],
-  issues: ContractDefinitionIssue[],
+  allowed: readonly string[],
+  issues: UnknownDefinitionPropertyIssue[],
 ): void {
+  collectUnknownVariantProperties(definitions, path, allowed, issues);
   if (!isPlainRecord(presenters)) return;
   const declared = isPlainRecord(definitions) ? definitions : {};
   for (const name of Object.keys(presenters)) {
@@ -5635,62 +5662,81 @@ function collectUnknownPresenterNames(
   }
 }
 
-/**
- * Report unknown fields and presenter names against the author’s execution and presentation declarations.
- */
 function collectOutputAuthoringProperties(
-  mode: object,
-  modePath: readonly string[],
-  issues: ContractDefinitionIssue[],
+  authoring: Readonly<{
+    declaration: unknown;
+    presentation: unknown;
+    delivery: OutputDelivery;
+    format: OutputFormat;
+  }>,
+  issues: UnknownDefinitionPropertyIssue[],
 ): void {
-  const authoring = outputModeAuthoring.get(mode);
-  if (authoring === undefined) return;
+  const { delivery, format } = authoring;
   collectUnknownProperties(
     authoring.declaration,
-    modePath,
-    authoring.delivery === "atomic"
+    [],
+    delivery === "atomic"
       ? ["success", "failures", "handler"]
       : ["records", "failures", "handler"],
     issues,
   );
   collectUnknownProperties(
     authoring.presentation,
-    modePath,
-    authoring.format === "structured"
+    [],
+    format === "structured"
       ? ["description"]
-      : authoring.delivery === "atomic"
+      : delivery === "atomic"
         ? ["description", "success", "failures"]
         : ["description", "records", "failures", "terminal"],
     issues,
   );
-  if (authoring.format !== "text") return;
   const declaration = isPlainRecord(authoring.declaration)
     ? authoring.declaration
     : {};
-  const presentation = isPlainRecord(authoring.presentation)
-    ? authoring.presentation
-    : {};
-  collectUnknownPresenterNames(
-    presentation.failures,
+  const presenters =
+    format === "text" && isPlainRecord(authoring.presentation)
+      ? authoring.presentation
+      : {};
+  // In structured modes, the existing result compiler reports an embedded
+  // presenter as unexpectedTextPresenter. A text mode would overwrite it.
+  const atomicVariantProperties =
+    format === "text"
+      ? declaredAtomicVariantProperties
+      : definitionPropertyKeys.atomicVariant;
+  collectOutputVariantProperties(
     declaration.failures,
-    [...modePath, "failures"],
+    presenters.failures,
+    ["failures"],
+    atomicVariantProperties,
     issues,
   );
-  if (authoring.delivery === "stream") {
-    collectUnknownPresenterNames(
-      presentation.records,
+  if (delivery === "stream") {
+    collectOutputVariantProperties(
       declaration.records,
-      [...modePath, "success", "records"],
+      presenters.records,
+      ["success", "records"],
+      format === "text"
+        ? declaredStreamRecordProperties
+        : definitionPropertyKeys.streamRecord,
       issues,
     );
     return;
   }
-  const success = isPlainRecord(declaration.success) ? declaration.success : {};
+  const success = declaration.success;
+  if (!isPlainRecord(success)) return;
+  const successProperties =
+    success.kind === "data"
+      ? ["kind", "variants"]
+      : success.kind === "completion" && format === "structured"
+        ? ["kind", "text"]
+        : ["kind"];
+  collectUnknownProperties(success, ["success"], successProperties, issues);
   if (success.kind === "data") {
-    collectUnknownPresenterNames(
-      presentation.success,
+    collectOutputVariantProperties(
       success.variants,
-      [...modePath, "success", "variants"],
+      presenters.success,
+      ["success", "variants"],
+      atomicVariantProperties,
       issues,
     );
   }
@@ -5817,7 +5863,6 @@ function collectUnknownDefinitionProperties(
         definitionPropertyKeys.atomicVariant,
         issues,
       );
-      collectOutputAuthoringProperties(rawMode, modePath, issues);
     }
   }
 }
@@ -6152,6 +6197,10 @@ function compileOutputModes(
       command,
       reason: "mismatchedInput",
     });
+  } else {
+    for (const issue of metadata.unknownProperties) {
+      issues.push(issue);
+    }
   }
 
   const rawModes: unknown = definition.modes;
@@ -6232,6 +6281,22 @@ function compileOutputModes(
         mode: modeName,
         reason: "mismatchedBinding",
       });
+      continue;
+    }
+    if (modeMetadata.unknownProperties.length > 0) {
+      for (const issue of modeMetadata.unknownProperties) {
+        issues.push({
+          code: issue.code,
+          path: [
+            "commands",
+            command,
+            "outputs",
+            "modes",
+            modeName,
+            ...issue.path,
+          ],
+        });
+      }
       continue;
     }
     if (!isSingleLineText(mode.description)) {
