@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { englishHelpCapability } from "./english-help.ts";
 
-void test("叶命令独立声明应用选项，清单版本与执行线版本各自保持准确", async () => {
+void test("leaf commands declare application options independently, and manifest and execution wire versions each stay accurate", async () => {
   const define = defineCli();
   const sharedInput1 = z.object({ region: z.enum(["us", "cn"]).optional() });
   const sharedInput0 = z.object({ region: z.enum(["us", "eu"]) });

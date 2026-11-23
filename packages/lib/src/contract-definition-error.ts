@@ -91,11 +91,11 @@ export type ContractDefinitionIssue =
       readonly location: "input";
       readonly fields: readonly Readonly<{
         readonly field: string;
-        /** 指向命令声明中对应输入模式属性的位置。 */
+        /** Points at the corresponding input schema property in the command declaration. */
         readonly path: readonly string[];
-        /** CLI 字段解析器产生的 raw 值形态。 */
+        /** The raw value shape produced by the CLI field parser. */
         readonly expected: "boolean" | "string" | "stringArray";
-        /** 实际 JSON Schema Input 投影，不代表 Standard Schema 的 TypeScript Input。 */
+        /** The actual JSON Schema Input projection, not the Standard Schema TypeScript Input. */
         readonly received: JsonValue;
       }>[];
     }>
@@ -433,8 +433,11 @@ type FieldKind =
   | "repeatableOption";
 
 /**
- * 定义期发现动态声明违反契约时抛出的闭合问题集合，在执行 handler 前定位无效声明。
- * 它服务作者修正契约，不代表命令调用的用法失败；核心不会自动将它写入 CLI 诊断输出。
+ * A closed set of issues thrown when a dynamic declaration violates the
+ * contract at definition time, locating the invalid declaration before any
+ * handler runs. It helps authors fix their contract and does not represent a
+ * usage failure of a command invocation; the core never writes it to CLI
+ * diagnostic output automatically.
  */
 export class ContractDefinitionError extends Error {
   readonly issues: readonly [
@@ -445,7 +448,7 @@ export class ContractDefinitionError extends Error {
   constructor(
     issues: readonly [ContractDefinitionIssue, ...ContractDefinitionIssue[]],
   ) {
-    super(issues.map(formatContractDefinitionIssue).join("；"));
+    super(issues.map(formatContractDefinitionIssue).join("; "));
     this.name = "ContractDefinitionError";
     const [first, ...rest] = issues;
     this.issues = Object.freeze([
@@ -455,155 +458,155 @@ export class ContractDefinitionError extends Error {
   }
 }
 
-// oxlint-disable-next-line typescript/consistent-return -- 所有闭合定义问题 code 均由 switch 返回。
+// oxlint-disable-next-line typescript/consistent-return -- Every closed definition issue code is returned by the switch.
 function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
   switch (issue.code) {
     case "unknownDefinitionProperty":
-      return `CLI 声明包含未知属性 ${issue.path.join(".")}`;
+      return `CLI declaration contains unknown property ${issue.path.join(".")}`;
     case "missingHelpFactTemplate":
-      return `命令 ${issue.command} 的帮助事实缺少 ${issue.slot} 模板`;
+      return `Help facts of command ${issue.command} are missing the ${issue.slot} template`;
     case "invalidHelpFactTemplate":
-      return `帮助事实模板 ${issue.slot} 无效：${issue.reason}`;
+      return `Help fact template ${issue.slot} is invalid: ${issue.reason}`;
     case "missingSchemaCapability":
-      return `${formatSchemaTarget(issue)} 缺少 ${issue.capability} 能力`;
+      return `${formatSchemaTarget(issue)} is missing the ${issue.capability} capability`;
     case "schemaDialectMismatch":
-      return `${formatSchemaTarget(issue)} 的 ${issue.projection} 投影不是 Draft 2020-12`;
+      return `The ${issue.projection} projection of ${formatSchemaTarget(issue)} is not Draft 2020-12`;
     case "schemaExportFailed":
-      return `${formatSchemaTarget(issue)} 无法导出 ${issue.projection} 投影`;
+      return `Cannot export the ${issue.projection} projection of ${formatSchemaTarget(issue)}`;
     case "schemaReferenceNotSelfContained":
-      return `${formatSchemaTarget(issue)} 的 ${issue.projection} 投影引用 ${issue.reference} 无法离线解释`;
+      return `The ${issue.projection} projection of ${formatSchemaTarget(issue)} references ${issue.reference}, which cannot be resolved offline`;
     case "invalidSchemaProjection":
-      return `${formatSchemaTarget(issue)} 的 ${issue.projection} 投影不是 JSON object`;
+      return `The ${issue.projection} projection of ${formatSchemaTarget(issue)} is not a JSON object`;
     case "schemaFieldSetMismatch":
-      return `命令 ${issue.command} 的字段与输入模式属性不一致`;
+      return `Fields of command ${issue.command} do not match the input schema properties`;
     case "schemaFieldDoesNotAcceptRawValue":
-      return `命令 ${issue.command} 的输入字段 ${issue.fields.map(({ field, path, expected, received }) => `${field}（${path.join(".")}）需要 raw ${expected}，实际输入模式属性为 ${JSON.stringify(received)}`).join(", ")}`;
+      return `Input fields of command ${issue.command}: ${issue.fields.map(({ field, path, expected, received }) => `${field} (${path.join(".")}) requires raw ${expected}, but the input schema property is ${JSON.stringify(received)}`).join(", ")}`;
     case "invalidInputSchemaShape":
-      return `命令 ${issue.command} 的输入模式 ${issue.aspect} 无效`;
+      return `The input schema ${issue.aspect} of command ${issue.command} is invalid`;
     case "missingInputDefault":
-      return `命令 ${issue.command} 的输入字段 ${issue.field} 缺少 default 注解`;
+      return `Input field ${issue.field} of command ${issue.command} is missing a default annotation`;
     case "invalidOutputSchemaShape":
-      return `命令 ${issue.command} 的输出模式 ${issue.aspect} 无效`;
+      return `The output schema ${issue.aspect} of command ${issue.command} is invalid`;
     case "outputRequiredFieldMissingFromInput":
-      return `命令 ${issue.command} 的输出必填字段 ${issue.field} 不在输入模式属性中`;
+      return `Required output field ${issue.field} of command ${issue.command} is not an input schema property`;
     case "invalidVariantName":
-      return `命令 ${issue.command} 的 ${issue.location} 变体名 ${issue.variant} 无效`;
+      return `The ${issue.location} variant name ${issue.variant} of command ${issue.command} is invalid`;
     case "invalidDescription":
       return issue.location === "command"
-        ? `命令 ${issue.command} 的描述必须是合法单行文本`
+        ? `The description of command ${issue.command} must be valid single-line text`
         : issue.location === "field"
-          ? `命令 ${issue.command} 的字段 ${issue.field} 描述必须是合法单行文本`
-          : `命令 ${issue.command} 的 ${issue.location} 变体 ${issue.variant} 描述必须是合法单行文本`;
+          ? `The description of field ${issue.field} in command ${issue.command} must be valid single-line text`
+          : `The description of ${issue.location} variant ${issue.variant} in command ${issue.command} must be valid single-line text`;
     case "invalidVariantExitCode":
-      return `命令 ${issue.command} 的 ${issue.location} 变体 ${issue.variant} 退出码无效`;
+      return `The exit code of ${issue.location} variant ${issue.variant} in command ${issue.command} is invalid`;
     case "missingStreamRecord":
-      return `命令 ${issue.command} 的 stream 必须声明至少一个 record`;
+      return `The stream of command ${issue.command} must declare at least one record`;
     case "invalidCapability":
-      return `CLI 的 ${issue.capability} 能力无效`;
+      return `The ${issue.capability} capability of the CLI is invalid`;
     case "invalidOutputModes":
-      return `命令 ${issue.command} 的输出方式集合无效（${issue.reason}）`;
+      return `The output mode set of command ${issue.command} is invalid (${issue.reason})`;
     case "invalidDefaultOutputMode":
-      return `命令 ${issue.command} 的默认输出方式 ${issue.received ?? "缺失"} 无效`;
+      return `The default output mode ${issue.received ?? "missing"} of command ${issue.command} is invalid`;
     case "invalidOutputMode":
-      return `命令 ${issue.command} 的输出方式 ${issue.mode} 无效（${issue.reason}）`;
+      return `Output mode ${issue.mode} of command ${issue.command} is invalid (${issue.reason})`;
     case "missingTextPresenter":
-      return `命令 ${issue.command} 的 ${issue.location}${issue.variant === undefined ? "" : ` 变体 ${issue.variant}`} 缺少 text presenter`;
+      return `The ${issue.location}${issue.variant === undefined ? "" : ` variant ${issue.variant}`} of command ${issue.command} is missing a text presenter`;
     case "unexpectedTextPresenter":
-      return `命令 ${issue.command} 的 ${issue.location}${issue.variant === undefined ? "" : ` 变体 ${issue.variant}`} 不应声明 text presenter`;
+      return `The ${issue.location}${issue.variant === undefined ? "" : ` variant ${issue.variant}`} of command ${issue.command} must not declare a text presenter`;
     case "invalidUsageFailureExitCode":
-      return "CLI 的用法失败退出码无效";
+      return "The usage failure exit code of the CLI is invalid";
     case "invalidRootCommandSet":
-      return `CLI 根 ${issue.root} 必须对应唯一根命令`;
+      return `CLI root ${issue.root} must map to exactly one root command`;
     case "invalidRootCommandKind":
-      return `命令 ${issue.command} 的 kind 无效`;
+      return `The kind of command ${issue.command} is invalid`;
     case "invalidCommandIdentity":
-      return `命令身份 ${issue.command} 无效`;
+      return `Command identity ${issue.command} is invalid`;
     case "invalidCommandNodeKind":
-      return `命令 ${issue.command} 的节点 kind 无效`;
+      return `The node kind of command ${issue.command} is invalid`;
     case "invalidCommandHandler":
-      return `命令 ${issue.command} 的 handler 声明无效`;
+      return `The handler declaration of command ${issue.command} is invalid`;
     case "invalidCommandParent":
-      return `命令 ${issue.command} 的 parent ${issue.parent ?? "缺失"} 无效`;
+      return `The parent ${issue.parent ?? "missing"} of command ${issue.command} is invalid`;
     case "invalidCommandSpelling":
-      return `命令 ${issue.command} 的 spelling ${issue.spelling} 无效`;
+      return `The spelling ${issue.spelling} of command ${issue.command} is invalid`;
     case "rootGroupWithoutChildren":
-      return `根命令组 ${issue.command} 没有子命令`;
+      return `Root command group ${issue.command} has no child commands`;
     case "commandHierarchyCycle":
-      return `命令层级存在环：${issue.commands.join(", ")}`;
+      return `Command hierarchy contains a cycle: ${issue.commands.join(", ")}`;
     case "duplicateCommandSpelling":
-      return `命令 ${issue.commands.join(", ")} 在 ${issue.parent} 下重复使用 spelling ${issue.spelling}`;
+      return `Commands ${issue.commands.join(", ")} reuse spelling ${issue.spelling} under ${issue.parent}`;
     case "missingCommandText":
-      return `命令 ${issue.command} 缺少 ${issue.field}`;
+      return `Command ${issue.command} is missing ${issue.field}`;
     case "invalidHelpSupplement":
-      return `命令 ${issue.command} 的帮助补充必须是合法文本行组`;
+      return `The help supplement of command ${issue.command} must be a valid group of text lines`;
     case "invalidFieldLongOption":
-      return `命令 ${issue.command} 的字段 ${issue.field} long option 无效`;
+      return `The long option of field ${issue.field} in command ${issue.command} is invalid`;
     case "invalidFieldIdentity":
       return issue.reason === "reservedName"
-        ? `命令 ${issue.command} 的字段身份 ${issue.field} 为保留名称；请更换字段键，并同步模式 Input 键及相关引用；CLI 拼写可保留`
-        : `命令 ${issue.command} 的字段身份 ${issue.field} 必须符合 lowerCamelCase（小写字母开头，仅含字母和数字）`;
+        ? `Field identity ${issue.field} of command ${issue.command} is a reserved name; rename the field key and update the schema Input key and its references; the CLI spelling may stay unchanged`
+        : `Field identity ${issue.field} of command ${issue.command} must be lowerCamelCase (start with a lowercase letter, letters and digits only)`;
     case "invalidFieldKind":
-      return `命令 ${issue.command} 的字段 ${issue.field} kind 无效`;
+      return `The kind of field ${issue.field} in command ${issue.command} is invalid`;
     case "invalidFieldShortAlias":
-      return `命令 ${issue.command} 的字段 ${issue.field} short alias 无效`;
+      return `The short alias of field ${issue.field} in command ${issue.command} is invalid`;
     case "duplicateFieldOptionSpelling":
-      return `命令 ${issue.command} 的字段 ${issue.fields.join(", ")} 重复使用 option spelling ${issue.spelling}`;
+      return `Fields ${issue.fields.join(", ")} of command ${issue.command} reuse option spelling ${issue.spelling}`;
     case "fieldOptionConflictsWithControl":
-      return `命令 ${issue.command} 的字段 ${issue.field} 与 ${issue.control} control spelling ${issue.spelling} 冲突`;
+      return `Field ${issue.field} of command ${issue.command} conflicts with the ${issue.control} control spelling ${issue.spelling}`;
     case "requiredPositionalAfterOptional":
-      return `命令 ${issue.command} 的必填 positional ${issue.field} 位于可选 positional ${issue.precedingOptionalField} 之后`;
+      return `Required positional ${issue.field} of command ${issue.command} follows optional positional ${issue.precedingOptionalField}`;
     case "positionalAfterVariadic":
-      return `命令 ${issue.command} 的 positional ${issue.field} 位于 variadic positional ${issue.variadicField} 之后`;
+      return `Positional ${issue.field} of command ${issue.command} follows variadic positional ${issue.variadicField}`;
     case "duplicateFieldLongOption":
-      return `命令 ${issue.command} 的字段 ${issue.fields.join(", ")} 重复使用 long option ${issue.longOption}`;
+      return `Fields ${issue.fields.join(", ")} of command ${issue.command} reuse long option ${issue.longOption}`;
     case "missingDataVariant":
-      return `命令 ${issue.command} 必须声明至少一个 data 变体`;
+      return `Command ${issue.command} must declare at least one data variant`;
     case "invalidCommandExample":
       return formatCommandExampleIssue(issue);
     case "invalidUsageConstraint":
-      return `命令 ${issue.command} 的 usage constraint${issue.index === null ? "" : `[${issue.index}]`}${issue.member === undefined ? "" : ` ${issue.member}`} ${formatIssueValue(issue.received)} 无效${issue.expected === undefined ? "" : `，期望 ${issue.expected}`}${issue.path === undefined ? "" : `（${issue.path.join(".")}）`}`;
+      return `Usage constraint${issue.index === null ? "" : `[${issue.index}]`}${issue.member === undefined ? "" : ` ${issue.member}`} of command ${issue.command} is invalid: ${formatIssueValue(issue.received)}${issue.expected === undefined ? "" : `; expected ${issue.expected}`}${issue.path === undefined ? "" : ` (${issue.path.join(".")})`}`;
     case "invalidCountConstraint":
-      return `命令 ${issue.command} 的 count ${issue.member} 无效（${issue.reason}）`;
+      return `The count ${issue.member} of command ${issue.command} is invalid (${issue.reason})`;
     case "unknownUsageConstraintField":
-      return `命令 ${issue.command} 的 usage constraint[${issue.index}] ${issue.constraint}.${issue.member} 引用了不存在字段 ${issue.field}`;
+      return `Usage constraint[${issue.index}] ${issue.constraint}.${issue.member} of command ${issue.command} references unknown field ${issue.field}`;
     case "inapplicableUsageConstraintField":
-      return `命令 ${issue.command} 的 ${issue.constraint} usage constraint${issue.member === undefined ? "" : ` ${issue.member}`} 不适用于字段 ${issue.field}（${issue.kind}）`;
+      return `The ${issue.constraint} usage constraint${issue.member === undefined ? "" : ` ${issue.member}`} of command ${issue.command} does not apply to field ${issue.field} (${issue.kind})`;
     case "invalidUsageConstraintValue":
-      return `命令 ${issue.command} 的 ${issue.constraint} 等值事实 ${issue.field}=${formatIssueValue(issue.actual)} 不属于可接受值 ${JSON.stringify(issue.expected)}`;
+      return `The ${issue.constraint} equality fact ${issue.field}=${formatIssueValue(issue.actual)} of command ${issue.command} is not among the accepted values ${JSON.stringify(issue.expected)}`;
     case "contradictoryUsageConstraint":
-      return `命令 ${issue.command} 的 ${issue.constraint} usage constraint${issue.member === undefined ? "" : ` ${issue.member}`} 内部矛盾：${issue.fields.join(", ")}`;
+      return `The ${issue.constraint} usage constraint${issue.member === undefined ? "" : ` ${issue.member}`} of command ${issue.command} is self-contradictory: ${issue.fields.join(", ")}`;
   }
 }
 
-// oxlint-disable-next-line typescript/consistent-return -- 原因联合闭合，所有分支均返回诊断文本。
+// oxlint-disable-next-line typescript/consistent-return -- The reason union is closed; every branch returns diagnostic text.
 function formatCommandExampleIssue(
   issue: Extract<
     ContractDefinitionIssue,
     { readonly code: "invalidCommandExample" }
   >,
 ): string {
-  const location = `命令 ${issue.command} 的示例[${issue.index}]`;
+  const location = `Example[${issue.index}] of command ${issue.command}`;
   switch (issue.reason) {
     case "invalidShape":
-      return `${location} 必须包含对象形式的 input`;
+      return `${location} must contain an object-shaped input`;
     case "unknownField":
-      return `${location} 引用了未声明字段 ${issue.field ?? "<未知>"}`;
+      return `${location} references undeclared field ${issue.field ?? "<unknown>"}`;
     case "unencodableFieldValue":
-      return `${location} 的字段 ${issue.field ?? "<未知>"} 不符合可编码的原始字段形状`;
+      return `${location} field ${issue.field ?? "<unknown>"} does not match an encodable raw field shape`;
     case "invalidOutputMode":
-      return `${location} 指定了命令 ${issue.command} 不存在的输出方式 ${issue.received ?? "<无效值>"}`;
+      return `${location} specifies output mode ${issue.received ?? "<invalid>"}, which does not exist on command ${issue.command}`;
     case "parseDidNotComplete":
       return issue.usageIssues === undefined
-        ? `${location} 的规范 argv 未解析为完整调用`
-        : `${location} 的调用语法无效：${formatIssueValue(issue.usageIssues)}`;
+        ? `${location} canonical argv did not parse into a complete invocation`
+        : `${location} has invalid invocation syntax: ${formatIssueValue(issue.usageIssues)}`;
     case "wrongCommand":
-      return `${location} 解析到命令 ${issue.received ?? "<未知>"}，预期 ${issue.expected ?? issue.command}`;
+      return `${location} parsed to command ${issue.received ?? "<unknown>"}, expected ${issue.expected ?? issue.command}`;
     case "wrongOutputMode":
-      return `${location} 解析到输出方式 ${issue.received ?? "<未知>"}，预期 ${issue.expected ?? "<未知>"}`;
+      return `${location} parsed to output mode ${issue.received ?? "<unknown>"}, expected ${issue.expected ?? "<unknown>"}`;
     case "rawInputMismatch":
-      return `${location} 的原始输入无法经规范 argv 往返${issue.mismatchedFields === undefined ? "" : `：${issue.mismatchedFields.join(", ")}`}`;
+      return `${location} raw input cannot round-trip through the canonical argv${issue.mismatchedFields === undefined ? "" : `: ${issue.mismatchedFields.join(", ")}`}`;
     case "inputRejected":
-      return `${location} 未通过输入模式验证：${(issue.evidence ?? []).map(({ message, path }) => `${message}${path === undefined ? "" : ` (${path.join(".")})`}`).join("；")}`;
+      return `${location} failed input schema validation: ${(issue.evidence ?? []).map(({ message, path }) => `${message}${path === undefined ? "" : ` (${path.join(".")})`}`).join("; ")}`;
   }
 }
 
@@ -617,13 +620,13 @@ function formatIssueValue(value: unknown): string {
     try {
       return String(value);
     } catch {
-      return "<无法显示>";
+      return "<unprintable>";
     }
   }
 }
 
 function formatSchemaTarget(target: SchemaDefinitionTarget): string {
   return target.location === "input"
-    ? `命令 ${target.command} 输入`
-    : `命令 ${target.command} 的 ${target.location} 变体 ${target.variant}`;
+    ? `input of command ${target.command}`
+    : `${target.location} variant ${target.variant} of command ${target.command}`;
 }

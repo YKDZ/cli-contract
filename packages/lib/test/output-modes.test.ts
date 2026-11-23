@@ -12,7 +12,7 @@ import {
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
-void test("每个命令按具名方式选择独立结果契约并保留方式身份", async () => {
+void test("each command selects an independent result contract per named mode and keeps mode identity", async () => {
   const define = defineCli();
   const input = z.object({ name: z.string() });
   const selectedHandlers: string[] = [];
@@ -335,7 +335,7 @@ function invalidMultiModeDefinition() {
   };
 }
 
-void test("默认方式只在缺省时选择唯一方式并拒绝显式无效值", async () => {
+void test("the default mode only selects the sole mode when omitted and rejects explicit invalid values", async () => {
   for (const selection of ["implicit", "explicit"] as const) {
     const cli = createSingleModeCli(selection);
     const invocation = parseCliInvocation(cli, []);

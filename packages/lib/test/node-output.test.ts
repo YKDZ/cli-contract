@@ -33,11 +33,11 @@ class ControlledWritable extends EventEmitter {
 }
 
 function asWritable(writable: ControlledWritable): Writable {
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 测试对象仅模拟 Writable 的实际写入接口。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The test object only simulates the actual write interface of Writable.
   return writable as unknown as Writable;
 }
 
-void test("nodeCliOutput 将 stdout 与 stderr 路由到调用方提供的 Writable", async () => {
+void test("nodeCliOutput routes stdout and stderr to caller-provided Writables", async () => {
   const stdout = new ControlledWritable();
   const stderr = new ControlledWritable();
   const write = nodeCliOutput({
@@ -56,7 +56,7 @@ void test("nodeCliOutput 将 stdout 与 stderr 路由到调用方提供的 Writa
   assert.deepEqual(stderr.chunks, ["err"]);
 });
 
-void test("nodeCliOutput 等待 Node Writable 的异步 callback 与背压 drain", async () => {
+void test("nodeCliOutput awaits the Node Writable async callback and backpressure drain", async () => {
   let completeWrite: (() => void) | undefined;
   const stdout = new Writable({
     highWaterMark: 1,
@@ -89,7 +89,7 @@ void test("nodeCliOutput 等待 Node Writable 的异步 callback 与背压 drain
   assert.equal(settled, true);
 });
 
-void test("nodeCliOutput 在 callback 先于 drain 时仍等待 drain，并只结算一次", async () => {
+void test("nodeCliOutput still awaits drain when the callback precedes it, and settles only once", async () => {
   const stdout = new ControlledWritable();
   stdout.writeResult = false;
   const stderr = new ControlledWritable();
@@ -117,7 +117,7 @@ void test("nodeCliOutput 在 callback 先于 drain 时仍等待 drain，并只�
   assert.equal(stdout.listenerCount("error"), 0);
 });
 
-void test("nodeCliOutput 原样拒绝 Writable 的 error、callback error 与同步异常", async () => {
+void test("nodeCliOutput rejects with the Writable error, callback error, or synchronous throw unchanged", async () => {
   const eventError = Object.assign(new Error("event failure"), {
     code: "EPIPE",
   });
@@ -173,7 +173,7 @@ void test("nodeCliOutput 原样拒绝 Writable 的 error、callback error 与同
   assert.equal(throwingWritable.listenerCount("error"), 0);
 });
 
-void test("isNodeBrokenPipe 只识别 Node EPIPE 证据及其 cause 链", () => {
+void test("isNodeBrokenPipe only detects Node EPIPE evidence and its cause chain", () => {
   const pipe = Object.assign(new Error("write EPIPE"), { code: "EPIPE" });
 
   assert.equal(isNodeBrokenPipe(pipe), true);
@@ -182,7 +182,7 @@ void test("isNodeBrokenPipe 只识别 Node EPIPE 证据及其 cause 链", () => 
   assert.equal(isNodeBrokenPipe(new Error("EPIPE")), false);
 });
 
-void test("stream 经 nodeCliOutput 写入失败时保留公共 CliWriteError 并清理 generator", async () => {
+void test("a stream write failure through nodeCliOutput preserves the public CliWriteError and cleans up the generator", async () => {
   let pulled = 0;
   let cleaned = false;
   const sharedInput0 = z.object({});

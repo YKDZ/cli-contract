@@ -62,10 +62,10 @@ function createDefaultingCli(
   });
 }
 
-void test("Zod 默认只由 validation 施加，并同源投影到 grammar、manifest 与 help", async () => {
+void test("Zod defaults are applied only by validation and project from one source into grammar, manifest, and help", async () => {
   const vendorSchema = z.object({ name: z.string().default("Ada") });
   let validationCalls = 0;
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 测试 fixture 改写模式能力，以验证默认值和定义期拒绝。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The test fixture rewrites schema capabilities to verify defaults and definition-time rejection.
   const input = {
     "~standard": {
       ...vendorSchema["~standard"],
@@ -132,7 +132,7 @@ void test("Zod 默认只由 validation 施加，并同源投影到 grammar、man
   assert.deepEqual(received, [{ name: "Ada" }]);
 });
 
-void test("显式 false 和空数组默认值保留在同源帮助详情", async () => {
+void test("explicit false and empty-array defaults survive in the single-source help detail", async () => {
   const sharedInput0 = z.object({
     enabled: z.boolean().optional().default(false),
     tags: z.array(z.string()).optional().default([]),
@@ -212,7 +212,7 @@ void test("显式 false 和空数组默认值保留在同源帮助详情", async
   ]);
 });
 
-void test("输出保证存在而输入可缺席时，缺少 input default 注解在定义期拒绝", () => {
+void test("when output guarantees presence but input may be absent, a missing input default annotation is rejected at definition time", () => {
   const implicitDefault = z
     .object({ name: z.string().optional() })
     .transform(({ name }) => ({ name: name ?? "Ada" }))
@@ -221,7 +221,7 @@ void test("输出保证存在而输入可缺席时，缺少 input default 注解
   assert.throws(
     () =>
       createDefaultingCli(
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 测试 fixture 改写模式能力，以验证默认值和定义期拒绝。
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The test fixture rewrites schema capabilities to verify defaults and definition-time rejection.
         implicitDefault as unknown as ContractSchema<
           RawDefaultInput,
           DefaultedInput
@@ -243,7 +243,7 @@ void test("输出保证存在而输入可缺席时，缺少 input default 注解
   );
 });
 
-void test("默认检查拒绝畸形 output 投影和未映射的 output required 字段", () => {
+void test("the default check rejects malformed output projections and unmapped output required fields", () => {
   const vendorSchema = z.object({ name: z.string().default("Ada") });
   const standard = vendorSchema["~standard"];
   const invalidOutputSchemas = [
@@ -295,7 +295,7 @@ void test("默认检查拒绝畸形 output 投影和未映射的 output required
   ] as const;
 
   for (const { outputSchema, issue } of invalidOutputSchemas) {
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 测试 fixture 改写模式能力，以验证默认值和定义期拒绝。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The test fixture rewrites schema capabilities to verify defaults and definition-time rejection.
     const input = {
       "~standard": {
         ...standard,

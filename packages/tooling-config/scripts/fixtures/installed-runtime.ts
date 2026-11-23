@@ -413,7 +413,7 @@ assert.throws(
     ]);
     assert.match(
       String(Reflect.get(error, "message")),
-      /命令 rawMismatch 的输入字段 count（commands\.rawMismatch\.input\.properties\.count）需要 raw string，实际输入模式属性为 \{"type":"number"\}/,
+      /Input fields of command rawMismatch: count \(commands\.rawMismatch\.input\.properties\.count\) requires raw string, but the input schema property is \{"type":"number"\}/,
     );
     return true;
   },
@@ -788,7 +788,7 @@ assert.throws(
         received: 42,
         member: "all",
         path: ["commands", "probe", "usageConstraints", 0, "all", 1],
-        expected: "present 或 equals 字段事实对象",
+        expected: "a present or equals field fact object",
       },
       {
         code: "unknownUsageConstraintField",
@@ -856,7 +856,7 @@ assert.throws(
         received: "equals",
         member: "all",
         path: ["commands", "probe", "usageConstraints", 5, "all", 0],
-        expected: "present{field} 或 equals{field,value}",
+        expected: "present{field} or equals{field,value}",
       },
     ]);
     return true;
@@ -1213,7 +1213,10 @@ assert.throws(
         reason: "reservedName",
       },
     ]);
-    assert.match(error.message, /模式 Input.*引用.*CLI 拼写可保留/);
+    assert.match(
+      error.message,
+      /schema Input.*references.*CLI spelling may stay unchanged/,
+    );
     return true;
   },
 );

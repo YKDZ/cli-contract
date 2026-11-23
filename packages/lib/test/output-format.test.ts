@@ -108,7 +108,7 @@ function createGreetingCli() {
   });
 }
 
-void test("--output 选择命令方式并隔离重复、未知值和 -- 后的 token", async () => {
+void test("--output selects the command mode and isolates duplicates, unknown values, and tokens after --", async () => {
   const cli = createGreetingCli();
   assert.deepEqual(
     parseCliInvocation(cli, ["--name", "Ada", "--output", "human"]),
@@ -218,7 +218,7 @@ void test("--output 选择命令方式并隔离重复、未知值和 -- 后的 t
   }
 });
 
-void test("帮助列出方式说明和默认值，用法失败保持固定结构化通道", async () => {
+void test("help lists mode descriptions and the default, and usage failures keep the fixed structured channel", async () => {
   const cli = createGreetingCli();
   const helpWrites: string[] = [];
   await executeCli(cli, {
@@ -250,7 +250,7 @@ void test("帮助列出方式说明和默认值，用法失败保持固定结构
   assert.match(writes[0]?.chunk ?? "", /"kind":"usageFailure"/);
 });
 
-void test("文本方式呈现成功与失败，structured 方式保留结构化信封", async () => {
+void test("text modes present success and failure while the structured mode keeps structured envelopes", async () => {
   const cli = createGreetingCli();
   const humanWrites: Array<Readonly<{ destination: string; chunk: string }>> =
     [];
@@ -305,7 +305,7 @@ void test("文本方式呈现成功与失败，structured 方式保留结构化�
   ]);
 });
 
-void test("文本构造器拒绝非法 framing 并保留可显式静默的 completion", async () => {
+void test("text constructors reject invalid framing and keep completion explicitly silenceable", async () => {
   for (const value of ["", "a\rb", "a\nb", "a\0b"]) {
     assert.throws(() => text.line(value), TypeError);
   }

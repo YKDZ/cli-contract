@@ -18,8 +18,10 @@ export type CliInputValidation =
     }>;
 
 /**
- * 使用契约模式验证已解析的原始输入，不调用命令处理器。模式抛出的异常，以及格式错误或异步返回的标准模式结果，
- * 继续遵守正常 CLI 执行时相同的执行错误边界。
+ * Validates parsed raw input with the contract schema without invoking the
+ * command handler. Exceptions thrown by the schema, and malformed or
+ * asynchronously returned standard schema results, keep the same execution
+ * error boundaries as normal CLI execution.
  */
 export function validateCliInput(
   schema: ContractSchema,
@@ -41,7 +43,7 @@ export function validateCliInput(
   return Object.freeze({ kind: "accepted", value: validation.value });
 }
 
-/** 同步验证契约模式，并保留核心缺陷对应的错误边界。 */
+/** Validates a contract schema synchronously, preserving the error boundaries for core defects. */
 export function validateContractSchemaSynchronously(
   schema: ContractSchema,
   value: unknown,

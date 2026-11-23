@@ -57,7 +57,7 @@ function createCompletionCli(onRun: () => Promise<void> | void) {
   });
 }
 
-void test("错配契约的 invocation 以闭合执行问题拒绝", async () => {
+void test("an invocation mismatched with the contract is rejected with a closed execution issue", async () => {
   let runCount = 0;
   const first = createCompletionCli(() => {
     runCount += 1;
@@ -93,12 +93,12 @@ void test("错配契约的 invocation 以闭合执行问题拒绝", async () => 
   assert.deepEqual(writes, []);
 });
 
-void test("伪造的 CLI 契约在读取公开结构前以闭合执行问题拒绝", async () => {
+void test("a forged CLI contract is rejected with a closed execution issue before reading public structure", async () => {
   const cli = createCompletionCli(() => undefined);
   const writes: string[] = [];
 
   await assert.rejects(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意伪造契约或返回值，以验证执行边界。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally forges a contract or return value to verify the execution boundary.
     executeCli({} as typeof cli, {
       invocation: parseCliInvocation(cli, []),
       dependencies: undefined,
@@ -115,7 +115,7 @@ void test("伪造的 CLI 契约在读取公开结构前以闭合执行问题拒�
   assert.deepEqual(writes, []);
 });
 
-void test("输出端口拒绝时保留 destination 与原始 cause 且不重试", async () => {
+void test("an output-seam rejection preserves destination and the original cause without retrying", async () => {
   let runCount = 0;
   let writeCount = 0;
   const cli = createCompletionCli(() => {
@@ -146,7 +146,7 @@ void test("输出端口拒绝时保留 destination 与原始 cause 且不重试"
   assert.equal(writeCount, 1);
 });
 
-void test("handler 抛出的开放异常保持原始身份", async () => {
+void test("open exceptions thrown by the handler keep their original identity", async () => {
   const cause = new TypeError("consumer handler defect", {
     cause: new Error("domain cause"),
   });
@@ -168,7 +168,7 @@ void test("handler 抛出的开放异常保持原始身份", async () => {
   assert.deepEqual(writes, []);
 });
 
-void test("文本呈现器中的非字符串构造错误保持原身份并不写出", async () => {
+void test("a non-string construction error in a text presenter keeps its identity and writes nothing", async () => {
   const privateText = "包装文本不应泄漏";
   let constructionError: unknown;
   const sharedInput1 = z.object({});
@@ -231,7 +231,7 @@ void test("文本呈现器中的非字符串构造错误保持原身份并不写
   assert.deepEqual(writes, []);
 });
 
-void test("文本呈现器抛出的异常保持原始身份", async () => {
+void test("exceptions thrown by a text presenter keep their original identity", async () => {
   const cause = new RangeError("consumer text presenter defect");
   const sharedInput2 = z.object({});
   const cli = defineCli()({
@@ -291,7 +291,7 @@ void test("文本呈现器抛出的异常保持原始身份", async () => {
   );
 });
 
-void test("schema validate 抛出的开放异常保持原始身份", async () => {
+void test("open exceptions thrown by schema validate keep their original identity", async () => {
   const cause = new RangeError("consumer schema defect", {
     cause: new Error("validator cause"),
   });
@@ -350,7 +350,7 @@ void test("schema validate 抛出的开放异常保持原始身份", async () =>
   assert.deepEqual(writes, []);
 });
 
-void test("handler 返回未签发对象时以核心执行问题拒绝且不写出", async () => {
+void test("a handler returning an unissued object is rejected with a core execution issue without writing", async () => {
   const sharedInput3 = z.object({});
   const cli = defineCli()({
     root: "fixture",
@@ -364,7 +364,7 @@ void test("handler 返回未签发对象时以核心执行问题拒绝且不写�
         description: "fixture command",
         input: sharedInput3,
 
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意伪造契约或返回值，以验证执行边界。
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally forges a contract or return value to verify the execution boundary.
 
         outputs: (mode) => ({
           default: "structured",
@@ -407,7 +407,7 @@ void test("handler 返回未签发对象时以核心执行问题拒绝且不写�
   assert.deepEqual(writes, []);
 });
 
-void test("defineCli 一次报告当前声明中的动态无效值", () => {
+void test("defineCli reports dynamic invalid values in the current declaration in one pass", () => {
   const definition = {
     root: "fixture",
     help: {},
@@ -460,7 +460,7 @@ void test("defineCli 一次报告当前声明中的动态无效值", () => {
   };
 
   assert.throws(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意伪造契约或返回值，以验证执行边界。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally forges a contract or return value to verify the execution boundary.
     () => defineCli()(definition as never),
     (error) => {
       assert.ok(error instanceof ContractDefinitionError);
@@ -512,7 +512,7 @@ void test("defineCli 一次报告当前声明中的动态无效值", () => {
   );
 });
 
-void test("defineCli 拒绝缺少 presenter 的 text completion", () => {
+void test("defineCli rejects a text completion missing its presenter", () => {
   const sharedInput4 = z.object({});
   assert.throws(
     () =>
@@ -566,7 +566,7 @@ void test("defineCli 拒绝缺少 presenter 的 text completion", () => {
   );
 });
 
-void test("defineCli 拒绝字段间重复的 canonical long option", () => {
+void test("defineCli rejects a canonical long option duplicated across fields", () => {
   const sharedInput5 = z.object({ first: z.string(), second: z.string() });
   const definition = {
     root: "fixture",
@@ -619,7 +619,7 @@ void test("defineCli 拒绝字段间重复的 canonical long option", () => {
   };
 
   assert.throws(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意伪造契约或返回值，以验证执行边界。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally forges a contract or return value to verify the execution boundary.
     () => defineCli()(definition as never),
     (error) => {
       assert.ok(error instanceof ContractDefinitionError);

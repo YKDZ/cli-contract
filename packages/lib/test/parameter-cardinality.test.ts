@@ -75,7 +75,7 @@ function createArchiveCli() {
   });
 }
 
-void test("repeatable、variadic positional 与 negated flag 形成固定 raw 值", () => {
+void test("repeatable, variadic positional, and negated flag fields form fixed raw values", () => {
   const cli = createArchiveCli();
   const negativeRawInput: CliContractRawInput<typeof cli> = { color: false };
   void negativeRawInput;
@@ -228,7 +228,7 @@ function createDiagnosticCli() {
   });
 }
 
-void test("无歧义解析后按字段声明顺序聚合必填、重复与正负冲突", () => {
+void test("after unambiguous parsing, missing, duplicate, and positive/negative conflicts aggregate in field declaration order", () => {
   const cli = createDiagnosticCli();
   const usage = {
     command: "diagnose",
@@ -306,7 +306,7 @@ void test("无歧义解析后按字段声明顺序聚合必填、重复与正负
   );
 });
 
-void test("cardinality 事实同源投影到 grammar、usage、help 与 manifest", async () => {
+void test("cardinality facts project from one source into grammar, usage, help, and manifest", async () => {
   const cli = createArchiveCli();
   const fields = [
     {
@@ -362,7 +362,7 @@ void test("cardinality 事实同源投影到 grammar、usage、help 与 manifest
   ]);
 });
 
-void test("defineCli 拒绝 variadic 后续 positional 与非法或冲突 negated spelling", () => {
+void test("defineCli rejects positionals after a variadic and invalid or conflicting negated spellings", () => {
   const sharedInput2 = z.object({
     files: z.array(z.string()).optional(),
     after: z.string().optional(),
@@ -430,7 +430,7 @@ void test("defineCli 拒绝 variadic 后续 positional 与非法或冲突 negate
   };
 
   assert.throws(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证定义期拒绝。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally bypasses static restrictions to verify definition-time rejection.
     () => defineCli()(definition as never),
     (error) => {
       assert.ok(error instanceof ContractDefinitionError);

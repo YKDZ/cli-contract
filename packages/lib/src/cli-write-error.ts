@@ -1,8 +1,11 @@
 import type { CliOutputDestination } from "#/cli-execution";
 
 /**
- * 宿主输出端口未能完成写入，保留目的通道和原始 cause；它不是应用失败或正常终止结果。
- * chunk 可能已部分写出，核心不自动重试，也不借失败端口补写诊断；后续处置由宿主决定。
+ * The host output seam failed to complete a write. Preserves the destination
+ * channel and the original cause; it is neither an application failure nor a
+ * normal termination result. The chunk may be partially written. The core does
+ * not retry or write diagnostics through the failed seam; the host decides what
+ * happens next.
  */
 export class CliWriteError extends Error {
   readonly destination: CliOutputDestination;

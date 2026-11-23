@@ -158,7 +158,7 @@ export interface ContractQueryFailure {
 
 export type ContractQueryResult = ContractQueryDocument | ContractQueryFailure;
 
-/** 以根之后的规范命令名路径查询发现事实；不接受内部 id 或 alias。 */
+/** Queries discovery facts by the canonical command-name path below the root; internal ids and aliases are not accepted. */
 export function queryCliContract(
   contract: AnyCliContract,
   path: readonly string[],
@@ -319,7 +319,7 @@ function createSummaryQuery(
   path: readonly string[],
 ): ContractSummaryQuery {
   if (!isExecutableManifest(manifest)) {
-    throw new TypeError("已编译命令清单与运行时命令不一致");
+    throw new TypeError("compiledCommandManifestMismatch");
   }
   const modes = Object.fromEntries(
     Object.entries(manifest.outputs.modes).map(([mode, output]) => [
