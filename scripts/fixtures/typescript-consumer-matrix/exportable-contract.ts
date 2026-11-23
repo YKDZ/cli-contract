@@ -92,37 +92,40 @@ export const inspectCombination = define.command("inspect")({
     },
   ],
 
-  outputs: define.outputModes("inspect", inspectInput, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: {
-          kind: "data",
-          variants: {
-            found: {
-              description: "找到目标",
-              schema: foundPayload,
-              exitCode: 0,
-            },
+  examples: [{ input: { query: "alpha" }, outputMode: "structured" }],
+
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: {
+        kind: "data",
+        variants: {
+          found: {
+            description: "找到目标",
+            schema: foundPayload,
+            exitCode: 0,
           },
         },
-        failures: {
-          unavailable: {
-            description: "目标不可用",
-            schema: unavailablePayload,
-            exitCode: 9,
-          },
+      },
+      failures: {
+        unavailable: {
+          description: "目标不可用",
+          schema: unavailablePayload,
+          exitCode: 9,
         },
-        handler: ({ dependencies, input, outcome }) =>
-          outcome.data.found({
-            count: input.count,
-            endpoint: dependencies.endpoint,
-          }),
-      }),
-    },
-  })),
+      },
+      handler: ({ dependencies, input, outcome }) =>
+        outcome.data.found({
+          count: input.count,
+          endpoint: dependencies.endpoint,
+        }),
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: operation.structured({ description: "结构化输出" }),
+      },
+    };
+  },
 });
 
 export const tailCombination = define.command("tail")({
@@ -153,80 +156,53 @@ export const tailCombination = define.command("tail")({
     },
   ],
 
-  outputs: define.outputModes("tail", tailInput, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.stream({
-        description: "结构化输出",
-        format: "structured",
-        success: {
-          kind: "stream",
-          records: {
-            line: {
-              description: "读取结果",
-              schema: tailLinePayload,
-            },
-          },
+  examples: [
+    { input: { topic: "source" }, outputMode: "text" },
+    { input: { topic: "mirror", follow: true } },
+  ],
+
+  outputs({ stream }) {
+    const streaming = stream({
+      records: {
+        line: {
+          description: "读取结果",
+          schema: tailLinePayload,
         },
-        failures: {
-          unavailable: {
-            description: "来源不可用",
-            schema: tailUnavailablePayload,
-            exitCode: 10,
-          },
+      },
+      failures: {
+        unavailable: {
+          description: "来源不可用",
+          schema: tailUnavailablePayload,
+          exitCode: 10,
         },
-        async *handler({ dependencies, input, outcome }) {
-          yield outcome.record.line({
-            target: input.target,
+      },
+      async *handler({ dependencies, input, outcome }) {
+        yield outcome.record.line({
+          target: input.target,
+          endpoint: dependencies.endpoint,
+        });
+        if (input.follow) {
+          return outcome.failure.unavailable({
+            reason: "offline",
             endpoint: dependencies.endpoint,
           });
-          if (input.follow) {
-            return outcome.failure.unavailable({
-              reason: "offline",
-              endpoint: dependencies.endpoint,
-            });
-          }
-          return outcome.streamSuccess();
-        },
-      }),
-      text: mode.stream({
-        description: "文本输出",
-        format: "text",
-        success: {
-          kind: "stream",
-          text: () => text.silent,
-          records: {
-            line: {
-              description: "读取结果",
-              schema: tailLinePayload,
-              text: (value) => text.line(value.target),
-            },
-          },
-        },
-        failures: {
-          unavailable: {
-            description: "来源不可用",
-            schema: tailUnavailablePayload,
-            exitCode: 10,
-            text: (value) => text.line(value.reason),
-          },
-        },
-        async *handler({ dependencies, input, outcome }) {
-          yield outcome.record.line({
-            target: input.target,
-            endpoint: dependencies.endpoint,
-          });
-          if (input.follow) {
-            return outcome.failure.unavailable({
-              reason: "offline",
-              endpoint: dependencies.endpoint,
-            });
-          }
-          return outcome.streamSuccess();
-        },
-      }),
-    },
-  })),
+        }
+        return outcome.streamSuccess();
+      },
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: streaming.structured({ description: "结构化输出" }),
+        text: streaming.text({
+          description: "文本输出",
+          records: { line: (value) => text.line(value.target) },
+          failures: { unavailable: (value) => text.line(value.reason) },
+          terminal: () => text.silent,
+        }),
+      },
+    };
+  },
 });
 
 type InspectUsageConstraint = UsageConstraint<

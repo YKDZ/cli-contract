@@ -63,25 +63,24 @@ const complete = define.command("complete")({
   fields: {},
   input: emptyInput,
 
-  outputs: define.outputModes("complete", emptyInput, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
-      text: mode.atomic({
-        description: "文本输出",
-        format: "text",
-        success: { kind: "completion", text: () => text.lines(["完成", ""]) },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
-    },
-  })),
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: operation.structured({ description: "结构化输出" }),
+        text: operation.text({
+          description: "文本输出",
+          success: () => text.lines(["完成", ""]),
+          failures: {},
+        }),
+      },
+    };
+  },
 });
 
 const inspect = define.command("inspect")({
@@ -98,63 +97,47 @@ const inspect = define.command("inspect")({
   },
   input: inspectInput,
 
-  outputs: define.outputModes("inspect", inspectInput, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: {
-          kind: "data",
-          variants: {
-            found: {
-              description: "找到目标",
-              schema: payload,
-              exitCode: 0,
-            },
-          },
-        },
-        failures: {
-          unavailable: {
-            description: "服务不可用",
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: {
+        kind: "data",
+        variants: {
+          found: {
+            description: "找到目标",
             schema: payload,
-            exitCode: 9,
+            exitCode: 0,
           },
         },
-        handler: ({ dependencies, outcome }) =>
-          dependencies.available
-            ? outcome.data.found({ message: "public" })
-            : outcome.failure.unavailable({ message: "remote" }),
-      }),
-      text: mode.atomic({
-        description: "文本输出",
-        format: "text",
-        success: {
-          kind: "data",
-          variants: {
-            found: {
-              description: "找到目标",
-              schema: payload,
-              exitCode: 0,
-              text: (value: Payload) => text.lines(["找到", value.message]),
-            },
-          },
+      },
+      failures: {
+        unavailable: {
+          description: "服务不可用",
+          schema: payload,
+          exitCode: 9,
         },
-        failures: {
-          unavailable: {
-            description: "服务不可用",
-            schema: payload,
-            exitCode: 9,
-            text: (value: Payload) => text.lines(["不可用", value.message]),
+      },
+      handler: ({ dependencies, outcome }) =>
+        dependencies.available
+          ? outcome.data.found({ message: "public" })
+          : outcome.failure.unavailable({ message: "remote" }),
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: operation.structured({ description: "结构化输出" }),
+        text: operation.text({
+          description: "文本输出",
+          success: {
+            found: (value: Payload) => text.lines(["找到", value.message]),
           },
-        },
-        handler: ({ dependencies, outcome }) =>
-          dependencies.available
-            ? outcome.data.found({ message: "public" })
-            : outcome.failure.unavailable({ message: "remote" }),
-      }),
-    },
-  })),
+          failures: {
+            unavailable: (value: Payload) =>
+              text.lines(["不可用", value.message]),
+          },
+        }),
+      },
+    };
+  },
 });
 
 const watch = define.command("watch")({
@@ -165,49 +148,33 @@ const watch = define.command("watch")({
   fields: {},
   input: emptyInput,
 
-  outputs: define.outputModes("watch", emptyInput, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.stream({
-        description: "结构化输出",
-        format: "structured",
-        success: {
-          kind: "stream",
-          records: {
-            item: {
-              description: "观察记录",
-              schema: payload,
-            },
-          },
+  outputs({ stream }) {
+    const streaming = stream({
+      records: {
+        item: {
+          description: "观察记录",
+          schema: payload,
         },
-        failures: {},
-        async *handler({ outcome }) {
-          yield outcome.record.item({ message: "第一条" });
-          return outcome.streamSuccess();
-        },
-      }),
-      text: mode.stream({
-        description: "文本输出",
-        format: "text",
-        success: {
-          kind: "stream",
-          records: {
-            item: {
-              description: "观察记录",
-              schema: payload,
-              text: (value: Payload) => text.line(value.message),
-            },
-          },
-          text: () => text.lines(["观察完成", ""]),
-        },
-        failures: {},
-        async *handler({ outcome }) {
-          yield outcome.record.item({ message: "第一条" });
-          return outcome.streamSuccess();
-        },
-      }),
-    },
-  })),
+      },
+      failures: {},
+      async *handler({ outcome }) {
+        yield outcome.record.item({ message: "第一条" });
+        return outcome.streamSuccess();
+      },
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: streaming.structured({ description: "结构化输出" }),
+        text: streaming.text({
+          description: "文本输出",
+          records: { item: (value: Payload) => text.line(value.message) },
+          failures: {},
+          terminal: () => text.lines(["观察完成", ""]),
+        }),
+      },
+    };
+  },
 });
 
 const cli = define({

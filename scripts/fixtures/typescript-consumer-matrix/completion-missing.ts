@@ -16,29 +16,23 @@ defineCli()({
       description: "缺少 completion presenter",
       input: emptyInput,
 
-      outputs: defineCli().outputModes(
-        "missingCompletion",
-        emptyInput,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "text",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
-            text: mode.atomic({
+            structured: operation.structured({ description: "结构化输出" }),
+            text: operation.text({
               description: "文本输出",
-              format: "text",
-              success: { kind: "completion" },
               failures: {},
-              handler: ({ outcome }) => outcome.completion(),
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -62,35 +56,26 @@ defineCli()({
       },
       input: textInput,
 
-      outputs: defineCli().outputModes(
-        "missingCompletionWithField",
-        textInput,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ input, outcome }) => {
+            input.name satisfies string | undefined;
+            return outcome.completion();
+          },
+        });
+        return {
           default: "text",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ input, outcome }) => {
-                input.name satisfies string | undefined;
-                return outcome.completion();
-              },
-            }),
-            text: mode.atomic({
+            structured: operation.structured({ description: "结构化输出" }),
+            text: operation.text({
               description: "文本输出",
-              format: "text",
-              success: { kind: "completion" },
               failures: {},
-              handler: ({ input, outcome }) => {
-                input.name satisfies string | undefined;
-                return outcome.completion();
-              },
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });

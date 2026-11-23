@@ -191,6 +191,68 @@ tailFailure.data.endpoint satisfies Dependencies["endpoint"];
 // @ts-expect-error stream failure 名在声明再消费后仍保持闭集。
 tailFailure.variant satisfies "missing";
 
+// Re-consumed mode tables stay closed with literal defaults on the exported leaf
+// definition and on the formal root/leaf grammar and manifest, via public exports.
+type TailDefinitionModeKeys = keyof typeof tailCombination.tail.outputs.modes;
+const tailDefinitionMode: TailDefinitionModeKeys = "text";
+// @ts-expect-error The exported tail definition keeps a closed mode key set.
+const invalidTailDefinitionMode: TailDefinitionModeKeys = "missing";
+type InspectDefinitionModeKeys =
+  keyof typeof inspectCombination.inspect.outputs.modes;
+const inspectDefinitionMode: InspectDefinitionModeKeys = "structured";
+// @ts-expect-error The exported inspect definition keeps a closed mode key set.
+const invalidInspectDefinitionMode: InspectDefinitionModeKeys = "text";
+const tailDefinitionDefault: typeof tailCombination.tail.outputs.default =
+  "structured";
+// @ts-expect-error The exported tail definition keeps a literal default mode.
+const invalidTailDefinitionDefault: typeof tailCombination.tail.outputs.default =
+  "text";
+const inspectDefinitionDefault: typeof inspectCombination.inspect.outputs.default =
+  "structured";
+// @ts-expect-error The exported inspect definition keeps a literal default mode.
+const invalidInspectDefinitionDefault: typeof inspectCombination.inspect.outputs.default =
+  "text";
+
+type TailManifestModeKeys =
+  keyof typeof cli.manifest.commands.tail.outputs.modes;
+const tailManifestMode: TailManifestModeKeys = "text";
+// @ts-expect-error The formal manifest tail mode keys stay closed.
+const invalidTailManifestMode: TailManifestModeKeys = "missing";
+const tailManifestDefault: typeof cli.manifest.commands.tail.outputs.default =
+  "structured";
+// @ts-expect-error The formal manifest tail default stays a literal.
+const invalidTailManifestDefault: typeof cli.manifest.commands.tail.outputs.default =
+  "text";
+type InspectManifestModeKeys =
+  keyof typeof cli.manifest.commands.inspect.outputs.modes;
+const inspectManifestMode: InspectManifestModeKeys = "structured";
+// @ts-expect-error The formal manifest inspect mode keys stay closed.
+const invalidInspectManifestMode: InspectManifestModeKeys = "text";
+
+type TailGrammarNode = Extract<
+  (typeof cli.grammar.nodes)[number],
+  { readonly id: "tail" }
+>;
+type TailGrammarModeKeys = keyof TailGrammarNode["outputs"]["modes"];
+const tailGrammarMode: TailGrammarModeKeys = "text";
+// @ts-expect-error The formal grammar tail mode keys stay closed.
+const invalidTailGrammarMode: TailGrammarModeKeys = "missing";
+const tailGrammarDefault: TailGrammarNode["outputs"]["default"] = "structured";
+// @ts-expect-error The formal grammar tail default stays a literal.
+const invalidTailGrammarDefault: TailGrammarNode["outputs"]["default"] = "text";
+
+// Example outputMode literals survive on the exported definition. The manifest
+// example outputMode is still widened to string (tracked 02-types dependency).
+type InspectExampleMode =
+  (typeof inspectCombination.inspect.examples)[0]["outputMode"];
+const inspectExampleMode: InspectExampleMode = "structured";
+// @ts-expect-error The exported inspect example keeps its literal output mode.
+const invalidInspectExampleMode: InspectExampleMode = "text";
+type TailExampleMode = (typeof tailCombination.tail.examples)[0]["outputMode"];
+const tailExampleMode: TailExampleMode = "text";
+// @ts-expect-error The exported tail example keeps its literal output mode.
+const invalidTailExampleMode: TailExampleMode = "structured";
+
 // @ts-expect-error 普通对象不能伪造已编译契约品牌。
 const forgedContract: typeof cli = {
   grammar: cli.grammar,
@@ -228,3 +290,25 @@ void tailRecord;
 void tailSuccess;
 void tailFailure;
 void forgedContract;
+void tailDefinitionMode;
+void invalidTailDefinitionMode;
+void inspectDefinitionMode;
+void invalidInspectDefinitionMode;
+void tailDefinitionDefault;
+void invalidTailDefinitionDefault;
+void inspectDefinitionDefault;
+void invalidInspectDefinitionDefault;
+void tailManifestMode;
+void invalidTailManifestMode;
+void tailManifestDefault;
+void invalidTailManifestDefault;
+void inspectManifestMode;
+void invalidInspectManifestMode;
+void tailGrammarMode;
+void invalidTailGrammarMode;
+void tailGrammarDefault;
+void invalidTailGrammarDefault;
+void inspectExampleMode;
+void invalidInspectExampleMode;
+void tailExampleMode;
+void invalidTailExampleMode;

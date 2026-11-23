@@ -39,17 +39,6 @@ const fields = {
   paths: { kind: "variadicPositional", description: "路径" },
 } as const;
 const define = defineCli();
-const outputs = define.outputModes("inspect", input, (mode) => ({
-  modes: {
-    structured: mode.atomic({
-      description: "结构化输出",
-      format: "structured",
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
-    }),
-  },
-}));
 
 const root = define({
   root: "inspect",
@@ -62,7 +51,18 @@ const root = define({
       description: "根命令示例",
       fields,
       input,
-      outputs,
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
+          modes: {
+            structured: operation.structured({ description: "结构化输出" }),
+          },
+        };
+      },
       examples: [
         {
           input: {
@@ -97,7 +97,18 @@ const leafCommand = define.command("inspect")({
   description: "叶命令示例",
   fields,
   input,
-  outputs,
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      modes: {
+        structured: operation.structured({ description: "结构化输出" }),
+      },
+    };
+  },
   examples: [
     {
       input: {
@@ -132,7 +143,18 @@ const invalidEnumCommand = define.command("inspect")({
   description: "枚举负例",
   fields,
   input,
-  outputs,
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      modes: {
+        structured: operation.structured({ description: "结构化输出" }),
+      },
+    };
+  },
   // @ts-expect-error 输入模式的枚举约束也适用于原始示例。
   examples: [
     {
@@ -155,7 +177,18 @@ const invalidModeCommand = define.command("inspect")({
   description: "方式负例",
   fields,
   input,
-  outputs,
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      modes: {
+        structured: operation.structured({ description: "结构化输出" }),
+      },
+    };
+  },
   // @ts-expect-error 固定输出方式必须属于命令的方式闭集。
   examples: [
     {
@@ -179,7 +212,18 @@ const missingInputCommand = define.command("inspect")({
   description: "必填负例",
   fields,
   input,
-  outputs,
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      modes: {
+        structured: operation.structured({ description: "结构化输出" }),
+      },
+    };
+  },
   // @ts-expect-error 输入模式必填字段不能从示例中省略。
   examples: [
     {
@@ -203,7 +247,6 @@ const inputWithExtra = {
   paths: ["src"] as [string, ...string[]],
   extra: "not declared",
 };
-// @ts-expect-error 提取变量中的额外字段仍受输入闭集检查。
 const extraInputCommand = define.command("inspect")({
   kind: "command",
   parent: "workspace",
@@ -211,7 +254,19 @@ const extraInputCommand = define.command("inspect")({
   description: "额外字段负例",
   fields,
   input,
-  outputs,
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      modes: {
+        structured: operation.structured({ description: "结构化输出" }),
+      },
+    };
+  },
+  // @ts-expect-error 提取变量中的额外字段仍受输入闭集检查。
   examples: [{ input: inputWithExtra }],
 });
 
@@ -222,7 +277,18 @@ const misspelledMemberCommand = define.command("inspect")({
   description: "拼错成员负例",
   fields,
   input,
-  outputs,
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      modes: {
+        structured: operation.structured({ description: "结构化输出" }),
+      },
+    };
+  },
   examples: [
     {
       input: {
@@ -240,7 +306,6 @@ const misspelledMemberCommand = define.command("inspect")({
 });
 
 const readonlyTags = ["read-only"] as const;
-// @ts-expect-error 只读数组不能满足 schema 的可变数组 Input。
 const readonlyArrayCommand = define.command("inspect")({
   kind: "command",
   parent: "workspace",
@@ -248,13 +313,25 @@ const readonlyArrayCommand = define.command("inspect")({
   description: "只读数组负例",
   fields,
   input,
-  outputs,
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      modes: {
+        structured: operation.structured({ description: "结构化输出" }),
+      },
+    };
+  },
   examples: [
     {
       input: {
         channel: "fast",
         count: "3",
         enabled: true,
+        // @ts-expect-error 只读数组不能满足 schema 的可变数组 Input。
         tags: readonlyTags,
         target: "build",
         paths: ["src"],
@@ -263,7 +340,6 @@ const readonlyArrayCommand = define.command("inspect")({
   ],
 });
 
-// @ts-expect-error repeatable 字段必须包含至少一个原始值。
 const emptyRepeatableCommand = define.command("inspect")({
   kind: "command",
   parent: "workspace",
@@ -271,13 +347,25 @@ const emptyRepeatableCommand = define.command("inspect")({
   description: "空重复数组负例",
   fields,
   input,
-  outputs,
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      modes: {
+        structured: operation.structured({ description: "结构化输出" }),
+      },
+    };
+  },
   examples: [
     {
       input: {
         channel: "fast",
         count: "3",
         enabled: true,
+        // @ts-expect-error repeatable 字段必须包含至少一个原始值。
         tags: [],
         target: "build",
         paths: ["src"],
@@ -301,7 +389,18 @@ const unnegatedFalseFlagCommand = define.command("inspect")({
   description: "无否定flag负例",
   fields: unnegatedFlagFields,
   input,
-  outputs,
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      modes: {
+        structured: operation.structured({ description: "结构化输出" }),
+      },
+    };
+  },
   // @ts-expect-error 无否定拼写的flag不能使用false原始值。
   examples: [
     {
