@@ -381,49 +381,49 @@ void test("rejects a presenter embedded in the original execution variant", () =
   );
 });
 
-void test("still rejects a mode reused from another command construction", () => {
+void test("reusing a mode or deriving one from a previous execution preserves its original binding", () => {
   const firstOutputs = ({
     atomic,
   }: OutputExecutionFactory<"probe", undefined, typeof input>) => {
-    const mode = atomic({
+    const completion = atomic({
       success: { kind: "completion" },
       failures: {},
       handler: ({ outcome }) => outcome.completion(),
-    }).structured({ description: "Result" });
+    });
+    derive = () =>
+      completion.structured({
+        description: "Derived from the previous execution",
+      });
+    const mode = completion.structured({ description: "Initial mode" });
     stale = mode;
     return { modes: { only: mode } };
   };
   let stale: ReturnType<typeof firstOutputs>["modes"]["only"];
+  let derive: () => typeof stale;
   defineCli()({
     ...cli,
-    commands: {
-      probe: {
-        ...probe,
-        outputs: firstOutputs,
-      },
-    },
+    commands: { probe: { ...probe, outputs: firstOutputs } },
   });
-  assert.throws(
-    () =>
-      defineCli()({
-        ...cli,
-        commands: {
-          probe: {
-            ...probe,
-            outputs: () => ({ modes: { only: stale } }),
+  for (const reuse of [() => stale, () => derive()]) {
+    assert.throws(
+      () =>
+        defineCli()({
+          ...cli,
+          commands: {
+            probe: { ...probe, outputs: () => ({ modes: { only: reuse() } }) },
           },
-        },
-      }),
-    (error: unknown) => {
-      assert.ok(error instanceof ContractDefinitionError);
-      assert.ok(
-        error.issues.some(
-          (issue) =>
-            issue.code === "invalidOutputMode" &&
-            issue.reason === "mismatchedBinding",
-        ),
-      );
-      return true;
-    },
-  );
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof ContractDefinitionError);
+        assert.ok(
+          error.issues.some(
+            (issue) =>
+              issue.code === "invalidOutputMode" &&
+              issue.reason === "mismatchedBinding",
+          ),
+        );
+        return true;
+      },
+    );
+  }
 });

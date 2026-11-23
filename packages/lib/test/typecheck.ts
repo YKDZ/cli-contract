@@ -1141,7 +1141,7 @@ const cli = defineCli()({
   },
 });
 
-function checkModeDefaults() {
+function checkModeBindings() {
   const define = defineCli();
   const run = define.command("run");
   const node = {
@@ -1159,10 +1159,19 @@ function checkModeDefaults() {
       failures: {},
       handler: ({ outcome }) => outcome.completion(),
     });
-  run({
+  const valid = run({
     ...node,
     outputs: (factory) => ({
       modes: { json: execution(factory).structured({ description: "JSON" }) },
+    }),
+  });
+  define.command("other")({
+    ...node,
+    // @ts-expect-error A mode bound to run cannot be selected by another command.
+    outputs: () => ({
+      modes: {
+        json: valid.run.outputs.modes.json,
+      },
     }),
   });
   run({
@@ -1191,7 +1200,7 @@ function checkModeDefaults() {
     },
   });
 }
-void checkModeDefaults;
+void checkModeBindings;
 
 const invalidHelpSupplement: RootCommandDefinition<"invalidSupplement"> = {
   kind: "rootCommand",
