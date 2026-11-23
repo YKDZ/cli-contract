@@ -16,40 +16,34 @@ defineCli()({
       description: "非法 record 身份",
       input: sharedInput0,
 
-      outputs: defineCli().outputModes(
-        "invalidRecordName",
-        sharedInput0,
-        (mode) => ({
+      outputs({ stream }) {
+        const operation = stream({
+          // @ts-expect-error 流记录名称必须使用 lowerCamelCase。
+          records: {
+            bad_name: {
+              description: "非法记录",
+              schema: payload,
+            },
+          },
+          failures: {
+            unavailable: {
+              description: "不可用",
+              schema: payload,
+              exitCode: 9,
+            },
+          },
+          async *handler({ outcome }) {
+            yield outcome.record.bad_name({ message: "one" });
+            return outcome.streamSuccess();
+          },
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.stream({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "stream",
-                // @ts-expect-error 流记录名称必须使用 lowerCamelCase。
-                records: {
-                  bad_name: {
-                    description: "非法记录",
-                    schema: payload,
-                  },
-                },
-              },
-              failures: {
-                unavailable: {
-                  description: "不可用",
-                  schema: payload,
-                  exitCode: 9,
-                },
-              },
-              async *handler({ outcome }) {
-                yield outcome.record.bad_name({ message: "one" });
-                return outcome.streamSuccess();
-              },
-            }),
+            structured: operation.structured({ description: "结构化输出" }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });

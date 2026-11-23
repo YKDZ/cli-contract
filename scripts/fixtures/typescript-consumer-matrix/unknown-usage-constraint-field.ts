@@ -41,18 +41,19 @@ define({
         },
       ],
 
-      outputs: define.outputModes("deploy", sharedInput0, (mode) => ({
-        default: "structured",
-        modes: {
-          structured: mode.atomic({
-            description: "结构化输出",
-            format: "structured",
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
-          }),
-        },
-      })),
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
+          default: "structured",
+          modes: {
+            structured: operation.structured({ description: "结构化输出" }),
+          },
+        };
+      },
     }),
   },
 });
@@ -80,18 +81,19 @@ defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes("rootDeploy", sharedInput1, (mode) => ({
-        default: "structured",
-        modes: {
-          structured: mode.atomic({
-            description: "结构化输出",
-            format: "structured",
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
-          }),
-        },
-      })),
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
+          default: "structured",
+          modes: {
+            structured: operation.structured({ description: "结构化输出" }),
+          },
+        };
+      },
     },
   },
 });
@@ -127,18 +129,19 @@ defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes("mixedRest", sharedInput2, (mode) => ({
-        default: "structured",
-        modes: {
-          structured: mode.atomic({
-            description: "结构化输出",
-            format: "structured",
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
-          }),
-        },
-      })),
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
+          default: "structured",
+          modes: {
+            structured: operation.structured({ description: "结构化输出" }),
+          },
+        };
+      },
     },
   },
 });
@@ -166,22 +169,19 @@ defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes(
-        "suffixMissingEffect",
-        sharedInput3,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: operation.structured({ description: "结构化输出" }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });

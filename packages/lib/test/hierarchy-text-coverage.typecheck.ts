@@ -257,9 +257,9 @@ defineMissingData({
               failures: {},
               handler: ({ outcome }) => outcome.data.found({ message: "结果" }),
             })
+            // @ts-expect-error [hierarchy-text-coverage] The text mode must cover every data variant.
             .text({
               description: "文本输出",
-              // @ts-expect-error [hierarchy-text-coverage] The text mode must cover every data variant.
               success: {},
               failures: {},
             }),
@@ -303,10 +303,10 @@ defineMissingFailure({
               },
               handler: ({ outcome }) => outcome.completion(),
             })
+            // @ts-expect-error [hierarchy-text-coverage] The text mode must cover every failure variant.
             .text({
               description: "文本输出",
               success: () => text.silent,
-              // @ts-expect-error [hierarchy-text-coverage] The text mode must cover every failure variant.
               failures: {},
             }),
         },
@@ -356,9 +356,9 @@ defineMissingRecord({
                 return outcome.streamSuccess();
               },
             })
+            // @ts-expect-error [hierarchy-text-coverage] The text mode must cover every record variant.
             .text({
               description: "文本输出",
-              // @ts-expect-error [hierarchy-text-coverage] The text mode must cover every record variant.
               records: {},
               failures: {},
               terminal: () => text.silent,

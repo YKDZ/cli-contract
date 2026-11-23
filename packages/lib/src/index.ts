@@ -71,6 +71,18 @@ export {
   type StreamExecutionFactory,
   type AtomicExecution,
   type StreamExecution,
+  type AtomicExecutionDefinition,
+  type StreamExecutionDefinition,
+  type AtomicTextOptions,
+  type StreamTextOptions,
+  type DeclaredAtomicVariant,
+  type DeclaredStreamRecord,
+  type DeclaredVariants,
+  type DeclaredRecords,
+  type DeclaredAtomicSuccess,
+  type CompletionHandlerContext,
+  type DataHandlerContext,
+  type OutputModeGrammar,
   type OutputModeManifest,
   type OutputModesDefinition,
   type OutputModesGrammar,
@@ -123,6 +135,7 @@ export {
 export type {
   AtomicTextPresenter,
   CompletionTextPresenter,
+  StreamTextPresenter,
 } from "#/outcome-fact";
 export {
   queryCliContract,

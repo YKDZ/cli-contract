@@ -27,22 +27,23 @@ const contract = define({
       fields: { id: { kind: "positional", description: "对象标识。" } },
       input,
       examples: [{ input: { id: "alice" } }],
-      outputs: define.outputModes("inspect", input, (mode) => ({
-        default: "json",
-        modes: {
-          json: mode.atomic({
-            description: "结构化对象。",
-            format: "structured",
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ dependencies, outcome }) => {
-              const directory: string = dependencies.directory;
-              void directory;
-              return outcome.completion();
-            },
-          }),
-        },
-      })),
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ dependencies, outcome }) => {
+            const directory: string = dependencies.directory;
+            void directory;
+            return outcome.completion();
+          },
+        });
+        return {
+          default: "json",
+          modes: {
+            json: operation.structured({ description: "结构化对象。" }),
+          },
+        };
+      },
     },
   },
 });
