@@ -88,6 +88,22 @@ stream.text({
   terminal,
 });
 
+// A stream record presenter returns a line or fragment, never silence or a line group.
+stream.text({
+  description: "Human",
+  // @ts-expect-error [output-authoring-diagnostics] root record event cannot forge silent.
+  records: { event: () => text.silent },
+  failures: { denied: say },
+  terminal,
+});
+stream.text({
+  description: "Human",
+  // @ts-expect-error [output-authoring-diagnostics] root record event cannot return a line group.
+  records: { event: () => text.lines(["One line", "Two lines"]) },
+  failures: { denied: say },
+  terminal,
+});
+
 // Two text modes share one execution; each table that omits the shared failure
 // must report at its own .text call.
 const sharedFailureMissing = { ...valid, failures: {} };

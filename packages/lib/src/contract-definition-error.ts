@@ -20,6 +20,10 @@ export type ContractDefinitionIssue =
       readonly path: readonly string[];
     }>
   | Readonly<{
+      readonly code: "invalidPresenterTable";
+      readonly path: readonly string[];
+    }>
+  | Readonly<{
       readonly code: "missingHelpFactTemplate";
       readonly command: string;
       readonly slot:
@@ -145,6 +149,14 @@ export type ContractDefinitionIssue =
       readonly received: number | null;
       readonly minimum: 0 | 1;
       readonly maximum: 255;
+    }>
+  | Readonly<{
+      readonly code: "invalidResultDefinition";
+      readonly command: string;
+      readonly mode: string;
+      readonly location: "data" | "failure" | "record";
+      readonly variant?: string;
+      readonly reason: "missingTable" | "invalidEntry";
     }>
   | Readonly<{
       readonly code: "missingStreamRecord";
@@ -463,6 +475,8 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
   switch (issue.code) {
     case "unknownDefinitionProperty":
       return `CLI declaration contains unknown property ${issue.path.join(".")}`;
+    case "invalidPresenterTable":
+      return `The presenter table at ${issue.path.join(".")} must be a plain object`;
     case "missingHelpFactTemplate":
       return `Help facts of command ${issue.command} are missing the ${issue.slot} template`;
     case "invalidHelpFactTemplate":
@@ -499,6 +513,10 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
           : `The description of ${issue.location} variant ${issue.variant} in command ${issue.command} must be valid single-line text`;
     case "invalidVariantExitCode":
       return `The exit code of ${issue.location} variant ${issue.variant} in command ${issue.command} is invalid`;
+    case "invalidResultDefinition":
+      return issue.reason === "missingTable"
+        ? `The ${issue.location} result table of output mode ${issue.mode} in command ${issue.command} must be a plain object`
+        : `The ${issue.location} variant ${issue.variant} of output mode ${issue.mode} in command ${issue.command} must be a plain object`;
     case "missingStreamRecord":
       return `The stream of command ${issue.command} must declare at least one record`;
     case "invalidCapability":

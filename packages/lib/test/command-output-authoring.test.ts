@@ -571,3 +571,59 @@ void test("a shared stream keeps the result contract declared before its first d
     assert.equal(writes.at(-1)?.destination, "stderr");
   }
 });
+
+void test("a shared execution solidifies the result snapshot exposed by structured", async () => {
+  let snapshot: unknown;
+  const cli = defineCli()({
+    root: "probe",
+    help: englishHelpCapability(),
+    usageFailureExitCode: 64,
+    commands: {
+      probe: {
+        kind: "rootCommand",
+        name: "probe",
+        description: "Read a user profile",
+        input: z.object({}),
+        outputs: ({ atomic }) => {
+          const execution = atomic({
+            success: {
+              kind: "data",
+              variants: {
+                found: {
+                  description: "The matching user profile",
+                  schema: userProfileSchema,
+                  exitCode: 0,
+                },
+              },
+            },
+            failures: {},
+            handler: ({ outcome }) =>
+              outcome.data.found({ id: "ada", name: "Ada Lovelace" }),
+          });
+          const brief = execution.text({
+            description: "Show the user's name",
+            success: { found: (user) => text.line(user.name) },
+            failures: {},
+          });
+          const json = execution.structured({
+            description: "Return the user profile as JSON",
+          });
+          snapshot = json.success.variants.found;
+          Reflect.set(json.success.variants.found, "exitCode", 9);
+          return { default: "brief", modes: { brief, json } };
+        },
+      },
+    },
+  });
+  assert.equal(Object.isFrozen(snapshot), true);
+  assert.equal(Object.isFrozen(userProfileSchema), false);
+  for (const mode of ["brief", "json"] as const) {
+    const termination = await executeCli(cli, {
+      invocation: parseCliInvocation(cli, ["--output", mode]),
+      dependencies: undefined,
+      write: () => undefined,
+    });
+    assert.equal(termination.kind, "applicationResult");
+    assert.equal(termination.exitCode, 0);
+  }
+});

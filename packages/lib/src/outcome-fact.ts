@@ -320,18 +320,17 @@ export type DataVariantDefinition<
     ? Readonly<{ readonly text?: never }>
     : Readonly<{ readonly text?: AtomicTextPresenter<Output> }>);
 
-export type DataVariantDefinitions<_TextEnabled extends boolean = boolean> =
-  Readonly<
-    Record<
-      string,
-      Readonly<{
-        readonly description: string;
-        readonly schema: ContractSchema;
-        readonly exitCode: number;
-        readonly text?: unknown;
-      }>
-    >
-  >;
+export type DataVariantDefinitions = Readonly<
+  Record<
+    string,
+    Readonly<{
+      readonly description: string;
+      readonly schema: ContractSchema;
+      readonly exitCode: number;
+      readonly text?: unknown;
+    }>
+  >
+>;
 
 /**
  * One named stream record. Outcome constructors accept the schema Input; the text
@@ -351,17 +350,16 @@ export type StreamRecordDefinition<
       ? Readonly<{ readonly text?: never }>
       : Readonly<{ readonly text?: StreamTextPresenter<Output> }>);
 
-export type StreamRecordDefinitions<_TextEnabled extends boolean = boolean> =
-  Readonly<
-    Record<
-      string,
-      Readonly<{
-        readonly description: string;
-        readonly schema: ContractSchema;
-        readonly text?: unknown;
-      }>
-    >
-  >;
+export type StreamRecordDefinitions = Readonly<
+  Record<
+    string,
+    Readonly<{
+      readonly description: string;
+      readonly schema: ContractSchema;
+      readonly text?: unknown;
+    }>
+  >
+>;
 
 /**
  * One named failure variant. Outcome constructors accept the schema Input; the text
@@ -381,18 +379,17 @@ export type FailureVariantDefinition<
     ? Readonly<{ readonly text?: never }>
     : Readonly<{ readonly text?: AtomicTextPresenter<Output> }>);
 
-export type FailureVariantDefinitions<_TextEnabled extends boolean = boolean> =
-  Readonly<
-    Record<
-      string,
-      Readonly<{
-        readonly description: string;
-        readonly schema: ContractSchema;
-        readonly exitCode: number;
-        readonly text?: unknown;
-      }>
-    >
-  >;
+export type FailureVariantDefinitions = Readonly<
+  Record<
+    string,
+    Readonly<{
+      readonly description: string;
+      readonly schema: ContractSchema;
+      readonly exitCode: number;
+      readonly text?: unknown;
+    }>
+  >
+>;
 
 export interface CompletionFact<Command extends string = string> {
   readonly kind: "completion";

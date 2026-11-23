@@ -17,11 +17,9 @@ import {
   type ContractSchemaOutput,
   type EmptyCliInput,
   type FieldDefinition,
-  type DataVariantDefinition,
   type InvalidFieldChoiceIssue,
   type InvalidSchemaQueryIssue,
   type RootCommandDefinition,
-  type StreamRecordDefinition,
   type ShortOptionAlias,
   type TextLines,
   type TextValueErrorIssue,
@@ -1464,49 +1462,9 @@ function verifyTypeErrors() {
   // @ts-expect-error The version capability requires an explicit controlled single-line value.
   versionCapability({ value: "1.2.3" });
 
-  const silentStreamRecord: StreamRecordDefinition<
-    Readonly<{ readonly message: string }>,
-    true
-  > = {
-    description: "Greeting",
-    schema: greetingData,
-    // @ts-expect-error A stream record presenter cannot forge silent.
-    text: () => text.silent,
-  };
-  void silentStreamRecord;
-
-  const textLinesStreamRecord: StreamRecordDefinition<
-    Readonly<{ readonly message: string }>,
-    true
-  > = {
-    description: "Greeting",
-    schema: greetingData,
-    // @ts-expect-error A stream record presenter cannot return a line group.
-    text: () => text.lines(["One line", "Two lines"]),
-  };
-  void textLinesStreamRecord;
-
   // @ts-expect-error A line group contains at least one entry at the type level.
   text.lines([]);
 
-  // @ts-expect-error A text data variant must declare its presenter in place.
-  const missingDataText: DataVariantDefinition<
-    Readonly<{ readonly message: string }>,
-    true
-  > = { description: "Greeting", schema: greetingData, exitCode: 0 };
-  void missingDataText;
-
-  const structuredData: DataVariantDefinition<
-    Readonly<{ readonly message: string }>,
-    false
-  > = {
-    description: "Greeting",
-    schema: greetingData,
-    exitCode: 0,
-    // @ts-expect-error A structured-only variant cannot declare a presenter.
-    text: () => text.line("Greeting"),
-  };
-  void structuredData;
   const invalidUsageConstraint: UsageConstraint<
     UsageFixtureFields,
     UsageFixtureInput

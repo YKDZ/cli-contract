@@ -581,6 +581,388 @@ void test("rejects an extra text key set to undefined on a structured execution 
   );
 });
 
+void test("rejects a data success without a variants table", () => {
+  assert.throws(
+    () =>
+      defineCli()({
+        ...cli,
+        commands: {
+          probe: {
+            ...probe,
+            outputs: ({ atomic }) => {
+              const success = {
+                kind: "data" as const,
+                variants: {
+                  found: { description: "Result", schema: input, exitCode: 0 },
+                },
+              };
+              Reflect.deleteProperty(success, "variants");
+              return {
+                modes: {
+                  only: atomic({
+                    success,
+                    failures: {},
+                    handler: ({ outcome }) => outcome.data.found({}),
+                  }).structured({ description: "Result" }),
+                },
+              };
+            },
+          },
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidResultDefinition",
+          command: "probe",
+          mode: "only",
+          location: "data",
+          reason: "missingTable",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("rejects a stream without a records table", () => {
+  assert.throws(
+    () =>
+      defineCli()({
+        ...cli,
+        commands: {
+          probe: {
+            ...probe,
+            outputs: ({ stream }) => {
+              const declaration = {
+                records: {
+                  entry: { description: "Record", schema: input },
+                },
+                failures: {},
+              };
+              Reflect.deleteProperty(declaration, "records");
+              return {
+                modes: {
+                  only: stream({
+                    ...declaration,
+                    handler: async function* ({ outcome }) {
+                      yield outcome.record.entry({});
+                      return outcome.streamSuccess();
+                    },
+                  }).structured({
+                    description: "Result",
+                  }),
+                },
+              };
+            },
+          },
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidResultDefinition",
+          command: "probe",
+          mode: "only",
+          location: "record",
+          reason: "missingTable",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("rejects a null data variant entry", () => {
+  assert.throws(
+    () =>
+      defineCli()({
+        ...cli,
+        commands: {
+          probe: {
+            ...probe,
+            outputs: ({ atomic }) => {
+              const variants = {
+                ok: { description: "Result", schema: input, exitCode: 0 },
+              };
+              Reflect.set(variants, "ok", null);
+              return {
+                modes: {
+                  only: atomic({
+                    success: { kind: "data", variants },
+                    failures: {},
+                    handler: ({ outcome }) => outcome.data.ok({}),
+                  }).structured({ description: "Result" }),
+                },
+              };
+            },
+          },
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidResultDefinition",
+          command: "probe",
+          mode: "only",
+          location: "data",
+          variant: "ok",
+          reason: "invalidEntry",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("rejects a null failure entry", () => {
+  assert.throws(
+    () =>
+      defineCli()({
+        ...cli,
+        commands: {
+          probe: {
+            ...probe,
+            outputs: ({ atomic }) => {
+              const failures = {
+                denied: { description: "Denied", schema: input, exitCode: 2 },
+              };
+              Reflect.set(failures, "denied", null);
+              return {
+                modes: {
+                  only: atomic({
+                    success: { kind: "completion" },
+                    failures,
+                    handler: ({ outcome }) => outcome.completion(),
+                  }).structured({ description: "Result" }),
+                },
+              };
+            },
+          },
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidResultDefinition",
+          command: "probe",
+          mode: "only",
+          location: "failure",
+          variant: "denied",
+          reason: "invalidEntry",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("rejects a null stream record entry", () => {
+  assert.throws(
+    () =>
+      defineCli()({
+        ...cli,
+        commands: {
+          probe: {
+            ...probe,
+            outputs: ({ stream }) => {
+              const records = {
+                entry: { description: "Record", schema: input },
+              };
+              Reflect.set(records, "entry", null);
+              return {
+                modes: {
+                  only: stream({
+                    records,
+                    failures: {},
+                    handler: async function* ({ outcome }) {
+                      yield outcome.record.entry({});
+                      return outcome.streamSuccess();
+                    },
+                  }).structured({ description: "Result" }),
+                },
+              };
+            },
+          },
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidResultDefinition",
+          command: "probe",
+          mode: "only",
+          location: "record",
+          variant: "entry",
+          reason: "invalidEntry",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("rejects an explicit non-object failures presenter table", () => {
+  assert.throws(
+    () =>
+      defineCli()({
+        ...cli,
+        commands: {
+          probe: {
+            ...probe,
+            outputs: ({ atomic }) => {
+              const options = {
+                description: "Result",
+                success: () => text.silent,
+                failures: {},
+              };
+              Reflect.set(options, "failures", 42);
+              return {
+                modes: {
+                  only: atomic({
+                    success: { kind: "completion" },
+                    failures: {},
+                    handler: ({ outcome }) => outcome.completion(),
+                  }).text(options),
+                },
+              };
+            },
+          },
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidPresenterTable",
+          path: ["commands", "probe", "outputs", "modes", "only", "failures"],
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("accepts an omitted failures presenter table for an empty failure set", () => {
+  const contract = defineCli()({
+    ...cli,
+    commands: {
+      probe: {
+        ...probe,
+        outputs: ({ atomic }) => {
+          const options = {
+            description: "Result",
+            success: () => text.silent,
+            failures: {},
+          };
+          Reflect.deleteProperty(options, "failures");
+          return {
+            modes: {
+              only: atomic({
+                success: { kind: "completion" },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              }).text(options),
+            },
+          };
+        },
+      },
+    },
+  });
+  assert.equal(contract.manifest.root, "probe");
+});
+
+void test("rejects extra own presenter keys without reading unknown getters", () => {
+  const extra = Symbol("extra");
+  const cases: ReadonlyArray<
+    Readonly<{ key: string; define: (presenters: object) => void }>
+  > = [
+    {
+      key: "extra",
+      define: (presenters) =>
+        Object.defineProperty(presenters, "extra", {
+          value: () => text.line("Extra"),
+          enumerable: false,
+        }),
+    },
+    {
+      key: String(extra),
+      define: (presenters) =>
+        Object.defineProperty(presenters, extra, {
+          value: () => text.line("Extra"),
+          enumerable: true,
+        }),
+    },
+    {
+      key: "extra",
+      define: (presenters) =>
+        Object.defineProperty(presenters, "extra", {
+          get: () => assert.fail("The unknown presenter must not be read"),
+          enumerable: true,
+        }),
+    },
+  ];
+  for (const { key, define } of cases) {
+    assert.throws(
+      () =>
+        defineCli()({
+          ...cli,
+          commands: {
+            probe: {
+              ...probe,
+              outputs: ({ atomic }) => {
+                const presenters = { denied: () => text.line("Denied") };
+                define(presenters);
+                return {
+                  modes: {
+                    only: atomic({
+                      success: { kind: "completion" },
+                      failures: {
+                        denied: {
+                          description: "Denied",
+                          schema: input,
+                          exitCode: 3,
+                        },
+                      },
+                      handler: ({ outcome }) => outcome.completion(),
+                    }).text({
+                      description: "Only",
+                      success: () => text.silent,
+                      failures: presenters,
+                    }),
+                  },
+                };
+              },
+            },
+          },
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof ContractDefinitionError);
+        assert.deepEqual(error.issues, [
+          {
+            code: "unknownDefinitionProperty",
+            path: [
+              "commands",
+              "probe",
+              "outputs",
+              "modes",
+              "only",
+              "failures",
+              key,
+            ],
+          },
+        ]);
+        return true;
+      },
+    );
+  }
+});
+
 void test("a mode issued for another command or input reports mismatchedBinding", () => {
   const define = defineCli();
   let issued: unknown;
