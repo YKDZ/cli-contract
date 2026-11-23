@@ -67,23 +67,27 @@ function createFixtureCli(onRun: () => void = () => undefined) {
         description: "演示最小 CLI",
         input,
 
-        outputs: define.outputModes("fixture", input, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler({ input, dependencies, outcome }) {
-                assert.deepEqual(input, {});
-                assert.equal(dependencies, undefined);
-                onRun();
-                return outcome.completion();
-              },
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler({ input, dependencies, outcome }) {
+                  assert.deepEqual(input, {});
+                  assert.equal(dependencies, undefined);
+                  onRun();
+                  return outcome.completion();
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -269,18 +273,22 @@ void test("定义期请求两侧 Draft 2020-12 并公开不可变投影", () => 
         description: "演示最小 CLI",
         input: schema,
 
-        outputs: defineCli().outputModes("fixture", schema, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });

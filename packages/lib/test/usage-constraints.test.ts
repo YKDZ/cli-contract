@@ -10,6 +10,7 @@ import {
   type CliContract,
   type ContractSchema,
   type JsonObject,
+  type OutputExecutionFactory,
   type UsageConstraint,
 } from "@ykdz/cli-contract";
 import { Ajv2020 } from "ajv/dist/2020.js";
@@ -79,21 +80,25 @@ function createConstrainedCli(handler = () => undefined) {
         ],
         input: sharedInput0,
 
-        outputs: defineCli().outputModes("publish", sharedInput0, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => {
-                handler();
-                return outcome.completion();
-              },
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => {
+                  handler();
+                  return outcome.completion();
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -151,26 +156,31 @@ function countCliDefinition<
         usageConstraints,
         input: sharedInput1,
 
-        outputs: defineCli().outputModes(
-          "countInputs",
-          sharedInput1,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
-                success: { kind: "completion" },
+        outputs: (
+          mode: OutputExecutionFactory<
+            "countInputs",
+            undefined,
+            typeof sharedInput1
+          >,
+        ) => ({
+          modes: {
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
                 failures: {},
                 handler: () => {
                   handler();
                   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 用例只验证 parser 失败路径，成功 handler 不会执行。
                   return undefined as never;
                 },
+              })
+              .structured({
+                description: "结构化输出",
               }),
-            },
-          }),
-        ),
+          },
+        }),
       },
     },
   } as const;
@@ -225,22 +235,22 @@ function createRequiredCountCli() {
         ],
         input: sharedInput2,
 
-        outputs: defineCli().outputModes(
-          "requiredCount",
-          sharedInput2,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
-                success: { kind: "completion" },
+        outputs: (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
                 failures: {},
                 handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
               }),
-            },
-          }),
-        ),
+          },
+        }),
       },
     },
   });
@@ -277,18 +287,22 @@ function createProjectedSchemaCountCli(input: ContractSchema) {
         ],
         input,
 
-        outputs: defineCli().outputModes("countProjection", input, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -632,18 +646,22 @@ void test("count 投影的模式体积在较宽字段组下保持可用", () => 
         usageConstraints: [{ kind: "count", fields, min: 1, max: 1 }],
         input,
 
-        outputs: defineCli().outputModes("countVolume", input, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -1258,18 +1276,22 @@ void test("禁配字段事实同时观察出现与等值，并保留声明顺序
           },
         ],
 
-        outputs: defineCli().outputModes("publish", sharedInput3, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -1344,22 +1366,22 @@ void test("等值事实观察 schema transform 前的 raw Input 值", () => {
           },
         ],
 
-        outputs: defineCli().outputModes(
-          "transformedInput",
-          sharedInput4,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
-                success: { kind: "completion" },
+        outputs: (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
                 failures: {},
                 handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
               }),
-            },
-          }),
-        ),
+          },
+        }),
       },
     },
   });
@@ -1450,18 +1472,22 @@ void test("JSON Schema 语义与 parser 一致并保留引用定义", () => {
           },
         ],
 
-        outputs: defineCli().outputModes("publish", schema, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -1612,18 +1638,22 @@ void test("when 的分支 schema 与 parser 对照保留根引用及空效果", 
           },
         ],
 
-        outputs: defineCli().outputModes("conditional", schema, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -1790,22 +1820,28 @@ void test("输入 schema 投影缺失时仍收集 count 定义诊断", () => {
   const countDefinition = countCliDefinition([
     { kind: "count", fields: ["auth"], min: 1 },
   ]);
-  const outputs = defineCli().outputModes(
-    "countInputs",
-    missingProjection,
-    (mode) => ({
-      default: "structured",
-      modes: {
-        structured: mode.atomic({
-          description: "结构化输出",
-          format: "structured",
-          success: { kind: "completion" },
+  const outputs = (
+    mode: OutputExecutionFactory<
+      "countInputs",
+      undefined,
+      typeof missingProjection
+    >,
+  ) => ({
+    default: "structured" as const,
+    modes: {
+      structured: mode
+        .atomic({
+          success: {
+            kind: "completion",
+          },
           failures: {},
           handler: ({ outcome }) => outcome.completion(),
+        })
+        .structured({
+          description: "结构化输出",
         }),
-      },
-    }),
-  );
+    },
+  });
   const definition = {
     ...countDefinition,
     commands: {
@@ -1956,22 +1992,28 @@ void test("动态 when 校验复用事实和值域规则，并检查分支局部
         ],
         input: sharedInput5,
 
-        outputs: defineCli().outputModes(
-          "invalidConstraints",
-          sharedInput5,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
-                success: { kind: "completion" },
+        outputs: (
+          mode: OutputExecutionFactory<
+            "invalidConstraints",
+            undefined,
+            typeof sharedInput5
+          >,
+        ) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
                 failures: {},
                 handler: () => undefined as never,
+              })
+              .structured({
+                description: "结构化输出",
               }),
-            },
-          }),
-        ),
+          },
+        }),
       },
     },
   };
@@ -2081,22 +2123,28 @@ void test("动态 when 聚合空分支、畸形成员及闭合属性诊断", () 
         ],
         input: sharedInput6,
 
-        outputs: defineCli().outputModes(
-          "invalidShapes",
-          sharedInput6,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
-                success: { kind: "completion" },
+        outputs: (
+          mode: OutputExecutionFactory<
+            "invalidShapes",
+            undefined,
+            typeof sharedInput6
+          >,
+        ) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
                 failures: {},
                 handler: () => undefined as never,
+              })
+              .structured({
+                description: "结构化输出",
               }),
-            },
-          }),
-        ),
+          },
+        }),
       },
     },
   };
@@ -2244,20 +2292,26 @@ void test("层级定义继续聚合叶命令中的独立约束错误", () => {
           },
         ],
 
-        outputs: define.outputModes("probe", sharedInput0, (mode) => ({
+        outputs: (
+          mode: OutputExecutionFactory<"probe", undefined, typeof sharedInput0>,
+        ) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler() {
-                return undefined as never;
-              },
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler() {
+                  return undefined as never;
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   };
@@ -2326,22 +2380,28 @@ void test("defineCli 拒绝同字段上互相矛盾的等值事实", () => {
           },
         ],
 
-        outputs: defineCli().outputModes(
-          "contradictoryFacts",
-          sharedInput1,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
-                success: { kind: "completion" },
+        outputs: (
+          mode: OutputExecutionFactory<
+            "contradictoryFacts",
+            undefined,
+            typeof sharedInput1
+          >,
+        ) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
                 failures: {},
                 handler: () => undefined as never,
+              })
+              .structured({
+                description: "结构化输出",
               }),
-            },
-          }),
-        ),
+          },
+        }),
       },
     },
   };
@@ -2394,22 +2454,28 @@ void test("defineCli 将禁配规则与事实上的未知属性报告为统一�
         ],
         input: sharedInput2,
 
-        outputs: defineCli().outputModes(
-          "unknownUsageProperties",
-          sharedInput2,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
-                success: { kind: "completion" },
+        outputs: (
+          mode: OutputExecutionFactory<
+            "unknownUsageProperties",
+            undefined,
+            typeof sharedInput2
+          >,
+        ) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
                 failures: {},
                 handler: () => undefined as never,
+              })
+              .structured({
+                description: "结构化输出",
               }),
-            },
-          }),
-        ),
+          },
+        }),
       },
     },
   };
@@ -2463,22 +2529,28 @@ void test("defineCli 将显式 null 交给 usage constraint collection 守卫", 
         usageConstraints: null,
         input: sharedInput3,
 
-        outputs: defineCli().outputModes(
-          "nullConstraints",
-          sharedInput3,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
-                success: { kind: "completion" },
+        outputs: (
+          mode: OutputExecutionFactory<
+            "nullConstraints",
+            undefined,
+            typeof sharedInput3
+          >,
+        ) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
                 failures: {},
                 handler: () => undefined as never,
+              })
+              .structured({
+                description: "结构化输出",
               }),
-            },
-          }),
-        ),
+          },
+        }),
       },
     },
   };
@@ -2554,21 +2626,25 @@ void test("when 成立时按一条规则报告完整条件与全部失败效果"
           },
         ],
 
-        outputs: defineCli().outputModes("replay", sharedInput7, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => {
-                executions += 1;
-                return outcome.completion();
-              },
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => {
+                  executions += 1;
+                  return outcome.completion();
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -2653,22 +2729,22 @@ void test("动态效果字段数组只在运行值实际重叠时产生条件失
           },
         ],
 
-        outputs: defineCli().outputModes(
-          "dynamicEffects",
-          sharedInput8,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
-                success: { kind: "completion" },
+        outputs: (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
                 failures: {},
                 handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
               }),
-            },
-          }),
-        ),
+          },
+        }),
       },
     },
   });
