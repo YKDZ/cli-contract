@@ -3,6 +3,7 @@ import {
   helpCapability,
   text,
   type CommandExampleManifest,
+  type OutputExecutionFactory,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
@@ -43,25 +44,26 @@ const exampleFields = {
 } as const;
 
 const define = defineCli();
-const outputs = define.outputModes("inspect", exampleInput, (mode) => ({
-  default: "structured",
-  modes: {
-    structured: mode.atomic({
-      description: "机器读取结果",
-      format: "structured",
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
-    }),
-    text: mode.atomic({
-      description: "供人阅读结果",
-      format: "text",
-      success: { kind: "completion", text: () => text.silent },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
-    }),
-  },
-}));
+const outputs = ({
+  atomic,
+}: OutputExecutionFactory<"inspect", undefined, typeof exampleInput>) => {
+  const completion = atomic({
+    success: { kind: "completion" },
+    failures: {},
+    handler: ({ outcome }) => outcome.completion(),
+  });
+  return {
+    default: "structured",
+    modes: {
+      structured: completion.structured({ description: "机器读取结果" }),
+      text: completion.text({
+        description: "供人阅读结果",
+        success: () => text.silent,
+        failures: {},
+      }),
+    },
+  } as const;
+};
 
 const root = define({
   root: "inspect",
@@ -226,7 +228,6 @@ const inputWithExtraField = {
   paths: ["first"] as [string, ...string[]],
   extra: "not declared",
 };
-// @ts-expect-error 提取变量保留字段闭集检查，额外字段不能经 raw input 进入示例
 define.command("inspect")({
   kind: "command",
   parent: "workspace",
@@ -235,6 +236,7 @@ define.command("inspect")({
   fields: exampleFields,
   input: exampleInput,
   outputs,
+  // @ts-expect-error Extracted inputs must use declared field keys.
   examples: [{ input: inputWithExtraField }],
 });
 
@@ -246,6 +248,7 @@ define.command("inspect")({
   fields: exampleFields,
   input: exampleInput,
   outputs,
+  // @ts-expect-error Example members must use their declared spellings.
   examples: [
     {
       input: {
@@ -255,14 +258,12 @@ define.command("inspect")({
         tags: ["one"],
         paths: ["first"],
       },
-      // @ts-expect-error 示例成员名称受闭集约束
       outputmode: "text",
     },
   ],
 });
 
 const readonlyTags = ["readonly"] as const;
-// @ts-expect-error 显式只读数组不满足 schema 的可变 Input 数组
 define.command("inspect")({
   kind: "command",
   parent: "workspace",
@@ -277,6 +278,7 @@ define.command("inspect")({
         count: "4",
         channel: "fast",
         enabled: true,
+        // @ts-expect-error The raw schema expects a mutable array.
         tags: readonlyTags,
         paths: ["first"],
       },
