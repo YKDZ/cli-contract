@@ -145,7 +145,7 @@ async function verifyHierarchyTextCoverageDiagnostic(
   }
 }
 
-export const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
+const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
   {
     fixture: "invalid-authoring-identities.ts",
     sourcePath:
@@ -888,7 +888,7 @@ const authoringDiscoverySources: readonly AuthoringDiagnosticSource[] = [
   },
 ] as const;
 
-export async function readAuthoringDiagnosticFixtures(): Promise<
+async function readAuthoringDiagnosticFixtures(): Promise<
   Readonly<Record<string, string>>
 > {
   const repositoryRoot = resolve(import.meta.dirname, "..");
@@ -1099,7 +1099,7 @@ interface AuthoringLanguageServiceCase {
   readonly requiredSignature?: readonly string[];
 }
 
-export function verifyAuthoringLanguageService(
+function verifyAuthoringLanguageService(
   project: string,
   resolution: (typeof resolutions)[number],
   fixtures: Readonly<Record<string, string>>,
@@ -1739,7 +1739,7 @@ const authoringDiagnosticFixtureNames = [
   ]),
 ];
 
-export async function prepareAuthoringDiagnosticCases(
+async function prepareAuthoringDiagnosticCases(
   project: string,
   resolution: Resolution,
   fixtures: Readonly<Record<string, string>>,
@@ -1779,7 +1779,7 @@ function deriveDiagnosticSource(
   );
 }
 
-export async function verifySingleAuthoringDiagnosticCase(
+async function verifySingleAuthoringDiagnosticCase(
   project: string,
   resolution: Resolution,
   diagnostic: AuthoringDiagnosticCase,
