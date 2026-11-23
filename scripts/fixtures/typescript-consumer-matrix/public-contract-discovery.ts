@@ -17,14 +17,14 @@ const input = z.object({ id: z.string() });
 const contract = define({
   root: "inspect",
   help: helpCapability(),
-  schema: schemaCapability({ description: text.line("查询契约。") }),
+  schema: schemaCapability({ description: text.line("Query contract.") }),
   usageFailureExitCode: 64,
   commands: {
     inspect: {
       kind: "rootCommand",
       name: "inspect",
-      description: "查询对象。",
-      fields: { id: { kind: "positional", description: "对象标识。" } },
+      description: "Query object.",
+      fields: { id: { kind: "positional", description: "Object identifier." } },
       input,
       examples: [{ input: { id: "alice" } }],
       outputs({ atomic }) {
@@ -40,7 +40,7 @@ const contract = define({
         return {
           default: "json",
           modes: {
-            json: operation.structured({ description: "结构化对象。" }),
+            json: operation.structured({ description: "Structured object." }),
           },
         };
       },
@@ -58,7 +58,7 @@ if (summary.kind === "summary") {
   void exampleArgv;
   void defaultMode;
 
-  // @ts-expect-error 目录的 children 不属于命令摘要。
+  // @ts-expect-error A directory's children do not belong to the command summary.
   const invalidChildren: unknown = publicSummary.children;
   void invalidChildren;
 }
@@ -87,7 +87,7 @@ if (schemaInvocation.kind === "schema") {
 
 const applicationInvocation = parseCliInvocation(contract, ["alice"]);
 if (applicationInvocation.kind === "parsed") {
-  // @ts-expect-error 应用执行仍要求真实消费者依赖。
+  // @ts-expect-error Application execution still requires real consumer dependencies.
   void executeCli(contract, {
     invocation: applicationInvocation,
     write: () => undefined,

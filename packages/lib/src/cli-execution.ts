@@ -74,22 +74,27 @@ type CompiledOutputMode = CompiledExecutable["outputModes"][string];
 
 export type CliOutputDestination = "stderr" | "stdout";
 
-/** 核心已完成投影和通道路由的非空文本 chunk；宿主写入时不再改写格式或目的通道。 */
+/** A text chunk already projected, framed, and routed by the core; the host writes it verbatim without reformatting or rerouting. */
 export interface CliOutput {
   readonly destination: CliOutputDestination;
   readonly chunk: string;
 }
 
 /**
- * 宿主提供的异步输出接缝；异步写入必须返回代表完成的 Promise。
- * 核心等待每次写入后才继续写出或拉取下一条流记录，保留跨通道顺序与背压。
- * 抛出或拒绝会以保留原始 cause 和目的通道的 CliWriteError 拒绝执行，不自动重试。
+ * Host-provided output seam. An asynchronous write must return a promise that
+ * settles when the chunk is fully written; the core awaits each write before
+ * writing further output or pulling the next stream record, preserving
+ * cross-channel ordering and backpressure. A throw or rejection rejects
+ * execution with a CliWriteError that preserves the original cause and
+ * destination channel; nothing is retried automatically.
  */
 export type WriteCliOutput = (output: CliOutput) => Promise<void> | void;
 
 /**
- * 正常控制流完成全部可控写入后的程序化结果；宿主仍须落实真实进程退出状态。
- * 流结果只保留终态，不累计已写记录。程序缺陷与写入错误使执行拒绝，不进入此联合。
+ * Programmatic result of normal control flow after all controllable writes have
+ * completed; the host still owns the real process exit status. Stream results
+ * keep only the terminal fact, not the records already written. Program defects
+ * and write errors reject execution instead of joining this union.
  */
 export type CliTermination<Contract extends AnyCliContract = AnyCliContract> =
   | Readonly<{
@@ -141,15 +146,21 @@ export type ExecuteCliOptions<
 type RuntimeStreamGenerator = AsyncGenerator<unknown, unknown, void>;
 
 /**
- * 执行同一契约签发的调用：验证 raw input，将模式的验证结果和宿主依赖交给 handler，
- * 再验证、投影结果并顺序等待宿主写入。帮助、版本、发现和用法失败不执行业务 handler。
+ * Executes an invocation issued by the same contract: validates the raw input,
+ * hands the schema-validated input and host dependencies to the handler, then
+ * validates and projects the result and awaits host writes in order. Help,
+ * version, discovery, and usage failures never run the business handler.
  *
- * 宿主负责参数来源、依赖构造、输出端口和真实进程退出；应 await 本函数，
- * 等可控写入完成后再使用终止结果的 exitCode，不能提前结束进程。
+ * The host owns argument sourcing, dependency construction, the output seam,
+ * and the real process exit. Await this function and let the controllable
+ * writes finish before using the termination's exitCode; do not exit early.
  *
- * 消费者模式、handler、generator 或呈现器抛出的值保留原始身份；核心检测的契约违反
- * 使用 ContractExecutionError，输出端口失败使用 CliWriteError。执行拒绝时不自动写诊断，
- * 活动流会执行必要清理，已经写出的合法前缀不会撤回，也不会追加伪造的成功终态。
+ * Values thrown by consumer schemas, handlers, generators, or presenters keep
+ * their original identity; contract violations detected by the core use
+ * ContractExecutionError and output-seam failures use CliWriteError. A rejected
+ * execution writes no diagnostics automatically, an active stream performs the
+ * necessary cleanup, and a legitimately written prefix is neither withdrawn nor
+ * followed by a fabricated success terminal.
  */
 // oxlint-disable-next-line typescript/consistent-return
 export async function executeCli<
@@ -210,7 +221,7 @@ export async function executeCli<
       });
       return Object.freeze({
         kind: "schema",
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令来自当前 Contract 的编译树。
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The command comes from the compiled tree of the current Contract.
         command: command.id as CliContractRoot<Contract>,
         document: options.invocation.document,
         exitCode: 0,
@@ -224,7 +235,7 @@ export async function executeCli<
       });
       return Object.freeze({
         kind: "usageFailure",
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令来自当前 Contract 的编译树，泛型身份在此恢复。
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The command comes from the compiled tree of the current Contract; the generic identity is restored here.
         command: command.id as CliContractRoot<Contract>,
         issues: options.invocation.issues,
         exitCode: compiled.usageFailureExitCode,
@@ -254,7 +265,7 @@ export async function executeCli<
         });
         return Object.freeze({
           kind: "usageFailure",
-          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令来自当前 Contract 的编译树，泛型身份在此恢复。
+          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The command comes from the compiled tree of the current Contract; the generic identity is restored here.
           command: command.id as CliContractRoot<Contract>,
           issues,
           exitCode: compiled.usageFailureExitCode,
@@ -667,10 +678,10 @@ async function executeApplicationResult<
   await writeProjectedOutput(options.write, projected.output);
   return Object.freeze({
     kind: "applicationResult",
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令来自当前 Contract 的编译树，泛型身份在此恢复。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The command comes from the compiled tree of the current Contract; the generic identity is restored here.
     command: compiled.id as CliContractRoot<Contract>,
     outputMode: outputMode.id,
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 结果经该命令的结果模式验证并由本次执行签发。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The result was validated against this command's result schema and issued by this execution.
     result: projected.result as CliContractResult<Contract>,
     exitCode: projected.exitCode,
   });
@@ -764,10 +775,10 @@ async function executeStreamResult<
       await writeProjectedOutput(options.write, projected.output);
       return Object.freeze({
         kind: "applicationResult",
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令来自当前 Contract 的编译树，泛型身份在此恢复。
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The command comes from the compiled tree of the current Contract; the generic identity is restored here.
         command: compiled.id as CliContractRoot<Contract>,
         outputMode: outputMode.id,
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 结果经该命令的结果模式验证并由本次执行签发。
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The result was validated against this command's result schema and issued by this execution.
         result: projected.result as CliContractResult<Contract>,
         exitCode: projected.exitCode,
       });
@@ -777,7 +788,7 @@ async function executeStreamResult<
       try {
         await generator.return(undefined);
       } catch {
-        // 清理异常不能掩盖触发中断的写入或程序缺陷。
+        // Cleanup failures must not mask the write error or program defect that triggered the abort.
       }
     }
     throw cause;
@@ -1011,7 +1022,7 @@ function presentStreamRecordText(presenter: unknown, data: unknown): unknown {
   return presenter(data);
 }
 
-// oxlint-disable-next-line typescript/consistent-return -- 验证失败分支通过 throwExecutionIssue 以 never 终止。
+// oxlint-disable-next-line typescript/consistent-return -- The validation-failure branch terminates as never via throwExecutionIssue.
 function projectAtomicData(
   schema: ContractSchema,
   value: unknown,

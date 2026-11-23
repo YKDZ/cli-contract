@@ -36,18 +36,18 @@ const hierarchy = defineHierarchy({
     workspace: {
       kind: "rootGroup",
       name: "workspace",
-      description: "工作区",
+      description: "Workspace",
     },
     ...defineHierarchy.command("inspect")({
       kind: "command",
       parent: "workspace",
       name: "inspect",
-      description: "检查",
+      description: "Inspect",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: inspectInput,
@@ -60,7 +60,7 @@ const hierarchy = defineHierarchy({
                 kind: "data",
                 variants: {
                   found: {
-                    description: "找到",
+                    description: "Found",
                     schema: payload,
                     exitCode: 0,
                   },
@@ -68,7 +68,7 @@ const hierarchy = defineHierarchy({
               },
               failures: {
                 unavailable: {
-                  description: "不可用",
+                  description: "Unavailable",
                   schema: payload,
                   exitCode: 9,
                 },
@@ -80,7 +80,7 @@ const hierarchy = defineHierarchy({
               },
             })
             .structured({
-              description: "结构化输出",
+              description: "Structured output",
             }),
           text: mode
             .atomic({
@@ -88,7 +88,7 @@ const hierarchy = defineHierarchy({
                 kind: "data",
                 variants: {
                   found: {
-                    description: "找到",
+                    description: "Found",
                     schema: payload,
                     exitCode: 0,
                   },
@@ -96,7 +96,7 @@ const hierarchy = defineHierarchy({
               },
               failures: {
                 unavailable: {
-                  description: "不可用",
+                  description: "Unavailable",
                   schema: payload,
                   exitCode: 9,
                 },
@@ -107,7 +107,7 @@ const hierarchy = defineHierarchy({
               },
             })
             .text({
-              description: "文本输出",
+              description: "Text output",
               success: {
                 found: ({ message }) => text.line(message),
               },
@@ -122,7 +122,7 @@ const hierarchy = defineHierarchy({
       kind: "command",
       parent: "workspace",
       name: "watch",
-      description: "监看",
+      description: "Watch",
       fields: {},
       input: emptyInput,
       outputs: (mode) => ({
@@ -132,36 +132,36 @@ const hierarchy = defineHierarchy({
             .stream({
               records: {
                 update: {
-                  description: "更新",
+                  description: "Update",
                   schema: payload,
                 },
               },
               failures: {},
               async *handler({ dependencies, outcome }) {
                 dependencies.requestId satisfies string;
-                yield outcome.record.update({ message: "更新" });
+                yield outcome.record.update({ message: "Update" });
                 return outcome.streamSuccess();
               },
             })
             .structured({
-              description: "结构化输出",
+              description: "Structured output",
             }),
           text: mode
             .stream({
               records: {
                 update: {
-                  description: "更新",
+                  description: "Update",
                   schema: payload,
                 },
               },
               failures: {},
               async *handler({ outcome }) {
-                yield outcome.record.update({ message: "更新" });
+                yield outcome.record.update({ message: "Update" });
                 return outcome.streamSuccess();
               },
             })
             .text({
-              description: "文本流",
+              description: "Text stream",
               records: {
                 update: ({ message }) => text.line(message),
               },
@@ -190,13 +190,13 @@ defineMissingCompletion({
     missingCompletion: {
       kind: "rootGroup",
       name: "missing-completion",
-      description: "遗漏 completion",
+      description: "Missing completion",
     },
     ...defineMissingCompletion.command("leaf")({
       kind: "command",
       parent: "missingCompletion",
       name: "leaf",
-      description: "叶命令",
+      description: "Leaf command",
       input: emptyInput,
       outputs: (mode) => ({
         default: "text",
@@ -224,18 +224,18 @@ defineMissingData({
     missingData: {
       kind: "rootGroup",
       name: "missing-data",
-      description: "遗漏 data",
+      description: "Missing data",
     },
     ...defineMissingData.command("leaf")({
       kind: "command",
       parent: "missingData",
       name: "leaf",
-      description: "叶命令",
+      description: "Leaf command",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: namedInput,
@@ -248,18 +248,19 @@ defineMissingData({
                 kind: "data",
                 variants: {
                   found: {
-                    description: "找到",
+                    description: "Found",
                     schema: payload,
                     exitCode: 0,
                   },
                 },
               },
               failures: {},
-              handler: ({ outcome }) => outcome.data.found({ message: "结果" }),
+              handler: ({ outcome }) =>
+                outcome.data.found({ message: "Result" }),
             })
             // @ts-expect-error [hierarchy-text-coverage] The text mode must cover every data variant.
             .text({
-              description: "文本输出",
+              description: "Text output",
               success: {},
               failures: {},
             }),
@@ -278,13 +279,13 @@ defineMissingFailure({
     missingFailure: {
       kind: "rootGroup",
       name: "missing-failure",
-      description: "遗漏 failure",
+      description: "Missing failure",
     },
     ...defineMissingFailure.command("leaf")({
       kind: "command",
       parent: "missingFailure",
       name: "leaf",
-      description: "叶命令",
+      description: "Leaf command",
       input: emptyInput,
       outputs: (mode) => ({
         default: "text",
@@ -296,7 +297,7 @@ defineMissingFailure({
               },
               failures: {
                 unavailable: {
-                  description: "不可用",
+                  description: "Unavailable",
                   schema: payload,
                   exitCode: 9,
                 },
@@ -305,7 +306,7 @@ defineMissingFailure({
             })
             // @ts-expect-error [hierarchy-text-coverage] The text mode must cover every failure variant.
             .text({
-              description: "文本输出",
+              description: "Text output",
               success: () => text.silent,
               failures: {},
             }),
@@ -324,18 +325,18 @@ defineMissingRecord({
     missingRecord: {
       kind: "rootGroup",
       name: "missing-record",
-      description: "遗漏 record",
+      description: "Missing record",
     },
     ...defineMissingRecord.command("leaf")({
       kind: "command",
       parent: "missingRecord",
       name: "leaf",
-      description: "叶命令",
+      description: "Leaf command",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: namedInput,
@@ -346,19 +347,19 @@ defineMissingRecord({
             .stream({
               records: {
                 update: {
-                  description: "更新",
+                  description: "Update",
                   schema: payload,
                 },
               },
               failures: {},
               async *handler({ outcome }) {
-                yield outcome.record.update({ message: "更新" });
+                yield outcome.record.update({ message: "Update" });
                 return outcome.streamSuccess();
               },
             })
             // @ts-expect-error [hierarchy-text-coverage] The text mode must cover every record variant.
             .text({
-              description: "文本输出",
+              description: "Text output",
               records: {},
               failures: {},
               terminal: () => text.silent,
@@ -378,18 +379,18 @@ defineMissingStreamSuccess({
     missingStreamSuccess: {
       kind: "rootGroup",
       name: "missing-stream-success",
-      description: "遗漏 stream success",
+      description: "Missing stream success",
     },
     ...defineMissingStreamSuccess.command("leaf")({
       kind: "command",
       parent: "missingStreamSuccess",
       name: "leaf",
-      description: "叶命令",
+      description: "Leaf command",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: namedInput,

@@ -13,18 +13,18 @@ define({
     workspace: {
       kind: "rootGroup",
       name: "workspace",
-      description: "工作区",
+      description: "Workspace",
     },
     ...define.command("inspect")({
       kind: "command",
       parent: "workspace",
       name: "inspect",
-      description: "检查",
+      description: "Inspect",
       fields: {
         count: {
           kind: "valueOption",
           longOption: "--count",
-          description: "数量",
+          description: "Count",
         },
       },
       input: sharedInput0,
@@ -38,7 +38,9 @@ define({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -56,12 +58,12 @@ defineCli()({
     rootInspect: {
       kind: "rootCommand",
       name: "root-inspect",
-      description: "根检查",
+      description: "Root inspect",
       fields: {
         count: {
           kind: "valueOption",
           longOption: "--count",
-          description: "数量",
+          description: "Count",
         },
       },
       input: sharedInput1,
@@ -75,7 +77,9 @@ defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -93,12 +97,12 @@ defineCli()({
     rootEnabled: {
       kind: "rootCommand",
       name: "root-enabled",
-      description: "根启用",
+      description: "Root enabled",
       fields: {
         enabled: {
           kind: "flag",
           longOption: "--enabled",
-          description: "启用",
+          description: "Enabled",
         },
       },
       input: sharedInput2,
@@ -112,7 +116,9 @@ defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -130,12 +136,12 @@ defineCli()({
     rootTags: {
       kind: "rootCommand",
       name: "root-tags",
-      description: "根标签",
+      description: "Root tags",
       fields: {
         tags: {
           kind: "repeatableOption",
           longOption: "--tag",
-          description: "标签",
+          description: "Tags",
         },
       },
       input: sharedInput3,
@@ -149,7 +155,9 @@ defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },

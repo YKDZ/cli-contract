@@ -22,7 +22,7 @@ void helpCapability({ wording: validChoicesUnion });
 
 const inferredEmptyWordingBranch =
   Math.random() < 0.5 ? {} : { wording: { choices: "候选 {choises}" } };
-// @ts-expect-error 无注解空分支不能让另一分支中的非法模板通过。
+// @ts-expect-error An unannotated empty branch must not let an invalid template in the other branch pass.
 void helpCapability(inferredEmptyWordingBranch);
 
 type OptionalValidWording = {
@@ -51,13 +51,13 @@ const validSuffixCount = defineCli()({
   commands: {
     validSuffixCount: {
       kind: "rootCommand",
-      name: "有效后缀数量",
-      description: "已知后缀字段仍可使用",
+      name: "Valid suffix count",
+      description: "Known-suffix fields are still usable",
       fields: {
         token: {
           kind: "valueOption",
           longOption: "--token",
-          description: "令牌",
+          description: "Token",
         },
       },
       input: sharedInput0,
@@ -74,7 +74,9 @@ const validSuffixCount = defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -91,14 +93,14 @@ const validNegatedOptionWithoutAlias = defineCli()({
   commands: {
     validNegatedOption: {
       kind: "rootCommand",
-      name: "有效反向选项",
-      description: "无短别名的合法反向选项",
+      name: "Valid negated option",
+      description: "A valid negated option without a short alias",
       fields: {
         token: {
           kind: "flag",
           longOption: "--token",
           negatedLongOption: "--no-token",
-          description: "令牌",
+          description: "Token",
         },
       },
       input: sharedInput1,
@@ -112,7 +114,9 @@ const validNegatedOptionWithoutAlias = defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },

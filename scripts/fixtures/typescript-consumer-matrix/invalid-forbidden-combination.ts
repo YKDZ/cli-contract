@@ -48,18 +48,18 @@ define({
     workspace: {
       kind: "rootGroup",
       name: "workspace",
-      description: "工作区",
+      description: "Workspace",
     },
     ...define.command("invalidHierarchy")({
       kind: "command",
       parent: "workspace",
       name: "invalid-hierarchy",
-      description: "非法层级约束",
+      description: "Invalid hierarchy constraint",
       fields: {
         mode: {
           kind: "valueOption",
           longOption: "--mode",
-          description: "模式",
+          description: "Mode",
         },
       },
       input: sharedInput0,
@@ -79,7 +79,9 @@ define({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -95,12 +97,12 @@ defineCli()({
     validExtractedFactUnion: {
       kind: "rootCommand",
       name: "valid-extracted-fact-union",
-      description: "合法提取事实联合",
+      description: "Valid extracted fact union",
       fields: {
         mode: {
           kind: "valueOption",
           longOption: "--mode",
-          description: "模式",
+          description: "Mode",
         },
       },
       input: sharedInput1,
@@ -117,7 +119,9 @@ defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -133,12 +137,12 @@ defineCli()({
     invalidClosedFactUnion: {
       kind: "rootCommand",
       name: "invalid-closed-fact-union",
-      description: "闭合提取事实联合",
+      description: "Closed extracted fact union",
       fields: {
         mode: {
           kind: "valueOption",
           longOption: "--mode",
-          description: "模式",
+          description: "Mode",
         },
       },
       input: sharedInput2,
@@ -158,7 +162,9 @@ defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -174,18 +180,18 @@ define({
     workspace: {
       kind: "rootGroup",
       name: "workspace",
-      description: "工作区",
+      description: "Workspace",
     },
     ...define.command("invalidClosedFactUnionHierarchy")({
       kind: "command",
       parent: "workspace",
       name: "invalid-closed-fact-union-hierarchy",
-      description: "层级闭合提取事实联合",
+      description: "Hierarchy closed extracted fact union",
       fields: {
         mode: {
           kind: "valueOption",
           longOption: "--mode",
-          description: "模式",
+          description: "Mode",
         },
       },
       input: sharedInput3,
@@ -205,7 +211,9 @@ define({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -221,12 +229,12 @@ defineCli()({
     invalidClosedConstraint: {
       kind: "rootCommand",
       name: "invalid-closed-constraint",
-      description: "封闭禁配规则",
+      description: "Closed forbidden-combination rule",
       fields: {
         mode: {
           kind: "valueOption",
           longOption: "--mode",
-          description: "模式",
+          description: "Mode",
         },
       },
       input: sharedInput4,
@@ -247,7 +255,9 @@ defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -263,12 +273,12 @@ defineCli()({
     invalidClosedFact: {
       kind: "rootCommand",
       name: "invalid-closed-fact",
-      description: "封闭禁配事实",
+      description: "Closed forbidden-combination fact",
       fields: {
         mode: {
           kind: "valueOption",
           longOption: "--mode",
-          description: "模式",
+          description: "Mode",
         },
       },
       input: sharedInput5,
@@ -288,7 +298,9 @@ defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -304,12 +316,12 @@ defineCli()({
     invalidNumericValue: {
       kind: "rootCommand",
       name: "invalid-numeric-value",
-      description: "非法数字等值",
+      description: "Invalid numeric equality",
       fields: {
         mode: {
           kind: "valueOption",
           longOption: "--mode",
-          description: "模式",
+          description: "Mode",
         },
       },
       input: sharedInput6,
@@ -329,7 +341,9 @@ defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -345,12 +359,12 @@ defineCli()({
     invalidNullValue: {
       kind: "rootCommand",
       name: "invalid-null-value",
-      description: "非法空值等值",
+      description: "Invalid null equality",
       fields: {
         mode: {
           kind: "valueOption",
           longOption: "--mode",
-          description: "模式",
+          description: "Mode",
         },
       },
       input: sharedInput7,
@@ -370,7 +384,9 @@ defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -386,12 +402,12 @@ defineCli()({
     invalidObjectValue: {
       kind: "rootCommand",
       name: "invalid-object-value",
-      description: "非法对象等值",
+      description: "Invalid object equality",
       fields: {
         mode: {
           kind: "valueOption",
           longOption: "--mode",
-          description: "模式",
+          description: "Mode",
         },
       },
       input: sharedInput8,
@@ -411,7 +427,9 @@ defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -426,13 +444,13 @@ defineCli()({
   commands: {
     factSuffixConflict: {
       kind: "rootCommand",
-      name: "事实后缀矛盾",
-      description: "保留事实已知后缀",
+      name: "Fact suffix contradiction",
+      description: "Reserved fact with a known suffix",
       fields: {
         token: {
           kind: "valueOption",
           longOption: "--token",
-          description: "令牌",
+          description: "Token",
         },
       },
       input: sharedInput9,
@@ -452,7 +470,9 @@ defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -471,13 +491,13 @@ defineCli()({
     invalidValue: {
       kind: "rootCommand",
       name: "invalid-value",
-      description: "值类型冲突",
+      description: "Value type conflict",
       fields: {
-        auth: { kind: "flag", longOption: "--auth", description: "认证" },
+        auth: { kind: "flag", longOption: "--auth", description: "Auth" },
         mode: {
           kind: "valueOption",
           longOption: "--mode",
-          description: "模式",
+          description: "Mode",
         },
       },
       input: sharedInput10,
@@ -500,7 +520,9 @@ defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -519,13 +541,13 @@ defineCli()({
     invalidKind: {
       kind: "rootCommand",
       name: "invalid-kind",
-      description: "字段种类冲突",
+      description: "Field kind conflict",
       fields: {
-        auth: { kind: "flag", longOption: "--auth", description: "认证" },
+        auth: { kind: "flag", longOption: "--auth", description: "Auth" },
         target: {
           kind: "repeatableOption",
           longOption: "--target",
-          description: "目标",
+          description: "Target",
         },
       },
       input: sharedInput11,
@@ -548,7 +570,9 @@ defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -564,12 +588,12 @@ defineCli()({
     invalidContradiction: {
       kind: "rootCommand",
       name: "invalid-contradiction",
-      description: "矛盾等值事实",
+      description: "Contradictory equality fact",
       fields: {
         mode: {
           kind: "valueOption",
           longOption: "--mode",
-          description: "模式",
+          description: "Mode",
         },
       },
       input: sharedInput12,
@@ -592,7 +616,9 @@ defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -608,18 +634,18 @@ define({
     workspace: {
       kind: "rootGroup",
       name: "workspace",
-      description: "工作区",
+      description: "Workspace",
     },
     ...define.command("contradictoryHierarchy")({
       kind: "command",
       parent: "workspace",
       name: "contradictory-hierarchy",
-      description: "矛盾等值事实",
+      description: "Contradictory equality fact",
       fields: {
         mode: {
           kind: "valueOption",
           longOption: "--mode",
-          description: "模式",
+          description: "Mode",
         },
       },
       input: sharedInput13,
@@ -642,7 +668,9 @@ define({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },

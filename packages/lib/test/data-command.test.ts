@@ -101,7 +101,7 @@ function createDataCli(
   });
 }
 
-void test("value option 经模式变换后产生具名 data 结果", async () => {
+void test("a value option produces a named data result after schema transformation", async () => {
   const inputs: GreetingInput[] = [];
   const cli = createDataCli((input) => inputs.push(input));
   const invocation = parseCliInvocation(cli, ["--name", "Ada"]);
@@ -213,7 +213,7 @@ void test("value option 经模式变换后产生具名 data 结果", async () =>
   });
 });
 
-void test("输入模式正常拒绝产生 inputRejected 且不执行 handler", async () => {
+void test("a normal input schema rejection produces inputRejected without running the handler", async () => {
   let runCount = 0;
   const cli = createDataCli(() => {
     runCount += 1;
@@ -229,7 +229,7 @@ void test("输入模式正常拒绝产生 inputRejected 且不执行 handler", a
   });
 
   if (termination.kind !== "usageFailure") {
-    assert.fail("预期返回 inputRejected 用法失败");
+    assert.fail("expected an inputRejected usage failure");
   }
   assert.equal(runCount, 0);
   assert.deepEqual(writes, [
@@ -252,7 +252,7 @@ void test("输入模式正常拒绝产生 inputRejected 且不执行 handler", a
   });
 });
 
-void test("原生 Zod 失败携带额外 value 仍产生 inputRejected", async () => {
+void test("a native Zod failure with an extra value still produces inputRejected", async () => {
   let runCount = 0;
   const vendor = greetingInputSchema["~standard"];
   const inputSchema: ContractSchema<RawGreetingInput, GreetingInput> = {
@@ -290,7 +290,7 @@ void test("原生 Zod 失败携带额外 value 仍产生 inputRejected", async (
   });
 
   if (termination.kind !== "usageFailure") {
-    assert.fail("预期返回 inputRejected 用法失败");
+    assert.fail("expected an inputRejected usage failure");
   }
   assert.equal(runCount, 0);
   assert.deepEqual(writes, [
@@ -309,10 +309,10 @@ void test("原生 Zod 失败携带额外 value 仍产生 inputRejected", async (
 });
 
 for (const { label, withValue } of [
-  { label: "空 issues", withValue: false },
-  { label: "空 issues 与额外 value", withValue: true },
+  { label: "empty issues", withValue: false },
+  { label: "empty issues with an extra value", withValue: true },
 ] as const) {
-  void test(`${label} 仍产生空 evidence 的 inputRejected`, async () => {
+  void test(`${label} still produces inputRejected with empty evidence`, async () => {
     let runCount = 0;
     const inputSchema: ContractSchema<RawGreetingInput, GreetingInput> = {
       "~standard": {
@@ -363,12 +363,12 @@ for (const { label, withValue } of [
   });
 }
 
-void test("输出模式产生非 JSON 值时拒绝且不写出字节", async () => {
+void test("a non-JSON value from the output schema is rejected without writing bytes", async () => {
   const invalidOutputSchema: ContractSchema<GreetingData> = {
     "~standard": {
       ...greetingDataSchema["~standard"],
       validate() {
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意注入无效模式或结果，以验证契约边界。
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally injects an invalid schema or result to verify the contract boundary.
         return { value: new Date() as unknown as GreetingData };
       },
     },
@@ -402,7 +402,7 @@ void test("输出模式产生非 JSON 值时拒绝且不写出字节", async () 
   assert.deepEqual(writes, []);
 });
 
-void test("data 输出模式的空 issues 仍产生 outputSchemaRejected", async () => {
+void test("empty issues from a data output schema still produce outputSchemaRejected", async () => {
   const rejectedDataSchema: ContractSchema<GreetingData> = {
     "~standard": {
       ...greetingDataSchema["~standard"],
@@ -444,7 +444,7 @@ void test("data 输出模式的空 issues 仍产生 outputSchemaRejected", async
   assert.deepEqual(writes, []);
 });
 
-void test("Valibot combined schema 可沿同一接缝定义并执行", async () => {
+void test("a Valibot combined schema can be defined and executed through the same seam", async () => {
   const valibotInputSchema = toStandardJsonSchema(
     v.object({ name: v.pipe(v.string(), v.nonEmpty()) }),
   );
@@ -467,7 +467,7 @@ void test("Valibot combined schema 可沿同一接缝定义并执行", async () 
   });
 });
 
-void test("定义期拒绝与 value option 不相容的 Input JSON Schema", () => {
+void test("definition time rejects an Input JSON Schema incompatible with a value option", () => {
   const driftingInputSchema: ContractSchema<RawGreetingInput, GreetingInput> = {
     "~standard": {
       ...greetingInputSchema["~standard"],
@@ -505,15 +505,15 @@ void test("定义期拒绝与 value option 不相容的 Input JSON Schema", () =
       ]);
       assert.match(
         error.message,
-        /命令 greet 的输入字段 name（commands\.greet\.input\.properties\.name）需要 raw string，实际输入模式属性为 \{"type":"number"\}/,
+        /Input fields of command greet: name \(commands\.greet\.input\.properties\.name\) requires raw string, but the input schema property is \{"type":"number"\}/,
       );
       return true;
     },
   );
 });
 
-void test("定义期以闭合问题拒绝缺少标准 JSON Schema 能力的模式", () => {
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意注入无效模式或结果，以验证契约边界。
+void test("definition time rejects schemas missing the standard JSON Schema capability with a closed issue", () => {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally injects an invalid schema or result to verify the contract boundary.
   const missingJsonSchema = {
     "~standard": {
       validate: greetingInputSchema["~standard"].validate,
@@ -539,8 +539,8 @@ void test("定义期以闭合问题拒绝缺少标准 JSON Schema 能力的模�
   );
 });
 
-void test("执行期拒绝 Standard Schema 返回的异步 validation", async () => {
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意注入无效模式或结果，以验证契约边界。
+void test("execution rejects asynchronous validation returned by a Standard Schema", async () => {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally injects an invalid schema or result to verify the contract boundary.
   const asynchronousSchema = {
     "~standard": {
       ...greetingInputSchema["~standard"],
@@ -577,7 +577,7 @@ void test("执行期拒绝 Standard Schema 返回的异步 validation", async ()
   );
 });
 
-void test("定义期拒绝没有忠实返回 Draft 2020-12 方言的投影", () => {
+void test("definition time rejects projections that do not faithfully return the Draft 2020-12 dialect", () => {
   const wrongDialectSchema: ContractSchema<RawGreetingInput, GreetingInput> = {
     "~standard": {
       ...greetingInputSchema["~standard"],
@@ -612,7 +612,7 @@ void test("定义期拒绝没有忠实返回 Draft 2020-12 方言的投影", () 
   );
 });
 
-void test("定义期把无法导出的模式归入闭合问题而不泄漏 vendor 错误", () => {
+void test("definition time folds unexportable schemas into a closed issue without leaking vendor errors", () => {
   const exportFailureSchema: ContractSchema<RawGreetingInput, GreetingInput> = {
     "~standard": {
       ...greetingInputSchema["~standard"],
@@ -644,8 +644,8 @@ void test("定义期把无法导出的模式归入闭合问题而不泄漏 vendo
   );
 });
 
-void test("定义期拒绝不能忠实形成 JSON 值的 schema 投影", () => {
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意注入无效模式或结果，以验证契约边界。
+void test("definition time rejects schema projections that cannot faithfully form JSON values", () => {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally injects an invalid schema or result to verify the contract boundary.
   const invalidProjectionSchema = {
     "~standard": {
       ...greetingInputSchema["~standard"],
@@ -678,8 +678,8 @@ void test("定义期拒绝不能忠实形成 JSON 值的 schema 投影", () => {
   );
 });
 
-void test("defineCli 一次报告输入与 data 模式的全部定义问题", () => {
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意注入无效模式或结果，以验证契约边界。
+void test("defineCli reports every definition issue of input and data schemas in one pass", () => {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally injects an invalid schema or result to verify the contract boundary.
   const missingInputCapability = {
     "~standard": {
       validate: greetingInputSchema["~standard"].validate,
@@ -728,7 +728,7 @@ void test("defineCli 一次报告输入与 data 模式的全部定义问题", ()
   );
 });
 
-void test("定义期拒绝没有声明 object 根类型的输入投影", () => {
+void test("definition time rejects input projections without a declared object root type", () => {
   const scalarRootSchema: ContractSchema<RawGreetingInput, GreetingInput> = {
     "~standard": {
       ...greetingInputSchema["~standard"],
@@ -761,9 +761,9 @@ void test("定义期拒绝没有声明 object 根类型的输入投影", () => {
   );
 });
 
-void test("执行期拒绝非法 Standard Result 且不调用 handler", async () => {
+void test("execution rejects an invalid Standard Result without calling the handler", async () => {
   let runCount = 0;
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意注入无效模式或结果，以验证契约边界。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally injects an invalid schema or result to verify the contract boundary.
   const invalidResultSchema = {
     "~standard": {
       ...greetingInputSchema["~standard"],

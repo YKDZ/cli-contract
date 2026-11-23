@@ -79,7 +79,7 @@ function createAliasedHierarchy(onRun: () => void = () => undefined) {
   return { cli, supplement };
 }
 
-void test("根级 -h 配置机械投影到 controls、各节点 parser 与完整帮助", async () => {
+void test("root-level -h configuration projects mechanically into controls, every node parser, and full help", async () => {
   let runs = 0;
   const { cli, supplement } = createAliasedHierarchy(() => {
     runs += 1;
@@ -201,7 +201,7 @@ void test("根级 -h 配置机械投影到 controls、各节点 parser 与完整
   ]);
 });
 
-void test("未启用短别名时 -h 保留给字段且帮助不注入补充", () => {
+void test("without the short alias, -h stays available to fields and help injects no supplement", () => {
   const sharedInput1 = z.object({ help: z.boolean().optional() });
   const cli = defineCli()({
     root: "quiet",
@@ -259,7 +259,7 @@ void test("未启用短别名时 -h 保留给字段且帮助不注入补充", ()
   });
 });
 
-void test("缺席标题只省略标题行，空段落不注入默认文案", async () => {
+void test("an absent heading only omits the heading line, and empty sections inject no default wording", async () => {
   const sharedInput2 = z.object({});
   const cli = defineCli()({
     root: "minimal",
@@ -309,8 +309,8 @@ void test("缺席标题只省略标题行，空段落不注入默认文案", asy
   );
 });
 
-void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补充被拒绝", () => {
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证帮助配置拒绝。
+void test("-h conflicts with fields and other control spellings aggregate at definition time, and forged supplements are rejected", () => {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally bypasses static restrictions to verify help configuration rejection.
   assert.throws(() => helpCapability({ shortAlias: "-x" } as never), TypeError);
   for (const headings of [
     { usage: "" },
@@ -319,7 +319,7 @@ void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补
     { options: "选项\0列表" },
     { extra: "额外" },
   ]) {
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证帮助配置拒绝。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally bypasses static restrictions to verify help configuration rejection.
     assert.throws(() => helpCapability({ headings } as never), TypeError);
   }
 
@@ -521,7 +521,7 @@ void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补
             kind: "rootCommand",
             name: "forged",
             description: "伪造",
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证帮助配置拒绝。
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally bypasses static restrictions to verify help configuration rejection.
             helpSupplement: { kind: "lines", lines: ["伪造"] } as never,
             input: sharedInput4,
 

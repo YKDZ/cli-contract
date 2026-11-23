@@ -11,12 +11,12 @@ defineCli()({
     missingWhenEffects: {
       kind: "rootCommand",
       name: "missing-when-effects",
-      description: "缺少条件效果",
+      description: "Missing conditional effect",
       fields: {
         mode: {
           kind: "valueOption",
           longOption: "--mode",
-          description: "模式",
+          description: "Mode",
         },
       },
       input: sharedInput0,
@@ -33,7 +33,9 @@ defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -52,18 +54,18 @@ define({
     workspace: {
       kind: "rootGroup",
       name: "workspace",
-      description: "工作区",
+      description: "Workspace",
     },
     ...define.command("branchConflict")({
       kind: "command",
       parent: "workspace",
       name: "branch-conflict",
-      description: "条件分支冲突",
+      description: "Conditional branch conflict",
       fields: {
         token: {
           kind: "valueOption",
           longOption: "--token",
-          description: "令牌",
+          description: "Token",
         },
       },
       input: sharedInput1,
@@ -84,7 +86,9 @@ define({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -118,17 +122,17 @@ defineCli()({
     multiFieldConflict: {
       kind: "rootCommand",
       name: "multi-field-conflict",
-      description: "多字段效果冲突",
+      description: "Multi-field effect conflict",
       fields: {
         mode: {
           kind: "valueOption",
           longOption: "--mode",
-          description: "模式",
+          description: "Mode",
         },
         token: {
           kind: "valueOption",
           longOption: "--token",
-          description: "令牌",
+          description: "Token",
         },
       },
       input: sharedInput2,
@@ -149,7 +153,9 @@ defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -171,19 +177,19 @@ defineCli()({
     unionFieldConflict: {
       kind: "rootCommand",
       name: "union-field-conflict",
-      description: "分支共同字段冲突",
+      description: "Shared field conflict across branches",
       fields: {
         mode: {
           kind: "valueOption",
           longOption: "--mode",
-          description: "模式",
+          description: "Mode",
         },
         token: {
           kind: "valueOption",
           longOption: "--token",
-          description: "令牌",
+          description: "Token",
         },
-        auth: { kind: "flag", longOption: "--auth", description: "认证" },
+        auth: { kind: "flag", longOption: "--auth", description: "Auth" },
       },
       input: sharedInput3,
       usageConstraints: [
@@ -203,7 +209,9 @@ defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -220,13 +228,13 @@ defineCli()({
   commands: {
     effectSuffixConflict: {
       kind: "rootCommand",
-      name: "效果后缀矛盾",
-      description: "保留效果已知后缀",
+      name: "Effect suffix contradiction",
+      description: "Reserved effect with a known suffix",
       fields: {
         token: {
           kind: "valueOption",
           longOption: "--token",
-          description: "令牌",
+          description: "Token",
         },
       },
       input: sharedInput4,
@@ -247,7 +255,9 @@ defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -264,13 +274,13 @@ defineCli()({
   commands: {
     factSuffixConflict: {
       kind: "rootCommand",
-      name: "事实后缀矛盾",
-      description: "保留事实已知后缀",
+      name: "Fact suffix contradiction",
+      description: "Reserved fact with a known suffix",
       fields: {
         token: {
           kind: "valueOption",
           longOption: "--token",
-          description: "令牌",
+          description: "Token",
         },
       },
       input: sharedInput5,
@@ -291,7 +301,9 @@ defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },

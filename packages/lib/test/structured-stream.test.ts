@@ -29,7 +29,7 @@ function createUncheckedStreamCli(handler: unknown) {
         description: "列出项目",
         input: emptyInput,
 
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意越过静态类型，以验证流式结果边界。
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally crosses static types to verify the streaming result boundary.
 
         outputs: (mode) => ({
           default: "structured",
@@ -55,7 +55,7 @@ function createUncheckedStreamCli(handler: unknown) {
   });
 }
 
-void test("stream handler 在 header 前闭合验证 async iterator 协议", async () => {
+void test("the stream handler validates the async iterator protocol as a closed check before the header", async () => {
   let synchronousGeneratorRan = false;
   function* synchronousGenerator() {
     synchronousGeneratorRan = true;
@@ -63,10 +63,10 @@ void test("stream handler 在 header 前闭合验证 async iterator 协议", asy
   }
   const invalidHandlers: readonly [string, unknown][] = [
     ["Promise", () => Promise.resolve(undefined)],
-    ["同步 generator", synchronousGenerator],
-    ["缺少 asyncIterator", () => ({ next() {}, return() {} })],
-    ["缺少 next", () => ({ [Symbol.asyncIterator]() {}, return() {} })],
-    ["缺少 return", () => ({ [Symbol.asyncIterator]() {}, next() {} })],
+    ["synchronous generator", synchronousGenerator],
+    ["missing asyncIterator", () => ({ next() {}, return() {} })],
+    ["missing next", () => ({ [Symbol.asyncIterator]() {}, return() {} })],
+    ["missing return", () => ({ [Symbol.asyncIterator]() {}, next() {} })],
   ];
   for (const [label, handler] of invalidHandlers) {
     const cli = createUncheckedStreamCli(handler);
@@ -92,7 +92,7 @@ void test("stream handler 在 header 前闭合验证 async iterator 协议", asy
   assert.equal(synchronousGeneratorRan, false);
 });
 
-void test("structured stream 按 header、record、终态写出紧凑 NDJSON", async () => {
+void test("a structured stream writes compact NDJSON as header, records, and terminal fact", async () => {
   const cli = defineCli()({
     root: "list",
     help: englishHelpCapability(),
@@ -197,7 +197,7 @@ void test("structured stream 按 header、record、终态写出紧凑 NDJSON", a
     properties: { kind: { const: "streamSuccess" } },
     required: ["kind"],
   });
-  // oxlint-disable-next-line unicorn/no-array-sort -- Object.keys 为断言新建数组，排序不修改 manifest。
+  // oxlint-disable-next-line unicorn/no-array-sort -- Object.keys creates a fresh array for the assertion; sorting does not modify the manifest.
   assert.deepEqual(Object.keys(structuredWire.stream ?? {}).sort(), [
     "header",
     "line",
@@ -206,7 +206,7 @@ void test("structured stream 按 header、record、终态写出紧凑 NDJSON", a
   ]);
 });
 
-void test("record 输出模式的空 issues 仍产生 outputSchemaRejected", async () => {
+void test("empty issues from a record output schema still produce outputSchemaRejected", async () => {
   const rejectedRecordSchema: ContractSchema<Readonly<{ value: string }>> = {
     "~standard": {
       ...item["~standard"],
@@ -286,7 +286,7 @@ void test("record 输出模式的空 issues 仍产生 outputSchemaRejected", asy
   ]);
 });
 
-void test("stream 可在首帧后直接显式成功", async () => {
+void test("a stream may explicitly succeed right after the first frame", async () => {
   const cli = defineCli()({
     root: "list",
     help: englishHelpCapability(),
@@ -338,7 +338,7 @@ void test("stream 可在首帧后直接显式成功", async () => {
   ]);
 });
 
-void test("stream 失败保留 stdout 前缀且不写成功终态", async () => {
+void test("stream failure keeps the stdout prefix and writes no success terminal fact", async () => {
   const cli = defineCli()({
     root: "list",
     help: englishHelpCapability(),
@@ -408,7 +408,7 @@ void test("stream 失败保留 stdout 前缀且不写成功终态", async () => 
   assert.equal(termination.exitCode, 8);
 });
 
-void test("record 验证拒绝与写入拒绝均停止拉取并清理 generator", async () => {
+void test("record validation rejection and write rejection both stop pulling and clean up the generator", async () => {
   let invalidCleanup = false;
   const invalidCli = defineCli()({
     root: "list",
@@ -436,7 +436,7 @@ void test("record 验证拒绝与写入拒绝均停止拉取并清理 generator"
                 failures: {},
                 async *handler({ outcome }) {
                   try {
-                    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意越过静态类型，以验证流式结果边界。
+                    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally crosses static types to verify the streaming result boundary.
                     yield outcome.record.item({
                       value: 1 as unknown as string,
                     });
@@ -532,7 +532,7 @@ void test("record 验证拒绝与写入拒绝均停止拉取并清理 generator"
   assert.equal(cleanup, true);
 });
 
-void test("同一 stream handler 可投影为 structured NDJSON 或 text line、fragment 与 silent 终态", async () => {
+void test("one stream handler projects to structured NDJSON or text line, fragment, and silent terminal facts", async () => {
   let executions = 0;
   const cli = defineCli()({
     root: "list",
@@ -637,12 +637,13 @@ void test("同一 stream handler 可投影为 structured NDJSON 或 text line、
   assert.ok(textMode);
   const manifestSuccess = textMode.success;
   assert.equal(manifestSuccess.kind, "stream");
-  if (manifestSuccess.kind !== "stream") assert.fail("应为 stream manifest");
+  if (manifestSuccess.kind !== "stream")
+    assert.fail("expected a stream manifest");
   assert.deepEqual(manifestSuccess.text, { recordFraming: "fragment" });
   assert.throws(() => text.fragment("a\0b"), TypeError);
 });
 
-void test("text stream success 以 text.lines 写出一个确定的终态 chunk", async () => {
+void test("text stream success writes one deterministic terminal chunk via text.lines", async () => {
   const cli = defineCli()({
     root: "list",
     help: englishHelpCapability(),
@@ -714,7 +715,7 @@ void test("text stream success 以 text.lines 写出一个确定的终态 chunk"
   assert.deepEqual(writes, ["完成\n\n没有更多项目\n"]);
 });
 
-void test("text stream failure 保留已写 record、稳定 identity 与 stderr，拒绝写入会停止拉取并清理", async () => {
+void test("text stream failure keeps written records, stable identity, and stderr; a write rejection stops pulling and cleans up", async () => {
   let pulled = 0;
   let cleaned = false;
   const cli = defineCli()({

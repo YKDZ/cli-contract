@@ -172,7 +172,7 @@ function countCliDefinition<
                 failures: {},
                 handler: () => {
                   handler();
-                  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 用例只验证 parser 失败路径，成功 handler 不会执行。
+                  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The case only verifies the parser failure path; the success handler never runs.
                   return undefined as never;
                 },
               })
@@ -374,7 +374,7 @@ function valueOptionField<const Name extends string>(
   return { kind: "valueOption", longOption: `--${name}`, description: name };
 }
 
-void test("count 按 raw 自有字段计数，false 与重复值只计一项且默认不补", async () => {
+void test("count tallies raw own fields; false and repeated values count once and defaults do not fill in", async () => {
   let executions = 0;
   const cli = createCountCli(() => {
     executions += 1;
@@ -511,7 +511,7 @@ void test("count 按 raw 自有字段计数，false 与重复值只计一项且�
   });
 });
 
-void test("count 的 Draft 2020-12 投影与 parser 在有效 raw 输入上判定一致", () => {
+void test("the Draft 2020-12 count projection and the parser agree on valid raw input", () => {
   const cli = createCountCli();
   const ajv = new Ajv2020({ allErrors: true, strict: false });
   const validator = ajv.compile(
@@ -551,7 +551,7 @@ void test("count 的 Draft 2020-12 投影与 parser 在有效 raw 输入上判�
   }
 });
 
-void test("count 投影保留模式引用并避免定义名碰撞", () => {
+void test("the count projection keeps schema references and avoids definition name collisions", () => {
   const inputSchema = createReferencedCountInputSchema(
     [
       { name: "auth", type: "string" },
@@ -588,7 +588,7 @@ void test("count 投影保留模式引用并避免定义名碰撞", () => {
   }
 });
 
-void test("count 投影的模式体积在较宽字段组下保持可用", () => {
+void test("the count projection schema stays usable in size for wider field groups", () => {
   const fields = [
     "field0",
     "field1",
@@ -668,10 +668,10 @@ void test("count 投影的模式体积在较宽字段组下保持可用", () => 
   const size = Buffer.byteLength(
     JSON.stringify(cli.manifest.commands.countVolume.input.inputSchema),
   );
-  assert.ok(size < 100_000, `count 投影为 ${size} 字节`);
+  assert.ok(size < 100_000, `count projection is ${size} bytes`);
 });
 
-void test("count 补齐默认端点并按固定顺序选择帮助模板", async () => {
+void test("count fills default endpoints and picks help templates in a fixed order", async () => {
   const minOnly = defineCli()(
     countCliDefinition([{ kind: "count", fields: ["auth", "quiet"], min: 1 }]),
   );
@@ -736,7 +736,7 @@ void test("count 补齐默认端点并按固定顺序选择帮助模板", async 
   );
 });
 
-void test("count 不会把声明必需但缺席的字段预先算作出现", () => {
+void test("count does not pre-count declared-required but absent fields as present", () => {
   const invocation = parseCliInvocation(createRequiredCountCli(), ["--quiet"]);
   assert.deepEqual(invocation, {
     kind: "usageFailure",
@@ -758,7 +758,7 @@ void test("count 不会把声明必需但缺席的字段预先算作出现", () 
   });
 });
 
-void test("动态 count 定义按端点和字段问题给出局部原因", () => {
+void test("dynamic count definitions give local reasons per endpoint and field issue", () => {
   const dynamicFields: string[] = ["auth", "quiet"];
   const emptyDynamicFields: string[] = [];
   const duplicateDynamicFields: string[] = ["auth", "auth"];
@@ -975,10 +975,10 @@ void test("动态 count 定义按端点和字段问题给出局部原因", () =>
   ];
 
   for (const { constraint, expected } of cases) {
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 动态负例绕过静态契约，以验证定义期边界。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The dynamic negative case bypasses the static contract to verify the definition-time boundary.
     const definition = countCliDefinition([constraint as UsageConstraint]);
     assert.throws(
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 动态负例绕过静态契约，以验证定义期边界。
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The dynamic negative case bypasses the static contract to verify the definition-time boundary.
       () => defineCli()(definition as never),
       (error: unknown) => {
         assert(error instanceof ContractDefinitionError);
@@ -992,7 +992,7 @@ void test("动态 count 定义按端点和字段问题给出局部原因", () =>
   }
 });
 
-void test("动态 count 数组聚合仍可独立判定的成员和端点问题", () => {
+void test("dynamic count arrays still aggregate independently decidable member and endpoint issues", () => {
   const constraints: unknown = [
     {
       kind: "count",
@@ -1005,11 +1005,11 @@ void test("动态 count 数组聚合仍可独立判定的成员和端点问题",
     { kind: "count", fields: "not-a-fields-array", min: 2, max: 1 },
   ];
   const definition = countCliDefinition(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 动态数组故意含非法成员，以验证定义期聚合。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The dynamic array intentionally contains invalid members to verify definition-time aggregation.
     constraints as readonly UsageConstraint[],
   );
   assert.throws(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 动态负例绕过静态契约，以验证定义期边界。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The dynamic negative case bypasses the static contract to verify the definition-time boundary.
     () => defineCli()(definition as never),
     (error: unknown) => {
       assert(error instanceof ContractDefinitionError);
@@ -1116,7 +1116,7 @@ void test("动态 count 数组聚合仍可独立判定的成员和端点问题",
   );
 });
 
-void test("条件规则与禁配规则按声明顺序聚合，失败不执行 handler", async () => {
+void test("conditional and forbidden-combination rules aggregate in declaration order, and failures skip the handler", async () => {
   let executions = 0;
   const cli = createConstrainedCli(() => {
     executions += 1;
@@ -1209,7 +1209,7 @@ void test("条件规则与禁配规则按声明顺序聚合，失败不执行 ha
   );
 });
 
-void test("跨规则的不可达条件分支不会触发全局可满足性拒绝", () => {
+void test("unreachable conditional branches across rules do not trigger global satisfiability rejection", () => {
   const cli = defineCli()({
     ...countCliDefinition([
       { kind: "count", fields: ["auth", "quiet"], max: 1 },
@@ -1235,7 +1235,7 @@ void test("跨规则的不可达条件分支不会触发全局可满足性拒绝
   ]);
 });
 
-void test("禁配字段事实同时观察出现与等值，并保留声明顺序", () => {
+void test("forbidden field facts observe both presence and equality and keep declaration order", () => {
   const sharedInput3 = z.object({
     mode: z.enum(["json", "yaml"]).optional(),
     quiet: z.boolean().default(true),
@@ -1324,7 +1324,7 @@ void test("禁配字段事实同时观察出现与等值，并保留声明顺序
   });
 });
 
-void test("等值事实观察 schema transform 前的 raw Input 值", () => {
+void test("equals facts observe the raw Input value before schema transforms", () => {
   const sharedInput4 = z.object({
     mode: z
       .string()
@@ -1411,7 +1411,7 @@ void test("等值事实观察 schema transform 前的 raw Input 值", () => {
   });
 });
 
-void test("JSON Schema 语义与 parser 一致并保留引用定义", () => {
+void test("JSON Schema semantics agree with the parser and keep referenced definitions", () => {
   const source = z.object({
     format: z.enum(["json", "yaml"]).optional(),
     quiet: z.boolean().optional(),
@@ -1546,7 +1546,7 @@ void test("JSON Schema 语义与 parser 一致并保留引用定义", () => {
   );
 });
 
-void test("when 的分支 schema 与 parser 对照保留根引用及空效果", () => {
+void test("when branch schemas checked against the parser keep root references and empty effects", () => {
   const source = z.object({
     mode: z.enum(["live", "replay"]).optional(),
     cursor: z.string().optional(),
@@ -1768,7 +1768,7 @@ void test("when 的分支 schema 与 parser 对照保留根引用及空效果", 
   }
 });
 
-void test("无效 count 不会遮蔽有效 count 所需的帮助模板诊断", () => {
+void test("an invalid count does not mask help template diagnostics required by a valid count", () => {
   const invalidMinimum: number = -1;
   const definition = {
     ...countCliDefinition([
@@ -1784,7 +1784,7 @@ void test("无效 count 不会遮蔽有效 count 所需的帮助模板诊断", (
   };
 
   assert.throws(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 动态非法 count 需要越过作者期静态诊断。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- A dynamic invalid count must cross authoring-time static diagnostics.
     () => defineCli()(definition as never),
     (error: unknown) => {
       assert.ok(error instanceof ContractDefinitionError);
@@ -1808,7 +1808,7 @@ void test("无效 count 不会遮蔽有效 count 所需的帮助模板诊断", (
   );
 });
 
-void test("输入 schema 投影缺失时仍收集 count 定义诊断", () => {
+void test("count definition diagnostics are still collected when the input schema projection is missing", () => {
   const input = z.object({ auth: z.string().optional() });
   const missingProjection = {
     "~standard": {
@@ -1855,7 +1855,7 @@ void test("输入 schema 投影缺失时仍收集 count 定义诊断", () => {
   };
 
   assert.throws(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 缺少 JSON Schema 接缝的负例需绕过静态消费类型。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case lacking the JSON Schema seam must bypass static consumer types.
     () => defineCli()(definition as never),
     (error: unknown) => {
       assert.ok(error instanceof ContractDefinitionError);
@@ -1880,7 +1880,7 @@ void test("输入 schema 投影缺失时仍收集 count 定义诊断", () => {
   );
 });
 
-void test("同一约束事实投影到 grammar、manifest、Draft 2020-12 与 help", async () => {
+void test("one constraint fact projects into grammar, manifest, Draft 2020-12, and help", async () => {
   const cli = createConstrainedCli();
   const constraints = [
     { kind: "count", fields: ["output", "quiet"], min: 0, max: 1 },
@@ -1914,7 +1914,7 @@ void test("同一约束事实投影到 grammar、manifest、Draft 2020-12 与 he
   );
   assert.deepEqual(projectedSchema.allOf[1], {
     if: { allOf: [{ required: ["auth"] }] },
-    // oxlint-disable-next-line unicorn/no-thenable -- Draft 2020-12 固定关键字。
+    // oxlint-disable-next-line unicorn/no-thenable -- A fixed Draft 2020-12 keyword.
     then: {
       required: ["token"],
       not: {
@@ -1948,7 +1948,7 @@ void test("同一约束事实投影到 grammar、manifest、Draft 2020-12 与 he
   );
 });
 
-void test("动态 when 校验复用事实和值域规则，并检查分支局部矛盾", () => {
+void test("dynamic when validation reuses fact and value-domain rules and checks branch-local contradictions", () => {
   const sharedInput5 = z.object({
     mode: z.enum(["safe", "force"]).optional(),
     tags: z.array(z.string()).optional(),
@@ -2018,7 +2018,7 @@ void test("动态 when 校验复用事实和值域规则，并检查分支局部
     },
   };
   assert.throws(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 动态定义负例绕过静态限制，以验证定义期事实与分支检查。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The dynamic definition negative case bypasses static restrictions to verify definition-time fact and branch checks.
     () => defineCli()(definition as never),
     (error: unknown) => {
       assert.ok(error instanceof ContractDefinitionError);
@@ -2062,7 +2062,7 @@ void test("动态 when 校验复用事实和值域规则，并检查分支局部
   );
 });
 
-void test("动态 when 聚合空分支、畸形成员及闭合属性诊断", () => {
+void test("dynamic when aggregates empty branches, malformed members, and closed property diagnostics", () => {
   const sharedInput6 = z.object({
     force: z.boolean().optional(),
     mode: z.enum(["safe", "force"]).optional(),
@@ -2149,7 +2149,7 @@ void test("动态 when 聚合空分支、畸形成员及闭合属性诊断", () 
     },
   };
   assert.throws(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 动态定义负例绕过静态限制，验证闭合检查完整聚合。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The dynamic definition negative case bypasses static restrictions to verify the closed check aggregates completely.
     () => defineCli()(definition as never),
     (error: unknown) => {
       assert(error instanceof ContractDefinitionError);
@@ -2254,7 +2254,7 @@ void test("动态 when 聚合空分支、畸形成员及闭合属性诊断", () 
   );
 });
 
-void test("层级定义继续聚合叶命令中的独立约束错误", () => {
+void test("hierarchical definitions keep aggregating independent constraint errors in leaf commands", () => {
   const define = defineCli();
   const sharedInput0 = z.object({ mode: z.enum(["safe", "force"]).optional() });
   const definition = {
@@ -2317,7 +2317,7 @@ void test("层级定义继续聚合叶命令中的独立约束错误", () => {
   };
 
   assert.throws(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 动态边界负例绕过静态检查，验证层级定义仍聚合叶约束错误。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The dynamic boundary negative case bypasses static checks to verify hierarchical definitions still aggregate leaf constraint errors.
     () => define(definition as never),
     (error: unknown) => {
       assert.ok(error instanceof ContractDefinitionError);
@@ -2350,7 +2350,7 @@ void test("层级定义继续聚合叶命令中的独立约束错误", () => {
   );
 });
 
-void test("defineCli 拒绝同字段上互相矛盾的等值事实", () => {
+void test("defineCli rejects mutually contradictory equals facts on the same field", () => {
   const sharedInput1 = z.object({ mode: z.string().optional() });
   const definition = {
     root: "contradictoryFacts",
@@ -2406,7 +2406,7 @@ void test("defineCli 拒绝同字段上互相矛盾的等值事实", () => {
     },
   };
   assert.throws(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证定义期检查。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally bypasses static restrictions to verify definition-time checks.
     () => defineCli()(definition as never),
     (error: unknown) => {
       assert.ok(error instanceof ContractDefinitionError);
@@ -2430,7 +2430,7 @@ void test("defineCli 拒绝同字段上互相矛盾的等值事实", () => {
   );
 });
 
-void test("defineCli 将禁配规则与事实上的未知属性报告为统一身份", () => {
+void test("defineCli reports unknown properties on forbidden rules and facts under a unified identity", () => {
   const sharedInput2 = z.object({ force: z.boolean().optional() });
   const definition = {
     root: "unknownUsageProperties",
@@ -2480,7 +2480,7 @@ void test("defineCli 将禁配规则与事实上的未知属性报告为统一�
     },
   };
   assert.throws(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例绕过静态约束，以验证动态定义期诊断身份。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case bypasses static constraints to verify dynamic definition-time diagnostic identities.
     () => defineCli()(definition as never),
     (error: unknown) => {
       assert.ok(error instanceof ContractDefinitionError);
@@ -2513,7 +2513,7 @@ void test("defineCli 将禁配规则与事实上的未知属性报告为统一�
   );
 });
 
-void test("defineCli 将显式 null 交给 usage constraint collection 守卫", () => {
+void test("defineCli hands explicit null to the usage constraint collection guard", () => {
   const sharedInput3 = z.object({});
   const definition = {
     root: "nullConstraints",
@@ -2555,7 +2555,7 @@ void test("defineCli 将显式 null 交给 usage constraint collection 守卫", 
     },
   };
   assert.throws(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证用法约束拒绝。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally bypasses static restrictions to verify usage constraint rejection.
     () => defineCli()(definition as never),
     (error: unknown) => {
       assert(error instanceof ContractDefinitionError);
@@ -2573,7 +2573,7 @@ void test("defineCli 将显式 null 交给 usage constraint collection 守卫", 
   );
 });
 
-void test("when 成立时按一条规则报告完整条件与全部失败效果", async () => {
+void test("a satisfied when reports the full condition and every failed effect as one rule", async () => {
   let executions = 0;
   const sharedInput7 = z.object({
     mode: z.enum(["live", "replay"]).optional(),
@@ -2657,7 +2657,8 @@ void test("when 成立时按一条规则报告完整条件与全部失败效果"
     "--feedback",
   ]);
   assert.equal(invocation.kind, "usageFailure");
-  if (invocation.kind !== "usageFailure") assert.fail("应拒绝缺少令牌的调用");
+  if (invocation.kind !== "usageFailure")
+    assert.fail("the invocation missing the token must be rejected");
   assert.deepEqual(invocation.issues, [
     {
       code: "conditionalConstraintViolation",
@@ -2691,7 +2692,7 @@ void test("when 成立时按一条规则报告完整条件与全部失败效果"
   assert.equal(writes.length, 1);
 });
 
-void test("动态效果字段数组只在运行值实际重叠时产生条件失败", () => {
+void test("dynamic effect field arrays produce conditional failures only when runtime values actually overlap", () => {
   const required: readonly ("mode" | "token")[] = ["token"];
   const forbidden: readonly ("mode" | "token")[] = ["mode"];
   const sharedInput8 = z.object({
@@ -2769,7 +2770,7 @@ void test("动态效果字段数组只在运行值实际重叠时产生条件失
   });
 });
 
-void test("动态 when 效果保留混合数组中可知的错字段定位", () => {
+void test("dynamic when effects keep the decidable bad-field locations inside mixed arrays", () => {
   const constraints: readonly UsageConstraint[] = [
     {
       kind: "when",

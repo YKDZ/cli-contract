@@ -13,7 +13,7 @@ defineCli()({
     extractedMissingFailure: {
       kind: "rootCommand",
       name: "extracted-missing-failure",
-      description: "提取变量后遗漏 failure presenter",
+      description: "Missing failure presenter after extracting a variable",
       input,
 
       outputs({ atomic }) {
@@ -21,7 +21,7 @@ defineCli()({
           success: { kind: "completion" },
           failures: {
             unavailable: {
-              description: "不可用",
+              description: "Unavailable",
               schema: payload,
               exitCode: 9,
             },
@@ -29,14 +29,16 @@ defineCli()({
           handler: ({ outcome }) => outcome.completion(),
         });
         const presentation = {
-          description: "文本输出",
+          description: "Text output",
           success: () => text.silent,
           failures: {},
         };
         return {
           default: "text",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
             text: operation.text(presentation),
           },
         };
@@ -54,7 +56,7 @@ defineCli()({
     extractedMissingData: {
       kind: "rootCommand",
       name: "extracted-missing-data",
-      description: "提取变量后遗漏 data presenter",
+      description: "Missing data presenter after extracting a variable",
       input,
 
       outputs({ atomic }) {
@@ -63,24 +65,26 @@ defineCli()({
             kind: "data",
             variants: {
               found: {
-                description: "找到",
+                description: "Found",
                 schema: payload,
                 exitCode: 0,
               },
             },
           },
           failures: {},
-          handler: ({ outcome }) => outcome.data.found({ message: "结果" }),
+          handler: ({ outcome }) => outcome.data.found({ message: "Result" }),
         });
         const presentation = {
-          description: "文本输出",
+          description: "Text output",
           success: {},
           failures: {},
         };
         return {
           default: "text",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
             text: operation.text(presentation),
           },
         };

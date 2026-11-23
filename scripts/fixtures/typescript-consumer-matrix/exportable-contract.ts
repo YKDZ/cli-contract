@@ -56,17 +56,17 @@ export const inspectCombination = define.command("inspect")({
   kind: "command",
   parent: "tool",
   name: "inspect",
-  description: "检查目标",
+  description: "Inspect target",
   fields: {
     query: {
       kind: "valueOption",
       longOption: "--query",
-      description: "查询",
+      description: "Query",
     },
     dryRun: {
       kind: "flag",
       longOption: "--dry-run",
-      description: "仅演练",
+      description: "Dry run only",
     },
   },
   input: inspectInput,
@@ -100,7 +100,7 @@ export const inspectCombination = define.command("inspect")({
         kind: "data",
         variants: {
           found: {
-            description: "找到目标",
+            description: "Target found",
             schema: foundPayload,
             exitCode: 0,
           },
@@ -108,7 +108,7 @@ export const inspectCombination = define.command("inspect")({
       },
       failures: {
         unavailable: {
-          description: "目标不可用",
+          description: "Target unavailable",
           schema: unavailablePayload,
           exitCode: 9,
         },
@@ -122,7 +122,7 @@ export const inspectCombination = define.command("inspect")({
     return {
       default: "structured",
       modes: {
-        structured: operation.structured({ description: "结构化输出" }),
+        structured: operation.structured({ description: "Structured output" }),
       },
     };
   },
@@ -132,17 +132,17 @@ export const tailCombination = define.command("tail")({
   kind: "command",
   parent: "tool",
   name: "tail",
-  description: "读取记录",
+  description: "Read records",
   fields: {
     topic: {
       kind: "valueOption",
       longOption: "--topic",
-      description: "来源",
+      description: "Source",
     },
     follow: {
       kind: "flag",
       longOption: "--follow",
-      description: "持续读取",
+      description: "Keep reading",
     },
   },
   input: tailInput,
@@ -165,13 +165,13 @@ export const tailCombination = define.command("tail")({
     const streaming = stream({
       records: {
         line: {
-          description: "读取结果",
+          description: "Read result",
           schema: tailLinePayload,
         },
       },
       failures: {
         unavailable: {
-          description: "来源不可用",
+          description: "Source unavailable",
           schema: tailUnavailablePayload,
           exitCode: 10,
         },
@@ -193,9 +193,9 @@ export const tailCombination = define.command("tail")({
     return {
       default: "structured",
       modes: {
-        structured: streaming.structured({ description: "结构化输出" }),
+        structured: streaming.structured({ description: "Structured output" }),
         text: streaming.text({
-          description: "文本输出",
+          description: "Text output",
           records: { line: (value) => text.line(value.target) },
           failures: { unavailable: (value) => text.line(value.reason) },
           terminal: () => text.silent,
@@ -210,12 +210,12 @@ type InspectUsageConstraint = UsageConstraint<
     readonly query: {
       readonly kind: "valueOption";
       readonly longOption: "--query";
-      readonly description: "查询";
+      readonly description: "Query";
     };
     readonly dryRun: {
       readonly kind: "flag";
       readonly longOption: "--dry-run";
-      readonly description: "仅演练";
+      readonly description: "Dry run only";
     };
   },
   InspectInput
@@ -231,7 +231,7 @@ export const cli = define({
     tool: {
       kind: "rootGroup",
       name: "tool",
-      description: "工具",
+      description: "Tool",
     },
     ...inspectCombination,
     ...tailCombination,
@@ -246,17 +246,17 @@ export const rootCommandContract = define({
     probe: {
       kind: "rootCommand",
       name: "probe",
-      description: "根命令示例",
+      description: "Root command example",
       fields: {
         query: {
           kind: "valueOption",
           longOption: "--query",
-          description: "查询",
+          description: "Query",
         },
         dryRun: {
           kind: "flag",
           longOption: "--dry-run",
-          description: "仅演练",
+          description: "Dry run only",
         },
       },
       input: inspectInput,
@@ -271,7 +271,7 @@ export const rootCommandContract = define({
             kind: "data",
             variants: {
               found: {
-                description: "找到目标",
+                description: "Target found",
                 schema: foundPayload,
                 exitCode: 0,
               },
@@ -279,7 +279,7 @@ export const rootCommandContract = define({
           },
           failures: {
             unavailable: {
-              description: "目标不可用",
+              description: "Target unavailable",
               schema: unavailablePayload,
               exitCode: 9,
             },
@@ -293,9 +293,11 @@ export const rootCommandContract = define({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               success: { found: (value) => text.line(String(value.count)) },
               failures: { unavailable: (value) => text.line(value.reason) },
             }),

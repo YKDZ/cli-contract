@@ -29,7 +29,7 @@ function schema<Input, Output>(): ContractSchema<Input, Output> {
     "~standard": {
       version: 1,
       vendor: "typescript-consumer-matrix",
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 跨包编译矩阵故意使用静态占位与类型探针。
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The cross-package compile matrix deliberately uses static placeholders and type probes.
       validate: (value) => ({ value: value as Output }),
       jsonSchema: {
         input: () => ({ type: "object" }),
@@ -44,22 +44,27 @@ const emptyInput = schema<EmptyCliInput, EmptyCliInput>();
 const inspectInput = schema<InspectInput, InspectInput>();
 const payload = schema<Payload, Payload>();
 
-const nonEmptyTextLines: readonly [string, ...string[]] = ["已知非空", ""];
+const nonEmptyTextLines: readonly [string, ...string[]] = [
+  "Known non-empty",
+  "",
+];
 void text.lines(nonEmptyTextLines);
 
 const emptyTextLines: [] = [];
-// @ts-expect-error 空元组不能满足至少一行的公开声明。
+// @ts-expect-error An empty tuple cannot satisfy the public at-least-one-line declaration.
 void text.lines(emptyTextLines);
 
-const dynamicTextLines: string[] = ["运行时才确定是否有行"];
-// @ts-expect-error 普通数组没有保留至少一行的静态事实。
+const dynamicTextLines: string[] = [
+  "Whether lines exist is decided at runtime",
+];
+// @ts-expect-error A plain array does not preserve the static at-least-one-line fact.
 void text.lines(dynamicTextLines);
 
 const complete = define.command("complete")({
   kind: "command",
   parent: "consumer",
   name: "complete",
-  description: "完成任务",
+  description: "Complete task",
   fields: {},
   input: emptyInput,
 
@@ -72,10 +77,10 @@ const complete = define.command("complete")({
     return {
       default: "structured",
       modes: {
-        structured: operation.structured({ description: "结构化输出" }),
+        structured: operation.structured({ description: "Structured output" }),
         text: operation.text({
-          description: "文本输出",
-          success: () => text.lines(["完成", ""]),
+          description: "Text output",
+          success: () => text.lines(["Done", ""]),
           failures: {},
         }),
       },
@@ -87,12 +92,12 @@ const inspect = define.command("inspect")({
   kind: "command",
   parent: "consumer",
   name: "inspect",
-  description: "检查目标",
+  description: "Inspect target",
   fields: {
     target: {
       kind: "valueOption",
       longOption: "--target",
-      description: "目标",
+      description: "Target",
     },
   },
   input: inspectInput,
@@ -103,7 +108,7 @@ const inspect = define.command("inspect")({
         kind: "data",
         variants: {
           found: {
-            description: "找到目标",
+            description: "Target found",
             schema: payload,
             exitCode: 0,
           },
@@ -111,7 +116,7 @@ const inspect = define.command("inspect")({
       },
       failures: {
         unavailable: {
-          description: "服务不可用",
+          description: "Service unavailable",
           schema: payload,
           exitCode: 9,
         },
@@ -124,15 +129,15 @@ const inspect = define.command("inspect")({
     return {
       default: "structured",
       modes: {
-        structured: operation.structured({ description: "结构化输出" }),
+        structured: operation.structured({ description: "Structured output" }),
         text: operation.text({
-          description: "文本输出",
+          description: "Text output",
           success: {
-            found: (value: Payload) => text.lines(["找到", value.message]),
+            found: (value: Payload) => text.lines(["Found", value.message]),
           },
           failures: {
             unavailable: (value: Payload) =>
-              text.lines(["不可用", value.message]),
+              text.lines(["Unavailable", value.message]),
           },
         }),
       },
@@ -144,7 +149,7 @@ const watch = define.command("watch")({
   kind: "command",
   parent: "consumer",
   name: "watch",
-  description: "观察目标",
+  description: "Observe target",
   fields: {},
   input: emptyInput,
 
@@ -152,25 +157,25 @@ const watch = define.command("watch")({
     const streaming = stream({
       records: {
         item: {
-          description: "观察记录",
+          description: "Observation record",
           schema: payload,
         },
       },
       failures: {},
       async *handler({ outcome }) {
-        yield outcome.record.item({ message: "第一条" });
+        yield outcome.record.item({ message: "First entry" });
         return outcome.streamSuccess();
       },
     });
     return {
       default: "structured",
       modes: {
-        structured: streaming.structured({ description: "结构化输出" }),
+        structured: streaming.structured({ description: "Structured output" }),
         text: streaming.text({
-          description: "文本输出",
+          description: "Text output",
           records: { item: (value: Payload) => text.line(value.message) },
           failures: {},
-          terminal: () => text.lines(["观察完成", ""]),
+          terminal: () => text.lines(["Observation complete", ""]),
         }),
       },
     };
@@ -186,8 +191,8 @@ const cli = define({
     consumer: {
       kind: "rootGroup",
       name: "consumer",
-      description: "消费者",
-      helpSupplement: text.lines(["使用 -h 查看帮助", ""]),
+      description: "Consumer",
+      helpSupplement: text.lines(["Use -h for help", ""]),
     },
     ...complete,
     ...inspect,
@@ -196,9 +201,9 @@ const cli = define({
 });
 
 void nodeCliOutput({
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 跨包编译矩阵故意使用静态占位与类型探针。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The cross-package compile matrix deliberately uses static placeholders and type probes.
   stdout: null as unknown as Writable,
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 跨包编译矩阵故意使用静态占位与类型探针。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The cross-package compile matrix deliberately uses static placeholders and type probes.
   stderr: null as unknown as Writable,
 });
 
@@ -240,7 +245,7 @@ void positiveIssueShapes;
 function negativeContractShapes(): void {
   void defineCommandScenarios(
     cli,
-    // @ts-expect-error 每个命令都必须有场景。
+    // @ts-expect-error Every command must have a scenario.
     {
       complete: { argv: ["complete"], dependencies: { available: true } },
       inspect: {
@@ -251,7 +256,7 @@ function negativeContractShapes(): void {
   );
 
   void defineFailureScenarios(cli, {
-    // @ts-expect-error 已声明失败不能遗漏场景。
+    // @ts-expect-error A declared failure must not omit its scenario.
     inspect: {},
   });
 
@@ -259,7 +264,7 @@ function negativeContractShapes(): void {
     inspect: {
       unavailable: {
         argv: ["inspect"],
-        // @ts-expect-error 场景依赖必须和契约依赖一致。
+        // @ts-expect-error Scenario dependencies must match the contract dependencies.
         dependencies: { missing: true },
       },
     },
@@ -272,40 +277,40 @@ function negativeContractShapes(): void {
       dependencies: { available: true },
     },
     watch: { argv: ["watch"], dependencies: { available: true } },
-    // @ts-expect-error 结果位置不能伪造为命令场景。
+    // @ts-expect-error A result location cannot be forged as a command scenario.
     result: { argv: [], dependencies: { available: true } },
   });
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 跨包编译矩阵故意使用静态占位与类型探针。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The cross-package compile matrix deliberately uses static placeholders and type probes.
   const scenarioSink = null as unknown as Readonly<
     Record<string, CliScenario<typeof cli>>
   >;
-  // @ts-expect-error 场景映射不能用索引签名逃避闭集。
+  // @ts-expect-error A scenario map cannot use an index signature to escape the closed set.
   void defineCommandScenarios(cli, scenarioSink);
 
   const invalidDataPresenter: DataVariantDefinition<Payload, true> = {
-    description: "错误 data",
+    description: "Wrong data",
     schema: payload,
     exitCode: 0,
-    // @ts-expect-error data presenter 不接受 silentText。
+    // @ts-expect-error A data presenter does not accept silentText.
     text: () => text.silent,
   };
   void invalidDataPresenter;
 
   const invalidFailurePresenter: FailureVariantDefinition<Payload, true> = {
-    description: "错误 failure",
+    description: "Wrong failure",
     schema: payload,
     exitCode: 9,
-    // @ts-expect-error failure presenter 不接受 silentText。
+    // @ts-expect-error A failure presenter does not accept silentText.
     text: () => text.silent,
   };
   void invalidFailurePresenter;
 
   const invalidRecordPresenter: StreamRecordDefinition<Payload, true> = {
-    description: "错误 record",
+    description: "Wrong record",
     schema: payload,
-    // @ts-expect-error stream record presenter 不接受 TextLines。
-    text: () => text.lines(["错误位置"]),
+    // @ts-expect-error A stream record presenter does not accept TextLines.
+    text: () => text.lines(["Wrong location"]),
   };
   void invalidRecordPresenter;
 }

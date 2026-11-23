@@ -15,7 +15,9 @@ if (
   typeof manifest.version !== "string" ||
   !isRecord(manifest.exports)
 ) {
-  throw new TypeError("公共包元数据缺少有效的 name、version 或 exports");
+  throw new TypeError(
+    "Public package metadata is missing a valid name, version, or exports",
+  );
 }
 const coreMetadata =
   manifest.name === "@ykdz/cli-contract"
@@ -23,16 +25,17 @@ const coreMetadata =
     : await readCoreMetadata(directory, manifest.version);
 const coreVersion = coreMetadata.version;
 if (typeof coreVersion !== "string") {
-  throw new TypeError("core 包元数据缺少有效的 version");
+  throw new TypeError("core package metadata is missing a valid version");
 }
 const sourceTag = encodeURIComponent(`@ykdz/cli-contract@${coreVersion}`);
 const url = `https://github.com/YKDZ/cli-contract/tree/${sourceTag}/packages/example`;
 const entries = new Set<string>();
 for (const exported of Object.values(manifest.exports)) {
-  if (!isRecord(exported)) throw new TypeError("示例包 exports 项必须是对象");
+  if (!isRecord(exported))
+    throw new TypeError("Package exports entries must be objects");
   for (const entry of Object.values(exported)) {
     if (typeof entry !== "string")
-      throw new TypeError("示例包 exports 路径必须是字符串");
+      throw new TypeError("Package exports paths must be strings");
     entries.add(resolve(directory, entry));
   }
 }
@@ -48,8 +51,8 @@ for (const entry of await readdir(resolve(directory, "dist"), {
     url,
   );
   if (entries.has(file)) {
-    content = content.replace(/^\/\*\* 完整示例：.*? \*\/\n/, "");
-    content = `/** 完整示例：${url} */\n${content}`;
+    content = content.replace(/^\/\*\* Full example: .*? \*\/\n/, "");
+    content = `/** Full example: ${url} */\n${content}`;
   }
   if (content !== original) await writeFile(file, content);
 }
@@ -66,10 +69,12 @@ async function readCoreMetadata(
   const path = require.resolve("@ykdz/cli-contract/package.json");
   const value: unknown = JSON.parse(await readFile(path, "utf8"));
   if (!isRecord(value) || typeof value.version !== "string") {
-    throw new TypeError("testing 构建需要有效的 core 包元数据");
+    throw new TypeError(
+      "The testing build requires valid core package metadata",
+    );
   }
   if (value.version !== packageVersion) {
-    throw new Error("core 与 testing 构建版本不一致");
+    throw new Error("core and testing build versions do not match");
   }
   return { version: value.version };
 }

@@ -13,8 +13,10 @@ export type JsonValue =
 export type JsonObject = { readonly [key: string]: JsonValue };
 
 /**
- * 同一模式负责运行时验证和 JSON Schema 投影。输入字段的必填、候选值及实际格式规则
- * 以模式为准；不要为了简化投影而删掉仍会影响接受范围的校验。
+ * One schema owns both runtime validation and JSON Schema projection. Required
+ * input fields, choices, and actual format rules are decided by the schema; do
+ * not drop validation that still affects the accepted range just to simplify
+ * the projection.
  */
 export interface ContractSchema<Input = unknown, Output = Input> {
   readonly "~standard": StandardSchemaV1.Props<Input, Output> &

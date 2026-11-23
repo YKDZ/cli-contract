@@ -97,7 +97,7 @@ function createSuggestionCli() {
   });
 }
 
-void test("命令建议只从当前 group 的直接名称与 alias 唯一选择", () => {
+void test("command suggestions pick uniquely from the direct names and aliases of the current group", () => {
   const cli = createSuggestionCli();
 
   for (const [argv, issue] of [
@@ -127,7 +127,7 @@ void test("命令建议只从当前 group 的直接名称与 alias 唯一选择"
   });
 });
 
-void test("长选项建议从当前可执行命令字段与核心 controls 机械选择", () => {
+void test("long option suggestions pick mechanically from the fields of the current executable command and core controls", () => {
   const cli = createSuggestionCli();
 
   for (const [argv, option, suggestedOption] of [
@@ -172,7 +172,7 @@ void test("长选项建议从当前可执行命令字段与核心 controls 机�
   });
 });
 
-void test("建议保持大小写敏感，并在阈值、并列或过远时省略", () => {
+void test("suggestions stay case-sensitive and are omitted at the threshold, on ties, or when too distant", () => {
   const define = defineCli();
   const sharedInput0 = z.object({});
   const sharedInput1 = z.object({

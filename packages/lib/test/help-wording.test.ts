@@ -15,7 +15,7 @@ import { z } from "zod";
 
 import { englishHelpWording } from "./english-help.ts";
 
-void test("帮助事实模板表达候选值和默认值，保留 schema 中的值", async () => {
+void test("help fact templates express choices and defaults while preserving the schema values", async () => {
   const sharedInput0 = z.object({
     mode: z.enum(["safe", "force"]).default("safe"),
   });
@@ -76,7 +76,7 @@ void test("帮助事实模板表达候选值和默认值，保留 schema 中的�
   );
 });
 
-void test("提取的帮助事实未知槽位报告闭合定义问题", () => {
+void test("unknown slots in extracted help facts report a closed definition issue", () => {
   const definition: HelpCapabilityDefinition = JSON.parse(
     '{"wording":{"choises":"候选 {choices}","defalt":"默认 {value}"}}',
   );
@@ -100,7 +100,7 @@ void test("提取的帮助事实未知槽位报告闭合定义问题", () => {
   );
 });
 
-void test("帮助文案中未知槽位与已知模板问题同次聚合", () => {
+void test("unknown slots and known template issues in help wording aggregate in the same pass", () => {
   assert.throws(
     () =>
       helpCapability({
@@ -129,7 +129,7 @@ void test("帮助文案中未知槽位与已知模板问题同次聚合", () => 
   );
 });
 
-void test("仅已知模板错误仍在根装配时与叶约束问题聚合", () => {
+void test("known-only template errors still aggregate with leaf constraint issues at root assembly", () => {
   const helpDefinition: HelpCapabilityDefinition = JSON.parse(
     '{"wording":{"choices":"候选 {choises}","default":"默认 {value}"}}',
   );
@@ -188,7 +188,7 @@ void test("仅已知模板错误仍在根装配时与叶约束问题聚合", () 
   };
 
   assert.throws(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 动态闭合负例验证根级问题仍与叶约束问题聚合。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The dynamic closed negative case verifies root-level issues still aggregate with leaf constraint issues.
     () => defineCli()(definition as never),
     (error: unknown) => {
       assert.ok(error instanceof ContractDefinitionError);
@@ -214,7 +214,7 @@ void test("仅已知模板错误仍在根装配时与叶约束问题聚合", () 
   );
 });
 
-void test("已声明帮助事实缺少模板时在定义期报告命令与槽位", () => {
+void test("a declared help fact missing its template reports command and slot at definition time", () => {
   const sharedInput0 = z.object({
     mode: z.enum(["safe", "force"]).default("safe"),
   });
@@ -322,7 +322,7 @@ void test("已声明帮助事实缺少模板时在定义期报告命令与槽位
   );
 });
 
-void test("输出方式的候选与默认事实缺少作者模板时在定义期报告", () => {
+void test("output-mode choice and default facts missing author templates report at definition time", () => {
   const define = defineCli();
   const input = z.object({});
 
@@ -368,7 +368,7 @@ void test("输出方式的候选与默认事实缺少作者模板时在定义期
   );
 });
 
-void test("空效果分支不要求对应帮助槽位", async () => {
+void test("empty effect branches do not require their help slots", async () => {
   const sharedInput2 = z.object({ mode: z.string().optional() });
   const cli = defineCli()({
     root: "choose",
@@ -434,7 +434,7 @@ void test("空效果分支不要求对应帮助槽位", async () => {
   assert.match(writes.join(""), /当并非全部满足 存在 mode 时，不能提供 mode/);
 });
 
-void test("动态帮助事实模板在根装配时聚合报告非法槽位", () => {
+void test("dynamic help fact templates aggregate invalid slots at root assembly", () => {
   const wording: { readonly choices: string; readonly default: string } = {
     choices: "（可选值：{unknown}）",
     default: "默认值\n{value}",
@@ -503,7 +503,7 @@ void test("动态帮助事实模板在根装配时聚合报告非法槽位", () 
   );
 });
 
-void test("帮助模板错误保留非法原值并继续聚合定义期问题", () => {
+void test("help template errors keep the invalid original value and keep aggregating definition issues", () => {
   const helpDefinition: HelpCapabilityDefinition = JSON.parse(
     '{"wording":{"choices":42,"default":null,"countExactly":{},"whenOnMatch":"满足 {unknown}"}}',
   );
@@ -591,7 +591,7 @@ void test("帮助模板错误保留非法原值并继续聚合定义期问题", 
   );
 });
 
-void test("命令组占位词静态与动态判断同界", () => {
+void test("command group placeholders share the same boundary for static and dynamic checks", () => {
   const invalidTemplates = [
     { received: "   ", reason: "empty" },
     { received: "<命令组>", reason: "placeholder" },
@@ -658,7 +658,7 @@ void test("命令组占位词静态与动态判断同界", () => {
   }
 });
 
-void test("命令组缺少占位词时在定义期报告根身份", () => {
+void test("a command group missing its placeholder reports the root identity at definition time", () => {
   const define = defineCli();
   const sharedInput6 = z.object({});
   assert.throws(
@@ -715,7 +715,7 @@ void test("命令组缺少占位词时在定义期报告根身份", () => {
   );
 });
 
-void test("命令组占位词贯穿帮助、用法失败和契约清单", async () => {
+void test("the command group placeholder flows through help, usage failures, and the contract manifest", async () => {
   const define = defineCli();
   const sharedInput7 = z.object({});
   const cli = define({
@@ -787,7 +787,7 @@ void test("命令组占位词贯穿帮助、用法失败和契约清单", async 
   assert.match(writes.join(""), /jobs <命令>/);
 });
 
-void test("条件分支模板表达全称条件，并允许各槽位调整词序", async () => {
+void test("conditional branch templates express universal conditions and let each slot reorder words", async () => {
   const sharedInput1 = z.object({
     auth: z.string().optional(),
     token: z.string().optional(),
@@ -898,7 +898,7 @@ void test("条件分支模板表达全称条件，并允许各槽位调整词序
   assert.match(help, /禁止同时出现 quiet 等于 true, force 等于 true/);
 });
 
-void test("输出格式控制复用候选值和默认值模板", async () => {
+void test("the output format control reuses the choices and default templates", async () => {
   const sharedInput8 = z.object({});
   const cli = defineCli()({
     root: "show",
@@ -963,7 +963,7 @@ void test("输出格式控制复用候选值和默认值模板", async () => {
   );
 });
 
-void test("输出方式帮助列出根作者提供的候选值与默认值文案", async () => {
+void test("output-mode help lists the choices and default wording provided by the root author", async () => {
   const sharedInput9 = z.object({});
   const cli = defineCli()({
     root: "show",

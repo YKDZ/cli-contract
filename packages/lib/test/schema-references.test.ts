@@ -31,7 +31,7 @@ interface TreeNode {
   readonly children: readonly TreeNode[];
 }
 
-void test("recursive Zod data 经过信封后仍通过公开线模式", async () => {
+void test("recursive Zod data still passes the public wire schema after enveloping", async () => {
   let treeSchema: z.ZodType<TreeNode, TreeNode>;
   treeSchema = z.lazy(() =>
     z.object({ name: z.string(), children: z.array(treeSchema) }),
@@ -117,7 +117,7 @@ void test("recursive Zod data 经过信封后仍通过公开线模式", async ()
   );
 });
 
-void test("递归 Zod data 的根 URI 经信封后仍指向载荷根", async () => {
+void test("the root URI of recursive Zod data still points at the payload root after enveloping", async () => {
   let treeSchema: z.ZodType<TreeNode, TreeNode>;
   treeSchema = z.lazy(() =>
     z.object({ name: z.string(), children: z.array(treeSchema) }),
@@ -217,7 +217,7 @@ void test("递归 Zod data 的根 URI 经信封后仍指向载荷根", async () 
   }
 });
 
-void test("recursive Zod failure 经过信封后仍通过公开线模式", async () => {
+void test("recursive Zod failure still passes the public wire schema after enveloping", async () => {
   let treeSchema: z.ZodType<TreeNode, TreeNode>;
   treeSchema = z.lazy(() =>
     z.object({ name: z.string(), children: z.array(treeSchema) }),
@@ -291,7 +291,7 @@ void test("recursive Zod failure 经过信封后仍通过公开线模式", async
   );
 });
 
-void test("recursive Zod stream record 经过信封后仍通过公开线模式", async () => {
+void test("recursive Zod stream records still pass the public wire schema after enveloping", async () => {
   let treeSchema: z.ZodType<TreeNode, TreeNode>;
   treeSchema = z.lazy(() =>
     z.object({ name: z.string(), children: z.array(treeSchema) }),
@@ -362,7 +362,7 @@ void test("recursive Zod stream record 经过信封后仍通过公开线模式",
   }
 });
 
-void test("多个 stream record 复用同一资源时 line 模式仍可离线编译", async () => {
+void test("the line schema still compiles offline when multiple stream records reuse one resource", async () => {
   let treeSchema: z.ZodType<TreeNode, TreeNode>;
   treeSchema = z.lazy(() =>
     z.object({ name: z.string(), children: z.array(treeSchema) }),
@@ -467,7 +467,7 @@ void test("多个 stream record 复用同一资源时 line 模式仍可离线编
   );
 });
 
-void test("stream record 各自保留重复资源 ID 下的载荷约束", async () => {
+void test("stream records each keep their payload constraints under duplicated resource IDs", async () => {
   const namedSchema = <Value>(
     runtimeSchema: ContractSchema<Value, Value>,
     id: string,
@@ -575,7 +575,7 @@ void test("stream record 各自保留重复资源 ID 下的载荷约束", async 
   }
 });
 
-void test("组合 stream line 保留嵌套资源与本地 JSON Pointer", async () => {
+void test("a combined stream line schema keeps nested resources and local JSON Pointers", async () => {
   const runtimeSchema = z.object({
     name: z.string(),
     alias: z.string(),
@@ -698,7 +698,7 @@ void test("组合 stream line 保留嵌套资源与本地 JSON Pointer", async (
   }
 });
 
-void test("重定位保留跨资源的 dynamicRef 作用域", async () => {
+void test("relocation preserves dynamicRef scopes across resources", async () => {
   let runtimeTree: z.ZodType<TreeNode, TreeNode>;
   runtimeTree = z.lazy(() =>
     z.object({ name: z.string(), children: z.array(runtimeTree) }).strict(),
@@ -803,7 +803,7 @@ void test("重定位保留跨资源的 dynamicRef 作用域", async () => {
   );
 });
 
-void test("data 线模式保留局部定义引用与资源 anchor", async () => {
+void test("the data wire schema keeps local definition references and resource anchors", async () => {
   let treeSchema: z.ZodType<TreeNode, TreeNode>;
   treeSchema = z.lazy(() =>
     z.object({ name: z.string(), children: z.array(treeSchema) }),
@@ -903,7 +903,7 @@ void test("data 线模式保留局部定义引用与资源 anchor", async () => 
   );
 });
 
-void test("不能自包含的外部 schema 引用产生定义诊断且不加载网络", () => {
+void test("external schema references that cannot be made self-contained produce definition diagnostics without loading the network", () => {
   const runtimeSchema = z.object({ reason: z.string() });
   const externalReference =
     "https://schemas.example.invalid/common.json#/$defs/Reason";

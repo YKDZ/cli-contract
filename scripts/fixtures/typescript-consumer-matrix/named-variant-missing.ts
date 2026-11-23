@@ -14,12 +14,12 @@ defineCli()({
     missingDataVariantText: {
       kind: "rootCommand",
       name: "missing-data-variant-text",
-      description: "遗漏 data presenter",
+      description: "Missing data presenter",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: textInput,
@@ -30,12 +30,12 @@ defineCli()({
             kind: "data",
             variants: {
               accepted: {
-                description: "已接受",
+                description: "Accepted",
                 schema: messagePayload,
                 exitCode: 0,
               },
               deferred: {
-                description: "已延后",
+                description: "Deferred",
                 schema: messagePayload,
                 exitCode: 0,
               },
@@ -43,14 +43,16 @@ defineCli()({
           },
           failures: {},
           handler: ({ outcome }) =>
-            outcome.data.accepted({ message: "已接受请求" }),
+            outcome.data.accepted({ message: "Request accepted" }),
         });
         return {
           default: "text",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               success: {
                 accepted: (payload) => text.line(payload.message),
               },
@@ -72,12 +74,12 @@ defineCli()({
     missingDataFailureText: {
       kind: "rootCommand",
       name: "missing-data-failure-text",
-      description: "data 的遗漏 failure presenter",
+      description: "Missing failure presenter for data",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: textInput,
@@ -88,7 +90,7 @@ defineCli()({
             kind: "data",
             variants: {
               accepted: {
-                description: "已接受",
+                description: "Accepted",
                 schema: messagePayload,
                 exitCode: 0,
               },
@@ -96,25 +98,27 @@ defineCli()({
           },
           failures: {
             unavailable: {
-              description: "不可用",
+              description: "Unavailable",
               schema: messagePayload,
               exitCode: 9,
             },
             forbidden: {
-              description: "禁止",
+              description: "Forbidden",
               schema: messagePayload,
               exitCode: 13,
             },
           },
           handler: ({ outcome }) =>
-            outcome.data.accepted({ message: "已接受请求" }),
+            outcome.data.accepted({ message: "Request accepted" }),
         });
         return {
           default: "text",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               success: {
                 accepted: (payload) => text.line(payload.message),
               },
@@ -138,7 +142,7 @@ defineCli()({
     missingCompletionFailureText: {
       kind: "rootCommand",
       name: "missing-completion-failure-text",
-      description: "completion 的遗漏 failure presenter",
+      description: "Missing failure presenter for completion",
       input: emptyInput,
 
       outputs({ atomic }) {
@@ -146,12 +150,12 @@ defineCli()({
           success: { kind: "completion" },
           failures: {
             unavailable: {
-              description: "不可用",
+              description: "Unavailable",
               schema: messagePayload,
               exitCode: 9,
             },
             forbidden: {
-              description: "禁止",
+              description: "Forbidden",
               schema: messagePayload,
               exitCode: 13,
             },
@@ -161,9 +165,11 @@ defineCli()({
         return {
           default: "text",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               success: () => text.silent,
               failures: {
                 unavailable: (payload) => text.line(payload.message),

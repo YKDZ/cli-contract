@@ -678,7 +678,7 @@ void test("ordinary help lists only applicable schema calls", async () => {
   );
 });
 
-void test("根作者省略发现标题时帮助保留机械查询形状与准确argv", async () => {
+void test("help keeps the mechanical query shape and exact argv when the root author omits the discovery heading", async () => {
   const cli = createRootDiscoveryCli();
   const invocation = parseCliInvocation(cli, ["--help"]);
   assert.equal(invocation.kind, "help");
