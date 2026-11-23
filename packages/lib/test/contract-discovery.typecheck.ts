@@ -14,14 +14,14 @@ const input = z.object({ id: z.string() });
 const cli = define({
   root: "inspect",
   help: englishHelpCapability(),
-  schema: schemaCapability({ description: text.line("查询契约。") }),
+  schema: schemaCapability({ description: text.line("Query the contract.") }),
   usageFailureExitCode: 64,
   commands: {
     inspect: {
       kind: "rootCommand",
       name: "inspect",
-      description: "查询对象。",
-      fields: { id: { kind: "positional", description: "对象标识。" } },
+      description: "Query an object.",
+      fields: { id: { kind: "positional", description: "Object identifier." } },
       input,
       outputs: (mode) => ({
         default: "json",
@@ -38,7 +38,7 @@ const cli = define({
               },
             })
             .structured({
-              description: "结构化结果。",
+              description: "Structured result.",
             }),
         },
       }),
@@ -56,7 +56,7 @@ if (schemaInvocation.kind === "schema") {
 
 const applicationInvocation = parseCliInvocation(cli, ["Ada"]);
 if (applicationInvocation.kind === "parsed") {
-  // @ts-expect-error 应用调用仍然必须提供精确业务依赖。
+  // @ts-expect-error Application invocations still require the exact business dependencies.
   void executeCli(cli, {
     invocation: applicationInvocation,
     write: () => undefined,

@@ -148,7 +148,8 @@ const declaredAtomicVariantProperties = [
 ] as const;
 const declaredStreamRecordProperties = ["description", "schema"] as const;
 
-// 类型约束与定义期检查共用已知属性，避免拼错的声明被静默丢弃。
+// Type constraints and definition-time checks share these known properties so
+// misspelled declarations are not silently dropped.
 const definitionPropertyKeys = {
   cli: [
     "root",
@@ -223,8 +224,8 @@ export interface HelpCapability {
 }
 
 /**
- * 根级帮助中既定段落的可选标题。未声明标题时仍保留对应机械内容和缩进，
- * 不会由核心补写默认文案。
+ * Optional headings for the fixed sections of root help. Omitting a heading keeps
+ * the section's mechanical content and indentation; the core writes no default copy.
  */
 export interface HelpHeadings {
   readonly usage?: string;
@@ -238,39 +239,39 @@ export interface HelpHeadings {
 }
 
 export interface HelpFactWording {
-  /** 命令组占位词本身，核心为它添加尖括号。 */
+  /** The command-group placeholder word itself; the core adds the angle brackets. */
   readonly commandPlaceholder?: string;
-  /** 字段或输出格式的候选集合，必须包含 `{choices}`。 */
+  /** The choice set of a field or output format; must contain `{choices}`. */
   readonly choices?: string;
-  /** 字段或输出格式的默认 JSON 值，必须包含 `{value}`。 */
+  /** The default JSON value of a field or output format; must contain `{value}`. */
   readonly default?: string;
-  /** 有效的成立分支，必须包含 `{facts}` 与 `{onMatch}`。 */
+  /** A valid match branch; must contain `{facts}` and `{onMatch}`. */
   readonly whenOnMatch?: string;
-  /** 有效的不成立分支，必须包含 `{facts}` 与 `{otherwise}`。 */
+  /** A valid non-match branch; must contain `{facts}` and `{otherwise}`. */
   readonly whenOtherwise?: string;
-  /** 两侧均有效的条件分支，必须包含 `{facts}`、`{onMatch}` 与 `{otherwise}`。 */
+  /** A conditional branch valid on both sides; must contain `{facts}`, `{onMatch}` and `{otherwise}`. */
   readonly whenOnMatchOtherwise?: string;
-  /** 效果中的必需字段组，必须包含 `{fields}`。 */
+  /** A required field group in an effect; must contain `{fields}`. */
   readonly require?: string;
-  /** 效果中的禁止字段组，必须包含 `{fields}`。 */
+  /** A forbidden field group in an effect; must contain `{fields}`. */
   readonly forbid?: string;
-  /** 字段出现事实，必须包含 `{field}`。 */
+  /** A field-presence fact; must contain `{field}`. */
   readonly present?: string;
-  /** 字段等值事实，必须包含 `{field}` 与 `{value}`。 */
+  /** A field-equality fact; must contain `{field}` and `{value}`. */
   readonly equals?: string;
-  /** 禁止同时成立的字段事实组，必须包含 `{facts}`。 */
+  /** A group of field facts that must not hold together; must contain `{facts}`. */
   readonly forbiddenCombination?: string;
-  /** 字段数必须恰好为 `{count}`，包含 `{fields}`。 */
+  /** The field count must be exactly `{count}`; contains `{fields}`. */
   readonly countExactly?: string;
-  /** 字段数至少为 `{min}`，包含 `{fields}`。 */
+  /** The field count must be at least `{min}`; contains `{fields}`. */
   readonly countAtLeast?: string;
-  /** 字段数至多为 `{max}`，包含 `{fields}`。 */
+  /** The field count must be at most `{max}`; contains `{fields}`. */
   readonly countAtMost?: string;
-  /** 字段数位于 `{min}` 到 `{max}`，包含 `{fields}`。 */
+  /** The field count must be between `{min}` and `{max}`; contains `{fields}`. */
   readonly countBetween?: string;
 }
 
-/** 帮助事实槽位及其必需替换参数的唯一规格。 */
+/** The single specification of help fact slots and their required replacement parameters. */
 export const helpTemplateSpecifications = {
   commandPlaceholder: { placeholders: [] },
   choices: { placeholders: ["choices"] },
@@ -292,7 +293,7 @@ export const helpTemplateSpecifications = {
   Readonly<{ readonly placeholders: readonly string[] }>
 >;
 
-/** 按帮助槽位推导的替换参数闭合形状。 */
+/** Closed replacement-parameter shapes derived per help slot. */
 export type HelpFactTemplateParameters = {
   readonly [Slot in keyof typeof helpTemplateSpecifications]: Readonly<
     Record<
@@ -302,7 +303,7 @@ export type HelpFactTemplateParameters = {
   >;
 };
 
-/** 根契约一次装配的帮助配置；标题可省略，实际出现的事实必须有文案。 */
+/** Help configuration assembled once on the root contract; headings are optional, but every fact that actually appears needs wording. */
 export interface HelpCapabilityDefinition {
   readonly shortAlias?: "-h";
   readonly headings?: HelpHeadings;
@@ -313,7 +314,7 @@ type HelpCapabilityDefinitionForTypeCheck = Omit<
   HelpCapabilityDefinition,
   "wording"
 > & {
-  /** 保留未知槽位的字面键，让局部闭合诊断提供可行动身份。 */
+  /** Keep literal keys of unknown slots so the local closed-set diagnostic reports an actionable identity. */
   readonly wording?: object;
 };
 
@@ -331,7 +332,7 @@ export interface VersionCapabilityDefinition {
   readonly shortAlias?: "-V";
 }
 
-/** 根级契约发现能力；说明文案一次装配后会投影到全树帮助。 */
+/** Root-level contract discovery capability; the description is assembled once and projected into help across the tree. */
 export interface SchemaCapability {
   readonly kind: "schemaCapability";
   readonly longOption: "--schema";
@@ -346,7 +347,7 @@ export interface SchemaCapabilityDefinition {
 export type OutputFormat = "structured" | "text";
 export type OutputDelivery = "atomic" | "stream";
 
-/** 与可执行命令同位的调用样本；省略 outputMode 表示采用命令默认方式。 */
+/** An invocation sample colocated with an executable command; omitting outputMode selects the command's default mode. */
 export interface CommandExampleDefinition<
   Input = unknown,
   OutputMode extends string = string,
@@ -471,7 +472,11 @@ export type OutputModeDefinition<
 
 export type OutputModeMap = Readonly<Record<string, OutputModeDefinition>>;
 
-/** Declare executions and name their output modes within the current command. */
+/**
+ * Declare executions and name their output modes within the current command.
+ * The callback runs once at definition time with a factory bound to this command
+ * construction, carrying the command's identity, input schema and dependency types.
+ */
 export type OutputModesAuthoring<
   Command extends string = string,
   Dependencies = unknown,
@@ -487,7 +492,7 @@ type DeclaredVariantOutput<Variant> =
     ? ContractSchemaOutput<Schema>
     : never;
 
-/** Every text mode supplies its own presenters for the same result contract. */
+/** One named atomic result variant; every text mode supplies its own presenter for the shared result contract. */
 export type DeclaredAtomicVariant = Readonly<{
   readonly description: string;
   readonly schema: ContractSchema;
@@ -749,8 +754,10 @@ type StreamTextSuccess<Records extends DeclaredRecords> = Readonly<{
 }>;
 
 /**
- * Derive modes for one atomic handler and result contract. Each text mode provides
- * its own success and failure presenters. Presenters receive validated schema output.
+ * Derive modes for one atomic handler and result contract. All derived modes share
+ * the handler and result contract, and a CLI invocation runs only the selected mode.
+ * Each text mode provides its own success and failure presenters. Outcome constructors
+ * accept the result schema's Input; presenters receive the validated schema Output.
  */
 export interface AtomicExecution<
   Command extends string,
@@ -797,7 +804,12 @@ export interface AtomicExecution<
   >;
 }
 
-/** Derive modes for one stream. Each text mode presents its records, failures and successful termination. */
+/**
+ * Derive modes for one stream handler and result contract. The handler yields record
+ * facts and returns a streamSuccess or failure fact as the terminal state. Each text
+ * mode presents its records, failures and successful termination; record presenters
+ * may return lines or fragments, while the terminal presenter may return text.silent.
+ */
 export interface StreamExecution<
   Command extends string,
   InputSchema extends ContractSchema,
@@ -1031,7 +1043,12 @@ export interface StreamExecutionFactory<
   ): StreamExecution<Command, InputSchema, RawRecords, RawFailures>;
 }
 
-/** Executions and their derived modes belong to the current command construction. Handlers receive validated command input. */
+/**
+ * Executions and their derived modes belong to the current command construction.
+ * Reusing modes or executions from another construction is rejected at definition
+ * time, even for identical command names and input schema instances. Handlers
+ * receive validated command input.
+ */
 export interface OutputExecutionFactory<
   Command extends string,
   Dependencies,
@@ -1041,7 +1058,11 @@ export interface OutputExecutionFactory<
   readonly stream: StreamExecutionFactory<Command, Dependencies, InputSchema>;
 }
 
-/** Name the modes returned by an outputs callback. A single mode is its own default. */
+/**
+ * Name the modes returned by an outputs callback. A single mode is its own default;
+ * with several modes, `default` must name one of them. Mode names are declared once
+ * here and constrain `examples.outputMode`.
+ */
 export type OutputModeTableDeclaration<
   Command extends string = string,
   InputSchema extends ContractSchema = ContractSchema,
@@ -1309,15 +1330,19 @@ export type FieldDefinition =
   | ValueOptionDefinition;
 
 /**
- * 字段键须符合 lowerCamelCase，且不能使用 constructor、hasOwnProperty、
- * isPrototypeOf、propertyIsEnumerable、toString、valueOf 或 toLocaleString。
- * 迁移字段键时同步模式 Input 键及引用，命令行拼写可保留。
+ * Field keys must be lowerCamelCase and must not be constructor, hasOwnProperty,
+ * isPrototypeOf, propertyIsEnumerable, toString, valueOf or toLocaleString.
+ * When renaming a field key, update the schema Input key and its references;
+ * the CLI spelling may stay unchanged.
  */
 export type FieldDefinitions = Readonly<Record<string, FieldDefinition>>;
 
 /**
- * 可投影到 parser 和 Draft 2020-12 的有限字段关系：`count` 限制 raw 字段出现数，`when` 根据 raw 事实选择必需或禁止效果，
- * `forbiddenCombination` 拒绝指定事实组合。字段必填、候选值与格式由输入模式表达；依赖实际值计算、时间或业务状态的规则由 handler 返回具名失败。
+ * The limited field relations projectable to the parser and Draft 2020-12: `count`
+ * limits raw field occurrences, `when` selects require or forbid effects from raw
+ * facts, and `forbiddenCombination` rejects the listed fact combinations. Required
+ * fields, choices and formats are expressed by the input schema; rules that depend
+ * on computed values, time or business state belong in the handler as named failures.
  */
 export type UsageConstraint<
   Fields extends FieldDefinitions = FieldDefinitions,
@@ -1328,12 +1353,15 @@ export type UsageConstraint<
   | ForbiddenCombinationUsageConstraint<Fields, Input>;
 
 /**
- * 限制当前命令中 `fields` 所列 raw 输入字段的出现数量；字段组必须非空且无重复。
- * 规范化端点必须是有限整数，且满足 `0 <= min <= max <= fields.length`。每个 raw 自有属性只计一次，
- * 因而 `false` 也算出现，repeatable 或 variadic 字段的多个值仍只计一项；
- * 缺席的 variadic 字段没有属性，schema 默认值和转换结果也不会增加计数。
- * 缺省 `min` 为 0，缺省 `max` 为字段组长度，至少显式提供一个端点。
- * TypeScript 会拒绝静态可判定的错误；动态端点或字段成员在 CLI 定义时校验。
+ * Limits how many of the raw input fields listed in `fields` occur in the current
+ * command; the field group must be non-empty and free of duplicates. Normalized
+ * endpoints must be finite integers satisfying `0 <= min <= max <= fields.length`.
+ * Each raw own property counts once, so `false` still counts as present and multiple
+ * values of a repeatable or variadic field still count as one; an absent variadic
+ * field has no property, and schema defaults or transform results add no count.
+ * `min` defaults to 0 and `max` to the field group length; provide at least one
+ * endpoint explicitly. TypeScript rejects statically decidable errors; dynamic
+ * endpoints or field members are validated when the CLI is defined.
  */
 export interface CountUsageConstraint<
   Fields extends FieldDefinitions = FieldDefinitions,
@@ -1348,15 +1376,16 @@ export interface CountUsageConstraint<
 }
 
 /**
- * 条件分支只描述 raw 输入 facts 全部成立或未全部成立时的效果；空效果不增加限制，
- * 但整条规则至少需要一个非空分支。字段不会被赋值或补入默认值。
+ * A conditional branch only describes effects for when all raw input facts hold or
+ * do not all hold; an empty effect adds no restriction, but the rule needs at least
+ * one non-empty branch. Fields are never assigned values or filled with defaults.
  */
 export interface UsageConstraintEffect<Field extends string = string> {
   readonly require?: readonly Field[];
   readonly forbid?: readonly Field[];
 }
 
-/** 表示一个输入字段在 raw argv 解析结果中出现。 */
+/** States that an input field occurs in the raw argv parse result. */
 export interface PresentUsageFact<Field extends string = string> {
   readonly kind: "present";
   readonly field: Field;
@@ -1383,14 +1412,14 @@ type UsageFactInputValue<Input, Field extends string, RawValue> =
         ? Extract<Exclude<Input[Field], undefined>, RawValue>
         : never;
 
-/** 从字段的 raw 标量和 schema Input 交集中推导可比较值。 */
+/** Derives the comparable values from the intersection of the field's raw scalar and the schema Input. */
 export type UsageFactValue<
   Fields extends FieldDefinitions,
   Input,
   Field extends keyof Fields & string,
 > = UsageFactInputValue<Input, Field, RawUsageFactValue<Fields[Field]>>;
 
-/** 将字段身份关联到其可接受的 raw 等值操作数。 */
+/** Associates a field identity with its acceptable raw equality operands. */
 export type EqualsUsageFact<
   Fields extends FieldDefinitions = FieldDefinitions,
   Input = unknown,
@@ -1408,7 +1437,7 @@ export type EqualsUsageFact<
       }>;
 }[keyof Fields & string];
 
-/** 字段出现或单值等值事实的闭合联合。 */
+/** The closed union of field-presence and single-value equality facts. */
 export type UsageFact<
   Fields extends FieldDefinitions = FieldDefinitions,
   Input = unknown,
@@ -1424,7 +1453,7 @@ export type UsageFact<
       | PresentUsageFact<Extract<keyof Fields, string>>
       | EqualsUsageFact<Fields, Input>;
 
-/** 所列事实同时成立时拒绝调用；`all` 保留非空顺序和重复项。 */
+/** Rejects the invocation when all listed facts hold together; `all` keeps its non-empty order and duplicates. */
 export interface ForbiddenCombinationUsageConstraint<
   Fields extends FieldDefinitions = FieldDefinitions,
   Input = unknown,
@@ -1437,7 +1466,8 @@ export interface ForbiddenCombinationUsageConstraint<
 }
 
 /**
- * 平面 facts 合取选择成立或不成立分支。观察与效果都依据模式验证、默认和转换前的 raw input。
+ * A flat conjunction of facts selects the match or non-match branch. Observations
+ * and effects both read the raw input before schema validation, defaults and transforms.
  */
 export interface WhenUsageConstraint<
   Fields extends FieldDefinitions = FieldDefinitions,
@@ -1756,8 +1786,8 @@ type FieldIdentityContract<
             ? "reservedName"
             : "lowerCamelCase";
           readonly hint: InvalidFieldIdentities<Fields> extends never
-            ? "更换字段键，同步模式 Input 键及引用；CLI 拼写可保留"
-            : "小写字母开头，仅含字母和数字";
+            ? "rename the field key and update the schema Input key and its references; the CLI spelling may stay unchanged"
+            : "start with a lowercase letter, letters and digits only";
         }>
       >;
 
@@ -2039,6 +2069,11 @@ type FailureVariantNameContract<Command extends string, Failures> =
         }>
       >;
 
+/**
+ * Handler context for a completion execution. `input` is the validated command
+ * input; `outcome` constructors accept each result schema's Input, and the core
+ * validates the payload before any presenter reads its Output.
+ */
 export interface CompletionHandlerContext<
   Command extends string,
   Dependencies,
@@ -2051,6 +2086,11 @@ export interface CompletionHandlerContext<
     FailureOutcome<Command, Failures>;
 }
 
+/**
+ * Handler context for a data execution. `input` is the validated command input;
+ * `outcome` constructors accept each result schema's Input, and the core validates
+ * the payload before any presenter reads its Output.
+ */
 export interface DataHandlerContext<
   Command extends string,
   Dependencies,
@@ -2064,6 +2104,12 @@ export interface DataHandlerContext<
     FailureOutcome<Command, Failures>;
 }
 
+/**
+ * Handler context for a stream execution. `input` is the validated command input;
+ * `outcome.record` constructors accept each record schema's Input and are yielded
+ * one by one, while `outcome.streamSuccess()` or a named failure is returned as the
+ * terminal fact. The core validates payloads before presenters read their Output.
+ */
 export interface StreamHandlerContext<
   Command extends string,
   Dependencies,
@@ -3791,7 +3837,7 @@ export interface ExecutableCommandManifest<
   readonly helpSupplement?: readonly string[];
 }
 
-/** 经正式解析和输入验证的示例事实；shell 为包含根命令名的 POSIX 调用行。 */
+/** Example facts after formal parsing and input validation; shell is a POSIX invocation line including the root command name. */
 export interface CommandExampleManifest {
   readonly argv: readonly string[];
   readonly shell: string;
@@ -4199,7 +4245,7 @@ type ExecutableNodesContract<Commands> = {
     : unknown;
 };
 
-/* oxlint-disable typescript/no-unnecessary-type-parameters -- 公共签名的泛型参与嵌套契约约束，不能按单次出现次数机械删除。 */
+/* oxlint-disable typescript/no-unnecessary-type-parameters -- Public signature generics participate in nested contract constraints; do not remove them mechanically by occurrence count. */
 export interface DefineCli<Dependencies> {
   /** Bind a leaf command and its outputs. Spread the returned record into the command tree. */
   readonly command: <const Command extends string>(
@@ -4310,8 +4356,8 @@ export interface DefineCli<Dependencies> {
 }
 /* oxlint-enable typescript/no-unnecessary-type-parameters */
 
-/* oxlint-disable typescript/no-unnecessary-type-parameters -- 公共命令签名用泛型连接字段、模式、结果与 handler。 */
-/** 为具名叶命令生成可展开到根契约 `commands` 的定义。 */
+/* oxlint-disable typescript/no-unnecessary-type-parameters -- Public command signatures use generics to connect fields, schemas, results and handlers. */
+/** Produce a definition for a named leaf command that spreads into the root contract's `commands`. Its outputs callback runs once at definition time. */
 export interface DefineCommand<Command extends string, Dependencies> {
   <
     InputSchema extends ContractSchema,
@@ -4500,8 +4546,10 @@ type RuntimeCliDefinition = RootCliDefinitionBase<string> &
   }>;
 
 /**
- * 显式装配全树帮助。`headings` 是可选段落标题；`wording` 按实际帮助事实
- * 提供必要模板，由 defineCli 检查完整性；核心不生成默认自然语言。
+ * Assemble help for the whole tree explicitly. `headings` are optional section
+ * titles; `wording` supplies the templates required by the help facts that actually
+ * appear, with completeness checked by defineCli. The core generates no default
+ * natural language.
  */
 export function helpCapability<
   const Definition extends HelpCapabilityDefinitionForTypeCheck =
@@ -4531,13 +4579,13 @@ export function helpCapability(
     "help",
   );
   if (definition.shortAlias !== undefined && definition.shortAlias !== "-h") {
-    throw new TypeError("帮助短别名必须是 -h");
+    throw new TypeError("The help short alias must be -h");
   }
   const copiedWording =
     definition.wording === undefined
       ? undefined
       : copyHelpFactWording(definition.wording);
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- helpCapability 由本工厂签发并登记到 WeakSet，类型品牌不在运行时输出。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- helpCapability is issued by this factory and registered in the WeakSet; the type brand is not emitted at runtime.
   const capability = Object.freeze({
     kind: "helpCapability" as const,
     longOption: "--help" as const,
@@ -4558,7 +4606,7 @@ export function helpCapability(
 
 function copyHelpHeadings(value: unknown): HelpHeadings {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new TypeError("帮助标题必须是对象");
+    throw new TypeError("Help headings must be an object");
   }
   const allowed = new Set([
     "usage",
@@ -4572,8 +4620,9 @@ function copyHelpHeadings(value: unknown): HelpHeadings {
   ]);
   const headings: Record<string, string> = {};
   for (const [key, heading] of Object.entries(value)) {
-    if (!allowed.has(key)) throw new TypeError("帮助标题包含未知段落");
-    headings[key] = copySingleLineText(heading, `帮助标题 ${key}`);
+    if (!allowed.has(key))
+      throw new TypeError("Help headings contain an unknown section");
+    headings[key] = copySingleLineText(heading, `Help heading ${key}`);
   }
   return Object.freeze(headings);
 }
@@ -4583,7 +4632,7 @@ function copyHelpFactWording(value: unknown): Readonly<{
   readonly invalidValues: ReadonlyMap<string, unknown>;
 }> {
   if (!isPlainRecord(value)) {
-    throw new TypeError("帮助事实文案必须是对象");
+    throw new TypeError("Help fact wording must be an object");
   }
   const wording: Record<string, string> = {};
   const invalidValues = new Map<string, unknown>();
@@ -4672,9 +4721,11 @@ function collectHelpFactTemplateIssues(
 }
 
 /**
- * 在根契约显式装配版本提前请求，并自动覆盖整棵命令树。`value` 与可选
- * `description` 均由消费者拥有；核心只注册固定 spelling、投影帮助并写出 value，
- * 不读取包元数据、不添加前缀或默认说明，也不把版本当作命令输入。
+ * Assemble the eager version request on the root contract explicitly; it covers the
+ * whole command tree automatically. `value` and the optional `description` are owned
+ * by the consumer; the core only registers the fixed spelling, projects help and
+ * writes the value. It reads no package metadata, adds no prefix or default
+ * description, and never treats the version as command input.
  */
 export function versionCapability<
   const Definition extends VersionCapabilityDefinition,
@@ -4690,15 +4741,15 @@ export function versionCapability<
     definitionPropertyKeys.capability.version,
     "version",
   );
-  const value = copyVersionTextLine(definition.value);
+  const value = copyTextLine(definition.value, "Version value");
   const description =
     definition.description === undefined
       ? undefined
-      : copyVersionLine(definition.description);
+      : copySingleLineText(definition.description, "Version description");
   if (definition.shortAlias !== undefined && definition.shortAlias !== "-V") {
-    throw new TypeError("版本短别名必须是 -V");
+    throw new TypeError("The version short alias must be -V");
   }
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- versionCapability 由本工厂签发并登记到 WeakSet，类型品牌不在运行时输出。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- versionCapability is issued by this factory and registered in the WeakSet; the type brand is not emitted at runtime.
   const capability = Object.freeze({
     kind: "versionCapability" as const,
     value,
@@ -4712,7 +4763,8 @@ export function versionCapability<
 }
 
 /**
- * 在根契约显式装配全树契约发现。说明文案由作者提供一次；核心负责查询事实、帮助和响应。
+ * Assemble contract discovery for the whole tree on the root contract explicitly.
+ * The author supplies the description once; the core owns query facts, help and responses.
  */
 export function schemaCapability<
   const Definition extends SchemaCapabilityDefinition,
@@ -4728,8 +4780,11 @@ export function schemaCapability<
     definitionPropertyKeys.capability.schema,
     "schema",
   );
-  const description = copyVersionTextLine(definition.description);
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- schemaCapability 由本工厂签发并登记到 WeakSet。
+  const description = copyTextLine(
+    definition.description,
+    "Schema description",
+  );
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- schemaCapability is issued by this factory and registered in the WeakSet.
   const capability = Object.freeze({
     kind: "schemaCapability" as const,
     longOption: "--schema" as const,
@@ -4739,7 +4794,7 @@ export function schemaCapability<
   return capability;
 }
 
-function copyVersionTextLine(value: unknown): string {
+function copyTextLine(value: unknown, label: string): string {
   if (
     typeof value !== "object" ||
     value === null ||
@@ -4747,13 +4802,9 @@ function copyVersionTextLine(value: unknown): string {
     value.kind !== "line" ||
     !("value" in value)
   ) {
-    throw new TypeError("版本值必须是合法单行文本");
+    throw new TypeError(`${label} must be a text.line projection`);
   }
-  return copySingleLineText(value.value, "版本值");
-}
-
-function copyVersionLine(value: unknown, label = "版本描述"): string {
-  return copySingleLineText(value, label);
+  return copySingleLineText(value.value, label);
 }
 
 function compileHelpSupplement(
@@ -4821,18 +4872,22 @@ function assertKnownCapabilityOptions(
 ): void {
   for (const property of Object.keys(definition)) {
     if (!allowed.includes(property)) {
-      throw new TypeError(`${capability} 能力包含未知属性 ${property}`);
+      throw new TypeError(
+        `The ${capability} capability contains an unknown property ${property}`,
+      );
     }
   }
 }
 
 /**
- * 定义一个闭合 CLI 契约。各可执行命令声明具名输出方式及其结果投影。
- * 动态声明仍会在定义期报告 `ContractDefinitionError`，不能以它替代静态可判定声明的类型检查。
- * @see {@link https://github.com/YKDZ/cli-contract/tree/main/packages/example | 端到端示例}
+ * Define a closed CLI contract. Each executable command declares named output modes
+ * and their result projections. Dynamic declarations still report
+ * `ContractDefinitionError` at definition time; that is no substitute for type
+ * checking statically decidable declarations.
+ * @see {@link https://github.com/YKDZ/cli-contract/tree/main/packages/example | End-to-end example}
  */
 export function defineCli<Dependencies = undefined>(): DefineCli<Dependencies> {
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 公共泛型定义接口由此运行时编译入口实现，类型参数只约束调用方。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The public generic definition interface is implemented by this runtime compilation entry; type parameters only constrain callers.
   const define = ((definition: RuntimeCliAuthoring) =>
     compileCli(definition)) as unknown as DefineCli<Dependencies>;
   Object.defineProperty(define, "command", {
@@ -5081,7 +5136,7 @@ function compileCli(raw: RuntimeCliAuthoring): CliContract {
   }
   if (isHierarchy && hasUnsafeCommandHierarchyIssue(issues)) {
     throw new ContractDefinitionError(
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- issues.length 已检查为正数，动态数组在此恢复非空元组类型。
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- issues.length was checked positive; the dynamic array regains its non-empty tuple type here.
       issues as [ContractDefinitionIssue, ...ContractDefinitionIssue[]],
     );
   }
@@ -5096,7 +5151,7 @@ function compileCli(raw: RuntimeCliAuthoring): CliContract {
   const examplesToValidate: PendingCommandExampleValidation[] = [];
 
   for (const id of orderedIds) {
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- orderedIds 来自已验证的命令键或根键。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- orderedIds comes from validated command keys or the root key.
     const node = definition.commands[id] as RuntimeCommandDefinition;
     const aliases = Object.freeze([...(node.aliases ?? [])]);
     const helpSupplement = compileHelpSupplement(
@@ -5107,7 +5162,7 @@ function compileCli(raw: RuntimeCliAuthoring): CliContract {
     if (node.kind === "rootGroup" || node.kind === "commandGroup") {
       const usage = deepFreeze({
         command: id,
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 层级契约已在进入循环前检查 commandPlaceholder 必填。
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The hierarchy contract checked commandPlaceholder as required before entering the loop.
         synopsis: `${commandPath(id, definition.commands)} <${helpWording?.commandPlaceholder as string}>`,
       });
       const compiledNode: RuntimeCompiledCommand = {
@@ -5126,7 +5181,7 @@ function compileCli(raw: RuntimeCliAuthoring): CliContract {
           deepFreeze({
             kind: "commandGroup" as const,
             id,
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 非根命令组的 parent 已在层级定义检查中确认。
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The parent of a non-root command group was confirmed by the hierarchy definition checks.
             parent: node.parent as string,
             name: node.name,
             aliases,
@@ -5147,7 +5202,7 @@ function compileCli(raw: RuntimeCliAuthoring): CliContract {
       continue;
     }
 
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令组分支已继续下一轮；其余节点按可执行定义编译。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The command-group branch already continued to the next iteration; remaining nodes compile as executable definitions.
     const executable = node as RuntimeExecutableDefinition;
     const input = compileContractSchema(
       executable.input,
@@ -5258,7 +5313,7 @@ function compileCli(raw: RuntimeCliAuthoring): CliContract {
         deepFreeze({
           kind: "command" as const,
           id,
-          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- kind 为 command 时，层级定义检查已确认 parent。
+          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- When kind is command, the hierarchy definition checks confirmed parent.
           parent: executable.parent as string,
           name: executable.name,
           aliases,
@@ -5285,7 +5340,7 @@ function compileCli(raw: RuntimeCliAuthoring): CliContract {
       executable.kind === "command"
         ? deepFreeze({
             kind: "command" as const,
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- kind 为 command 时，层级定义检查已确认 parent。
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- When kind is command, the hierarchy definition checks confirmed parent.
             parent: executable.parent as string,
             name: executable.name,
             aliases,
@@ -5300,12 +5355,12 @@ function compileCli(raw: RuntimeCliAuthoring): CliContract {
   }
   if (issues.length > 0)
     throw new ContractDefinitionError(
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- issues.length 已检查为正数，动态数组在此恢复非空元组类型。
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- issues.length was checked positive; the dynamic array regains its non-empty tuple type here.
       issues as [ContractDefinitionIssue, ...ContractDefinitionIssue[]],
     );
 
   const controls = compileControls(definition);
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 定义检查通过后根命令已在编译循环写入映射。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- After the definition checks pass, the root command was written into the map by the compilation loop.
   const rootCommand = runtimeCommands[
     definition.root
   ] as RuntimeCompiledCommand;
@@ -5359,10 +5414,10 @@ function compileCli(raw: RuntimeCliAuthoring): CliContract {
         })),
       ),
     },
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 根命令的 wire 已由同一编译循环写入映射。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The root command's wire was written into the map by the same compilation loop.
     wire: isHierarchy ? wire : (wire[definition.root] as CommandWireManifest),
   });
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 契约类型品牌由编译器签发，并登记到 compiledCliContracts。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The contract type brand is issued by the compiler and registered in compiledCliContracts.
   const contract = Object.freeze({
     grammar,
     manifest,
@@ -5377,7 +5432,7 @@ function compileCli(raw: RuntimeCliAuthoring): CliContract {
   if (issues.length > 0) {
     compiledCliContracts.delete(contract);
     throw new ContractDefinitionError(
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- issues.length 已检查为正数。
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- issues.length was checked positive.
       issues as [ContractDefinitionIssue, ...ContractDefinitionIssue[]],
     );
   }
@@ -6092,7 +6147,7 @@ function collectRootDefinitionIssues(
     issues.push({
       code: "invalidRootCommandSet",
       root: definition.root,
-      // oxlint-disable-next-line unicorn/no-array-sort -- commandKeys 来自 Object.keys 且不再复用，原地排序不会影响命令对象。
+      // oxlint-disable-next-line unicorn/no-array-sort -- commandKeys comes from Object.keys and is not reused; sorting in place does not affect the command object.
       receivedCommands: commandKeys.sort(),
     });
   }
@@ -6175,7 +6230,7 @@ function orderHierarchy(
     issues.push({ code: "rootGroupWithoutChildren", command: definition.root });
   }
   for (const id of ids) {
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- id 来自 Object.keys(definition.commands)，此处读取同一对象。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- id comes from Object.keys(definition.commands); the same object is read here.
     const node = definition.commands[id] as RuntimeCommandDefinition;
     if (!/^[a-z][A-Za-z0-9]*$/.test(id))
       issues.push({ code: "invalidCommandIdentity", command: id });
@@ -6272,7 +6327,7 @@ function orderHierarchy(
     for (const child of ids.filter(
       (id) => definition.commands[id]?.parent === parent,
     )) {
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- child 来自同一命令对象的键集合。
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- child comes from the key set of the same command object.
       const node = definition.commands[child] as RuntimeCommandDefinition;
       for (const spelling of [node.name, ...(node.aliases ?? [])]) {
         const owners = spellings.get(spelling) ?? [];

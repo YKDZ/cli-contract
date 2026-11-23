@@ -34,10 +34,11 @@ export async function verifyExample(
   argv?: readonly string[],
 ): Promise<void> {
   const example = await manifestAt(exampleRoot);
-  if (!example.scripts) throw new TypeError("示例包缺少 scripts");
+  if (!example.scripts)
+    throw new TypeError("The example package has no scripts");
   const coreVersion = coreMetadata.version;
   if (typeof coreVersion !== "string")
-    throw new Error("公共 core 包元数据缺少版本");
+    throw new Error("The public core package metadata has no version");
   if (packed === undefined) verifyPublishedSource(coreVersion);
   const replacements: Record<string, string> = {
     [corePackage]: packed ? `file:${packed.coreTarball}` : coreVersion,
@@ -60,7 +61,7 @@ export async function verifyExample(
         recursive: true,
       });
     }
-    // 展平 Node 配置，让临时项目与 workspace 使用相同编译选项。
+    // Flatten the Node config so the temporary project uses the same compiler options as the workspace.
     const config = JSON.parse(
       await readFile(resolve(exampleRoot, "tsconfig.json"), "utf8"),
     );
@@ -108,7 +109,9 @@ export async function verifyExample(
       });
       if (result.error) throw result.error;
       if (result.status !== 0)
-        throw new Error(`示例进程以状态 ${result.status ?? "unknown"} 退出`);
+        throw new Error(
+          `The example process exited with status ${result.status ?? "unknown"}`,
+        );
     }
   });
 }
@@ -121,7 +124,7 @@ function verifyPublishedSource(version: string): void {
   );
   if (modifiedExample.trim().length > 0) {
     throw new Error(
-      "发布后示例验收要求示例包与发布源码一致；请从对应 Changesets 原生包 tag 的干净工作区运行",
+      "Post-publish example acceptance requires the example package to match the published source; run from a clean workspace at the corresponding native Changesets package tags",
     );
   }
 
@@ -137,7 +140,7 @@ function verifyPublishedSource(version: string): void {
   const missingTags = requiredTags.filter((tag) => !tagsAtHead.has(tag));
   if (missingTags.length > 0) {
     throw new Error(
-      `发布后示例验收要求 HEAD 位于对应 Changesets 原生包 tag：${missingTags.join("、")}`,
+      `Post-publish example acceptance requires HEAD at the corresponding native Changesets package tags: ${missingTags.join(", ")}`,
     );
   }
 }
@@ -156,7 +159,7 @@ async function manifestAt(directory: string): Promise<Manifest> {
     (value.devDependencies !== undefined &&
       !isStringRecord(value.devDependencies))
   ) {
-    throw new TypeError(`包元数据无效：${directory}`);
+    throw new TypeError(`Invalid package metadata: ${directory}`);
   }
   return {
     ...value,
@@ -198,7 +201,9 @@ async function installedDependencies(
           resolve(exampleRoot, "node_modules", name),
         );
         if (!installed.version)
-          throw new Error(`无法确定已安装依赖的版本：${name}`);
+          throw new Error(
+            `Cannot determine the installed dependency version: ${name}`,
+          );
         return [
           name,
           installed.name === name
@@ -227,7 +232,7 @@ if (import.meta.main) {
   const published = args[0] === "--published";
   if ((!packed && !published) || (published && args.length !== 1))
     throw new Error(
-      "用法：release:verify --core <tgz> --testing <tgz> 或 verify:published [CLI 参数]",
+      "Usage: release:verify --core <tgz> --testing <tgz>, or verify:published [CLI args]",
     );
   await verifyExample(packed, published ? cliArgs : undefined);
 }
