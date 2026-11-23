@@ -9,7 +9,7 @@ import {
 
 import { cli } from "../src/index.ts";
 
-// 新增命令或失败时，场景表会提示遗漏。
+// The scenario tables flag any command or failure that lacks a trigger.
 const dependencies = {
   async *readLogs() {
     yield { message: "started" };
@@ -49,10 +49,10 @@ const failures = defineFailureScenarios(cli, {
   },
 });
 
-void test("解析语法与契约清单共享数量和条件规则", () => {
+void test("parse grammar and contract manifest share the count and conditional rules", () => {
   const validateNode = cli.grammar.nodes.find((node) => node.id === "validate");
   if (validateNode === undefined || validateNode.kind !== "command") {
-    assert.fail("预期 validate 是可执行命令");
+    assert.fail("expected validate to be an executable command");
   }
   assert.strictEqual(
     validateNode.usageConstraints,
@@ -65,21 +65,30 @@ void test("解析语法与契约清单共享数量和条件规则", () => {
 
   const properties =
     cli.manifest.commands.validate.input.inputSchema.properties;
-  assert.ok(isJsonRecord(properties), "预期清单投影声明输入字段模式");
+  assert.ok(
+    isJsonRecord(properties),
+    "expected the manifest projection to declare input field schemas",
+  );
   const idSchema = properties.id;
-  assert.ok(isJsonRecord(idSchema), "预期 id 投影为对象模式");
+  assert.ok(
+    isJsonRecord(idSchema),
+    "expected id to project as an object schema",
+  );
   assert.equal(idSchema.minLength, 1);
 
   const emailSchema = properties.email;
-  assert.ok(isJsonRecord(emailSchema), "预期 email 投影为对象模式");
+  assert.ok(
+    isJsonRecord(emailSchema),
+    "expected email to project as an object schema",
+  );
   assert.equal(emailSchema.format, "email");
   assert.equal(typeof emailSchema.pattern, "string");
   assert.notEqual(emailSchema.pattern, "");
 });
 
-// 场景是否真的触发了预期结果，交给下面的断言验证。
+// The assertions below verify that each scenario actually triggers its expected result.
 for (const [command, scenario] of Object.entries(commands)) {
-  void test(`${command} 的成功场景`, async () => {
+  void test(`${command} success scenario`, async () => {
     const capture = await runCliScenario({ cliContract: cli, ...scenario });
     assert.equal(capture.termination.exitCode, 0);
     assert.equal(capture.stderr, "");
@@ -118,14 +127,16 @@ for (const [command, scenario] of Object.entries(commands)) {
   });
 }
 
-void test("基础输入模式拒绝由执行阶段产生 inputRejected", async () => {
+void test("base input schema rejection produces inputRejected at the execution stage", async () => {
   const capture = await runCliScenario({
     cliContract: cli,
     argv: ["validate", "--email", "not-an-email", "--domain", "example.com"],
     dependencies,
   });
   if (capture.termination.kind !== "usageFailure") {
-    assert.fail("预期执行内核返回输入用法失败");
+    assert.fail(
+      "expected the execution kernel to return an input usage failure",
+    );
   }
   assert.equal(capture.termination.exitCode, 64);
   assert.deepEqual(
@@ -136,7 +147,7 @@ void test("基础输入模式拒绝由执行阶段产生 inputRejected", async (
   assert.notEqual(capture.stderr, "");
 });
 
-void test("标识校验要求且仅要求一种输入字段", async () => {
+void test("identifier validation requires exactly one input field", async () => {
   for (const [argv, presentFields, absentFields] of [
     [["validate"], [], ["id", "email"]],
     [
@@ -151,7 +162,9 @@ void test("标识校验要求且仅要求一种输入字段", async () => {
       dependencies,
     });
     if (capture.termination.kind !== "usageFailure") {
-      assert.fail("预期用法约束在处理器前拒绝调用");
+      assert.fail(
+        "expected the usage constraint to reject the invocation before the handler",
+      );
     }
     assert.equal(capture.termination.exitCode, 64);
     assert.deepEqual(capture.termination.issues, [
@@ -167,14 +180,16 @@ void test("标识校验要求且仅要求一种输入字段", async () => {
   }
 });
 
-void test("指定邮箱域时要求同时提供邮箱", async () => {
+void test("specifying an email domain also requires the email", async () => {
   const capture = await runCliScenario({
     cliContract: cli,
     argv: ["validate", "--id", "alice", "--domain", "example.com"],
     dependencies,
   });
   if (capture.termination.kind !== "usageFailure") {
-    assert.fail("预期条件约束在处理器前拒绝调用");
+    assert.fail(
+      "expected the conditional constraint to reject the invocation before the handler",
+    );
   }
   assert.equal(capture.termination.exitCode, 64);
   assert.deepEqual(capture.termination.issues, [
@@ -189,7 +204,7 @@ void test("指定邮箱域时要求同时提供邮箱", async () => {
   assert.equal(capture.stdout, "");
 });
 
-void test("有效邮箱与指定域满足条件分支后完成", async () => {
+void test("a valid email and matching domain complete after satisfying the conditional branch", async () => {
   const capture = await runCliScenario({
     cliContract: cli,
     argv: [
@@ -208,7 +223,7 @@ void test("有效邮箱与指定域满足条件分支后完成", async () => {
 
 for (const [command, scenarios] of Object.entries(failures)) {
   for (const [failure, scenario] of Object.entries(scenarios)) {
-    void test(`${command} 的 ${failure} 失败场景`, async () => {
+    void test(`${command} ${failure} failure scenario`, async () => {
       const capture = await runCliScenario({ cliContract: cli, ...scenario });
       assert.equal(capture.termination.exitCode, 1);
       assert.equal(capture.stdout, "");
@@ -225,7 +240,7 @@ for (const [command, scenarios] of Object.entries(failures)) {
       }
       assert.equal(
         capture.stderr,
-        "邮箱 alice@elsewhere.com 不属于指定域 example.com\n",
+        "Email alice@elsewhere.com does not belong to domain example.com\n",
       );
     });
   }

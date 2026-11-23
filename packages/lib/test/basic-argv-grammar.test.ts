@@ -6,6 +6,7 @@ import {
   defineCli,
   executeCli,
   parseCliInvocation,
+  type OutputExecutionFactory,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
@@ -52,18 +53,22 @@ function createCopyCli() {
         },
         input: sharedInput0,
 
-        outputs: defineCli().outputModes("copyFiles", sharedInput0, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -298,18 +303,28 @@ void test("defineCli 聚合动态字段身份、spelling 与 positional 顺序�
         },
         input: sharedInput1,
 
-        outputs: defineCli().outputModes("copyFiles", sharedInput1, (mode) => ({
+        outputs: (
+          mode: OutputExecutionFactory<
+            "copyFiles",
+            undefined,
+            typeof sharedInput1
+          >,
+        ) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: () => undefined as never,
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: () => undefined as never,
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   };
@@ -433,18 +448,28 @@ void test("输入字段固定禁名覆盖全部字段形态，并区分拼写错
         ),
         input: sharedInput2,
 
-        outputs: defineCli().outputModes("inspect", sharedInput2, (mode) => ({
+        outputs: (
+          mode: OutputExecutionFactory<
+            "inspect",
+            undefined,
+            typeof sharedInput2
+          >,
+        ) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: () => undefined as never,
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: () => undefined as never,
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   };
@@ -533,18 +558,28 @@ void test("叶命令必填字段同样拒绝保留名称", () => {
         },
         input: sharedInput0,
 
-        outputs: defineCli().outputModes("inspect", sharedInput0, (mode) => ({
+        outputs: (
+          mode: OutputExecutionFactory<
+            "inspect",
+            undefined,
+            typeof sharedInput0
+          >,
+        ) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: () => undefined as never,
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: () => undefined as never,
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   };
@@ -597,15 +632,11 @@ void test("字段身份更名可保留 CLI 拼写，其他命名域继续合法"
         },
         input: sharedInput3,
 
-        outputs: defineCli().outputModes(
-          "constructor",
-          sharedInput3,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
+        outputs: (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
                 success: {
                   kind: "data",
                   variants: {
@@ -627,10 +658,12 @@ void test("字段身份更名可保留 CLI 拼写，其他命名域继续合法"
                     // oxlint-disable-next-line unicorn/no-thenable -- JSON 载荷中的普通数据键。
                     then: input.then ?? "absent",
                   }),
+              })
+              .structured({
+                description: "结构化输出",
               }),
-            },
-          }),
-        ),
+          },
+        }),
       },
     },
   });
@@ -686,22 +719,28 @@ void test("defineCli 拒绝动态非法命令身份", () => {
         description: "复制文件",
         input: sharedInput1,
 
-        outputs: defineCli().outputModes(
-          "copy-files",
-          sharedInput1,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
-                success: { kind: "completion" },
+        outputs: (
+          mode: OutputExecutionFactory<
+            "copy-files",
+            undefined,
+            typeof sharedInput1
+          >,
+        ) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
                 failures: {},
                 handler: () => undefined as never,
+              })
+              .structured({
+                description: "结构化输出",
               }),
-            },
-          }),
-        ),
+          },
+        }),
       },
     },
   };

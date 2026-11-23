@@ -76,18 +76,22 @@ function createSuggestionCli() {
         },
         input: sharedInput0,
 
-        outputs: define.outputModes("addPackage", sharedInput0, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       }),
     },
   });
@@ -219,18 +223,22 @@ void test("建议保持大小写敏感，并在阈值、并列或过远时省略
         },
         input: sharedInput1,
 
-        outputs: define.outputModes("add", sharedInput1, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       }),
       ...define.command("and")({
         kind: "command",
@@ -239,18 +247,22 @@ void test("建议保持大小写敏感，并在阈值、并列或过远时省略
         description: "并且",
         input: sharedInput0,
 
-        outputs: define.outputModes("and", sharedInput0, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       }),
     },
   });

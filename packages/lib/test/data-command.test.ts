@@ -67,33 +67,35 @@ function createDataCli(
         },
         input: inputSchema,
 
-        outputs: defineCli().outputModes("greet", inputSchema, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "data",
-                variants: {
-                  greeting: {
-                    description: "生成的问候",
-                    schema: dataSchema,
-                    exitCode: 7,
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "data",
+                  variants: {
+                    greeting: {
+                      description: "生成的问候",
+                      schema: dataSchema,
+                      exitCode: 7,
+                    },
                   },
                 },
-              },
-              failures: {},
-              handler({ input, dependencies, outcome }) {
-                onInput(input);
-                assert.equal(dependencies, undefined);
-                return outcome.data.greeting({
-                  message: `Hello, ${input.name}!`,
-                });
-              },
-            }),
+                failures: {},
+                handler({ input, dependencies, outcome }) {
+                  onInput(input);
+                  assert.equal(dependencies, undefined);
+                  return outcome.data.greeting({
+                    message: `Hello, ${input.name}!`,
+                  });
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });

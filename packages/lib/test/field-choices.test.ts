@@ -48,18 +48,22 @@ function createCombinationCli(input: ContractSchema<CombinationRawInput>) {
         },
         input,
 
-        outputs: defineCli().outputModes("combination", input, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -121,18 +125,22 @@ void test("Zod 的直接 enum 同源投影到 grammar、manifest、synopsis 与�
         },
         input,
 
-        outputs: defineCli().outputModes("choose", input, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -223,18 +231,22 @@ void test("Valibot 的直接 enum 同样覆盖单值与 repeatable option", () =
         },
         input,
 
-        outputs: defineCli().outputModes("valibotChoices", input, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -291,21 +303,25 @@ void test("每个显式字段候选值在 parser 聚合并在 validation 与 han
         },
         input,
 
-        outputs: defineCli().outputModes("choices", input, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => {
-                handlerCalls += 1;
-                return outcome.completion();
-              },
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => {
+                  handlerCalls += 1;
+                  return outcome.completion();
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -425,22 +441,26 @@ void test("缺席 default、没有候选值和其余 schema 约束保持原有�
         },
         input: source,
 
-        outputs: defineCli().outputModes("defaults", source, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ input, outcome }) => {
-                handlerCalls += 1;
-                assert.equal(input.defaultMode, "safe");
-                return outcome.completion();
-              },
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ input, outcome }) => {
+                  handlerCalls += 1;
+                  assert.equal(input.defaultMode, "safe");
+                  return outcome.completion();
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -588,18 +608,22 @@ void test("组合、引用、条件和非字符串 enum 不推断候选值", asy
         },
         input,
 
-        outputs: defineCli().outputModes("counterexample", input, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });

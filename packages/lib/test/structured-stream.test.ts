@@ -31,21 +31,25 @@ function createUncheckedStreamCli(handler: unknown) {
 
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意越过静态类型，以验证流式结果边界。
 
-        outputs: defineCli().outputModes("list", emptyInput, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.stream({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "stream",
-                records: { item: { description: "项目", schema: item } },
-              },
-              failures: {},
-              handler: handler as never,
-            }),
+            structured: mode
+              .stream({
+                records: {
+                  item: {
+                    description: "项目",
+                    schema: item,
+                  },
+                },
+                failures: {},
+                handler: handler as never,
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -101,25 +105,29 @@ void test("structured stream 按 header、record、终态写出紧凑 NDJSON", a
         description: "列出项目",
         input: emptyInput,
 
-        outputs: defineCli().outputModes("list", emptyInput, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.stream({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "stream",
-                records: { item: { description: "一个项目", schema: item } },
-              },
-              failures: {},
-              async *handler({ outcome }) {
-                yield outcome.record.item({ value: "first" });
-                yield outcome.record.item({ value: "second" });
-                return outcome.streamSuccess();
-              },
-            }),
+            structured: mode
+              .stream({
+                records: {
+                  item: {
+                    description: "一个项目",
+                    schema: item,
+                  },
+                },
+                failures: {},
+                async *handler({ outcome }) {
+                  yield outcome.record.item({ value: "first" });
+                  yield outcome.record.item({ value: "second" });
+                  return outcome.streamSuccess();
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -223,29 +231,28 @@ void test("record 输出模式的空 issues 仍产生 outputSchemaRejected", asy
         description: "列出项目",
         input: emptyInput,
 
-        outputs: defineCli().outputModes("list", emptyInput, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.stream({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "stream",
+            structured: mode
+              .stream({
                 records: {
                   item: {
                     description: "一个项目",
                     schema: rejectedRecordSchema,
                   },
                 },
-              },
-              failures: {},
-              async *handler({ outcome }) {
-                yield outcome.record.item({ value: "first" });
-                return outcome.streamSuccess();
-              },
-            }),
+                failures: {},
+                async *handler({ outcome }) {
+                  yield outcome.record.item({ value: "first" });
+                  return outcome.streamSuccess();
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -292,24 +299,28 @@ void test("stream 可在首帧后直接显式成功", async () => {
         description: "列出项目",
         input: emptyInput,
 
-        outputs: defineCli().outputModes("list", emptyInput, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.stream({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "stream",
-                records: { item: { description: "项目", schema: item } },
-              },
-              failures: {},
-              async *handler({ outcome }) {
-                yield* [] as Iterable<never>;
-                return outcome.streamSuccess();
-              },
-            }),
+            structured: mode
+              .stream({
+                records: {
+                  item: {
+                    description: "项目",
+                    schema: item,
+                  },
+                },
+                failures: {},
+                async *handler({ outcome }) {
+                  yield* [] as Iterable<never>;
+                  return outcome.streamSuccess();
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -340,26 +351,34 @@ void test("stream 失败保留 stdout 前缀且不写成功终态", async () => 
         description: "列出项目",
         input: emptyInput,
 
-        outputs: defineCli().outputModes("list", emptyInput, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.stream({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "stream",
-                records: { item: { description: "项目", schema: item } },
-              },
-              failures: {
-                stopped: { description: "中断", schema: item, exitCode: 8 },
-              },
-              async *handler({ outcome }) {
-                yield outcome.record.item({ value: "first" });
-                return outcome.failure.stopped({ value: "quota" });
-              },
-            }),
+            structured: mode
+              .stream({
+                records: {
+                  item: {
+                    description: "项目",
+                    schema: item,
+                  },
+                },
+                failures: {
+                  stopped: {
+                    description: "中断",
+                    schema: item,
+                    exitCode: 8,
+                  },
+                },
+                async *handler({ outcome }) {
+                  yield outcome.record.item({ value: "first" });
+                  return outcome.failure.stopped({ value: "quota" });
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -403,30 +422,36 @@ void test("record 验证拒绝与写入拒绝均停止拉取并清理 generator"
         description: "列出项目",
         input: emptyInput,
 
-        outputs: defineCli().outputModes("list", emptyInput, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.stream({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "stream",
-                records: { item: { description: "项目", schema: item } },
-              },
-              failures: {},
-              async *handler({ outcome }) {
-                try {
-                  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意越过静态类型，以验证流式结果边界。
-                  yield outcome.record.item({ value: 1 as unknown as string });
-                  yield outcome.record.item({ value: "never" });
-                  return outcome.streamSuccess();
-                } finally {
-                  invalidCleanup = true;
-                }
-              },
-            }),
+            structured: mode
+              .stream({
+                records: {
+                  item: {
+                    description: "项目",
+                    schema: item,
+                  },
+                },
+                failures: {},
+                async *handler({ outcome }) {
+                  try {
+                    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意越过静态类型，以验证流式结果边界。
+                    yield outcome.record.item({
+                      value: 1 as unknown as string,
+                    });
+                    yield outcome.record.item({ value: "never" });
+                    return outcome.streamSuccess();
+                  } finally {
+                    invalidCleanup = true;
+                  }
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -460,31 +485,35 @@ void test("record 验证拒绝与写入拒绝均停止拉取并清理 generator"
         description: "列出项目",
         input: emptyInput,
 
-        outputs: defineCli().outputModes("list", emptyInput, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.stream({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "stream",
-                records: { item: { description: "项目", schema: item } },
-              },
-              failures: {},
-              async *handler({ outcome }) {
-                try {
-                  pulled += 1;
-                  yield outcome.record.item({ value: "first" });
-                  pulled += 1;
-                  yield outcome.record.item({ value: "never" });
-                  return outcome.streamSuccess();
-                } finally {
-                  cleanup = true;
-                }
-              },
-            }),
+            structured: mode
+              .stream({
+                records: {
+                  item: {
+                    description: "项目",
+                    schema: item,
+                  },
+                },
+                failures: {},
+                async *handler({ outcome }) {
+                  try {
+                    pulled += 1;
+                    yield outcome.record.item({ value: "first" });
+                    pulled += 1;
+                    yield outcome.record.item({ value: "never" });
+                    return outcome.streamSuccess();
+                  } finally {
+                    cleanup = true;
+                  }
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -517,15 +546,11 @@ void test("同一 stream handler 可投影为 structured NDJSON 或 text line、
         description: "列出项目",
         input: emptyInput,
 
-        outputs: defineCli().outputModes("list", emptyInput, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.stream({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "stream",
-
+            structured: mode
+              .stream({
                 records: {
                   item: {
                     description: "项目",
@@ -536,46 +561,50 @@ void test("同一 stream handler 可投影为 structured NDJSON 或 text line、
                     schema: item,
                   },
                 },
-              },
-              failures: {},
-              async *handler({ outcome }) {
-                executions += 1;
-                yield outcome.record.item({ value: "one" });
-                yield outcome.record.delta({ value: "two\nthree" });
-                return outcome.streamSuccess();
-              },
-            }),
-            text: mode.stream({
-              description: "文本输出",
-              format: "text",
-              success: {
-                kind: "stream",
-                text: () => text.silent,
+                failures: {},
+                async *handler({ outcome }) {
+                  executions += 1;
+                  yield outcome.record.item({ value: "one" });
+                  yield outcome.record.delta({ value: "two\nthree" });
+                  return outcome.streamSuccess();
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
+            text: mode
+              .stream({
                 records: {
                   item: {
                     description: "项目",
                     schema: item,
-                    text: (data: Readonly<{ readonly value: string }>) =>
-                      text.line(`项目 ${data.value}`),
                   },
                   delta: {
                     description: "增量",
                     schema: item,
-                    text: (data: Readonly<{ readonly value: string }>) =>
-                      text.fragment(data.value),
                   },
                 },
-              },
-              failures: {},
-              async *handler({ outcome }) {
-                executions += 1;
-                yield outcome.record.item({ value: "one" });
-                yield outcome.record.delta({ value: "two\nthree" });
-                return outcome.streamSuccess();
-              },
-            }),
+                failures: {},
+                async *handler({ outcome }) {
+                  executions += 1;
+                  yield outcome.record.item({ value: "one" });
+                  yield outcome.record.delta({ value: "two\nthree" });
+                  return outcome.streamSuccess();
+                },
+              })
+              .text({
+                description: "文本输出",
+                records: {
+                  item: (data: Readonly<{ readonly value: string }>) =>
+                    text.line(`项目 ${data.value}`),
+                  delta: (data: Readonly<{ readonly value: string }>) =>
+                    text.fragment(data.value),
+                },
+                failures: {},
+                terminal: () => text.silent,
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -626,51 +655,51 @@ void test("text stream success 以 text.lines 写出一个确定的终态 chunk"
         description: "列出项目",
         input: emptyInput,
 
-        outputs: defineCli().outputModes("list", emptyInput, (mode) => ({
+        outputs: (mode) => ({
           default: "text",
           modes: {
-            structured: mode.stream({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "stream",
-
+            structured: mode
+              .stream({
                 records: {
                   item: {
                     description: "项目",
                     schema: item,
                   },
                 },
-              },
-              failures: {},
-              async *handler({ outcome }) {
-                yield* [] as Iterable<never>;
-                return outcome.streamSuccess();
-              },
-            }),
-            text: mode.stream({
-              description: "文本输出",
-              format: "text",
-              success: {
-                kind: "stream",
-                text: () => text.lines(["完成", "", "没有更多项目"]),
+                failures: {},
+                async *handler({ outcome }) {
+                  yield* [] as Iterable<never>;
+                  return outcome.streamSuccess();
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
+            text: mode
+              .stream({
                 records: {
                   item: {
                     description: "项目",
                     schema: item,
-                    text: (data: Readonly<{ readonly value: string }>) =>
-                      text.line(data.value),
                   },
                 },
-              },
-              failures: {},
-              async *handler({ outcome }) {
-                yield* [] as Iterable<never>;
-                return outcome.streamSuccess();
-              },
-            }),
+                failures: {},
+                async *handler({ outcome }) {
+                  yield* [] as Iterable<never>;
+                  return outcome.streamSuccess();
+                },
+              })
+              .text({
+                description: "文本输出",
+                records: {
+                  item: (data: Readonly<{ readonly value: string }>) =>
+                    text.line(data.value),
+                },
+                failures: {},
+                terminal: () => text.lines(["完成", "", "没有更多项目"]),
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -700,75 +729,76 @@ void test("text stream failure 保留已写 record、稳定 identity 与 stderr�
         description: "列出项目",
         input: emptyInput,
 
-        outputs: defineCli().outputModes("list", emptyInput, (mode) => ({
+        outputs: (mode) => ({
           default: "text",
           modes: {
-            structured: mode.stream({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "stream",
-
+            structured: mode
+              .stream({
                 records: {
                   item: {
                     description: "项目",
                     schema: item,
                   },
                 },
-              },
-              failures: {
-                stopped: {
-                  description: "中断",
-                  schema: item,
-                  exitCode: 8,
+                failures: {
+                  stopped: {
+                    description: "中断",
+                    schema: item,
+                    exitCode: 8,
+                  },
                 },
-              },
-              async *handler({ outcome }) {
-                try {
-                  pulled += 1;
-                  yield outcome.record.item({ value: "first" });
-                  return outcome.failure.stopped({ value: "quota" });
-                } finally {
-                  cleaned = true;
-                }
-              },
-            }),
-            text: mode.stream({
-              description: "文本输出",
-              format: "text",
-              success: {
-                kind: "stream",
-                text: () => text.silent,
+                async *handler({ outcome }) {
+                  try {
+                    pulled += 1;
+                    yield outcome.record.item({ value: "first" });
+                    return outcome.failure.stopped({ value: "quota" });
+                  } finally {
+                    cleaned = true;
+                  }
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
+            text: mode
+              .stream({
                 records: {
                   item: {
                     description: "项目",
                     schema: item,
-                    text: (data: Readonly<{ readonly value: string }>) =>
-                      text.line(data.value),
                   },
                 },
-              },
-              failures: {
-                stopped: {
-                  description: "中断",
-                  schema: item,
-                  exitCode: 8,
-                  text: (data: Readonly<{ readonly value: string }>) =>
+                failures: {
+                  stopped: {
+                    description: "中断",
+                    schema: item,
+                    exitCode: 8,
+                  },
+                },
+                async *handler({ outcome }) {
+                  try {
+                    pulled += 1;
+                    yield outcome.record.item({ value: "first" });
+                    return outcome.failure.stopped({ value: "quota" });
+                  } finally {
+                    cleaned = true;
+                  }
+                },
+              })
+              .text({
+                description: "文本输出",
+                records: {
+                  item: (data: Readonly<{ readonly value: string }>) =>
                     text.line(data.value),
                 },
-              },
-              async *handler({ outcome }) {
-                try {
-                  pulled += 1;
-                  yield outcome.record.item({ value: "first" });
-                  return outcome.failure.stopped({ value: "quota" });
-                } finally {
-                  cleaned = true;
-                }
-              },
-            }),
+                failures: {
+                  stopped: (data: Readonly<{ readonly value: string }>) =>
+                    text.line(data.value),
+                },
+                terminal: () => text.silent,
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -816,24 +846,39 @@ void test("text stream failure 保留已写 record、稳定 identity 与 stderr�
         description: "无效 presenter",
         input: emptyInput,
 
-        outputs: defineCli().outputModes(
-          "invalidPresenter",
-          emptyInput,
-          (mode) => ({
-            default: "text",
-            modes: {
-              structured: mode.stream({
+        outputs: (mode) => ({
+          default: "text",
+          modes: {
+            structured: mode
+              .stream({
+                records: {
+                  item: {
+                    description: "项目",
+                    schema: item,
+                  },
+                },
+                failures: {},
+                async *handler({ outcome }) {
+                  try {
+                    presenterPulled += 1;
+                    yield outcome.record.item({ value: "first" });
+                    presenterPulled += 1;
+                    yield outcome.record.item({ value: "never" });
+                    return outcome.streamSuccess();
+                  } finally {
+                    presenterCleaned = true;
+                  }
+                },
+              })
+              .structured({
                 description: "结构化输出",
-                format: "structured",
-                success: {
-                  kind: "stream",
-
-                  records: {
-                    item: {
-                      description: "项目",
-                      schema: item,
-                      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意越过静态类型，以验证流式结果边界。
-                    },
+              }),
+            text: mode
+              .stream({
+                records: {
+                  item: {
+                    description: "项目",
+                    schema: item,
                   },
                 },
                 failures: {},
@@ -848,38 +893,17 @@ void test("text stream failure 保留已写 record、稳定 identity 与 stderr�
                     presenterCleaned = true;
                   }
                 },
-              }),
-              text: mode.stream({
+              })
+              .text({
                 description: "文本输出",
-                format: "text",
-                success: {
-                  kind: "stream",
-                  text: () => text.silent,
-                  records: {
-                    item: {
-                      description: "项目",
-                      schema: item,
-                      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意越过静态类型，以验证流式结果边界。
-                      text: () => text.lines(["不应", "作为 record"]) as never,
-                    },
-                  },
+                records: {
+                  item: () => text.lines(["不应", "作为 record"]) as never,
                 },
                 failures: {},
-                async *handler({ outcome }) {
-                  try {
-                    presenterPulled += 1;
-                    yield outcome.record.item({ value: "first" });
-                    presenterPulled += 1;
-                    yield outcome.record.item({ value: "never" });
-                    return outcome.streamSuccess();
-                  } finally {
-                    presenterCleaned = true;
-                  }
-                },
+                terminal: () => text.silent,
               }),
-            },
-          }),
-        ),
+          },
+        }),
       },
     },
   });

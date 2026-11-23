@@ -198,33 +198,35 @@ void test("stream 经 nodeCliOutput 写入失败时保留公共 CliWriteError �
         description: "列出项目",
         input: sharedInput0,
 
-        outputs: defineCli().outputModes("list", sharedInput0, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.stream({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "stream",
+            structured: mode
+              .stream({
                 records: {
-                  item: { description: "项目", schema: z.object({}) },
+                  item: {
+                    description: "项目",
+                    schema: z.object({}),
+                  },
                 },
-              },
-              failures: {},
-              async *handler({ outcome }) {
-                try {
-                  pulled += 1;
-                  yield outcome.record.item({});
-                  pulled += 1;
-                  yield outcome.record.item({});
-                  return outcome.streamSuccess();
-                } finally {
-                  cleaned = true;
-                }
-              },
-            }),
+                failures: {},
+                async *handler({ outcome }) {
+                  try {
+                    pulled += 1;
+                    yield outcome.record.item({});
+                    pulled += 1;
+                    yield outcome.record.item({});
+                    return outcome.streamSuccess();
+                  } finally {
+                    cleaned = true;
+                  }
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });

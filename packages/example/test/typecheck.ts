@@ -7,14 +7,13 @@ import { z } from "zod";
 
 import { cli } from "../src/index.ts";
 
-// 这些反例只参与编译；约束失效后，未使用的 @ts-expect-error 会报错。
+// These negative cases only participate in compilation; if a constraint stops holding, the unused @ts-expect-error becomes an error.
 export function rejectedDeclarations() {
-  // @ts-expect-error 已声明的 lookup 缺少触发场景。
+  // @ts-expect-error the declared lookup lacks a trigger scenario.
   defineCommandScenarios(cli, {});
-  // @ts-expect-error 已声明的 notFound 缺少触发场景。
+  // @ts-expect-error the declared notFound lacks a trigger scenario.
   defineFailureScenarios(cli, { lookup: {} });
 
-  const sharedInput0 = z.object({});
   defineCli()({
     root: "check",
     help: helpCapability({
@@ -29,78 +28,55 @@ export function rejectedDeclarations() {
       check: {
         kind: "rootCommand",
         name: "check",
-        description: "检查类型",
+        description: "Check types",
         fields: {},
-        input: sharedInput0,
+        input: z.object({}),
 
-        outputs: defineCli().outputModes("check", sharedInput0, (mode) => ({
-          default: "text",
-          modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "data",
-                variants: {
-                  found: {
-                    description: "找到结果",
-                    schema: z.object({ name: z.string() }),
-                    exitCode: 0,
-                  },
+        outputs: ({ atomic }) => {
+          const lookup = atomic({
+            success: {
+              kind: "data",
+              variants: {
+                found: {
+                  description: "Result found",
+                  schema: z.object({ name: z.string() }),
+                  exitCode: 0,
                 },
               },
-              failures: {
-                notFound: {
-                  description: "结果不存在",
-                  schema: z.object({ id: z.string() }),
-                  exitCode: 1,
-                },
+            },
+            failures: {
+              notFound: {
+                description: "Result not found",
+                schema: z.object({ id: z.string() }),
+                exitCode: 1,
               },
-              handler({ outcome }) {
-                // @ts-expect-error 不能调用未声明的失败。
-                outcome.failure.unknown({});
-                // @ts-expect-error 变体载荷必须符合契约模式推导的类型。
-                outcome.data.found({ name: 42 });
-                return outcome.data.found({ name: "Alice" });
-              },
-            }),
-            text: mode.atomic({
-              description: "文本输出",
-              format: "text",
-              success: {
-                kind: "data",
-                variants: {
-                  found: {
-                    description: "找到结果",
-                    schema: z.object({ name: z.string() }),
-                    exitCode: 0,
-                    text: ({ name }) => text.line(name),
-                  },
-                },
-              },
-              failures: {
-                notFound: {
-                  description: "结果不存在",
-                  schema: z.object({ id: z.string() }),
-                  exitCode: 1,
-                  text: ({ id }) => text.line(id),
-                },
-              },
-              handler({ outcome }) {
-                // @ts-expect-error 不能调用未声明的失败。
-                outcome.failure.unknown({});
-                // @ts-expect-error 变体载荷必须符合契约模式推导的类型。
-                outcome.data.found({ name: 42 });
-                return outcome.data.found({ name: "Alice" });
-              },
-            }),
-          },
-        })),
+            },
+            handler({ outcome }) {
+              // @ts-expect-error cannot invoke an undeclared failure.
+              outcome.failure.unknown({});
+              // @ts-expect-error the payload must match the contract schema input.
+              outcome.data.found({ name: 42 });
+              return outcome.data.found({ name: "Alice" });
+            },
+          });
+          return {
+            default: "text",
+            modes: {
+              structured: lookup.structured({
+                description: "Structured output",
+              }),
+              text: lookup.text({
+                description: "Text output",
+                success: { found: ({ name }) => text.line(name) },
+                failures: { notFound: ({ id }) => text.line(id) },
+              }),
+            },
+          };
+        },
       },
     },
   });
 
-  const sharedInput1 = z.object({});
   defineCli()({
     root: "missingCompletion",
     help: helpCapability({
@@ -115,38 +91,30 @@ export function rejectedDeclarations() {
       missingCompletion: {
         kind: "rootCommand",
         name: "check",
-        description: "检查类型",
-        input: sharedInput1,
+        description: "Check types",
+        input: z.object({}),
 
-        outputs: defineCli().outputModes(
-          "missingCompletion",
-          sharedInput1,
-          (mode) => ({
+        outputs: ({ atomic }) => {
+          const complete = atomic({
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          });
+          return {
             default: "text",
             modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
-                success: { kind: "completion" },
-                failures: {},
-                handler: ({ outcome }) => outcome.completion(),
+              structured: complete.structured({
+                description: "Structured output",
               }),
-              // @ts-expect-error 文本完成方式必须声明当前 mode 的 presenter。
-              text: mode.atomic({
-                description: "文本输出",
-                format: "text",
-                success: { kind: "completion" },
-                failures: {},
-                handler: () => undefined as never,
-              }),
+              // @ts-expect-error a text completion mode must declare a success presenter.
+              text: complete.text({ description: "Text output", failures: {} }),
             },
-          }),
-        ),
+          };
+        },
       },
     },
   });
 
-  const sharedInput2 = z.object({});
   defineCli()({
     root: "validCompletion",
     help: helpCapability({
@@ -161,32 +129,29 @@ export function rejectedDeclarations() {
       validCompletion: {
         kind: "rootCommand",
         name: "check",
-        description: "检查类型",
-        input: sharedInput2,
+        description: "Check types",
+        input: z.object({}),
 
-        outputs: defineCli().outputModes(
-          "validCompletion",
-          sharedInput2,
-          (mode) => ({
+        outputs: ({ atomic }) => {
+          const complete = atomic({
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          });
+          return {
             default: "text",
             modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
-                success: { kind: "completion" },
-                failures: {},
-                handler: ({ outcome }) => outcome.completion(),
+              structured: complete.structured({
+                description: "Structured output",
               }),
-              text: mode.atomic({
-                description: "文本输出",
-                format: "text",
-                success: { kind: "completion", text: () => text.silent },
+              text: complete.text({
+                description: "Text output",
+                success: () => text.silent,
                 failures: {},
-                handler: ({ outcome }) => outcome.completion(),
               }),
             },
-          }),
-        ),
+          };
+        },
       },
     },
   });

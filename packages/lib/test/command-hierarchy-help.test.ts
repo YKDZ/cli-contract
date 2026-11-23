@@ -47,23 +47,27 @@ function createWorkspaceCli() {
         },
         input: sharedInput0,
 
-        outputs: define.outputModes("addPackage", sharedInput0, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ input, outcome }) => {
-                input satisfies { name: string };
-                // @ts-expect-error completion 命令不暴露 data 构造器。
-                void outcome.data;
-                return outcome.completion();
-              },
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ input, outcome }) => {
+                  input satisfies { name: string };
+                  // @ts-expect-error completion 命令不暴露 data 构造器。
+                  void outcome.data;
+                  return outcome.completion();
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       }),
       ...define.command("listPackages")({
         kind: "command",
@@ -72,18 +76,22 @@ function createWorkspaceCli() {
         description: "列出包",
         input: sharedInput1,
 
-        outputs: define.outputModes("listPackages", sharedInput1, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       }),
     },
   });

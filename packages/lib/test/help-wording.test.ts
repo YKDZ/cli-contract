@@ -9,6 +9,7 @@ import {
   parseCliInvocation,
   text,
   type HelpCapabilityDefinition,
+  type OutputExecutionFactory,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
@@ -42,18 +43,22 @@ void test("帮助事实模板表达候选值和默认值，保留 schema 中的�
         },
         input: sharedInput0,
 
-        outputs: defineCli().outputModes("choose", sharedInput0, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -154,20 +159,30 @@ void test("仅已知模板错误仍在根装配时与叶约束问题聚合", () 
           },
         ],
 
-        outputs: defineCli().outputModes("choose", sharedInput1, (mode) => ({
+        outputs: (
+          mode: OutputExecutionFactory<
+            "choose",
+            undefined,
+            typeof sharedInput1
+          >,
+        ) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler() {
-                return undefined as never;
-              },
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler() {
+                  return undefined as never;
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   };
@@ -249,22 +264,22 @@ void test("已声明帮助事实缺少模板时在定义期报告命令与槽位
               },
             ],
 
-            outputs: defineCli().outputModes(
-              "choose",
-              sharedInput0,
-              (mode) => ({
-                default: "structured",
-                modes: {
-                  structured: mode.atomic({
-                    description: "结构化输出",
-                    format: "structured",
-                    success: { kind: "completion" },
+            outputs: (mode) => ({
+              default: "structured",
+              modes: {
+                structured: mode
+                  .atomic({
+                    success: {
+                      kind: "completion",
+                    },
                     failures: {},
                     handler: ({ outcome }) => outcome.completion(),
+                  })
+                  .structured({
+                    description: "结构化输出",
                   }),
-                },
-              }),
-            ),
+              },
+            }),
           },
         },
       }),
@@ -323,18 +338,22 @@ void test("输出方式的候选与默认事实缺少作者模板时在定义期
             name: "show",
             description: "显示",
             input,
-            outputs: define.outputModes("show", input, (mode) => ({
+            outputs: (mode) => ({
               default: "json",
               modes: {
-                json: mode.atomic({
-                  description: "结构化输出",
-                  format: "structured",
-                  success: { kind: "completion" },
-                  failures: {},
-                  handler: ({ outcome }) => outcome.completion(),
-                }),
+                json: mode
+                  .atomic({
+                    success: {
+                      kind: "completion",
+                    },
+                    failures: {},
+                    handler: ({ outcome }) => outcome.completion(),
+                  })
+                  .structured({
+                    description: "结构化输出",
+                  }),
               },
-            })),
+            }),
           },
         },
       }),
@@ -385,18 +404,22 @@ void test("空效果分支不要求对应帮助槽位", async () => {
           },
         ],
 
-        outputs: defineCli().outputModes("choose", sharedInput2, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -438,22 +461,22 @@ void test("动态帮助事实模板在根装配时聚合报告非法槽位", () 
             },
             input: sharedInput3,
 
-            outputs: defineCli().outputModes(
-              "choose",
-              sharedInput3,
-              (mode) => ({
-                default: "structured",
-                modes: {
-                  structured: mode.atomic({
-                    description: "结构化输出",
-                    format: "structured",
-                    success: { kind: "completion" },
+            outputs: (mode) => ({
+              default: "structured",
+              modes: {
+                structured: mode
+                  .atomic({
+                    success: {
+                      kind: "completion",
+                    },
                     failures: {},
                     handler: ({ outcome }) => outcome.completion(),
+                  })
+                  .structured({
+                    description: "结构化输出",
                   }),
-                },
-              }),
-            ),
+              },
+            }),
           },
         },
       }),
@@ -497,18 +520,28 @@ void test("帮助模板错误保留非法原值并继续聚合定义期问题", 
         description: "选择模式",
         input: sharedInput4,
 
-        outputs: defineCli().outputModes("choose", sharedInput4, (mode) => ({
+        outputs: (
+          mode: OutputExecutionFactory<
+            "choose",
+            undefined,
+            typeof sharedInput4
+          >,
+        ) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   };
@@ -589,22 +622,22 @@ void test("命令组占位词静态与动态判断同界", () => {
               description: "选择模式",
               input: sharedInput5,
 
-              outputs: defineCli().outputModes(
-                "choose",
-                sharedInput5,
-                (mode) => ({
-                  default: "structured",
-                  modes: {
-                    structured: mode.atomic({
-                      description: "结构化输出",
-                      format: "structured",
-                      success: { kind: "completion" },
+              outputs: (mode) => ({
+                default: "structured",
+                modes: {
+                  structured: mode
+                    .atomic({
+                      success: {
+                        kind: "completion",
+                      },
                       failures: {},
                       handler: ({ outcome }) => outcome.completion(),
+                    })
+                    .structured({
+                      description: "结构化输出",
                     }),
-                  },
-                }),
-              ),
+                },
+              }),
             },
           },
         }),
@@ -649,18 +682,22 @@ void test("命令组缺少占位词时在定义期报告根身份", () => {
             description: "运行",
             input: sharedInput6,
 
-            outputs: define.outputModes("run", sharedInput6, (mode) => ({
+            outputs: (mode) => ({
               default: "structured",
               modes: {
-                structured: mode.atomic({
-                  description: "结构化输出",
-                  format: "structured",
-                  success: { kind: "completion" },
-                  failures: {},
-                  handler: ({ outcome }) => outcome.completion(),
-                }),
+                structured: mode
+                  .atomic({
+                    success: {
+                      kind: "completion",
+                    },
+                    failures: {},
+                    handler: ({ outcome }) => outcome.completion(),
+                  })
+                  .structured({
+                    description: "结构化输出",
+                  }),
               },
-            })),
+            }),
           }),
         },
       }),
@@ -707,18 +744,22 @@ void test("命令组占位词贯穿帮助、用法失败和契约清单", async 
         description: "运行任务",
         input: sharedInput7,
 
-        outputs: define.outputModes("run", sharedInput7, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       }),
     },
   });
@@ -819,18 +860,22 @@ void test("条件分支模板表达全称条件，并允许各槽位调整词序
         ],
         input: sharedInput1,
 
-        outputs: defineCli().outputModes("publish", sharedInput1, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -872,25 +917,35 @@ void test("输出格式控制复用候选值和默认值模板", async () => {
         description: "显示",
         input: sharedInput8,
 
-        outputs: defineCli().outputModes("show", sharedInput8, (mode) => ({
+        outputs: (mode) => ({
           default: "text",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
-            text: mode.atomic({
-              description: "文本输出",
-              format: "text",
-              success: { kind: "completion", text: () => text.silent },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
+            text: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .text({
+                description: "文本输出",
+                success: () => text.silent,
+                failures: {},
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -927,25 +982,35 @@ void test("输出方式帮助列出根作者提供的候选值与默认值文案
         description: "显示",
         input: sharedInput9,
 
-        outputs: defineCli().outputModes("show", sharedInput9, (mode) => ({
+        outputs: (mode) => ({
           default: "text",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
-            text: mode.atomic({
-              description: "文本输出",
-              format: "text",
-              success: { kind: "completion", text: () => text.silent },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
+            text: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .text({
+                description: "文本输出",
+                success: () => text.silent,
+                failures: {},
+              }),
           },
-        })),
+        }),
       },
     },
   });
