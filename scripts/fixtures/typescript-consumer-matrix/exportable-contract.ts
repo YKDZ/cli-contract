@@ -246,17 +246,17 @@ export const rootCommandContract = define({
     probe: {
       kind: "rootCommand",
       name: "probe",
-      description: "根命令示例",
+      description: "Root command example",
       fields: {
         query: {
           kind: "valueOption",
           longOption: "--query",
-          description: "查询",
+          description: "Query",
         },
         dryRun: {
           kind: "flag",
           longOption: "--dry-run",
-          description: "仅演练",
+          description: "Dry run only",
         },
       },
       input: inspectInput,
@@ -271,7 +271,7 @@ export const rootCommandContract = define({
             kind: "data",
             variants: {
               found: {
-                description: "找到目标",
+                description: "Target found",
                 schema: foundPayload,
                 exitCode: 0,
               },
@@ -279,7 +279,7 @@ export const rootCommandContract = define({
           },
           failures: {
             unavailable: {
-              description: "目标不可用",
+              description: "Target unavailable",
               schema: unavailablePayload,
               exitCode: 9,
             },
@@ -293,9 +293,11 @@ export const rootCommandContract = define({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               success: { found: (value) => text.line(String(value.count)) },
               failures: { unavailable: (value) => text.line(value.reason) },
             }),

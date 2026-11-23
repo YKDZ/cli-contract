@@ -215,7 +215,7 @@ const invalidRootModeCommand = define({
     inspect: {
       kind: "rootCommand",
       name: "inspect",
-      description: "根命令方式负例",
+      description: "Root mode negative",
       fields,
       input,
       outputs({ atomic }) {
@@ -226,7 +226,9 @@ const invalidRootModeCommand = define({
         });
         return {
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
