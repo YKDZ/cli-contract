@@ -10,14 +10,9 @@ import { z } from "zod";
 
 const emptyInput = z.object({});
 const textInput = z.object({ name: z.string().optional() });
-const countInput = z.object({ count: z.number() });
 const optionalCountInput = z.object({ count: z.number().optional() });
 const eitherAcceptsEmptyInput = z.union([
   z.object({ count: z.number().optional() }),
-  z.object({ name: z.string() }),
-]);
-const requiredEitherInput = z.union([
-  z.object({ count: z.number() }),
   z.object({ name: z.string() }),
 ]);
 const messagePayload = z.object({ message: z.string() });
@@ -355,9 +350,9 @@ defineCli()({
           default: "text",
           modes: {
             structured: operation.structured({ description: "结构化输出" }),
+            // @ts-expect-error 文本方式的每个 data 变体都必须声明 presenter。
             text: operation.text({
               description: "文本输出",
-              // @ts-expect-error 文本方式的每个 data 变体都必须声明 presenter。
               success: {
                 accepted: (payload: z.output<typeof messagePayload>) => {
                   payload.message satisfies string;
@@ -423,6 +418,7 @@ defineCli()({
           default: "text",
           modes: {
             structured: operation.structured({ description: "结构化输出" }),
+            // @ts-expect-error 文本方式的 failure 变体必须声明 presenter。
             text: operation.text({
               description: "文本输出",
               success: {
@@ -431,7 +427,6 @@ defineCli()({
                   return text.line(payload.message);
                 },
               },
-              // @ts-expect-error 文本方式的 failure 变体必须声明 presenter。
               failures: {
                 unavailable: (payload: z.output<typeof messagePayload>) => {
                   payload.message satisfies string;
@@ -479,51 +474,16 @@ defineCli()({
           default: "text",
           modes: {
             structured: operation.structured({ description: "结构化输出" }),
+            // @ts-expect-error 文本方式的 completion failure 变体必须声明 presenter。
             text: operation.text({
               description: "文本输出",
               success: () => text.silent,
-              // @ts-expect-error 文本方式的 completion failure 变体必须声明 presenter。
               failures: {
                 unavailable: (payload) => {
                   payload.message satisfies string;
                   return text.line(payload.message);
                 },
               },
-            }),
-          },
-        };
-      },
-    },
-  },
-});
-
-defineCli()({
-  root: "missingRawField",
-  help: helpCapability(),
-
-  usageFailureExitCode: 64,
-  commands: {
-    // @ts-expect-error 没有 raw 字段时输入模式不能要求 count。
-    missingRawField: {
-      kind: "rootCommand",
-      name: "missing-raw-field",
-      description: "缺少 raw 字段",
-      input: countInput,
-
-      outputs({ atomic }) {
-        const operation = atomic({
-          success: { kind: "completion" },
-          failures: {},
-          handler: ({ outcome }) => outcome.completion(),
-        });
-        return {
-          default: "text",
-          modes: {
-            structured: operation.structured({ description: "结构化输出" }),
-            text: operation.text({
-              description: "文本输出",
-              success: () => text.silent,
-              failures: {},
             }),
           },
         };
@@ -557,41 +517,6 @@ defineCli()({
             // @ts-expect-error 文本 completion 必须声明当前方式的 presenter。
             text: operation.text({
               description: "文本输出",
-              failures: {},
-            }),
-          },
-        };
-      },
-    },
-  },
-});
-
-defineCli()({
-  root: "missingUnionRawField",
-  help: helpCapability(),
-
-  usageFailureExitCode: 64,
-  commands: {
-    // @ts-expect-error 没有对应 raw 字段时联合输入不能要求 count 或 name。
-    missingUnionRawField: {
-      kind: "rootCommand",
-      name: "missing-union-raw-field",
-      description: "互异必需字段的联合输入",
-      input: requiredEitherInput,
-
-      outputs({ atomic }) {
-        const operation = atomic({
-          success: { kind: "completion" },
-          failures: {},
-          handler: ({ outcome }) => outcome.completion(),
-        });
-        return {
-          default: "text",
-          modes: {
-            structured: operation.structured({ description: "结构化输出" }),
-            text: operation.text({
-              description: "文本输出",
-              success: () => text.silent,
               failures: {},
             }),
           },

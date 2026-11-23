@@ -24,22 +24,19 @@ defineCli()({
         { kind: "when", all: [{ kind: "present", field: "mode" }] },
       ],
 
-      outputs: defineCli().outputModes(
-        "missingWhenEffects",
-        sharedInput0,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: operation.structured({ description: "结构化输出" }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -78,18 +75,19 @@ define({
         },
       ],
 
-      outputs: define.outputModes("branchConflict", sharedInput1, (mode) => ({
-        default: "structured",
-        modes: {
-          structured: mode.atomic({
-            description: "结构化输出",
-            format: "structured",
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
-          }),
-        },
-      })),
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
+          default: "structured",
+          modes: {
+            structured: operation.structured({ description: "结构化输出" }),
+          },
+        };
+      },
     }),
   },
 });
@@ -142,22 +140,19 @@ defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes(
-        "multiFieldConflict",
-        sharedInput2,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: operation.structured({ description: "结构化输出" }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -199,22 +194,19 @@ defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes(
-        "unionFieldConflict",
-        sharedInput3,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: operation.structured({ description: "结构化输出" }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -246,22 +238,19 @@ defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes(
-        "effectSuffixConflict",
-        sharedInput4,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: operation.structured({ description: "结构化输出" }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -293,22 +282,19 @@ defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes(
-        "factSuffixConflict",
-        sharedInput5,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: operation.structured({ description: "结构化输出" }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });

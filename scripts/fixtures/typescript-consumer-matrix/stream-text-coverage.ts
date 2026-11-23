@@ -19,38 +19,42 @@ const complete = defineCli()({
       description: "完整流",
       input,
 
-      outputs: defineCli().outputModes("completeStream", input, (mode) => ({
-        default: "text",
-        modes: {
-          text: mode.stream({
-            description: "文本输出",
-            format: "text",
-            success: {
-              kind: "stream",
-              text: () => text.silent,
+      outputs({ stream }) {
+        const operation = stream({
+          records: {
+            item: {
+              description: "记录",
+              schema: payload,
+            },
+          },
+          failures: {
+            unavailable: {
+              description: "不可用",
+              schema: payload,
+              exitCode: 9,
+            },
+          },
+          async *handler({ outcome }) {
+            yield outcome.record.item({ message: "one" });
+            return outcome.failure.unavailable({ message: "nope" });
+          },
+        });
+        return {
+          default: "text",
+          modes: {
+            text: operation.text({
+              description: "文本输出",
               records: {
-                item: {
-                  description: "记录",
-                  schema: payload,
-                  text: (value) => text.line(value.message),
-                },
+                item: (value) => text.line(value.message),
               },
-            },
-            failures: {
-              unavailable: {
-                description: "不可用",
-                schema: payload,
-                exitCode: 9,
-                text: (value) => text.line(value.message),
+              failures: {
+                unavailable: (value) => text.line(value.message),
               },
-            },
-            async *handler({ outcome }) {
-              yield outcome.record.item({ message: "one" });
-              return outcome.failure.unavailable({ message: "nope" });
-            },
-          }),
-        },
-      })),
+              terminal: () => text.silent,
+            }),
+          },
+        };
+      },
     },
   },
 });
@@ -66,35 +70,38 @@ defineCli()({
       description: "遗漏记录",
       input,
 
-      outputs: defineCli().outputModes("missingRecord", input, (mode) => ({
-        default: "text",
-        modes: {
-          // @ts-expect-error 文本流缺少记录呈现器。
-          text: mode.stream({
-            description: "文本输出",
-            format: "text",
-            success: {
-              kind: "stream",
-              text: () => text.silent,
-              records: {
-                item: { description: "记录", schema: payload },
+      outputs({ stream }) {
+        const operation = stream({
+          records: {
+            item: { description: "记录", schema: payload },
+          },
+          failures: {
+            unavailable: {
+              description: "不可用",
+              schema: payload,
+              exitCode: 9,
+            },
+          },
+          async *handler({ outcome }) {
+            yield outcome.record.item({ message: "one" });
+            return outcome.streamSuccess();
+          },
+        });
+        return {
+          default: "text",
+          modes: {
+            // @ts-expect-error 文本流缺少记录呈现器。
+            text: operation.text({
+              description: "文本输出",
+              records: {},
+              failures: {
+                unavailable: (value) => text.line(value.message),
               },
-            },
-            failures: {
-              unavailable: {
-                description: "不可用",
-                schema: payload,
-                exitCode: 9,
-                text: (value) => text.line(value.message),
-              },
-            },
-            async *handler({ outcome }) {
-              yield outcome.record.item({ message: "one" });
-              return outcome.streamSuccess();
-            },
-          }),
-        },
-      })),
+              terminal: () => text.silent,
+            }),
+          },
+        };
+      },
     },
   },
 });
@@ -109,38 +116,42 @@ defineCli()({
       description: "遗漏成功",
       input,
 
-      outputs: defineCli().outputModes("missingSuccess", input, (mode) => ({
-        default: "text",
-        modes: {
-          // @ts-expect-error 文本流缺少终态呈现器。
-          text: mode.stream({
-            description: "文本输出",
-            format: "text",
-            success: {
-              kind: "stream",
+      outputs({ stream }) {
+        const operation = stream({
+          records: {
+            item: {
+              description: "记录",
+              schema: payload,
+            },
+          },
+          failures: {
+            unavailable: {
+              description: "不可用",
+              schema: payload,
+              exitCode: 9,
+            },
+          },
+          async *handler({ outcome }) {
+            yield outcome.record.item({ message: "one" });
+            return outcome.streamSuccess();
+          },
+        });
+        return {
+          default: "text",
+          modes: {
+            // @ts-expect-error 文本流缺少终态呈现器。
+            text: operation.text({
+              description: "文本输出",
               records: {
-                item: {
-                  description: "记录",
-                  schema: payload,
-                  text: (value) => text.line(value.message),
-                },
+                item: (value) => text.line(value.message),
               },
-            },
-            failures: {
-              unavailable: {
-                description: "不可用",
-                schema: payload,
-                exitCode: 9,
-                text: (value) => text.line(value.message),
+              failures: {
+                unavailable: (value) => text.line(value.message),
               },
-            },
-            async *handler({ outcome }) {
-              yield outcome.record.item({ message: "one" });
-              return outcome.streamSuccess();
-            },
-          }),
-        },
-      })),
+            }),
+          },
+        };
+      },
     },
   },
 });

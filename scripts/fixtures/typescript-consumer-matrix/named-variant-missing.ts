@@ -24,60 +24,41 @@ defineCli()({
       },
       input: textInput,
 
-      outputs: defineCli().outputModes(
-        "missingDataVariantText",
-        textInput,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: {
+            kind: "data",
+            variants: {
+              accepted: {
+                description: "已接受",
+                schema: messagePayload,
+                exitCode: 0,
+              },
+              deferred: {
+                description: "已延后",
+                schema: messagePayload,
+                exitCode: 0,
+              },
+            },
+          },
+          failures: {},
+          handler: ({ outcome }) =>
+            outcome.data.accepted({ message: "已接受请求" }),
+        });
+        return {
           default: "text",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "data",
-                variants: {
-                  accepted: {
-                    description: "已接受",
-                    schema: messagePayload,
-                    exitCode: 0,
-                  },
-                  deferred: {
-                    description: "已延后",
-                    schema: messagePayload,
-                    exitCode: 0,
-                  },
-                },
-              },
-              failures: {},
-              handler: ({ outcome }) =>
-                outcome.data.accepted({ message: "已接受请求" }),
-            }),
-            text: mode.atomic({
+            structured: operation.structured({ description: "结构化输出" }),
+            text: operation.text({
               description: "文本输出",
-              format: "text",
               success: {
-                kind: "data",
-                variants: {
-                  accepted: {
-                    description: "已接受",
-                    schema: messagePayload,
-                    exitCode: 0,
-                    text: (payload) => text.line(payload.message),
-                  },
-                  deferred: {
-                    description: "已延后",
-                    schema: messagePayload,
-                    exitCode: 0,
-                  },
-                },
+                accepted: (payload) => text.line(payload.message),
               },
               failures: {},
-              handler: ({ outcome }) =>
-                outcome.data.accepted({ message: "已接受请求" }),
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -101,73 +82,49 @@ defineCli()({
       },
       input: textInput,
 
-      outputs: defineCli().outputModes(
-        "missingDataFailureText",
-        textInput,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: {
+            kind: "data",
+            variants: {
+              accepted: {
+                description: "已接受",
+                schema: messagePayload,
+                exitCode: 0,
+              },
+            },
+          },
+          failures: {
+            unavailable: {
+              description: "不可用",
+              schema: messagePayload,
+              exitCode: 9,
+            },
+            forbidden: {
+              description: "禁止",
+              schema: messagePayload,
+              exitCode: 13,
+            },
+          },
+          handler: ({ outcome }) =>
+            outcome.data.accepted({ message: "已接受请求" }),
+        });
+        return {
           default: "text",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "data",
-                variants: {
-                  accepted: {
-                    description: "已接受",
-                    schema: messagePayload,
-                    exitCode: 0,
-                  },
-                },
-              },
-              failures: {
-                unavailable: {
-                  description: "不可用",
-                  schema: messagePayload,
-                  exitCode: 9,
-                },
-                forbidden: {
-                  description: "禁止",
-                  schema: messagePayload,
-                  exitCode: 13,
-                },
-              },
-              handler: ({ outcome }) =>
-                outcome.data.accepted({ message: "已接受请求" }),
-            }),
-            text: mode.atomic({
+            structured: operation.structured({ description: "结构化输出" }),
+            text: operation.text({
               description: "文本输出",
-              format: "text",
               success: {
-                kind: "data",
-                variants: {
-                  accepted: {
-                    description: "已接受",
-                    schema: messagePayload,
-                    exitCode: 0,
-                    text: (payload) => text.line(payload.message),
-                  },
-                },
+                accepted: (payload) => text.line(payload.message),
               },
               failures: {
-                unavailable: {
-                  description: "不可用",
-                  schema: messagePayload,
-                  exitCode: 9,
-                  text: (payload) => text.line(payload.message),
-                },
-                forbidden: {
-                  description: "禁止",
-                  schema: messagePayload,
-                  exitCode: 13,
-                },
+                unavailable: (payload) => text.line(payload.message),
               },
-              handler: ({ outcome }) =>
-                outcome.data.accepted({ message: "已接受请求" }),
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -184,52 +141,37 @@ defineCli()({
       description: "completion 的遗漏 failure presenter",
       input: emptyInput,
 
-      outputs: defineCli().outputModes(
-        "missingCompletionFailureText",
-        emptyInput,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {
+            unavailable: {
+              description: "不可用",
+              schema: messagePayload,
+              exitCode: 9,
+            },
+            forbidden: {
+              description: "禁止",
+              schema: messagePayload,
+              exitCode: 13,
+            },
+          },
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "text",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {
-                unavailable: {
-                  description: "不可用",
-                  schema: messagePayload,
-                  exitCode: 9,
-                },
-                forbidden: {
-                  description: "禁止",
-                  schema: messagePayload,
-                  exitCode: 13,
-                },
-              },
-              handler: ({ outcome }) => outcome.completion(),
-            }),
-            text: mode.atomic({
+            structured: operation.structured({ description: "结构化输出" }),
+            text: operation.text({
               description: "文本输出",
-              format: "text",
-              success: { kind: "completion", text: () => text.silent },
+              success: () => text.silent,
               failures: {
-                unavailable: {
-                  description: "不可用",
-                  schema: messagePayload,
-                  exitCode: 9,
-                  text: (payload) => text.line(payload.message),
-                },
-                forbidden: {
-                  description: "禁止",
-                  schema: messagePayload,
-                  exitCode: 13,
-                },
+                unavailable: (payload) => text.line(payload.message),
               },
-              handler: ({ outcome }) => outcome.completion(),
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });

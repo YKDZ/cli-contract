@@ -54,18 +54,19 @@ const invalidChild = define.command("deploy")({
     },
   ],
 
-  outputs: define.outputModes("deploy", sharedInput0, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
-    },
-  })),
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: operation.structured({ description: "结构化输出" }),
+      },
+    };
+  },
 });
 
 const sharedInput1 = z.object({
@@ -91,18 +92,19 @@ const invalidDynamicNegativeChild = define.command("stage")({
     },
   ],
 
-  outputs: define.outputModes("stage", sharedInput1, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
-    },
-  })),
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: operation.structured({ description: "结构化输出" }),
+      },
+    };
+  },
 });
 
 const sharedInput2 = z.object({
@@ -127,18 +129,19 @@ const invalidFixedMaximumChild = define.command("quota")({
     },
   ],
 
-  outputs: define.outputModes("quota", sharedInput2, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
-    },
-  })),
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: operation.structured({ description: "结构化输出" }),
+      },
+    };
+  },
 });
 
 const sharedInput3 = z.object({
@@ -164,18 +167,19 @@ const invalidCompoundChild = define.command("compound")({
     },
   ],
 
-  outputs: define.outputModes("compound", sharedInput3, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
-    },
-  })),
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: operation.structured({ description: "结构化输出" }),
+      },
+    };
+  },
 });
 
 const sharedInput4 = z.object({
@@ -200,18 +204,19 @@ const invalidFractionalChild = define.command("fractional")({
     },
   ],
 
-  outputs: define.outputModes("fractional", sharedInput4, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
-    },
-  })),
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: operation.structured({ description: "结构化输出" }),
+      },
+    };
+  },
 });
 
 define({
@@ -316,18 +321,19 @@ defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes("rootDeploy", sharedInput5, (mode) => ({
-        default: "structured",
-        modes: {
-          structured: mode.atomic({
-            description: "结构化输出",
-            format: "structured",
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
-          }),
-        },
-      })),
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
+          default: "structured",
+          modes: {
+            structured: operation.structured({ description: "结构化输出" }),
+          },
+        };
+      },
     },
   },
 });
@@ -355,22 +361,19 @@ defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes(
-        "rootMissingCountField",
-        sharedInput6,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: operation.structured({ description: "结构化输出" }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -393,18 +396,19 @@ const invalidMixedCountChild = define.command("missingCountChild")({
     },
   ],
 
-  outputs: define.outputModes("missingCountChild", sharedInput7, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
-    },
-  })),
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: operation.structured({ description: "结构化输出" }),
+      },
+    };
+  },
 });
 
 define({
@@ -453,22 +457,19 @@ defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes(
-        "validBroadCounts",
-        sharedInput8,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: operation.structured({ description: "结构化输出" }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -496,22 +497,19 @@ defineCli()({
         { kind: "count", fields: missingSuffixCountFields, max: 1 },
       ],
 
-      outputs: defineCli().outputModes(
-        "missingSuffixCountField",
-        sharedInput9,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: operation.structured({ description: "结构化输出" }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -543,22 +541,19 @@ defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes(
-        "missingSuffixBeforeWideCountField",
-        sharedInput10,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: operation.structured({ description: "结构化输出" }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -586,22 +581,19 @@ defineCli()({
         { kind: "count", fields: duplicateSuffixCountFields, max: 1 },
       ],
 
-      outputs: defineCli().outputModes(
-        "duplicateSuffixCountField",
-        sharedInput11,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: operation.structured({ description: "结构化输出" }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });

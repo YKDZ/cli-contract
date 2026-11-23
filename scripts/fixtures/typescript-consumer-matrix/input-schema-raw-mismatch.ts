@@ -29,18 +29,19 @@ define({
       },
       input: sharedInput0,
 
-      outputs: define.outputModes("inspect", sharedInput0, (mode) => ({
-        default: "structured",
-        modes: {
-          structured: mode.atomic({
-            description: "结构化输出",
-            format: "structured",
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
-          }),
-        },
-      })),
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
+          default: "structured",
+          modes: {
+            structured: operation.structured({ description: "结构化输出" }),
+          },
+        };
+      },
     }),
   },
 });
@@ -65,18 +66,19 @@ defineCli()({
       },
       input: sharedInput1,
 
-      outputs: defineCli().outputModes("rootInspect", sharedInput1, (mode) => ({
-        default: "structured",
-        modes: {
-          structured: mode.atomic({
-            description: "结构化输出",
-            format: "structured",
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
-          }),
-        },
-      })),
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
+          default: "structured",
+          modes: {
+            structured: operation.structured({ description: "结构化输出" }),
+          },
+        };
+      },
     },
   },
 });
@@ -101,18 +103,19 @@ defineCli()({
       },
       input: sharedInput2,
 
-      outputs: defineCli().outputModes("rootEnabled", sharedInput2, (mode) => ({
-        default: "structured",
-        modes: {
-          structured: mode.atomic({
-            description: "结构化输出",
-            format: "structured",
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
-          }),
-        },
-      })),
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
+          default: "structured",
+          modes: {
+            structured: operation.structured({ description: "结构化输出" }),
+          },
+        };
+      },
     },
   },
 });
@@ -137,18 +140,19 @@ defineCli()({
       },
       input: sharedInput3,
 
-      outputs: defineCli().outputModes("rootTags", sharedInput3, (mode) => ({
-        default: "structured",
-        modes: {
-          structured: mode.atomic({
-            description: "结构化输出",
-            format: "structured",
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
-          }),
-        },
-      })),
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
+          default: "structured",
+          modes: {
+            structured: operation.structured({ description: "结构化输出" }),
+          },
+        };
+      },
     },
   },
 });

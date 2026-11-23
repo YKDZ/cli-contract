@@ -92,6 +92,8 @@ export const inspectCombination = define.command("inspect")({
     },
   ],
 
+  examples: [{ input: { query: "alpha" }, outputMode: "structured" }],
+
   outputs({ atomic }) {
     const operation = atomic({
       success: {
@@ -152,6 +154,11 @@ export const tailCombination = define.command("tail")({
         { kind: "present", field: "follow" },
       ],
     },
+  ],
+
+  examples: [
+    { input: { topic: "source" }, outputMode: "text" },
+    { input: { topic: "mirror", follow: true } },
   ],
 
   outputs({ stream }) {
