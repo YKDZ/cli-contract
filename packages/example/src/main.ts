@@ -3,7 +3,7 @@ import { nodeCliOutput } from "@ykdz/cli-contract/node";
 
 import { cli } from "./index.ts";
 
-// 换运行环境时替换 write 即可；这里用 Node 辅助函数处理流的背压和写入错误。
+// Swap `write` to target another runtime; the Node helper handles stream backpressure and write errors.
 const invocation = parseCliInvocation(cli, process.argv.slice(2));
 const write = nodeCliOutput({ stdout: process.stdout, stderr: process.stderr });
 const result =
@@ -15,10 +15,10 @@ const result =
       })
     : await executeCli(cli, { invocation, write });
 
-// process.exit() 可能截断流写入；设置 exitCode 让 Node 自然退出。
+// process.exit() can truncate pending stream writes; set exitCode and let Node exit naturally.
 process.exitCode = result.exitCode;
 
-// 此处从 stdin 接收日志，也可以接入返回 AsyncIterable 的事件订阅。
+// Reads log lines from stdin; any AsyncIterable event subscription can replace this.
 async function* readLogs() {
   const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
   try {
