@@ -5102,7 +5102,14 @@ function invokeOutputCallback(
       // callback assigns the mode name later, so keep paths relative to it.
       const authoringIssues: OutputAuthoringIssue[] = [];
       collectOutputAuthoringProperties(
-        { declaration: captured, presentation: material, delivery, format },
+        {
+          declaration: captured,
+          presentation: material,
+          rawDeclaration: declaration,
+          rawPresentation: presentation,
+          delivery,
+          format,
+        },
         authoringIssues,
       );
       const mode =
@@ -5129,7 +5136,7 @@ function invokeOutputCallback(
   });
   const record = isPlainRecord(declared) ? declared : {};
   const authoringIssues: OutputAuthoringIssue[] = [];
-  collectUnknownProperties(
+  collectUnknownOwnProperties(
     record,
     ["commands", command, "outputs"],
     definitionPropertyKeys.outputModes,
@@ -6012,6 +6019,29 @@ function collectUnknownVariantProperties(
 }
 
 /**
+ * New authoring records check every own key, including the non-enumerable
+ * strings and symbols that Object.keys hides. Only the keys are inspected, so
+ * an unknown property's getter is never evaluated.
+ */
+function collectUnknownOwnProperties(
+  value: unknown,
+  path: readonly string[],
+  allowed: readonly string[],
+  issues: ContractDefinitionIssue[],
+): void {
+  if (!isPlainRecord(value)) return;
+  for (const property of Reflect.ownKeys(value)) {
+    const name = String(property);
+    if (!allowed.includes(name)) {
+      issues.push({
+        code: "unknownDefinitionProperty",
+        path: [...path, name],
+      });
+    }
+  }
+}
+
+/**
  * Check a result table together with the presenters paired with it.
  * `declarationPath` locates a key in the compiled mode, while `presenterPath`
  * locates an extra presenter in the `.text(...)` table the author wrote.
@@ -6055,22 +6085,26 @@ function collectOutputAuthoringProperties(
   authoring: Readonly<{
     declaration: unknown;
     presentation: unknown;
+    rawDeclaration: unknown;
+    rawPresentation: unknown;
     delivery: OutputDelivery;
     format: OutputFormat;
   }>,
   issues: OutputAuthoringIssue[],
 ): void {
   const { delivery, format } = authoring;
-  collectUnknownProperties(
-    authoring.declaration,
+  // The snapshots drop non-enumerable and symbol keys, so the top-level key
+  // checks read the author's original records; value checks use the snapshots.
+  collectUnknownOwnProperties(
+    authoring.rawDeclaration,
     [],
     delivery === "atomic"
       ? ["success", "failures", "handler"]
       : ["records", "failures", "handler"],
     issues,
   );
-  collectUnknownProperties(
-    authoring.presentation,
+  collectUnknownOwnProperties(
+    authoring.rawPresentation,
     [],
     format === "structured"
       ? ["description"]

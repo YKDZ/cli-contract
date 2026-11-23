@@ -6,6 +6,7 @@ import {
   defineCli,
   helpCapability,
   text,
+  type AtomicExecutionDefinition,
   type OutputExecutionFactory,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
@@ -959,6 +960,137 @@ void test("rejects extra own presenter keys without reading unknown getters", ()
         ]);
         return true;
       },
+    );
+  }
+});
+
+void test("rejects extra own keys on the outer authoring records without reading unknown getters", () => {
+  const extra = Symbol("unexpected");
+  const cases: ReadonlyArray<
+    Readonly<{ key: string; define: (record: object) => void }>
+  > = [
+    {
+      key: "unexpected",
+      define: (record) =>
+        Object.defineProperty(record, "unexpected", {
+          value: true,
+          enumerable: false,
+        }),
+    },
+    {
+      key: String(extra),
+      define: (record) =>
+        Object.defineProperty(record, extra, { value: true, enumerable: true }),
+    },
+    {
+      key: "unexpected",
+      define: (record) =>
+        Object.defineProperty(record, "unexpected", {
+          get: () =>
+            assert.fail("The unknown authoring property must not be read"),
+          enumerable: false,
+        }),
+    },
+  ];
+  const expectUnknown =
+    (path: readonly string[]) =>
+    (error: unknown): boolean => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        { code: "unknownDefinitionProperty", path },
+      ]);
+      return true;
+    };
+  const modePath = ["commands", "probe", "outputs", "modes", "only"];
+  for (const { key, define } of cases) {
+    assert.throws(
+      () =>
+        defineCli()({
+          ...cli,
+          commands: {
+            probe: {
+              ...probe,
+              outputs: ({ atomic }) => {
+                const declaration: AtomicExecutionDefinition<
+                  "probe",
+                  undefined,
+                  typeof input,
+                  { kind: "completion" },
+                  {}
+                > = {
+                  success: { kind: "completion" },
+                  failures: {},
+                  handler: ({ outcome }) => outcome.completion(),
+                };
+                define(declaration);
+                return {
+                  modes: {
+                    only: atomic(declaration).text({
+                      description: "Only",
+                      success: () => text.silent,
+                      failures: {},
+                    }),
+                  },
+                };
+              },
+            },
+          },
+        }),
+      expectUnknown([...modePath, key]),
+    );
+    assert.throws(
+      () =>
+        defineCli()({
+          ...cli,
+          commands: {
+            probe: {
+              ...probe,
+              outputs: ({ atomic }) => {
+                const options = {
+                  description: "Only",
+                  success: () => text.silent,
+                  failures: {},
+                };
+                define(options);
+                return {
+                  modes: {
+                    only: atomic({
+                      success: { kind: "completion" },
+                      failures: {},
+                      handler: ({ outcome }) => outcome.completion(),
+                    }).text(options),
+                  },
+                };
+              },
+            },
+          },
+        }),
+      expectUnknown([...modePath, key]),
+    );
+    assert.throws(
+      () =>
+        defineCli()({
+          ...cli,
+          commands: {
+            probe: {
+              ...probe,
+              outputs: ({ atomic }) => {
+                const table = {
+                  modes: {
+                    only: atomic({
+                      success: { kind: "completion" },
+                      failures: {},
+                      handler: ({ outcome }) => outcome.completion(),
+                    }).structured({ description: "Only" }),
+                  },
+                };
+                define(table);
+                return table;
+              },
+            },
+          },
+        }),
+      expectUnknown(["commands", "probe", "outputs", key]),
     );
   }
 });
