@@ -29,7 +29,6 @@ import type {
   CompletionFact,
   CompletionTextPresenter,
   CompletionOutcome,
-  DataVariantDefinition,
   DataFactUnion,
   DataOutcome,
   DataVariantDefinitions,
@@ -37,10 +36,10 @@ import type {
   FailureOutcome,
   FailureVariantDefinitions,
   OutcomeFact,
+  TextFragment,
   TextLine,
   TextLines,
   StreamOutcome,
-  StreamRecordDefinition,
   StreamRecordDefinitions,
   StreamRecordFactUnion,
   StreamSuccessFact,
@@ -114,12 +113,19 @@ const invalidHelpFactWordingValues = new WeakMap<
   object,
   ReadonlyMap<string, unknown>
 >();
+const boundCommandNodes = new WeakMap<object, RuntimeExecutableDefinition>();
+type UnknownDefinitionPropertyIssue = Extract<
+  ContractDefinitionIssue,
+  { readonly code: "unknownDefinitionProperty" }
+>;
 const outputModes = new WeakSet<object>();
 const outputModeMetadata = new WeakMap<
   object,
   Readonly<{
     readonly command: string;
     readonly input: ContractSchema;
+    readonly binding: object;
+    readonly unknownProperties: readonly UnknownDefinitionPropertyIssue[];
   }>
 >();
 const outputModeDefinitions = new WeakSet<object>();
@@ -128,10 +134,19 @@ const outputModeDefinitionMetadata = new WeakMap<
   Readonly<{
     readonly command: string;
     readonly input: ContractSchema;
+    readonly binding: object;
+    readonly unknownProperties: readonly UnknownDefinitionPropertyIssue[];
   }>
 >();
 const versionCapabilities = new WeakSet<object>();
 const compiledCliContracts = new WeakMap<object, RuntimeCompiledCli>();
+
+const declaredAtomicVariantProperties = [
+  "description",
+  "schema",
+  "exitCode",
+] as const;
+const declaredStreamRecordProperties = ["description", "schema"] as const;
 
 // 类型约束与定义期检查共用已知属性，避免拼错的声明被静默丢弃。
 const definitionPropertyKeys = {
@@ -178,8 +193,8 @@ const definitionPropertyKeys = {
   },
   example: ["input", "outputMode"],
   usage: usageConstraintDefinitionPropertyKeys,
-  atomicVariant: ["description", "schema", "exitCode", "text"],
-  streamRecord: ["description", "schema", "text"],
+  atomicVariant: [...declaredAtomicVariantProperties, "text"],
+  streamRecord: [...declaredStreamRecordProperties, "text"],
   capability: {
     help: ["shortAlias", "headings", "wording"],
     version: ["value", "description", "shortAlias"],
@@ -348,14 +363,6 @@ type CommandDefinitionExampleContext = Readonly<{
   readonly examples?: readonly CommandExampleDefinition<CommandExampleInputContext>[];
 }>;
 
-type OutputFormatTextEnabled<Format extends OutputFormat> =
-  Format extends "text" ? true : false;
-
-type OutputModeSetDeclaration = Readonly<{
-  readonly default?: string;
-  readonly modes: Readonly<Record<string, unknown>>;
-}>;
-
 type OutputModeKeys<Modes> = Extract<keyof Modes, string>;
 
 type OutputModeDefaultContract<Definition> =
@@ -363,19 +370,12 @@ type OutputModeDefaultContract<Definition> =
     readonly modes: infer Modes;
     readonly default: infer Default;
   }>
-    ? IsUnion<OutputModeKeys<Modes>> extends true
-      ? Default extends OutputModeKeys<Modes>
-        ? unknown
-        : ContractTypeError<
-            "invalidDefaultOutputMode",
-            Readonly<{ readonly default: Default }>
-          >
-      : Default extends OutputModeKeys<Modes>
-        ? unknown
-        : ContractTypeError<
-            "invalidDefaultOutputMode",
-            Readonly<{ readonly default: Default }>
-          >
+    ? [Default] extends [OutputModeKeys<Modes>]
+      ? unknown
+      : ContractTypeError<
+          "invalidDefaultOutputMode",
+          Readonly<{ readonly default: Default }>
+        >
     : Definition extends Readonly<{ readonly modes: infer Modes }>
       ? IsUnion<OutputModeKeys<Modes>> extends true
         ? ContractTypeError<
@@ -446,10 +446,13 @@ export interface StreamOutputModeDefinition<
   }>;
 }
 
-export type OutputModeDefinition =
+export type OutputModeDefinition<
+  Command extends string = string,
+  InputSchema extends ContractSchema = ContractSchema,
+> =
   | AtomicOutputModeDefinition<
-      string,
-      ContractSchema,
+      Command,
+      InputSchema,
       OutputFormat,
       | Readonly<{ readonly kind: "completion" }>
       | Readonly<{
@@ -459,8 +462,8 @@ export type OutputModeDefinition =
       object
     >
   | StreamOutputModeDefinition<
-      string,
-      ContractSchema,
+      Command,
+      InputSchema,
       OutputFormat,
       StreamRecordDefinitions,
       object
@@ -468,523 +471,498 @@ export type OutputModeDefinition =
 
 export type OutputModeMap = Readonly<Record<string, OutputModeDefinition>>;
 
-type AtomicModeFailures<
-  _Command extends string,
-  Schemas extends VariantSchemaMap,
-  TextEnabled extends boolean,
-> = FailureVariantDefinitionsForSchemas<Schemas, TextEnabled>;
+/** Declare executions and name their output modes within the current command. */
+export type OutputModesAuthoring<
+  Command extends string = string,
+  Dependencies = unknown,
+  InputSchema extends ContractSchema = ContractSchema,
+> = (
+  factory: OutputExecutionFactory<Command, Dependencies, InputSchema>,
+) => OutputModeTableDeclaration<Command, InputSchema>;
 
-type AtomicModeFailuresContract<
-  Command extends string,
-  Schemas extends VariantSchemaMap,
-  TextEnabled extends boolean,
-> = AtomicModeFailures<Command, Schemas, TextEnabled> &
-  ClosedAtomicVariants<AtomicModeFailures<Command, Schemas, TextEnabled>> &
-  FailureVariantTextContract<
-    Command,
-    AtomicModeFailures<Command, Schemas, TextEnabled>,
-    TextEnabled
-  >;
+type DeclaredVariantOutput<Variant> =
+  Variant extends Readonly<{
+    readonly schema: infer Schema extends ContractSchema;
+  }>
+    ? ContractSchemaOutput<Schema>
+    : never;
 
-type AtomicModeDataSuccess<
-  _Command extends string,
-  Schemas extends VariantSchemaMap,
-  TextEnabled extends boolean,
-> = Readonly<{
-  readonly kind: "data";
-  readonly variants: DataVariantDefinitionsForSchemas<Schemas, TextEnabled>;
+/** Every text mode supplies its own presenters for the same result contract. */
+type DeclaredAtomicVariant = Readonly<{
+  readonly description: string;
+  readonly schema: ContractSchema;
+  readonly exitCode: number;
 }>;
 
-type AtomicModeDataSuccessContract<
-  Command extends string,
-  Schemas extends VariantSchemaMap,
-  TextEnabled extends boolean,
-> = AtomicModeDataSuccess<Command, Schemas, TextEnabled> &
-  Readonly<{
-    readonly variants: ClosedAtomicVariants<
-      DataVariantDefinitionsForSchemas<Schemas, TextEnabled>
-    > &
-      DataVariantTextContract<
-        Command,
-        DataVariantDefinitionsForSchemas<Schemas, TextEnabled>,
-        TextEnabled
-      >;
-  }>;
+type DeclaredStreamRecord = Readonly<{
+  readonly description: string;
+  readonly schema: ContractSchema;
+}>;
 
-type StreamRecordDefinitionsForSchemas<
-  Schemas extends VariantSchemaMap,
-  TextEnabled extends boolean,
+type DeclaredVariants = Readonly<Record<string, DeclaredAtomicVariant>>;
+type DeclaredRecords = Readonly<Record<string, DeclaredStreamRecord>>;
+
+type DeclaredAtomicSuccess =
+  | Readonly<{ readonly kind: "completion" }>
+  | Readonly<{ readonly kind: "data"; readonly variants: DeclaredVariants }>;
+
+type ClosedDeclaredVariants<Variants> = ClosedVariantDefinitions<
+  Variants,
+  (typeof declaredAtomicVariantProperties)[number]
+>;
+
+type ClosedDeclaredRecords<Records> = ClosedVariantDefinitions<
+  Records,
+  (typeof declaredStreamRecordProperties)[number]
+>;
+
+type ClosedDeclaredSuccess<Success> = RejectUnknownProperties<
+  Success,
+  Success extends Readonly<{ readonly kind: "completion" }>
+    ? "kind"
+    : "kind" | "variants"
+> &
+  (Success extends Readonly<{
+    readonly kind: "data";
+    readonly variants: infer Variants;
+  }>
+    ? Readonly<{ readonly variants: ClosedDeclaredVariants<Variants> }>
+    : unknown);
+
+type AtomicProjection = TextLine | TextLines;
+type RecordProjection = TextLine | TextFragment;
+
+type VariantPresenter<Variant, Projection> = (
+  payload: DeclaredVariantOutput<Variant>,
+) => Projection;
+
+type PresenterOptions<Definitions, Projection> = Readonly<{
+  readonly [Name in keyof Definitions]?: VariantPresenter<
+    Definitions[Name],
+    Projection
+  >;
+}>;
+
+type TextPresentedVariants<Variants, Projection> = Readonly<{
+  readonly [Name in keyof Variants]: Variants[Name] &
+    Readonly<{ readonly text: VariantPresenter<Variants[Name], Projection> }>;
+}>;
+
+type ProvidedPresenterKeys<Options, Member extends PropertyKey> =
+  Options extends Readonly<Record<Member, infer Table>> ? keyof Table : never;
+
+/** Check supplied presenters separately so missing entries retain their diagnostic evidence. */
+type ProvidedPresenterTable<
+  Definitions,
+  Provided extends PropertyKey,
+  Projection,
 > = Readonly<{
-  readonly [Variant in keyof Schemas]: Schemas[Variant] extends ContractSchema
-    ? StreamRecordDefinition<
-        ContractSchemaInput<Schemas[Variant]>,
-        TextEnabled,
-        ContractSchemaOutput<Schemas[Variant]>
-      > &
-        Readonly<{ readonly schema: Schemas[Variant] }>
+  readonly [Name in Provided]: Name extends keyof Definitions
+    ? VariantPresenter<Definitions[Name], Projection>
     : never;
 }>;
 
-type StreamModeRecords<
-  _Command extends string,
-  Schemas extends VariantSchemaMap,
-  TextEnabled extends boolean,
-> = StreamRecordDefinitionsForSchemas<Schemas, TextEnabled>;
-
-type StreamModeRecordsContract<
+type PresenterCoverage<
   Command extends string,
-  Schemas extends VariantSchemaMap,
-  TextEnabled extends boolean,
-> = StreamModeRecords<Command, Schemas, TextEnabled> &
-  ClosedStreamRecords<StreamRecordDefinitionsForSchemas<Schemas, TextEnabled>> &
-  StreamRecordNameContract<
-    Command,
-    StreamRecordDefinitionsForSchemas<Schemas, TextEnabled>
-  > &
-  StreamRecordTextContract<
-    Command,
-    StreamRecordDefinitionsForSchemas<Schemas, TextEnabled>,
-    TextEnabled
-  >;
+  Location extends "data" | "failure" | "record",
+  Definitions,
+  Keys extends PropertyKey,
+> = string extends Keys
+  ? ContractTypeError<
+      "missingTextPresenter",
+      Readonly<{
+        readonly command: Command;
+        readonly location: Location;
+        readonly variant: keyof Definitions & string;
+        readonly missing: "text";
+      }>
+    >
+  : [Exclude<keyof Definitions, Keys>] extends [never]
+    ? unknown
+    : ContractTypeError<
+        "missingTextPresenter",
+        Readonly<{
+          readonly command: Command;
+          readonly location: Location;
+          readonly variant: Exclude<keyof Definitions, Keys> & string;
+          readonly missing: "text";
+        }>
+      >;
 
-type StreamModeFailures<
+type DescriptionOnly<Options> = Readonly<{ readonly description: string }> &
+  RejectUnknownProperties<Options, "description">;
+
+type AtomicTextOptions<
+  Success extends DeclaredAtomicSuccess,
+  Failures extends DeclaredVariants,
+> = Readonly<{
+  readonly description: string;
+  readonly success: Success extends Readonly<{
+    readonly kind: "data";
+    readonly variants: infer Variants;
+  }>
+    ? PresenterOptions<Variants, AtomicProjection>
+    : CompletionTextPresenter;
+  readonly failures: PresenterOptions<Failures, AtomicProjection>;
+}>;
+
+type AtomicTextContract<
   Command extends string,
-  Schemas extends VariantSchemaMap,
-  TextEnabled extends boolean,
-> = AtomicModeFailures<Command, Schemas, TextEnabled>;
+  Success extends DeclaredAtomicSuccess,
+  Failures extends DeclaredVariants,
+  Options,
+> = RejectUnknownProperties<Options, "description" | "success" | "failures"> &
+  Readonly<{
+    readonly success: Success extends Readonly<{
+      readonly kind: "data";
+      readonly variants: infer Variants;
+    }>
+      ? ProvidedPresenterTable<
+          Variants,
+          ProvidedPresenterKeys<Options, "success">,
+          AtomicProjection
+        > &
+          PresenterCoverage<
+            Command,
+            "data",
+            Variants,
+            ProvidedPresenterKeys<Options, "success">
+          >
+      : "success" extends keyof Options
+        ? CompletionTextPresenter
+        : ContractTypeError<
+            "missingTextPresenter",
+            Readonly<{
+              readonly command: Command;
+              readonly location: "completion";
+              readonly missing: "text";
+            }>
+          >;
+    readonly failures: ProvidedPresenterTable<
+      Failures,
+      ProvidedPresenterKeys<Options, "failures">,
+      AtomicProjection
+    > &
+      PresenterCoverage<
+        Command,
+        "failure",
+        Failures,
+        ProvidedPresenterKeys<Options, "failures">
+      >;
+  }>;
 
-type StreamModeFailuresContract<
+type AtomicTextSuccess<Success extends DeclaredAtomicSuccess> =
+  Success extends Readonly<{
+    readonly kind: "data";
+    readonly variants: infer Variants;
+  }>
+    ? Readonly<{
+        readonly kind: "data";
+        readonly variants: TextPresentedVariants<Variants, AtomicProjection>;
+      }>
+    : Readonly<{
+        readonly kind: "completion";
+        readonly text: CompletionTextPresenter;
+      }>;
+
+type StreamTextOptions<
+  Records extends DeclaredRecords,
+  Failures extends DeclaredVariants,
+> = Readonly<{
+  readonly description: string;
+  readonly records: PresenterOptions<Records, RecordProjection>;
+  readonly failures: PresenterOptions<Failures, AtomicProjection>;
+  readonly terminal: CompletionTextPresenter;
+}>;
+
+type StreamTextContract<
   Command extends string,
-  Schemas extends VariantSchemaMap,
-  TextEnabled extends boolean,
-> = AtomicModeFailuresContract<Command, Schemas, TextEnabled>;
-
-type ClosedRawAtomicSuccess<Success> = RejectUnknownProperties<
-  Success,
-  Success extends { readonly kind: "completion" }
-    ? "kind" | "text"
-    : "kind" | "text" | "variants"
+  Records extends DeclaredRecords,
+  Failures extends DeclaredVariants,
+  Options,
+> = RejectUnknownProperties<
+  Options,
+  "description" | "records" | "failures" | "terminal"
 > &
-  (Success extends { readonly kind: "data"; readonly variants: infer Variants }
-    ? { readonly variants: ClosedAtomicVariants<Variants> }
-    : unknown);
+  Readonly<{
+    readonly records: ProvidedPresenterTable<
+      Records,
+      ProvidedPresenterKeys<Options, "records">,
+      RecordProjection
+    > &
+      PresenterCoverage<
+        Command,
+        "record",
+        Records,
+        ProvidedPresenterKeys<Options, "records">
+      >;
+    readonly failures: ProvidedPresenterTable<
+      Failures,
+      ProvidedPresenterKeys<Options, "failures">,
+      AtomicProjection
+    > &
+      PresenterCoverage<
+        Command,
+        "failure",
+        Failures,
+        ProvidedPresenterKeys<Options, "failures">
+      >;
+    readonly terminal: "terminal" extends keyof Options
+      ? CompletionTextPresenter
+      : ContractTypeError<
+          "missingTextPresenter",
+          Readonly<{
+            readonly command: Command;
+            readonly location: "streamSuccess";
+            readonly missing: "text";
+          }>
+        >;
+  }>;
 
-export interface OutputModeFactory<
+type StreamTextSuccess<Records extends DeclaredRecords> = Readonly<{
+  readonly kind: "stream";
+  readonly records: TextPresentedVariants<Records, RecordProjection>;
+  readonly text: CompletionTextPresenter;
+}>;
+
+/**
+ * Derive modes for one atomic handler and result contract. Each text mode provides
+ * its own success and failure presenters. Presenters receive validated schema output.
+ */
+export interface AtomicExecution<
+  Command extends string,
+  InputSchema extends ContractSchema,
+  Success extends DeclaredAtomicSuccess,
+  Failures extends DeclaredVariants,
+> {
+  structured<const Options extends object>(
+    options: Options & DescriptionOnly<NoInfer<Options>>,
+  ): AtomicOutputModeDefinition<
+    Command,
+    InputSchema,
+    "structured",
+    Success,
+    Failures
+  >;
+  text<const Options extends AtomicTextOptions<Success, Failures>>(
+    options: Options &
+      AtomicTextContract<Command, Success, Failures, NoInfer<Options>>,
+  ): AtomicOutputModeDefinition<
+    Command,
+    InputSchema,
+    "text",
+    AtomicTextSuccess<Success>,
+    TextPresentedVariants<Failures, AtomicProjection>
+  >;
+}
+
+/** Derive modes for one stream. Each text mode presents its records, failures and successful termination. */
+export interface StreamExecution<
+  Command extends string,
+  InputSchema extends ContractSchema,
+  Records extends DeclaredRecords,
+  Failures extends DeclaredVariants,
+> {
+  structured<const Options extends object>(
+    options: Options & DescriptionOnly<NoInfer<Options>>,
+  ): StreamOutputModeDefinition<
+    Command,
+    InputSchema,
+    "structured",
+    Records,
+    Failures
+  >;
+  text<const Options extends StreamTextOptions<Records, Failures>>(
+    options: Options &
+      StreamTextContract<Command, Records, Failures, NoInfer<Options>>,
+  ): Omit<
+    StreamOutputModeDefinition<
+      Command,
+      InputSchema,
+      "text",
+      TextPresentedVariants<Records, RecordProjection>,
+      TextPresentedVariants<Failures, AtomicProjection>
+    >,
+    "success"
+  > &
+    Readonly<{ readonly success: StreamTextSuccess<Records> }>;
+}
+
+export interface AtomicExecutionFactory<
   Command extends string,
   Dependencies,
   InputSchema extends ContractSchema,
 > {
-  readonly atomic: {
-    <
-      const Format extends OutputFormat,
-      const RawDefinition extends object,
-      const RawSuccess extends object,
-      const RawFailures extends object,
-      const Failures extends VariantSchemaMap = Readonly<Record<never, never>>,
-    >(
-      definition: RawDefinition &
-        Readonly<{
-          readonly description: string;
-          readonly format: Format;
-          readonly success: Readonly<{
-            readonly kind: "completion";
-            readonly text?: CompletionTextPresenter;
-          }> &
-            RawSuccess;
-          readonly failures: AtomicModeFailures<Command, Failures, boolean> &
-            RawFailures;
-          readonly handler: (
-            context: Readonly<{
-              readonly input: ContractSchemaOutput<InputSchema>;
-              readonly dependencies: Dependencies;
-              readonly outcome: CompletionOutcome<Command> &
-                FailureOutcome<
-                  Command,
-                  AtomicModeFailures<Command, Failures, boolean>
-                >;
-            }>,
-          ) =>
-            | CompletionFact<Command>
-            | FailureFactUnion<
-                Command,
-                AtomicModeFailures<Command, Failures, boolean>
-              >
-            | Promise<
-                | CompletionFact<Command>
-                | FailureFactUnion<
-                    Command,
-                    AtomicModeFailures<Command, Failures, boolean>
-                  >
-              >;
-        }> &
-        RejectUnknownProperties<
-          NoInfer<RawDefinition>,
-          Exclude<
-            (typeof definitionPropertyKeys.outputMode)[number],
-            "delivery"
-          >
-        > &
-        Readonly<{
-          readonly success: ClosedRawAtomicSuccess<NoInfer<RawSuccess>>;
-          readonly failures: ClosedAtomicVariants<NoInfer<RawFailures>>;
-        }> &
-        Readonly<{
-          readonly failures: AtomicModeFailuresContract<
-            Command,
-            NoInfer<Failures>,
-            boolean
-          >;
-        }>,
-    ): AtomicOutputModeDefinition<
-      Command,
-      InputSchema,
-      Format,
-      RawSuccess,
-      RawFailures
-    >;
-    <
-      const Format extends OutputFormat,
-      const RawDefinition extends object,
-      const RawSuccess extends object,
-      const RawFailures extends object,
-      const Schemas extends VariantSchemaMap,
-      const Failures extends VariantSchemaMap = Readonly<Record<never, never>>,
-    >(
-      definition: RawDefinition &
-        Readonly<{
-          readonly description: string;
-          readonly format: Format;
-          readonly success: AtomicModeDataSuccess<Command, Schemas, boolean> &
-            RawSuccess;
-          readonly failures: AtomicModeFailures<Command, Failures, boolean> &
-            RawFailures;
-          readonly handler: (
-            context: Readonly<{
-              readonly input: ContractSchemaOutput<InputSchema>;
-              readonly dependencies: Dependencies;
-              readonly outcome: DataOutcome<
-                Command,
-                DataVariantDefinitionsForSchemas<Schemas, boolean>
-              > &
-                FailureOutcome<
-                  Command,
-                  AtomicModeFailures<Command, Failures, boolean>
-                >;
-            }>,
-          ) =>
-            | DataFactUnion<
-                Command,
-                DataVariantDefinitionsForSchemas<Schemas, boolean>
-              >
-            | FailureFactUnion<
-                Command,
-                AtomicModeFailures<Command, Failures, boolean>
-              >
-            | Promise<
-                | DataFactUnion<
-                    Command,
-                    DataVariantDefinitionsForSchemas<Schemas, boolean>
-                  >
-                | FailureFactUnion<
-                    Command,
-                    AtomicModeFailures<Command, Failures, boolean>
-                  >
-              >;
-        }> &
-        RejectUnknownProperties<
-          NoInfer<RawDefinition>,
-          Exclude<
-            (typeof definitionPropertyKeys.outputMode)[number],
-            "delivery"
-          >
-        > &
-        Readonly<{
-          readonly success: ClosedRawAtomicSuccess<NoInfer<RawSuccess>>;
-          readonly failures: ClosedAtomicVariants<NoInfer<RawFailures>>;
-        }> &
-        Readonly<{
-          readonly success: AtomicModeDataSuccessContract<
-            Command,
-            NoInfer<Schemas>,
-            boolean
-          >;
-          readonly failures: AtomicModeFailuresContract<
-            Command,
-            NoInfer<Failures>,
-            boolean
-          >;
-        }>,
-    ): AtomicOutputModeDefinition<
-      Command,
-      InputSchema,
-      Format,
-      RawSuccess,
-      RawFailures
-    >;
-  };
-  readonly stream: <
-    const Format extends OutputFormat,
+  <
     const RawDefinition extends object,
-    const RawSuccess extends object,
-    const Schemas extends VariantSchemaMap,
-    const Failures extends VariantSchemaMap = Readonly<Record<never, never>>,
+    const RawSuccess extends Readonly<{ readonly kind: "completion" }>,
+    const RawFailures extends DeclaredVariants,
   >(
     definition: RawDefinition &
       Readonly<{
-        readonly description: string;
-        readonly format: Format;
-        readonly success: Readonly<{
-          readonly kind: "stream";
-          readonly records: StreamModeRecords<
+        readonly success: RawSuccess;
+        readonly failures: RawFailures;
+        readonly handler: (
+          context: CompletionHandlerContext<
             Command,
-            Schemas,
-            OutputFormatTextEnabled<Format> extends false ? false : boolean
-          >;
-        }> &
-          RawSuccess &
-          (OutputFormatTextEnabled<Format> extends true
-            ? Readonly<{ readonly text?: CompletionTextPresenter }>
-            : Readonly<{ readonly text?: never }>);
-        readonly failures: StreamModeFailures<
-          Command,
-          Failures,
-          OutputFormatTextEnabled<Format>
-        >;
+            Dependencies,
+            NoInfer<RawFailures>,
+            ContractSchemaOutput<InputSchema>
+          >,
+        ) =>
+          | CompletionFact<Command>
+          | FailureFactUnion<Command, NoInfer<RawFailures>>
+          | Promise<
+              | CompletionFact<Command>
+              | FailureFactUnion<Command, NoInfer<RawFailures>>
+            >;
+      }> &
+      RejectUnknownProperties<
+        NoInfer<RawDefinition>,
+        "success" | "failures" | "handler"
+      > &
+      Readonly<{
+        readonly success: ClosedDeclaredSuccess<NoInfer<RawSuccess>>;
+        readonly failures: ClosedDeclaredVariants<NoInfer<RawFailures>> &
+          FailureVariantNameContract<Command, NoInfer<RawFailures>>;
+      }>,
+  ): AtomicExecution<Command, InputSchema, RawSuccess, RawFailures>;
+  <
+    const RawDefinition extends object,
+    const RawSuccess extends Readonly<{
+      readonly kind: "data";
+      readonly variants: DeclaredVariants;
+    }>,
+    const RawFailures extends DeclaredVariants,
+  >(
+    definition: RawDefinition &
+      Readonly<{
+        readonly success: RawSuccess;
+        readonly failures: RawFailures;
+        readonly handler: (
+          context: DataHandlerContext<
+            Command,
+            Dependencies,
+            ContractSchemaOutput<InputSchema>,
+            NoInfer<RawSuccess>["variants"],
+            NoInfer<RawFailures>
+          >,
+        ) =>
+          | DataFactUnion<Command, NoInfer<RawSuccess>["variants"]>
+          | FailureFactUnion<Command, NoInfer<RawFailures>>
+          | Promise<
+              | DataFactUnion<Command, NoInfer<RawSuccess>["variants"]>
+              | FailureFactUnion<Command, NoInfer<RawFailures>>
+            >;
+      }> &
+      RejectUnknownProperties<
+        NoInfer<RawDefinition>,
+        "success" | "failures" | "handler"
+      > &
+      Readonly<{
+        readonly success: ClosedDeclaredSuccess<NoInfer<RawSuccess>> &
+          Readonly<{
+            readonly variants: DataVariantNameContract<
+              Command,
+              NoInfer<RawSuccess>["variants"]
+            >;
+          }>;
+        readonly failures: ClosedDeclaredVariants<NoInfer<RawFailures>> &
+          FailureVariantNameContract<Command, NoInfer<RawFailures>>;
+      }>,
+  ): AtomicExecution<Command, InputSchema, RawSuccess, RawFailures>;
+}
+
+export interface StreamExecutionFactory<
+  Command extends string,
+  Dependencies,
+  InputSchema extends ContractSchema,
+> {
+  <
+    const RawDefinition extends object,
+    const RawRecords extends DeclaredRecords,
+    const RawFailures extends DeclaredVariants,
+  >(
+    definition: RawDefinition &
+      Readonly<{
+        readonly records: RawRecords;
+        readonly failures: RawFailures;
         readonly handler: (
           context: StreamHandlerContext<
             Command,
             Dependencies,
             ContractSchemaOutput<InputSchema>,
-            StreamModeRecords<
-              Command,
-              Schemas,
-              OutputFormatTextEnabled<Format> extends false ? false : boolean
-            >,
-            StreamModeFailures<
-              Command,
-              Failures,
-              OutputFormatTextEnabled<Format>
-            >
+            NoInfer<RawRecords>,
+            NoInfer<RawFailures>
           >,
         ) => AsyncGenerator<
-          StreamRecordFactUnion<
-            Command,
-            StreamModeRecords<
-              Command,
-              Schemas,
-              OutputFormatTextEnabled<Format> extends false ? false : boolean
-            >
-          >,
+          StreamRecordFactUnion<Command, NoInfer<RawRecords>>,
           | StreamSuccessFact<Command>
-          | FailureFactUnion<
-              Command,
-              StreamModeFailures<
-                Command,
-                Failures,
-                OutputFormatTextEnabled<Format>
-              >
-            >,
+          | FailureFactUnion<Command, NoInfer<RawFailures>>,
           void
         >;
       }> &
       RejectUnknownProperties<
         NoInfer<RawDefinition>,
-        Exclude<(typeof definitionPropertyKeys.outputMode)[number], "delivery">
+        "records" | "failures" | "handler"
       > &
       Readonly<{
-        readonly success: ClosedRawStreamSuccess<NoInfer<RawSuccess>>;
-      }> &
-      Readonly<{
-        readonly success: Readonly<{
-          readonly records: StreamModeRecordsContract<
-            Command,
-            NoInfer<Schemas>,
-            OutputFormatTextEnabled<Format> extends false ? false : boolean
-          >;
-        }> &
-          (OutputFormatTextEnabled<Format> extends true
-            ? Readonly<{ readonly text?: CompletionTextPresenter }>
-            : Readonly<{ readonly text?: never }>);
-        readonly failures: StreamModeFailuresContract<
-          Command,
-          NoInfer<Failures>,
-          OutputFormatTextEnabled<Format>
-        >;
+        readonly records: ClosedDeclaredRecords<NoInfer<RawRecords>> &
+          StreamRecordNameContract<Command, NoInfer<RawRecords>>;
+        readonly failures: ClosedDeclaredVariants<NoInfer<RawFailures>> &
+          FailureVariantNameContract<Command, NoInfer<RawFailures>>;
       }>,
-  ) => Omit<
-    StreamOutputModeDefinition<
-      Command,
-      InputSchema,
-      Format,
-      RawStreamRecords<RawSuccess>,
-      StreamModeFailures<Command, Failures, OutputFormatTextEnabled<Format>>
-    >,
-    "success"
-  > &
-    Readonly<{ readonly success: RawSuccess }>;
+  ): StreamExecution<Command, InputSchema, RawRecords, RawFailures>;
 }
+
+/** Executions and their derived modes belong to the current command construction. Handlers receive validated command input. */
+export interface OutputExecutionFactory<
+  Command extends string,
+  Dependencies,
+  InputSchema extends ContractSchema,
+> {
+  readonly atomic: AtomicExecutionFactory<Command, Dependencies, InputSchema>;
+  readonly stream: StreamExecutionFactory<Command, Dependencies, InputSchema>;
+}
+
+/** Name the modes returned by an outputs callback. A single mode is its own default. */
+export type OutputModeTableDeclaration<
+  Command extends string = string,
+  InputSchema extends ContractSchema = ContractSchema,
+> = Readonly<{
+  readonly default?: string;
+  readonly modes: Readonly<
+    Record<string, OutputModeDefinition<Command, InputSchema>>
+  >;
+}>;
 
 type OutputModesDefault<Definition> =
   Definition extends Readonly<{
-    readonly modes: infer Modes;
-    readonly default?: infer Default;
+    readonly default: infer Default extends string;
   }>
-    ? Exclude<Default, undefined> extends never
+    ? Default
+    : Definition extends Readonly<{ readonly modes: infer Modes }>
       ? OutputModeKeys<Modes>
-      : Extract<Exclude<Default, undefined>, OutputModeKeys<Modes>>
-    : never;
+      : never;
 
-type ModeVariantNames<Command extends string, Mode> =
-  Mode extends Readonly<{
-    readonly success: Readonly<{
-      readonly kind: "data";
-      readonly variants: infer Variants;
-    }>;
-  }>
-    ? InvalidVariantNames<Variants> extends never
-      ? ModeFailureNames<Command, Mode>
-      : DataVariantNameContract<Command, Variants>
-    : ModeFailureNames<Command, Mode>;
-
-type ModeFailureNames<Command extends string, Mode> =
-  Mode extends Readonly<{ readonly failures: infer Failures }>
-    ? FailureVariantNameContract<Command, Failures>
-    : unknown;
-
-// 原子方式的呈现器覆盖按具名方式映射检查，以便诊断直接关联对应声明。
-type VariantsWithText<Variants> = {
-  [Variant in keyof Variants & string]: "text" extends keyof Variants[Variant]
-    ? Variant
-    : never;
-}[keyof Variants & string];
-type VariantPresenterContract<
-  Command extends string,
-  Location extends "data" | "failure",
-  Variants,
-  Format,
-> = Format extends "text"
-  ? NamedVariantTextContract<Command, Location, Variants, true, never>
-  : VariantsWithText<Variants> extends never
-    ? unknown
-    : ContractTypeError<
-        "unexpectedTextPresenter",
-        Readonly<{
-          readonly command: Command;
-          readonly location: Location;
-          readonly variant: VariantsWithText<Variants>;
-          readonly unexpected: "text";
-        }>
-      >;
-type SuccessPresenterContract<
-  Command extends string,
-  Success,
-  Format,
-> = Success extends { readonly kind: "completion" }
-  ? Format extends "text"
-    ? Success extends { readonly text: unknown }
-      ? unknown
-      : ContractTypeError<
-          "missingTextPresenter",
-          Readonly<{
-            readonly command: Command;
-            readonly location: "completion";
-            readonly missing: "text";
-          }>
-        >
-    : "text" extends keyof Success
-      ? ContractTypeError<
-          "unexpectedTextPresenter",
-          Readonly<{
-            readonly command: Command;
-            readonly location: "completion";
-            readonly unexpected: "text";
-          }>
-        >
-      : unknown
-  : Success extends { readonly kind: "data"; readonly variants: infer Variants }
-    ? VariantPresenterContract<Command, "data", Variants, Format>
-    : unknown;
-type AtomicPresenterContract<Command extends string, Mode> = Mode extends {
-  readonly delivery: "atomic";
-  readonly format: infer Format;
-  readonly success: infer Success;
-  readonly failures: infer Failures;
-}
-  ? SuccessPresenterContract<
-      Command,
-      Success,
-      Format
-    > extends ContractTypeError<string, unknown>
-    ? SuccessPresenterContract<Command, Success, Format>
-    : VariantPresenterContract<Command, "failure", Failures, Format>
-  : unknown;
-type RawStreamRecords<Success> = Success extends {
-  readonly records: infer Records extends StreamRecordDefinitions;
-}
-  ? Records
-  : never;
-type ClosedRawStreamSuccess<Success> = RejectUnknownProperties<
-  Success,
-  "kind" | "records" | "text"
+type OutputModesTypeContract<Definition> = RejectUnknownProperties<
+  Definition,
+  "modes" | "default"
 > &
-  (Success extends { readonly records: infer Records }
-    ? { readonly records: ClosedStreamRecords<Records> }
-    : unknown);
-type StreamPresenterContract<Command extends string, Mode> = Mode extends {
-  readonly delivery: "stream";
-  readonly format: "text";
-  readonly success: infer Success;
-}
-  ? Success extends { readonly records: infer Records }
-    ? MissingVariantTextPresenters<Records> extends never
-      ? Success extends { readonly text: unknown }
+  OutputModeDefaultContract<Definition> &
+  (Definition extends Readonly<{ readonly modes: infer Modes }>
+    ? [keyof Modes] extends [never]
+      ? ContractTypeError<
+          "invalidOutputModes",
+          Readonly<{ readonly reason: "emptyModes" }>
+        >
+      : Exclude<Modes[keyof Modes], OutputModeDefinition> extends never
         ? unknown
         : ContractTypeError<
-            "missingTextPresenter",
-            Readonly<{
-              readonly command: Command;
-              readonly location: "streamSuccess";
-              readonly missing: "text";
-            }>
-          >
-      : StreamRecordTextContract<Command, Records, true>
-    : unknown
-  : unknown;
-
-type LocalModeContract<Command extends string, Mode> =
-  ModeVariantNames<Command, Mode> extends ContractTypeError<string, unknown>
-    ? ModeVariantNames<Command, Mode>
-    : Mode extends { readonly delivery: "stream" }
-      ? StreamPresenterContract<Command, Mode>
-      : AtomicPresenterContract<Command, Mode>;
-
-type OutputModesVariantNames<Command extends string, Definition> =
-  Definition extends Readonly<{ readonly modes: infer Modes }>
-    ? Readonly<{
-        readonly modes: {
-          readonly [Mode in keyof Modes]: LocalModeContract<
-            Command,
-            Modes[Mode]
-          >;
-        };
-      }>
-    : unknown;
-
-type OutputModesTypeContract<Definition> =
-  OutputModeDefaultContract<Definition> &
-    (Definition extends Readonly<{ readonly modes: infer Modes }>
-      ? [keyof Modes] extends [never]
-        ? ContractTypeError<
             "invalidOutputModes",
-            Readonly<{ readonly reason: "emptyModes" }>
+            Readonly<{ readonly reason: "invalidMode" }>
           >
-        : Exclude<Modes[keyof Modes], OutputModeDefinition> extends never
-          ? unknown
-          : ContractTypeError<
-              "invalidOutputModes",
-              Readonly<{ readonly reason: "invalidMode" }>
-            >
-      : never);
+    : never);
 
 type AtomicOutputModeResult<Command extends string, Mode> =
   Mode extends Readonly<{
@@ -1034,6 +1012,54 @@ type OutputModesFromDeclaration<
         Extract<OutputModesDefault<Definition>, OutputModeKeys<Modes>>
       >
     : never;
+
+/** An omitted field table falls back to the generic index signature. An explicit empty object retains its empty key set. */
+type FieldsOmitted<Fields extends FieldDefinitions> =
+  string extends keyof Fields ? true : false;
+
+/**
+ * Replace the authoring callback with its bound table for field, example, usage and result inference.
+ */
+type CompiledExecutableNode<
+  Command extends string,
+  Node,
+  Fields extends FieldDefinitions,
+  InputSchema extends ContractSchema,
+  Declaration,
+  Kind extends "command" | "rootCommand",
+> = Omit<Node, "input" | "outputs" | "kind" | "fields"> &
+  (FieldsOmitted<Fields> extends true
+    ? unknown
+    : Readonly<{ readonly fields: Fields }>) &
+  Readonly<{
+    readonly kind: Kind;
+    readonly input: InputSchema;
+    readonly outputs: OutputModesFromDeclaration<
+      Command,
+      InputSchema,
+      Declaration
+    >;
+  }>;
+
+type CompiledRootCommands<
+  Command extends string,
+  Node,
+  Fields extends FieldDefinitions,
+  InputSchema extends ContractSchema,
+  Declaration,
+> = Readonly<
+  Record<
+    Command,
+    CompiledExecutableNode<
+      Command,
+      Node,
+      Fields,
+      InputSchema,
+      Declaration,
+      "rootCommand"
+    >
+  >
+>;
 
 type LowercaseLetter =
   | "a"
@@ -1472,16 +1498,6 @@ type ClosedVariantDefinitions<
     Allowed
   >;
 }>;
-
-type ClosedAtomicVariants<Variants> = ClosedVariantDefinitions<
-  Variants,
-  (typeof definitionPropertyKeys.atomicVariant)[number]
->;
-
-type ClosedStreamRecords<Records> = ClosedVariantDefinitions<
-  Records,
-  (typeof definitionPropertyKeys.streamRecord)[number]
->;
 
 type ClosedFieldDefinitions<Fields> = Readonly<{
   [Field in keyof Fields]: RejectUnknownProperties<
@@ -1945,102 +1961,6 @@ export interface StreamHandlerContext<
     FailureOutcome<Command, Failures>;
 }
 
-type MissingVariantTextPresenters<Variants> = {
-  [Variant in keyof Variants & string]: Variants[Variant] extends Readonly<{
-    readonly text: unknown;
-  }>
-    ? never
-    : Variant;
-}[keyof Variants & string];
-
-type NamedVariantTextContract<
-  Command extends string,
-  Location extends "data" | "failure" | "record",
-  Variants,
-  TextEnabled extends boolean,
-  TextDisabledDefinition,
-> = [TextEnabled] extends [true]
-  ? MissingVariantTextPresenters<Variants> extends never
-    ? unknown
-    : ContractTypeError<
-        "missingTextPresenter",
-        Readonly<{
-          readonly command: Command;
-          readonly location: Location;
-          readonly variant: MissingVariantTextPresenters<Variants>;
-          readonly missing: "text";
-        }>
-      >
-  : [TextEnabled] extends [false]
-    ? TextDisabledDefinition
-    : unknown;
-
-type DataVariantTextContract<
-  Command extends string,
-  Variants,
-  TextEnabled extends boolean,
-> = NamedVariantTextContract<
-  Command,
-  "data",
-  Variants,
-  TextEnabled,
-  DataVariantDefinitions<false>
->;
-
-type AtomicVariantDefinitionForSchema<
-  Schema extends ContractSchema,
-  TextEnabled extends boolean,
-> = DataVariantDefinition<
-  ContractSchemaInput<Schema>,
-  TextEnabled,
-  ContractSchemaOutput<Schema>
-> &
-  Readonly<{ readonly schema: Schema }>;
-
-type VariantSchemaMap = object;
-
-type DataVariantDefinitionsForSchemas<
-  Schemas extends VariantSchemaMap,
-  TextEnabled extends boolean,
-> = Readonly<{
-  readonly [Variant in keyof Schemas]: Schemas[Variant] extends ContractSchema
-    ? AtomicVariantDefinitionForSchema<Schemas[Variant], TextEnabled>
-    : never;
-}>;
-
-type FailureVariantDefinitionsForSchemas<
-  Schemas extends VariantSchemaMap,
-  TextEnabled extends boolean,
-> = Readonly<{
-  readonly [Variant in keyof Schemas]: Schemas[Variant] extends ContractSchema
-    ? AtomicVariantDefinitionForSchema<Schemas[Variant], TextEnabled>
-    : never;
-}>;
-
-type FailureVariantTextContract<
-  Command extends string,
-  Failures,
-  TextEnabled extends boolean,
-> = NamedVariantTextContract<
-  Command,
-  "failure",
-  Failures,
-  TextEnabled,
-  FailureVariantDefinitions<false>
->;
-
-type StreamRecordTextContract<
-  Command extends string,
-  Records,
-  TextEnabled extends boolean,
-> = NamedVariantTextContract<
-  Command,
-  "record",
-  Records,
-  TextEnabled,
-  StreamRecordDefinitions<false>
->;
-
 type StreamRecordNameContract<Command extends string, Records> =
   InvalidVariantNames<Records> extends never
     ? unknown
@@ -2056,7 +1976,7 @@ type StreamRecordNameContract<Command extends string, Records> =
 
 export interface RootCommandDefinition<
   Command extends string = string,
-  _Dependencies = unknown,
+  Dependencies = unknown,
 > {
   readonly kind: "rootCommand";
   readonly name: string;
@@ -2065,7 +1985,7 @@ export interface RootCommandDefinition<
   readonly examples?: readonly CommandExampleDefinition[];
   readonly fields?: FieldDefinitions;
   readonly input: ContractSchema;
-  readonly outputs: OutputModesDefinition<Command>;
+  readonly outputs: OutputModesAuthoring<Command, Dependencies>;
 }
 
 export interface RootGroupDefinition {
@@ -2124,7 +2044,7 @@ export type CommandNodeDefinition =
         readonly description: string;
         readonly fields?: unknown;
         readonly input: ContractSchema;
-        readonly outputs: OutputModesDefinition;
+        readonly outputs: OutputModesAuthoring | OutputModesDefinition;
         readonly examples?: readonly CommandExampleDefinition[];
       }>)
   | RootGroupDefinition;
@@ -2147,11 +2067,13 @@ type HierarchyRawInput<Commands> = {
 type HierarchyResult<Commands> = {
   [Command in keyof Commands]: Commands[Command] extends Readonly<{
     readonly kind: "command";
-    readonly outputs: infer Outputs extends OutputModesDefinition<
-      Extract<Command, string>
-    >;
+    readonly input: infer InputSchema extends ContractSchema;
+    readonly outputs: infer RawOutputs;
   }>
-    ? OutputModesResult<Extract<Command, string>, Outputs>
+    ? OutputModesResult<
+        Extract<Command, string>,
+        DeclaredNodeOutputs<Extract<Command, string>, InputSchema, RawOutputs>
+      >
     : never;
 }[keyof Commands];
 
@@ -3906,11 +3828,12 @@ type RootFallbackRawFieldInputContract<
   Command extends string,
   Fields extends FieldDefinitions,
   InputSchema extends ContractSchema,
-> = FieldDefinitions extends Fields
-  ? EmptyRawObject extends ContractSchemaInput<InputSchema>
-    ? unknown
-    : MissingRootFallbackFieldsContract<Command, InputSchema>
-  : RawFieldInputContract<Command, Fields, InputSchema>;
+> =
+  FieldsOmitted<Fields> extends true
+    ? EmptyRawObject extends ContractSchemaInput<InputSchema>
+      ? unknown
+      : MissingRootFallbackFieldsContract<Command, InputSchema>
+    : RawFieldInputContract<Command, Fields, InputSchema>;
 
 type RootNodeFromCommands<Root extends string, Commands> =
   Commands extends Readonly<Record<Root, infer Node>> ? Node : never;
@@ -3921,13 +3844,6 @@ type RootCommandRawInput<Root extends string, Commands> =
   }>
     ? RawFieldInput<Fields>
     : EmptyCliInput;
-
-type RootCommandResult<Root extends string, Commands> =
-  RootNodeFromCommands<Root, Commands> extends Readonly<{
-    readonly outputs: infer Outputs;
-  }>
-    ? OutputModesResult<Root, Outputs>
-    : never;
 
 type ExampleFields<Node> =
   Node extends Readonly<{
@@ -4012,41 +3928,63 @@ type CommandExamplesContract<
       }>
     : unknown;
 
+/** Normalize an inline callback or a bound command combination to its named mode table. */
+type DeclaredNodeOutputs<
+  Command extends string,
+  InputSchema extends ContractSchema,
+  Outputs,
+> = Outputs extends (...args: never[]) => infer Declaration
+  ? OutputModesFromDeclaration<Command, InputSchema, Declaration>
+  : Outputs;
+
 type ExecutableNodeContract<Command extends string, Node> =
   Node extends Readonly<{
     readonly kind: "command" | "rootCommand";
     readonly input: infer InputSchema extends ContractSchema;
-    readonly outputs: infer Outputs;
+    readonly outputs: infer RawOutputs;
   }>
-    ? Outputs extends OutputModesDefinition<Command, InputSchema>
-      ? Node extends Readonly<{
-          readonly fields: infer Fields extends FieldDefinitions;
-        }>
-        ? Readonly<{
-            readonly fields: CheckedFieldDefinitions<Fields, Command> &
-              FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
-              FieldIdentityContract<Command, Fields>;
-          }> &
-            RawFieldInputContract<Command, Fields, InputSchema> &
-            CommandExamplesContract<Command, Node, Fields, InputSchema, Outputs>
-        : Readonly<{ readonly fields?: never }> &
-            RootFallbackRawFieldInputContract<
-              Command,
-              FieldDefinitions,
-              InputSchema
-            > &
-            CommandExamplesContract<
-              Command,
-              Node,
-              ExampleFields<Node>,
-              InputSchema,
-              Outputs
-            >
-      : ContractTypeError<
-          "outputModesMustMatchCommand",
-          Readonly<{ readonly command: Command }>
-        >
+    ? ExecutableNodeOutputsContract<
+        Command,
+        Node,
+        InputSchema,
+        DeclaredNodeOutputs<Command, InputSchema, RawOutputs>
+      >
     : never;
+
+type ExecutableNodeOutputsContract<
+  Command extends string,
+  Node,
+  InputSchema extends ContractSchema,
+  Outputs,
+> =
+  Outputs extends OutputModesDefinition<Command, InputSchema>
+    ? Node extends Readonly<{
+        readonly fields: infer Fields extends FieldDefinitions;
+      }>
+      ? Readonly<{
+          readonly fields: CheckedFieldDefinitions<Fields, Command> &
+            FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
+            FieldIdentityContract<Command, Fields>;
+        }> &
+          RawFieldInputContract<Command, Fields, InputSchema> &
+          CommandExamplesContract<Command, Node, Fields, InputSchema, Outputs>
+      : Readonly<{ readonly fields?: never }> &
+          RootFallbackRawFieldInputContract<
+            Command,
+            FieldDefinitions,
+            InputSchema
+          > &
+          CommandExamplesContract<
+            Command,
+            Node,
+            ExampleFields<Node>,
+            InputSchema,
+            Outputs
+          >
+    : ContractTypeError<
+        "outputModesMustMatchCommand",
+        Readonly<{ readonly command: Command }>
+      >;
 
 type ExecutableNodesContract<Commands> = {
   [Command in keyof Commands & string]: Commands[Command] extends Readonly<{
@@ -4058,29 +3996,12 @@ type ExecutableNodesContract<Commands> = {
 
 /* oxlint-disable typescript/no-unnecessary-type-parameters -- 公共签名的泛型参与嵌套契约约束，不能按单次出现次数机械删除。 */
 export interface DefineCli<Dependencies> {
-  /** 为命令组创建可执行后代，再把返回记录展开到最终命令树中统一装配。 */
+  /** Bind a leaf command and its outputs. Spread the returned record into the command tree. */
   readonly command: <const Command extends string>(
     command: Command,
   ) => DefineCommand<Command, Dependencies>;
 
-  /**
-   * 为一个可执行命令定义共享输入下的具名输出方式。每种方式由独立的 atomic 或 stream
-   * 契约构造器创建；输入模式也传入此处，以便处理器明确使用同一命令的验证后输入类型。
-   */
-  readonly outputModes: <
-    const Command extends string,
-    InputSchema extends ContractSchema,
-    const Definition extends OutputModeSetDeclaration,
-  >(
-    command: Command,
-    input: InputSchema,
-    build: (
-      mode: OutputModeFactory<Command, Dependencies, InputSchema>,
-    ) => Definition &
-      OutputModesTypeContract<Definition> &
-      OutputModesVariantNames<Command, NoInfer<Definition>>,
-  ) => OutputModesFromDeclaration<Command, InputSchema, Definition>;
-
+  /** Assemble command groups and their bound executable descendants. */
   <
     const Root extends string,
     const Commands extends Readonly<Record<string, CommandNodeDefinition>>,
@@ -4093,33 +4014,93 @@ export interface DefineCli<Dependencies> {
         readonly commands: Commands &
           ClosedRootCommands<Commands> &
           ExecutableNodesContract<Commands> &
-          Readonly<
-            Record<
-              Root,
-              RootGroupDefinition | RootCommandDefinition<Root, Dependencies>
-            >
-          >;
+          Readonly<Record<Root, RootGroupDefinition>>;
       }> &
       ValidationIntersection<HierarchyUsageValidation<Commands>>,
-  ): Commands extends Readonly<Record<Root, { readonly kind: "rootGroup" }>>
-    ? CliContract<
-        Root,
-        Dependencies,
-        HierarchyRawInput<Commands>,
-        HierarchyResult<Commands>,
-        "rootGroup",
-        Commands,
-        HierarchyUsageConstraintFacts<Commands>
-      >
-    : CliContract<
-        Root,
-        Dependencies,
-        RootCommandRawInput<Root, Commands>,
-        RootCommandResult<Root, Commands>,
-        "rootCommand",
-        never,
-        RootUsageConstraintFacts<Root, Commands>
-      >;
+  ): CliContract<
+    Root,
+    Dependencies,
+    HierarchyRawInput<Commands>,
+    HierarchyResult<Commands>,
+    "rootGroup",
+    Commands,
+    HierarchyUsageConstraintFacts<Commands>
+  >;
+
+  /**
+   * Define an executable root. Its outputs callback receives the root command context
+   * and runs once when the contract is defined.
+   */
+  <
+    const Root extends string,
+    InputSchema extends ContractSchema,
+    const Table extends OutputModeTableDeclaration<
+      NoInfer<Root>,
+      NoInfer<InputSchema>
+    >,
+    const Fields extends FieldDefinitions,
+    const Node extends object & CommandDefinitionExampleContext,
+    const Definition extends object,
+  >(
+    definition: Definition &
+      ClosedRootDefinition<NoInfer<Definition>> &
+      RootCliDefinitionBase<Root> &
+      Readonly<{
+        readonly commands: {
+          readonly [Command in Root]: Node &
+            Omit<
+              RootCommandDefinition<Command, Dependencies>,
+              "input" | "outputs" | "examples" | "fields"
+            > &
+            Readonly<{
+              readonly fields?: Fields;
+              readonly input: InputSchema;
+              readonly outputs: (
+                factory: OutputExecutionFactory<
+                  NoInfer<Root>,
+                  Dependencies,
+                  NoInfer<InputSchema>
+                >,
+              ) => Table & OutputModesTypeContract<NoInfer<Table>>;
+            }> &
+            ExecutableNodeContract<
+              Command,
+              CompiledRootCommands<
+                Command,
+                NoInfer<Node>,
+                NoInfer<Fields>,
+                NoInfer<InputSchema>,
+                NoInfer<Table>
+              >[Command]
+            >;
+        };
+      }> &
+      ValidationIntersection<
+        HierarchyUsageValidation<
+          CompiledRootCommands<
+            NoInfer<Root>,
+            NoInfer<Node>,
+            NoInfer<Fields>,
+            NoInfer<InputSchema>,
+            NoInfer<Table>
+          >
+        >
+      >,
+  ): CliContract<
+    Root,
+    Dependencies,
+    RootCommandRawInput<
+      Root,
+      CompiledRootCommands<Root, Node, Fields, InputSchema, Table>
+    >,
+    OutputModesResult<Root, Table>,
+    "rootCommand",
+    never,
+    RootUsageConstraintFacts<
+      Root,
+      CompiledRootCommands<Root, Node, Fields, InputSchema, Table>
+    >
+  >;
 }
 /* oxlint-enable typescript/no-unnecessary-type-parameters */
 
@@ -4127,15 +4108,56 @@ export interface DefineCli<Dependencies> {
 /** 为具名叶命令生成可展开到根契约 `commands` 的定义。 */
 export interface DefineCommand<Command extends string, Dependencies> {
   <
+    InputSchema extends ContractSchema,
+    const Table extends OutputModeTableDeclaration<
+      Command,
+      NoInfer<InputSchema>
+    >,
+    const Fields extends FieldDefinitions,
     const Definition extends object & CommandDefinitionExampleContext,
     const Parent extends string,
   >(
     definition: Definition &
-      ClosedCommandDefinition<Definition, Command> &
-      Omit<ExecutableCommandDefinition<Command, Dependencies>, "kind"> &
+      ClosedCommandDefinition<NoInfer<Definition>, Command> &
+      Omit<
+        ExecutableCommandDefinition<Command, Dependencies>,
+        "kind" | "input" | "outputs" | "examples" | "fields"
+      > &
       HierarchyCommandFactsDefinition<Parent> &
-      ExecutableNodeContract<Command, Definition>,
-  ): CommandCombination<Command, Definition, Parent>;
+      Readonly<{
+        readonly fields?: Fields;
+        readonly input: InputSchema;
+        readonly outputs: (
+          factory: OutputExecutionFactory<
+            Command,
+            Dependencies,
+            NoInfer<InputSchema>
+          >,
+        ) => Table & OutputModesTypeContract<NoInfer<Table>>;
+      }> &
+      ExecutableNodeContract<
+        Command,
+        CompiledExecutableNode<
+          Command,
+          NoInfer<Definition>,
+          NoInfer<Fields>,
+          NoInfer<InputSchema>,
+          NoInfer<Table>,
+          "command"
+        >
+      >,
+  ): CommandCombination<
+    Command,
+    CompiledExecutableNode<
+      Command,
+      Definition,
+      Fields,
+      InputSchema,
+      Table,
+      "command"
+    >,
+    Parent
+  >;
 }
 /* oxlint-enable typescript/no-unnecessary-type-parameters */
 
@@ -4605,59 +4627,222 @@ function assertKnownCapabilityOptions(
  */
 export function defineCli<Dependencies = undefined>(): DefineCli<Dependencies> {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 公共泛型定义接口由此运行时编译入口实现，类型参数只约束调用方。
-  const define = ((definition: RuntimeCliDefinition) =>
+  const define = ((definition: RuntimeCliAuthoring) =>
     compileCli(definition)) as unknown as DefineCli<Dependencies>;
   Object.defineProperty(define, "command", {
     configurable: true,
-    value: (command: string) => (definition: object) =>
-      Object.freeze({
-        [command]: Object.freeze({
-          ...definition,
-        }),
-      }),
-  });
-  Object.defineProperty(define, "outputModes", {
-    configurable: true,
-    value: (
-      command: string,
-      input: ContractSchema,
-      build: (mode: {
-        readonly atomic: (definition: object) => object;
-        readonly stream: (definition: object) => object;
-      }) => OutputModeSetDeclaration,
-    ) => {
-      const issueMode = (definition: object, delivery: OutputDelivery) => {
-        const mode = Object.freeze({ ...definition, delivery });
-        outputModeDefinitions.add(mode);
-        outputModeDefinitionMetadata.set(mode, { command, input });
-        return mode;
-      };
-      const modes = build({
-        atomic: (definition) => issueMode(definition, "atomic"),
-        stream: (definition) => issueMode(definition, "stream"),
-      });
-      const modeNames = Object.keys(modes.modes);
-      const hasDefault = Object.hasOwn(modes, "default");
-      const outputDefinition = Object.freeze({
-        ...(hasDefault
-          ? { default: Reflect.get(modes, "default") }
-          : modeNames.length === 1
-            ? { default: modeNames[0] }
-            : {}),
-        modes: Object.freeze({ ...modes.modes }),
-      });
-      if (typeof outputDefinition === "object" && outputDefinition !== null) {
-        outputModes.add(outputDefinition);
-        outputModeMetadata.set(outputDefinition, { command, input });
-      }
-      return outputDefinition;
+    value: (command: string) => (definition: RuntimeExecutableAuthoring) => {
+      const node = Object.freeze(bindCommandOutputs(command, definition));
+      boundCommandNodes.set(node, node);
+      return Object.freeze({ [command]: node });
     },
   });
   return define;
 }
 
-function compileCli(definition: RuntimeCliDefinition): CliContract {
+type RuntimeExecution = Readonly<{
+  readonly structured: (options: unknown) => object;
+  readonly text: (options: unknown) => object;
+}>;
+
+type RuntimeOutputFactory = Readonly<{
+  readonly atomic: (declaration: unknown) => RuntimeExecution;
+  readonly stream: (declaration: unknown) => RuntimeExecution;
+}>;
+
+function presentVariants(definitions: unknown, presenters: unknown): unknown {
+  if (!isPlainRecord(definitions)) return definitions;
+  const table = isPlainRecord(presenters) ? presenters : {};
+  const presented: Record<string, unknown> = {};
+  for (const [name, definition] of Object.entries(definitions)) {
+    presented[name] = isPlainRecord(definition)
+      ? Object.freeze({
+          ...definition,
+          text: Object.hasOwn(table, name) ? table[name] : undefined,
+        })
+      : definition;
+  }
+  return Object.freeze(presented);
+}
+
+function buildOutputMode(
+  declaration: unknown,
+  presentation: unknown,
+  delivery: OutputDelivery,
+  format: OutputFormat,
+): object {
+  const source = isPlainRecord(declaration) ? declaration : {};
+  const options = isPlainRecord(presentation) ? presentation : {};
+  const failures =
+    format === "text"
+      ? presentVariants(source.failures, options.failures)
+      : source.failures;
+  if (delivery === "stream") {
+    return Object.freeze({
+      delivery,
+      description: options.description,
+      format,
+      success: Object.freeze({
+        kind: "stream" as const,
+        records:
+          format === "text"
+            ? presentVariants(source.records, options.records)
+            : source.records,
+        ...(format === "text" ? { text: options.terminal } : {}),
+      }),
+      failures,
+      handler: source.handler,
+    });
+  }
+  const success: unknown = source.success;
+  const presented =
+    format === "text" && isPlainRecord(success)
+      ? success.kind === "completion"
+        ? Object.freeze({ ...success, text: options.success })
+        : Object.freeze({
+            ...success,
+            variants: presentVariants(success.variants, options.success),
+          })
+      : success;
+  return Object.freeze({
+    delivery,
+    description: options.description,
+    format,
+    success: presented,
+    failures,
+    handler: source.handler,
+  });
+}
+
+/**
+ * Use a fresh binding for every command construction, including commands with
+ * identical names and schemas. Every derived mode keeps its execution’s binding.
+ */
+function invokeOutputCallback(
+  command: string,
+  input: ContractSchema,
+  callback: (factory: RuntimeOutputFactory) => unknown,
+): RuntimeOutputModesDefinition {
+  const binding = {};
+  const createExecution = (
+    declaration: unknown,
+    delivery: OutputDelivery,
+  ): RuntimeExecution => {
+    const issueMode = (presentation: unknown, format: OutputFormat) => {
+      // Check the original keys before pairing variants with presenters. The
+      // callback assigns the mode name later, so keep paths relative to it.
+      const unknownProperties: UnknownDefinitionPropertyIssue[] = [];
+      collectOutputAuthoringProperties(
+        { declaration, presentation, delivery, format },
+        unknownProperties,
+      );
+      const mode =
+        unknownProperties.length === 0
+          ? buildOutputMode(declaration, presentation, delivery, format)
+          : Object.freeze({});
+      outputModeDefinitions.add(mode);
+      outputModeDefinitionMetadata.set(mode, {
+        command,
+        input,
+        binding,
+        unknownProperties,
+      });
+      return mode;
+    };
+    return Object.freeze({
+      structured: (options: unknown) => issueMode(options, "structured"),
+      text: (options: unknown) => issueMode(options, "text"),
+    });
+  };
+  const declared: unknown = callback({
+    atomic: (declaration) => createExecution(declaration, "atomic"),
+    stream: (declaration) => createExecution(declaration, "stream"),
+  });
+  const record = isPlainRecord(declared) ? declared : {};
+  const unknownProperties: UnknownDefinitionPropertyIssue[] = [];
+  collectUnknownProperties(
+    record,
+    ["commands", command, "outputs"],
+    definitionPropertyKeys.outputModes,
+    unknownProperties,
+  );
+  const declaredModes = Object.hasOwn(record, "modes")
+    ? record.modes
+    : undefined;
+  const modes = isPlainRecord(declaredModes) ? declaredModes : {};
+  const modeNames = Object.keys(modes);
+  const hasDefault = Object.hasOwn(record, "default");
+  const table = Object.freeze({
+    ...(hasDefault
+      ? { default: Reflect.get(record, "default") }
+      : modeNames.length === 1
+        ? { default: modeNames[0] }
+        : {}),
+    modes: Object.freeze({ ...modes }),
+  });
+  outputModes.add(table);
+  outputModeMetadata.set(table, { command, input, binding, unknownProperties });
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- compileOutputModes validates dynamic entries and emits definition issues.
+  return table as unknown as RuntimeOutputModesDefinition;
+}
+
+type RuntimeExecutableAuthoring = Omit<
+  RuntimeExecutableDefinition,
+  "outputs"
+> & {
+  readonly outputs:
+    | RuntimeOutputModesDefinition
+    | ((factory: RuntimeOutputFactory) => unknown);
+};
+
+function bindCommandOutputs(
+  command: string,
+  node: RuntimeExecutableAuthoring,
+): RuntimeExecutableDefinition {
+  const { outputs } = node;
+  if (typeof outputs === "function") {
+    return {
+      ...node,
+      outputs: invokeOutputCallback(command, node.input, outputs),
+    };
+  }
+  if (outputModes.has(outputs)) {
+    throw new ContractDefinitionError([
+      { code: "invalidOutputModes", command, reason: "mismatchedBinding" },
+    ]);
+  }
+  return { ...node, outputs };
+}
+
+type RuntimeCliAuthoring = Omit<RuntimeCliDefinition, "commands"> & {
+  readonly commands: Readonly<
+    Record<string, RuntimeExecutableAuthoring | RuntimeGroupDefinition>
+  >;
+};
+
+function expandOutputDeclarations(
+  definition: RuntimeCliAuthoring,
+): RuntimeCliDefinition {
+  const commands = Object.fromEntries(
+    Object.entries(definition.commands).map(([id, node]) => {
+      switch (node.kind) {
+        case "command":
+        case "rootCommand":
+          return [
+            id,
+            boundCommandNodes.get(node) ?? bindCommandOutputs(id, node),
+          ] as const;
+        default:
+          return [id, node] as const;
+      }
+    }),
+  );
+  return { ...definition, commands };
+}
+
+function compileCli(raw: RuntimeCliAuthoring): CliContract {
   const issues: ContractDefinitionIssue[] = [];
+  const definition = expandOutputDeclarations(raw);
   collectUnknownDefinitionProperties(definition, issues);
   const isHierarchy =
     definition.commands[definition.root]?.kind === "rootGroup";
@@ -5457,6 +5642,106 @@ function collectUnknownVariantProperties(
   }
 }
 
+function collectOutputVariantProperties(
+  definitions: unknown,
+  presenters: unknown,
+  path: readonly string[],
+  allowed: readonly string[],
+  issues: UnknownDefinitionPropertyIssue[],
+): void {
+  collectUnknownVariantProperties(definitions, path, allowed, issues);
+  if (!isPlainRecord(presenters)) return;
+  const declared = isPlainRecord(definitions) ? definitions : {};
+  for (const name of Object.keys(presenters)) {
+    if (!Object.hasOwn(declared, name)) {
+      issues.push({
+        code: "unknownDefinitionProperty",
+        path: [...path, name],
+      });
+    }
+  }
+}
+
+function collectOutputAuthoringProperties(
+  authoring: Readonly<{
+    declaration: unknown;
+    presentation: unknown;
+    delivery: OutputDelivery;
+    format: OutputFormat;
+  }>,
+  issues: UnknownDefinitionPropertyIssue[],
+): void {
+  const { delivery, format } = authoring;
+  collectUnknownProperties(
+    authoring.declaration,
+    [],
+    delivery === "atomic"
+      ? ["success", "failures", "handler"]
+      : ["records", "failures", "handler"],
+    issues,
+  );
+  collectUnknownProperties(
+    authoring.presentation,
+    [],
+    format === "structured"
+      ? ["description"]
+      : delivery === "atomic"
+        ? ["description", "success", "failures"]
+        : ["description", "records", "failures", "terminal"],
+    issues,
+  );
+  const declaration = isPlainRecord(authoring.declaration)
+    ? authoring.declaration
+    : {};
+  const presenters =
+    format === "text" && isPlainRecord(authoring.presentation)
+      ? authoring.presentation
+      : {};
+  // In structured modes, the existing result compiler reports an embedded
+  // presenter as unexpectedTextPresenter. A text mode would overwrite it.
+  const atomicVariantProperties =
+    format === "text"
+      ? declaredAtomicVariantProperties
+      : definitionPropertyKeys.atomicVariant;
+  collectOutputVariantProperties(
+    declaration.failures,
+    presenters.failures,
+    ["failures"],
+    atomicVariantProperties,
+    issues,
+  );
+  if (delivery === "stream") {
+    collectOutputVariantProperties(
+      declaration.records,
+      presenters.records,
+      ["success", "records"],
+      format === "text"
+        ? declaredStreamRecordProperties
+        : definitionPropertyKeys.streamRecord,
+      issues,
+    );
+    return;
+  }
+  const success = declaration.success;
+  if (!isPlainRecord(success)) return;
+  const successProperties =
+    success.kind === "data"
+      ? ["kind", "variants"]
+      : success.kind === "completion" && format === "structured"
+        ? ["kind", "text"]
+        : ["kind"];
+  collectUnknownProperties(success, ["success"], successProperties, issues);
+  if (success.kind === "data") {
+    collectOutputVariantProperties(
+      success.variants,
+      presenters.success,
+      ["success", "variants"],
+      atomicVariantProperties,
+      issues,
+    );
+  }
+}
+
 function collectUnknownDefinitionProperties(
   definition: RuntimeCliDefinition,
   issues: ContractDefinitionIssue[],
@@ -5912,6 +6197,10 @@ function compileOutputModes(
       command,
       reason: "mismatchedInput",
     });
+  } else {
+    for (const issue of metadata.unknownProperties) {
+      issues.push(issue);
+    }
   }
 
   const rawModes: unknown = definition.modes;
@@ -5983,6 +6272,31 @@ function compileOutputModes(
         mode: modeName,
         reason: "invalidSuccess",
       });
+      continue;
+    }
+    if (metadata === undefined || modeMetadata.binding !== metadata.binding) {
+      issues.push({
+        code: "invalidOutputMode",
+        command,
+        mode: modeName,
+        reason: "mismatchedBinding",
+      });
+      continue;
+    }
+    if (modeMetadata.unknownProperties.length > 0) {
+      for (const issue of modeMetadata.unknownProperties) {
+        issues.push({
+          code: issue.code,
+          path: [
+            "commands",
+            command,
+            "outputs",
+            "modes",
+            modeName,
+            ...issue.path,
+          ],
+        });
+      }
       continue;
     }
     if (!isSingleLineText(mode.description)) {

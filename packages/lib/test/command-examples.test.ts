@@ -11,6 +11,7 @@ import {
   text,
   type ContractSchema,
   type FieldDefinitions,
+  type OutputExecutionFactory,
   type UsageConstraint,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
@@ -46,31 +47,43 @@ function createCli(
   includeExamplesHeading = true,
 ) {
   const define = defineCli();
-  const outputs = define.outputModes("inspect", exampleInput, (mode) => ({
+  const outputs = (
+    mode: OutputExecutionFactory<"inspect", undefined, typeof exampleInput>,
+  ) => ({
     default: defaultOutputMode,
     modes: {
-      structured: mode.atomic({
-        description: "机器读取结果",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => {
-          handlerCalls += 1;
-          return outcome.completion();
-        },
-      }),
-      text: mode.atomic({
-        description: "供人阅读结果",
-        format: "text",
-        success: { kind: "completion", text: () => text.silent },
-        failures: {},
-        handler: ({ outcome }) => {
-          handlerCalls += 1;
-          return outcome.completion();
-        },
-      }),
+      structured: mode
+        .atomic({
+          success: {
+            kind: "completion",
+          },
+          failures: {},
+          handler: ({ outcome }) => {
+            handlerCalls += 1;
+            return outcome.completion();
+          },
+        })
+        .structured({
+          description: "机器读取结果",
+        }),
+      text: mode
+        .atomic({
+          success: {
+            kind: "completion",
+          },
+          failures: {},
+          handler: ({ outcome }) => {
+            handlerCalls += 1;
+            return outcome.completion();
+          },
+        })
+        .text({
+          description: "供人阅读结果",
+          success: () => text.silent,
+          failures: {},
+        }),
     },
-  }));
+  });
 
   return define({
     root: "workspace",
@@ -163,17 +176,23 @@ function createDynamicCli(
   usageConstraints?: readonly UsageConstraint[],
 ) {
   const define = defineCli();
-  const outputs = define.outputModes("check", input, (mode) => ({
+  const outputs = (
+    mode: OutputExecutionFactory<"check", undefined, ContractSchema>,
+  ) => ({
     modes: {
-      structured: mode.atomic({
-        description: "结构化结果",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
+      structured: mode
+        .atomic({
+          success: {
+            kind: "completion",
+          },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        })
+        .structured({
+          description: "结构化结果",
+        }),
     },
-  }));
+  });
   return Reflect.apply(define, undefined, [
     {
       root: "check",
@@ -217,17 +236,23 @@ function getExampleIssue(action: () => unknown) {
 function createGroupWithExample() {
   const define = defineCli();
   const input = z.object({});
-  const outputs = define.outputModes("run", input, (mode) => ({
+  const outputs = (
+    mode: OutputExecutionFactory<"run", undefined, typeof input>,
+  ) => ({
     modes: {
-      structured: mode.atomic({
-        description: "结构化结果",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
+      structured: mode
+        .atomic({
+          success: {
+            kind: "completion",
+          },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        })
+        .structured({
+          description: "结构化结果",
+        }),
     },
-  }));
+  });
   return Reflect.apply(define, undefined, [
     {
       root: "tool",

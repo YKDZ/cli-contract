@@ -54,21 +54,25 @@ function createAliasedHierarchy(onRun: () => void = () => undefined) {
         description: "运行任务",
         input: sharedInput0,
 
-        outputs: define.outputModes("runTask", sharedInput0, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => {
-                onRun();
-                return outcome.completion();
-              },
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => {
+                  onRun();
+                  return outcome.completion();
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       }),
     },
   });
@@ -219,18 +223,22 @@ void test("未启用短别名时 -h 保留给字段且帮助不注入补充", ()
         },
         input: sharedInput1,
 
-        outputs: defineCli().outputModes("quiet", sharedInput1, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -265,18 +273,22 @@ void test("缺席标题只省略标题行，空段落不注入默认文案", asy
         description: "最小命令",
         input: sharedInput2,
 
-        outputs: defineCli().outputModes("minimal", sharedInput2, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -350,22 +362,22 @@ void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补
             },
             input: sharedInput3,
 
-            outputs: define.outputModes(
-              "listPackages",
-              sharedInput3,
-              (mode) => ({
-                default: "structured",
-                modes: {
-                  structured: mode.atomic({
-                    description: "结构化输出",
-                    format: "structured",
-                    success: { kind: "completion" },
+            outputs: (mode) => ({
+              default: "structured",
+              modes: {
+                structured: mode
+                  .atomic({
+                    success: {
+                      kind: "completion",
+                    },
                     failures: {},
                     handler: ({ outcome }) => outcome.completion(),
+                  })
+                  .structured({
+                    description: "结构化输出",
                   }),
-                },
-              }),
-            ),
+              },
+            }),
           }),
         },
       }),
@@ -435,29 +447,35 @@ void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补
             },
             input: sharedInput0,
 
-            outputs: defineCli().outputModes(
-              "conflict",
-              sharedInput0,
-              (mode) => ({
-                default: "structured",
-                modes: {
-                  structured: mode.atomic({
+            outputs: (mode) => ({
+              default: "structured",
+              modes: {
+                structured: mode
+                  .atomic({
+                    success: {
+                      kind: "completion",
+                    },
+                    failures: {},
+                    handler: ({ outcome }) => outcome.completion(),
+                  })
+                  .structured({
                     description: "结构化输出",
-                    format: "structured",
-                    success: { kind: "completion" },
+                  }),
+                text: mode
+                  .atomic({
+                    success: {
+                      kind: "completion",
+                    },
                     failures: {},
                     handler: ({ outcome }) => outcome.completion(),
-                  }),
-                  text: mode.atomic({
+                  })
+                  .text({
                     description: "文本输出",
-                    format: "text",
-                    success: { kind: "completion", text: () => text.silent },
+                    success: () => text.silent,
                     failures: {},
-                    handler: ({ outcome }) => outcome.completion(),
                   }),
-                },
-              }),
-            ),
+              },
+            }),
           },
         },
       }),
@@ -507,22 +525,22 @@ void test("-h 与字段及其他 control spelling 在定义期聚合，伪造补
             helpSupplement: { kind: "lines", lines: ["伪造"] } as never,
             input: sharedInput4,
 
-            outputs: defineCli().outputModes(
-              "forged",
-              sharedInput4,
-              (mode) => ({
-                default: "structured",
-                modes: {
-                  structured: mode.atomic({
-                    description: "结构化输出",
-                    format: "structured",
-                    success: { kind: "completion" },
+            outputs: (mode) => ({
+              default: "structured",
+              modes: {
+                structured: mode
+                  .atomic({
+                    success: {
+                      kind: "completion",
+                    },
                     failures: {},
                     handler: ({ outcome }) => outcome.completion(),
+                  })
+                  .structured({
+                    description: "结构化输出",
                   }),
-                },
-              }),
-            ),
+              },
+            }),
           },
         },
       }),

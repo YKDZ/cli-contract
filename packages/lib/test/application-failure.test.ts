@@ -30,25 +30,29 @@ void test("具名应用失败写入 stderr 并返回显式失败状态", async (
         description: "检查服务",
         input: emptyInput,
 
-        outputs: defineCli().outputModes("check", emptyInput, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {
-                unavailable: {
-                  description: "服务暂不可用",
-                  schema: unavailableData,
-                  exitCode: 9,
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
                 },
-              },
-              handler: ({ outcome }) =>
-                outcome.failure.unavailable({ service: "billing" }),
-            }),
+                failures: {
+                  unavailable: {
+                    description: "服务暂不可用",
+                    schema: unavailableData,
+                    exitCode: 9,
+                  },
+                },
+                handler: ({ outcome }) =>
+                  outcome.failure.unavailable({ service: "billing" }),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -152,28 +156,32 @@ void test("非法失败 payload 在任何写出前被拒绝", async () => {
         description: "检查服务",
         input: emptyInput,
 
-        outputs: defineCli().outputModes("check", emptyInput, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {
-                unavailable: {
-                  description: "服务暂不可用",
-                  schema: unavailableData,
-                  exitCode: 9,
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
                 },
-              },
-              handler: ({ outcome }) =>
-                outcome.failure.unavailable({
-                  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意注入错误类型，以验证结果边界。
-                  service: 1 as unknown as string,
-                }),
-            }),
+                failures: {
+                  unavailable: {
+                    description: "服务暂不可用",
+                    schema: unavailableData,
+                    exitCode: 9,
+                  },
+                },
+                handler: ({ outcome }) =>
+                  outcome.failure.unavailable({
+                    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意注入错误类型，以验证结果边界。
+                    service: 1 as unknown as string,
+                  }),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -230,25 +238,29 @@ void test("failure 输出模式的空 issues 仍产生 outputSchemaRejected", as
         description: "检查服务",
         input: emptyInput,
 
-        outputs: defineCli().outputModes("check", emptyInput, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {
-                unavailable: {
-                  description: "服务暂不可用",
-                  schema: rejectedFailureSchema,
-                  exitCode: 9,
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
                 },
-              },
-              handler: ({ outcome }) =>
-                outcome.failure.unavailable({ service: "billing" }),
-            }),
+                failures: {
+                  unavailable: {
+                    description: "服务暂不可用",
+                    schema: rejectedFailureSchema,
+                    exitCode: 9,
+                  },
+                },
+                handler: ({ outcome }) =>
+                  outcome.failure.unavailable({ service: "billing" }),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -295,24 +307,28 @@ void test("定义期聚合失败变体的无效描述与退出码", () => {
             description: "检查服务",
             input: emptyInput,
 
-            outputs: defineCli().outputModes("check", emptyInput, (mode) => ({
+            outputs: (mode) => ({
               default: "structured",
               modes: {
-                structured: mode.atomic({
-                  description: "结构化输出",
-                  format: "structured",
-                  success: { kind: "completion" },
-                  failures: {
-                    unavailable: {
-                      description: "",
-                      schema: unavailableData,
-                      exitCode: 0,
+                structured: mode
+                  .atomic({
+                    success: {
+                      kind: "completion",
                     },
-                  },
-                  handler: ({ outcome }) => outcome.completion(),
-                }),
+                    failures: {
+                      unavailable: {
+                        description: "",
+                        schema: unavailableData,
+                        exitCode: 0,
+                      },
+                    },
+                    handler: ({ outcome }) => outcome.completion(),
+                  })
+                  .structured({
+                    description: "结构化输出",
+                  }),
               },
-            })),
+            }),
           },
         },
       }),

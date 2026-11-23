@@ -1,6 +1,7 @@
 import { toStandardJsonSchema } from "@valibot/to-json-schema";
 import {
   defineCli,
+  type OutputExecutionFactory,
   executeCli,
   helpCapability,
   parseCliInvocation,
@@ -169,22 +170,22 @@ const validStaticUsageCli = defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes(
-        "validStaticFacts",
-        sharedInput0,
-        (mode) => ({
-          default: "structured",
-          modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
+      outputs: (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode
+            .atomic({
+              success: {
+                kind: "completion",
+              },
               failures: {},
               handler: ({ outcome }) => outcome.completion(),
+            })
+            .structured({
+              description: "结构化输出",
             }),
-          },
-        }),
-      ),
+        },
+      }),
     },
   },
 });
@@ -247,18 +248,22 @@ const validWhenCli = defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes("validWhen", whenInput, (mode) => ({
+      outputs: (mode) => ({
         default: "structured",
         modes: {
-          structured: mode.atomic({
-            description: "结构化输出",
-            format: "structured",
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
-          }),
+          structured: mode
+            .atomic({
+              success: {
+                kind: "completion",
+              },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            })
+            .structured({
+              description: "结构化输出",
+            }),
         },
-      })),
+      }),
     },
   },
 });
@@ -304,22 +309,22 @@ const dynamicEffectsWhenCli = defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes(
-        "dynamicEffectsWhen",
-        dynamicEffectsInput,
-        (mode) => ({
-          default: "structured",
-          modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
+      outputs: (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode
+            .atomic({
+              success: {
+                kind: "completion",
+              },
               failures: {},
               handler: ({ outcome }) => outcome.completion(),
+            })
+            .structured({
+              description: "结构化输出",
             }),
-          },
-        }),
-      ),
+        },
+      }),
     },
   },
 });
@@ -355,22 +360,22 @@ const invalidWhenValueCli = defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes(
-        "invalidWhenValue",
-        invalidWhenInput,
-        (mode) => ({
-          default: "structured",
-          modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
+      outputs: (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode
+            .atomic({
+              success: {
+                kind: "completion",
+              },
               failures: {},
               handler: ({ outcome }) => outcome.completion(),
+            })
+            .structured({
+              description: "结构化输出",
             }),
-          },
-        }),
-      ),
+        },
+      }),
     },
   },
 });
@@ -404,22 +409,22 @@ const invalidWhenEffectsCli = defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes(
-        "invalidWhenEffects",
-        sharedInput2,
-        (mode) => ({
-          default: "structured",
-          modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
+      outputs: (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode
+            .atomic({
+              success: {
+                kind: "completion",
+              },
               failures: {},
               handler: ({ outcome }) => outcome.completion(),
+            })
+            .structured({
+              description: "结构化输出",
             }),
-          },
-        }),
-      ),
+        },
+      }),
     },
   },
 });
@@ -454,22 +459,22 @@ const noEffectWhenCli = defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes(
-        "noEffectWhen",
-        sharedInput3,
-        (mode) => ({
-          default: "structured",
-          modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
+      outputs: (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode
+            .atomic({
+              success: {
+                kind: "completion",
+              },
               failures: {},
               handler: ({ outcome }) => outcome.completion(),
+            })
+            .structured({
+              description: "结构化输出",
             }),
-          },
-        }),
-      ),
+        },
+      }),
     },
   },
 });
@@ -502,22 +507,22 @@ defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes(
-        "missingWhenEffects",
-        sharedInput4,
-        (mode) => ({
-          default: "structured",
-          modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
+      outputs: (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode
+            .atomic({
+              success: {
+                kind: "completion",
+              },
               failures: {},
               handler: ({ outcome }) => outcome.completion(),
+            })
+            .structured({
+              description: "结构化输出",
             }),
-          },
-        }),
-      ),
+        },
+      }),
     },
   },
 });
@@ -564,22 +569,22 @@ const invalidExtractedWhenCli = defineCli()({
       // @ts-expect-error 提取联合中的每个 fact/effect 分支仍闭合检查未知属性。
       usageConstraints: [extractedWhenUnion],
 
-      outputs: defineCli().outputModes(
-        "invalidExtractedWhen",
-        extractedWhenInput,
-        (mode) => ({
-          default: "structured",
-          modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
+      outputs: (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode
+            .atomic({
+              success: {
+                kind: "completion",
+              },
               failures: {},
               handler: ({ outcome }) => outcome.completion(),
+            })
+            .structured({
+              description: "结构化输出",
             }),
-          },
-        }),
-      ),
+        },
+      }),
     },
   },
 });
@@ -673,18 +678,22 @@ const replayCommand = defineObservationCli.command("replay")({
     },
   ],
 
-  outputs: defineObservationCli.outputModes("replay", replayInput, (mode) => ({
+  outputs: (mode) => ({
     default: "structured",
     modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
+      structured: mode
+        .atomic({
+          success: {
+            kind: "completion",
+          },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        })
+        .structured({
+          description: "结构化输出",
+        }),
     },
-  })),
+  }),
 });
 const inspectInput = z.object({
   mode: z.enum(["json", "yaml"]).optional(),
@@ -716,22 +725,22 @@ const inspectCommand = defineObservationCli.command("inspect")({
     },
   ],
 
-  outputs: defineObservationCli.outputModes(
-    "inspect",
-    inspectInput,
-    (mode) => ({
-      default: "structured",
-      modes: {
-        structured: mode.atomic({
-          description: "结构化输出",
-          format: "structured",
-          success: { kind: "completion" },
+  outputs: (mode) => ({
+    default: "structured",
+    modes: {
+      structured: mode
+        .atomic({
+          success: {
+            kind: "completion",
+          },
           failures: {},
           handler: ({ outcome }) => outcome.completion(),
+        })
+        .structured({
+          description: "结构化输出",
         }),
-      },
-    }),
-  ),
+    },
+  }),
 });
 const observationCli = defineObservationCli({
   root: "tool",
@@ -848,22 +857,22 @@ const rootObservationCli = defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes(
-        "rootObservation",
-        sharedInput5,
-        (mode) => ({
-          default: "structured",
-          modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
+      outputs: (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode
+            .atomic({
+              success: {
+                kind: "completion",
+              },
               failures: {},
               handler: ({ outcome }) => outcome.completion(),
+            })
+            .structured({
+              description: "结构化输出",
             }),
-          },
-        }),
-      ),
+        },
+      }),
     },
   },
 });
@@ -964,22 +973,22 @@ const invalidClosedFactCli = defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes(
-        "closedFacts",
-        closedFactInput,
-        (mode) => ({
-          default: "structured",
-          modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
+      outputs: (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode
+            .atomic({
+              success: {
+                kind: "completion",
+              },
               failures: {},
               handler: ({ outcome }) => outcome.completion(),
+            })
+            .structured({
+              description: "结构化输出",
             }),
-          },
-        }),
-      ),
+        },
+      }),
     },
   },
 });
@@ -1015,22 +1024,22 @@ defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes(
-        "staticContradiction",
-        sharedInput6,
-        (mode) => ({
-          default: "structured",
-          modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
+      outputs: (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode
+            .atomic({
+              success: {
+                kind: "completion",
+              },
               failures: {},
               handler: ({ outcome }) => outcome.completion(),
+            })
+            .structured({
+              description: "结构化输出",
             }),
-          },
-        }),
-      ),
+        },
+      }),
     },
   },
 });
@@ -1108,83 +1117,90 @@ const cli = defineCli()({
       helpSupplement: explicitTextLines,
       input: emptyInput,
 
-      outputs: defineCli().outputModes("fixture", emptyInput, (mode) => ({
+      outputs: (mode) => ({
         default: "structured",
         modes: {
-          structured: mode.atomic({
-            description: "结构化输出",
-            format: "structured",
-            success: { kind: "completion" },
-            failures: {},
-            handler({ input, dependencies, outcome }) {
-              input satisfies EmptyCliInput;
-              dependencies satisfies undefined;
-              return outcome.completion();
-            },
-          }),
+          structured: mode
+            .atomic({
+              success: {
+                kind: "completion",
+              },
+              failures: {},
+              handler({ input, dependencies, outcome }) {
+                input satisfies EmptyCliInput;
+                dependencies satisfies undefined;
+                return outcome.completion();
+              },
+            })
+            .structured({
+              description: "结构化输出",
+            }),
         },
-      })),
+      }),
     },
   },
 });
 
-const singleOutputModeWithoutDefault = defineCli().outputModes(
-  "singleOutputModeWithoutDefault",
-  emptyInput,
-  (mode) => ({
-    modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
+function checkModeBindings() {
+  const define = defineCli();
+  const run = define.command("run");
+  const node = {
+    kind: "command",
+    name: "run",
+    parent: "workspace",
+    description: "Run",
+    input: emptyInput,
+  } as const;
+  const execution = ({
+    atomic,
+  }: OutputExecutionFactory<"run", undefined, typeof emptyInput>) =>
+    atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+  const valid = run({
+    ...node,
+    outputs: (factory) => ({
+      modes: { json: execution(factory).structured({ description: "JSON" }) },
+    }),
+  });
+  define.command("other")({
+    ...node,
+    // @ts-expect-error A mode bound to run cannot be selected by another command.
+    outputs: () => ({
+      modes: {
+        json: valid.run.outputs.modes.json,
+      },
+    }),
+  });
+  run({
+    ...node,
+    // @ts-expect-error The default must be a declared mode.
+    outputs: (factory) => ({
+      default: "missing",
+      modes: { json: execution(factory).structured({ description: "JSON" }) },
+    }),
+  });
+  run({
+    ...node,
+    // @ts-expect-error Multiple modes need an explicit default.
+    outputs: (factory) => {
+      const result = execution(factory);
+      return {
+        modes: {
+          json: result.structured({ description: "JSON" }),
+          text: result.text({
+            description: "Text",
+            success: () => text.silent,
+            failures: {},
+          }),
+        },
+      };
     },
-  }),
-);
-void singleOutputModeWithoutDefault;
-
-// @ts-expect-error 默认方式必须属于当前命令声明的方式集合。
-defineCli().outputModes("invalidOutputModeDefault", emptyInput, (mode) => ({
-  default: "missing",
-  modes: {
-    structured: mode.atomic({
-      description: "结构化输出",
-      format: "structured",
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
-    }),
-    text: mode.atomic({
-      description: "文本输出",
-      format: "text",
-      success: { kind: "completion", text: () => text.silent },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
-    }),
-  },
-}));
-
-// @ts-expect-error 多个输出方式必须静态声明默认方式。
-defineCli().outputModes("missingOutputModeDefault", emptyInput, (mode) => ({
-  modes: {
-    structured: mode.atomic({
-      description: "结构化输出",
-      format: "structured",
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
-    }),
-    text: mode.atomic({
-      description: "文本输出",
-      format: "text",
-      success: { kind: "completion", text: () => text.silent },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
-    }),
-  },
-}));
+  });
+}
+void checkModeBindings;
 
 const invalidHelpSupplement: RootCommandDefinition<"invalidSupplement"> = {
   kind: "rootCommand",
@@ -1193,18 +1209,22 @@ const invalidHelpSupplement: RootCommandDefinition<"invalidSupplement"> = {
   // @ts-expect-error 帮助补充只能使用受控 TextLines。
   helpSupplement: "任意文本",
   input: emptyInput,
-  outputs: defineCli().outputModes("invalidSupplement", emptyInput, (mode) => ({
+  outputs: (mode) => ({
     default: "structured",
     modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
+      structured: mode
+        .atomic({
+          success: {
+            kind: "completion",
+          },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        })
+        .structured({
+          description: "结构化输出",
+        }),
     },
-  })),
+  }),
 };
 void invalidHelpSupplement;
 
@@ -1227,51 +1247,53 @@ const dataCli = defineCli()({
       },
       input: namedInput,
 
-      outputs: defineCli().outputModes("greet", namedInput, (mode) => ({
+      outputs: (mode) => ({
         default: "structured",
         modes: {
-          structured: mode.atomic({
-            description: "结构化输出",
-            format: "structured",
-            success: {
-              kind: "data",
-              variants: {
-                greeting: {
-                  description: "生成的问候",
-                  schema: greetingData,
-                  exitCode: 0,
+          structured: mode
+            .atomic({
+              success: {
+                kind: "data",
+                variants: {
+                  greeting: {
+                    description: "生成的问候",
+                    schema: greetingData,
+                    exitCode: 0,
+                  },
                 },
               },
-            },
-            failures: {
-              unavailable: {
-                description: "服务不可用",
-                schema: greetingData,
-                exitCode: 9,
+              failures: {
+                unavailable: {
+                  description: "服务不可用",
+                  schema: greetingData,
+                  exitCode: 9,
+                },
               },
-            },
-            handler({ input, outcome }) {
-              input satisfies Readonly<{ readonly normalizedName: string }>;
-              // @ts-expect-error data handler 不拥有 completion 构造器。
-              outcome.completion();
-              // @ts-expect-error 未声明的 data 变体不可构造。
-              outcome.data.other({ message: "nope" });
-              // @ts-expect-error data payload 必须符合对应变体模式。
-              outcome.data.greeting({ message: 1 });
-              // @ts-expect-error 未声明的失败变体不可构造。
-              outcome.failure.other({ message: "nope" });
-              // @ts-expect-error 失败 payload 必须符合对应变体模式。
-              outcome.failure.unavailable({ message: 1 });
-              // @ts-expect-error 不存在万能 default 失败分支。
-              outcome.failure.default({ message: "nope" });
-              if (input.normalizedName === "unavailable") {
-                return outcome.failure.unavailable({ message: "稍后重试" });
-              }
-              return outcome.data.greeting({ message: input.normalizedName });
-            },
-          }),
+              handler({ input, outcome }) {
+                input satisfies Readonly<{ readonly normalizedName: string }>;
+                // @ts-expect-error data handler 不拥有 completion 构造器。
+                outcome.completion();
+                // @ts-expect-error 未声明的 data 变体不可构造。
+                outcome.data.other({ message: "nope" });
+                // @ts-expect-error data payload 必须符合对应变体模式。
+                outcome.data.greeting({ message: 1 });
+                // @ts-expect-error 未声明的失败变体不可构造。
+                outcome.failure.other({ message: "nope" });
+                // @ts-expect-error 失败 payload 必须符合对应变体模式。
+                outcome.failure.unavailable({ message: 1 });
+                // @ts-expect-error 不存在万能 default 失败分支。
+                outcome.failure.default({ message: "nope" });
+                if (input.normalizedName === "unavailable") {
+                  return outcome.failure.unavailable({ message: "稍后重试" });
+                }
+                return outcome.data.greeting({ message: input.normalizedName });
+              },
+            })
+            .structured({
+              description: "结构化输出",
+            }),
         },
-      })),
+      }),
     },
   },
 });
@@ -1288,32 +1310,34 @@ const streamCli = defineCli()({
       description: "流 fixture",
       input: emptyInput,
 
-      outputs: defineCli().outputModes("stream", emptyInput, (mode) => ({
+      outputs: (mode) => ({
         default: "structured",
         modes: {
-          structured: mode.stream({
-            description: "结构化输出",
-            format: "structured",
-            success: {
-              kind: "stream",
+          structured: mode
+            .stream({
               records: {
-                greeting: { description: "问候", schema: greetingData },
+                greeting: {
+                  description: "问候",
+                  schema: greetingData,
+                },
               },
-            },
-            failures: {
-              unavailable: {
-                description: "服务不可用",
-                schema: greetingData,
-                exitCode: 9,
+              failures: {
+                unavailable: {
+                  description: "服务不可用",
+                  schema: greetingData,
+                  exitCode: 9,
+                },
               },
-            },
-            async *handler({ outcome }) {
-              yield outcome.record.greeting({ message: "hello" });
-              return outcome.streamSuccess();
-            },
-          }),
+              async *handler({ outcome }) {
+                yield outcome.record.greeting({ message: "hello" });
+                return outcome.streamSuccess();
+              },
+            })
+            .structured({
+              description: "结构化输出",
+            }),
         },
-      })),
+      }),
     },
   },
 });
@@ -1331,50 +1355,51 @@ const textStreamCli = defineCli()({
       description: "文本流 fixture",
       input: emptyInput,
 
-      outputs: defineCli().outputModes("textStream", emptyInput, (mode) => ({
+      outputs: (mode) => ({
         default: "text",
         modes: {
-          structured: mode.stream({
-            description: "结构化输出",
-            format: "structured",
-            success: {
-              kind: "stream",
+          structured: mode
+            .stream({
               records: {
                 greeting: {
                   description: "问候",
                   schema: greetingData,
                 },
               },
-            },
-            failures: {},
-            async *handler({ outcome }) {
-              yield outcome.record.greeting({ message: "hello" });
-              return outcome.streamSuccess();
-            },
-          }),
-          text: mode.stream({
-            description: "文本输出",
-            format: "text",
-            success: {
-              kind: "stream",
-              text: () => text.lines(["流结束", "", "没有更多记录"]),
+              failures: {},
+              async *handler({ outcome }) {
+                yield outcome.record.greeting({ message: "hello" });
+                return outcome.streamSuccess();
+              },
+            })
+            .structured({
+              description: "结构化输出",
+            }),
+          text: mode
+            .stream({
               records: {
                 greeting: {
                   description: "问候",
                   schema: greetingData,
-                  text: (data: Readonly<{ readonly message: string }>) =>
-                    text.line(data.message),
                 },
               },
-            },
-            failures: {},
-            async *handler({ outcome }) {
-              yield outcome.record.greeting({ message: "hello" });
-              return outcome.streamSuccess();
-            },
-          }),
+              failures: {},
+              async *handler({ outcome }) {
+                yield outcome.record.greeting({ message: "hello" });
+                return outcome.streamSuccess();
+              },
+            })
+            .text({
+              description: "文本输出",
+              records: {
+                greeting: (data: Readonly<{ readonly message: string }>) =>
+                  text.line(data.message),
+              },
+              failures: {},
+              terminal: () => text.lines(["流结束", "", "没有更多记录"]),
+            }),
         },
-      })),
+      }),
     },
   },
 });
@@ -1389,22 +1414,15 @@ const hierarchyStreamLeaf = hierarchyStreamDefine.command("streamLeaf")({
   fields: {},
   input: emptyInput,
 
-  outputs: hierarchyStreamDefine.outputModes(
-    "streamLeaf",
-    emptyInput,
-    (mode) => ({
-      default: "structured",
-      modes: {
-        structured: mode.stream({
-          description: "结构化输出",
-          format: "structured",
-          success: {
-            kind: "stream",
-            records: {
-              greeting: {
-                description: "问候",
-                schema: greetingData,
-              },
+  outputs: (mode) => ({
+    default: "structured",
+    modes: {
+      structured: mode
+        .stream({
+          records: {
+            greeting: {
+              description: "问候",
+              schema: greetingData,
             },
           },
           failures: {},
@@ -1412,10 +1430,12 @@ const hierarchyStreamLeaf = hierarchyStreamDefine.command("streamLeaf")({
             yield* [] as Iterable<never>;
             return outcome.streamSuccess();
           },
+        })
+        .structured({
+          description: "结构化输出",
         }),
-      },
-    }),
-  ),
+    },
+  }),
 });
 const textStreamHierarchy = hierarchyStreamDefine({
   root: "workspace",
@@ -1533,24 +1553,29 @@ function verifyTypeErrors() {
           { kind: "count", fields: ["auth", "quiet"], min: 0, max: 2 },
         ],
 
-        outputs: defineCli().outputModes(
-          "countAuthoring",
-          sharedInput6,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
-                success: { kind: "completion" },
+        outputs: (
+          mode: OutputExecutionFactory<
+            "countAuthoring",
+            undefined,
+            typeof sharedInput6
+          >,
+        ) => ({
+          modes: {
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
                 failures: {},
                 handler: () => {
                   throw new Error("类型夹具不会执行");
                 },
+              })
+              .structured({
+                description: "结构化输出",
               }),
-            },
-          }),
-        ),
+          },
+        }),
       },
     },
   } as const;
@@ -1750,18 +1775,14 @@ function verifyTypeErrors() {
         },
         input: namedInput,
 
-        outputs: defineCli().outputModes(
-          "invalidVariant",
-          namedInput,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              // @ts-expect-error data 变体身份必须使用小写字母开头的驼峰命名。
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
+        outputs: (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
                 success: {
                   kind: "data",
+                  // @ts-expect-error Data variant names must start with a lowercase letter.
                   variants: {
                     "1greeting": {
                       description: "错误变体",
@@ -1774,12 +1795,23 @@ function verifyTypeErrors() {
                 handler: () => {
                   throw new Error("仅用于类型检查");
                 },
+              })
+              .structured({
+                description: "结构化输出",
               }),
-              // @ts-expect-error failure 变体身份必须使用小写字母开头的驼峰命名。
-              failure: mode.atomic({
-                description: "失败身份检查",
-                format: "structured",
-                success: { kind: "completion" },
+            failure: mode
+              .atomic({
+                success: {
+                  kind: "data",
+                  variants: {
+                    ok: {
+                      description: "OK",
+                      schema: greetingData,
+                      exitCode: 0,
+                    },
+                  },
+                },
+                // @ts-expect-error Failure names must start with a lowercase letter.
                 failures: {
                   "1failure": {
                     description: "错误失败",
@@ -1790,13 +1822,30 @@ function verifyTypeErrors() {
                 handler: () => {
                   throw new Error("仅用于类型检查");
                 },
+              })
+              .structured({
+                description: "失败身份检查",
               }),
-            },
-          }),
-        ),
+          },
+        }),
       },
     },
   });
+
+  function completionOutputs<
+    Command extends string,
+    Schema extends ContractSchema,
+  >({ atomic }: OutputExecutionFactory<Command, undefined, Schema>) {
+    return {
+      modes: {
+        structured: atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        }).structured({ description: "Structured output" }),
+      },
+    };
+  }
 
   defineCli()({
     root: "mismatch",
@@ -1818,28 +1867,7 @@ function verifyTypeErrors() {
         },
         input: namedInput,
 
-        outputs: defineCli().outputModes("mismatch", namedInput, (mode) => ({
-          default: "structured",
-          modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "data",
-                variants: {
-                  greeting: {
-                    description: "问候",
-                    schema: greetingData,
-                    exitCode: 0,
-                  },
-                },
-              },
-              failures: {},
-              handler: ({ outcome }) =>
-                outcome.data.greeting({ message: "nope" }),
-            }),
-          },
-        })),
+        outputs: completionOutputs,
       },
     },
   });
@@ -1856,41 +1884,16 @@ function verifyTypeErrors() {
         description: "非法字段声明",
         fields: {
           // @ts-expect-error short alias 必须是单个 ASCII 字母或数字。
-          "bad-field": {
+          name: {
             kind: "valueOption",
-            longOption: "--bad-field",
+            longOption: "--name",
             shortAlias: "-bad",
             description: "非法字段",
           },
         },
         input: namedInput,
 
-        outputs: defineCli().outputModes(
-          "invalidFields",
-          namedInput,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
-                success: {
-                  kind: "data",
-                  variants: {
-                    greeting: {
-                      description: "问候",
-                      schema: greetingData,
-                      exitCode: 0,
-                    },
-                  },
-                },
-                failures: {},
-                handler: ({ outcome }) =>
-                  outcome.data.greeting({ message: "nope" }),
-              }),
-            },
-          }),
-        ),
+        outputs: completionOutputs,
       },
     },
   });
@@ -1915,32 +1918,7 @@ function verifyTypeErrors() {
         },
         input: sharedInput7,
 
-        outputs: defineCli().outputModes(
-          "invalidIdentity",
-          sharedInput7,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
-                success: {
-                  kind: "data",
-                  variants: {
-                    greeting: {
-                      description: "问候",
-                      schema: greetingData,
-                      exitCode: 0,
-                    },
-                  },
-                },
-                failures: {},
-                handler: ({ outcome }) =>
-                  outcome.data.greeting({ message: "nope" }),
-              }),
-            },
-          }),
-        ),
+        outputs: completionOutputs,
       },
     },
   });
@@ -1964,25 +1942,25 @@ const invocationDependencyCli = defineCli<InvocationDependencies>()({
       description: "依赖请求标识",
       input: emptyInput,
 
-      outputs: defineCli<InvocationDependencies>().outputModes(
-        "dependencyRequest",
-        emptyInput,
-        (mode) => ({
-          default: "structured",
-          modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
+      outputs: (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode
+            .atomic({
+              success: {
+                kind: "completion",
+              },
               failures: {},
               handler({ dependencies, outcome }) {
                 dependencies.requestId satisfies string;
                 return outcome.completion();
               },
+            })
+            .structured({
+              description: "结构化输出",
             }),
-          },
-        }),
-      ),
+        },
+      }),
     },
   },
 });

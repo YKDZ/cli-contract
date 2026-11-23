@@ -161,7 +161,8 @@ export type ContractDefinitionIssue =
         | "notFactoryOutputModes"
         | "emptyModes"
         | "mismatchedCommand"
-        | "mismatchedInput";
+        | "mismatchedInput"
+        | "mismatchedBinding";
     }>
   | Readonly<{
       readonly code: "invalidDefaultOutputMode";
@@ -179,7 +180,8 @@ export type ContractDefinitionIssue =
         | "invalidFormat"
         | "missingHandler"
         | "invalidSuccess"
-        | "invalidFailures";
+        | "invalidFailures"
+        | "mismatchedBinding";
     }>
   | Readonly<{
       readonly code: "missingTextPresenter";

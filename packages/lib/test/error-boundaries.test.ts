@@ -11,6 +11,7 @@ import {
   helpCapability,
   parseCliInvocation,
   text,
+  type OutputExecutionFactory,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
@@ -32,21 +33,25 @@ function createCompletionCli(onRun: () => Promise<void> | void) {
         description: "fixture command",
         input: sharedInput0,
 
-        outputs: defineCli().outputModes("fixture", sharedInput0, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: async ({ outcome }) => {
-                await onRun();
-                return outcome.completion();
-              },
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: async ({ outcome }) => {
+                  await onRun();
+                  return outcome.completion();
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -179,15 +184,20 @@ void test("文本呈现器中的非字符串构造错误保持原身份并不写
         description: "fixture command",
         input: sharedInput1,
 
-        outputs: defineCli().outputModes("fixture", sharedInput1, (mode) => ({
+        outputs: (mode) => ({
           default: "text",
           modes: {
-            text: mode.atomic({
-              description: "文本输出",
-              format: "text",
-              success: {
-                kind: "completion",
-                text: () => {
+            text: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .text({
+                description: "文本输出",
+                success: () => {
                   try {
                     return text.line(new String(privateText) as never);
                   } catch (error) {
@@ -195,12 +205,10 @@ void test("文本呈现器中的非字符串构造错误保持原身份并不写
                     throw error;
                   }
                 },
-              },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+                failures: {},
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -238,32 +246,37 @@ void test("文本呈现器抛出的异常保持原始身份", async () => {
         description: "fixture command",
         input: sharedInput2,
 
-        outputs: defineCli().outputModes("fixture", sharedInput2, (mode) => ({
+        outputs: (mode) => ({
           default: "text",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "completion",
-              },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
-            text: mode.atomic({
-              description: "文本输出",
-              format: "text",
-              success: {
-                kind: "completion",
-                text: () => {
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
+            text: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .text({
+                description: "文本输出",
+                success: () => {
                   throw cause;
                 },
-              },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+                failures: {},
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -303,18 +316,22 @@ void test("schema validate 抛出的开放异常保持原始身份", async () =>
         description: "fixture command",
         input: throwingInput,
 
-        outputs: defineCli().outputModes("fixture", throwingInput, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -349,19 +366,23 @@ void test("handler 返回未签发对象时以核心执行问题拒绝且不写�
 
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意伪造契约或返回值，以验证执行边界。
 
-        outputs: defineCli().outputModes("fixture", sharedInput3, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: () =>
-                ({ kind: "completion", command: "fixture" }) as never,
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: () =>
+                  ({ kind: "completion", command: "fixture" }) as never,
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -405,15 +426,17 @@ void test("defineCli 一次报告当前声明中的动态无效值", () => {
         },
         input: invalidValueInput,
 
-        outputs: defineCli().outputModes(
-          "fixture",
-          invalidValueInput,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
+        outputs: (
+          mode: OutputExecutionFactory<
+            "fixture",
+            undefined,
+            typeof invalidValueInput
+          >,
+        ) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
                 success: {
                   kind: "data",
                   variants: {
@@ -426,10 +449,12 @@ void test("defineCli 一次报告当前声明中的动态无效值", () => {
                 },
                 failures: {},
                 handler: ({ outcome }) => outcome.data.found({ name: "结果" }),
+              })
+              .structured({
+                description: "结构化输出",
               }),
-            },
-          }),
-        ),
+          },
+        }),
       },
     },
   };
@@ -508,26 +533,22 @@ void test("defineCli 拒绝缺少 presenter 的 text completion", () => {
             description: "fixture command",
             input: sharedInput4,
 
-            outputs: defineCli().outputModes(
-              "fixture",
-              sharedInput4,
-              (mode) => ({
-                default: "text",
-                modes: {
-                  text: mode.atomic({
-                    description: "文本输出",
-                    format: "text",
-                    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例以虚假的已声明类型注入运行时缺失，验证动态定义边界。
-                    success: { kind: "completion" } as {
-                      readonly kind: "completion";
-                      readonly text: () => ReturnType<typeof text.line>;
-                    },
+            outputs: (mode) => ({
+              default: "text",
+              modes: {
+                text: mode
+                  .atomic({
+                    success: { kind: "completion" },
                     failures: {},
                     handler: ({ outcome }) => outcome.completion(),
+                  })
+                  // @ts-expect-error Exercise the runtime diagnostic for a missing completion presenter.
+                  .text({
+                    description: "文本输出",
+                    failures: {},
                   }),
-                },
-              }),
-            ),
+              },
+            }),
           },
         },
       }),
@@ -571,18 +592,28 @@ void test("defineCli 拒绝字段间重复的 canonical long option", () => {
         },
         input: sharedInput5,
 
-        outputs: defineCli().outputModes("fixture", sharedInput5, (mode) => ({
+        outputs: (
+          mode: OutputExecutionFactory<
+            "fixture",
+            undefined,
+            typeof sharedInput5
+          >,
+        ) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: () => undefined as never,
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: () => undefined as never,
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   };

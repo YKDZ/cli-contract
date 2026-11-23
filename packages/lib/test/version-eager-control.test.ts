@@ -8,6 +8,7 @@ import {
   parseCliInvocation,
   text,
   versionCapability,
+  type OutputExecutionFactory,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
@@ -51,22 +52,26 @@ function createVersionCli(
         },
         input: sharedInput0,
 
-        outputs: define.outputModes("runTask", sharedInput0, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ dependencies, outcome }) => {
-                dependencies.serviceName satisfies string;
-                onHandler();
-                return outcome.completion();
-              },
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ dependencies, outcome }) => {
+                  dependencies.serviceName satisfies string;
+                  onHandler();
+                  return outcome.completion();
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       }),
     },
   });
@@ -86,18 +91,22 @@ void test("未装配 version 时不投影 spelling 或版本请求", () => {
         description: "安静完成",
         input: sharedInput0,
 
-        outputs: defineCli().outputModes("quiet", sharedInput0, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -285,22 +294,28 @@ void test("版本值与所有 control spelling 在定义期闭合", () => {
               },
               input: sharedInput1,
 
-              outputs: defineCli().outputModes(
-                "conflict",
-                sharedInput1,
-                (mode) => ({
-                  default: "structured",
-                  modes: {
-                    structured: mode.atomic({
-                      description: "结构化输出",
-                      format: "structured",
-                      success: { kind: "completion" },
+              outputs: (
+                mode: OutputExecutionFactory<
+                  "conflict",
+                  undefined,
+                  typeof sharedInput1
+                >,
+              ) => ({
+                default: "structured",
+                modes: {
+                  structured: mode
+                    .atomic({
+                      success: {
+                        kind: "completion",
+                      },
                       failures: {},
                       handler: () => undefined as never,
+                    })
+                    .structured({
+                      description: "结构化输出",
                     }),
-                  },
-                }),
-              ),
+                },
+              }),
             },
           },
         } as never),
@@ -353,18 +368,22 @@ void test("version capability 复制并闭合单行 value 与 description", asyn
         description: "复制事实",
         input: sharedInput2,
 
-        outputs: defineCli().outputModes("copy", sharedInput2, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -425,22 +444,22 @@ void test("层级叶命令的应用选项与 version control 冲突时报告叶�
             },
             input: sharedInput3,
 
-            outputs: define.outputModes(
-              "listPackages",
-              sharedInput3,
-              (mode) => ({
-                default: "structured",
-                modes: {
-                  structured: mode.atomic({
-                    description: "结构化输出",
-                    format: "structured",
-                    success: { kind: "completion" },
+            outputs: (mode) => ({
+              default: "structured",
+              modes: {
+                structured: mode
+                  .atomic({
+                    success: {
+                      kind: "completion",
+                    },
                     failures: {},
                     handler: ({ outcome }) => outcome.completion(),
+                  })
+                  .structured({
+                    description: "结构化输出",
                   }),
-                },
-              }),
-            ),
+              },
+            }),
           }),
         },
       }),

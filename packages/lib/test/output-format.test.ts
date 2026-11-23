@@ -6,6 +6,7 @@ import {
   executeCli,
   parseCliInvocation,
   text,
+  type OutputExecutionFactory,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
@@ -15,64 +16,74 @@ function createGreetingCli() {
   const define = defineCli();
   const input = z.object({ name: z.string() });
   const payload = z.object({ message: z.string() });
-  const outputs = define.outputModes("greet", input, (mode) => ({
-    default: "json",
+  const outputs = (
+    mode: OutputExecutionFactory<"greet", undefined, typeof input>,
+  ) => ({
+    default: "json" as const,
     modes: {
-      json: mode.atomic({
-        description: "供机器读取的完整结果",
-        format: "structured",
-        success: {
-          kind: "data",
-          variants: {
-            greeting: {
-              description: "问候内容",
-              schema: payload,
-              exitCode: 0,
+      json: mode
+        .atomic({
+          success: {
+            kind: "data",
+            variants: {
+              greeting: {
+                description: "问候内容",
+                schema: payload,
+                exitCode: 0,
+              },
             },
           },
-        },
-        failures: {
-          unavailable: {
-            description: "服务不可用",
-            schema: payload,
-            exitCode: 9,
-          },
-        },
-        handler: ({ input: value, outcome }) =>
-          value.name === "down"
-            ? outcome.failure.unavailable({ message: "服务不可用" })
-            : outcome.data.greeting({ message: value.name }),
-      }),
-      human: mode.atomic({
-        description: "供人阅读的问候",
-        format: "text",
-        success: {
-          kind: "data",
-          variants: {
-            greeting: {
-              description: "问候内容",
+          failures: {
+            unavailable: {
+              description: "服务不可用",
               schema: payload,
-              exitCode: 0,
-              text: ({ message }) =>
-                text.lines([`你好，${message}`, "", "欢迎使用"]),
+              exitCode: 9,
             },
           },
-        },
-        failures: {
-          unavailable: {
-            description: "服务不可用",
-            schema: payload,
-            exitCode: 9,
-            text: ({ message }) => text.lines([message, "稍后重试"]),
+          handler: ({ input: value, outcome }) =>
+            value.name === "down"
+              ? outcome.failure.unavailable({ message: "服务不可用" })
+              : outcome.data.greeting({ message: value.name }),
+        })
+        .structured({
+          description: "供机器读取的完整结果",
+        }),
+      human: mode
+        .atomic({
+          success: {
+            kind: "data",
+            variants: {
+              greeting: {
+                description: "问候内容",
+                schema: payload,
+                exitCode: 0,
+              },
+            },
           },
-        },
-        handler: ({ input: value, outcome }) =>
-          value.name === "down"
-            ? outcome.failure.unavailable({ message: "服务不可用" })
-            : outcome.data.greeting({ message: value.name }),
-      }),
+          failures: {
+            unavailable: {
+              description: "服务不可用",
+              schema: payload,
+              exitCode: 9,
+            },
+          },
+          handler: ({ input: value, outcome }) =>
+            value.name === "down"
+              ? outcome.failure.unavailable({ message: "服务不可用" })
+              : outcome.data.greeting({ message: value.name }),
+        })
+        .text({
+          description: "供人阅读的问候",
+          success: {
+            greeting: ({ message }) =>
+              text.lines([`你好，${message}`, "", "欢迎使用"]),
+          },
+          failures: {
+            unavailable: ({ message }) => text.lines([message, "稍后重试"]),
+          },
+        }),
     },
-  }));
+  });
 
   return define({
     root: "greet",
@@ -318,17 +329,23 @@ void test("文本构造器拒绝非法 framing 并保留可显式静默的 compl
         name: "quiet",
         description: "静默完成",
         input,
-        outputs: define.outputModes("quiet", input, (mode) => ({
+        outputs: (mode) => ({
           modes: {
-            text: mode.atomic({
-              description: "文字结果",
-              format: "text",
-              success: { kind: "completion", text: () => text.silent },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            text: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .text({
+                description: "文字结果",
+                success: () => text.silent,
+                failures: {},
+              }),
           },
-        })),
+        }),
       },
     },
   });
