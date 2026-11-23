@@ -207,6 +207,47 @@ const invalidModeCommand = define.command("inspect")({
   ],
 });
 
+const invalidRootModeCommand = define({
+  root: "inspect",
+  help: helpCapability(),
+  usageFailureExitCode: 64,
+  commands: {
+    inspect: {
+      kind: "rootCommand",
+      name: "inspect",
+      description: "根命令方式负例",
+      fields,
+      input,
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
+          modes: {
+            structured: operation.structured({ description: "结构化输出" }),
+          },
+        };
+      },
+      // @ts-expect-error A root example cannot select a mode outside its own closed table.
+      examples: [
+        {
+          input: {
+            channel: "safe",
+            count: "3",
+            enabled: true,
+            tags: ["one"],
+            target: "build",
+            paths: ["src"],
+          },
+          outputMode: "text",
+        },
+      ],
+    },
+  },
+});
+
 const missingInputCommand = define.command("inspect")({
   kind: "command",
   parent: "workspace",
@@ -427,6 +468,7 @@ void root;
 void leaf;
 void invalidEnumCommand;
 void invalidModeCommand;
+void invalidRootModeCommand;
 void missingInputCommand;
 void extraInputCommand;
 void misspelledMemberCommand;

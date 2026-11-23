@@ -4,6 +4,7 @@ import type {
   CliContractRawInput,
   CliContractResult,
   CliContractRoot,
+  CommandExampleManifest,
   ContractSchemaInput,
   ContractSchemaOutput,
   StreamRecordFactUnion,
@@ -14,6 +15,7 @@ import { executeCli, parseCliInvocation } from "@ykdz/cli-contract";
 import {
   cli,
   inspectCombination,
+  rootCommandContract,
   tailCombination,
   wideConditionalContract,
 } from "__DECLARATION_IMPORT__";
@@ -241,8 +243,8 @@ const tailGrammarDefault: TailGrammarNode["outputs"]["default"] = "structured";
 // @ts-expect-error The formal grammar tail default stays a literal.
 const invalidTailGrammarDefault: TailGrammarNode["outputs"]["default"] = "text";
 
-// Example outputMode literals survive on the exported definition. The manifest
-// example outputMode is still widened to string (tracked 02-types dependency).
+// Example outputMode literals survive on the exported definition, and the formal
+// root/leaf manifest examples only select modes from their own closed table.
 type InspectExampleMode =
   (typeof inspectCombination.inspect.examples)[0]["outputMode"];
 const inspectExampleMode: InspectExampleMode = "structured";
@@ -252,6 +254,61 @@ type TailExampleMode = (typeof tailCombination.tail.examples)[0]["outputMode"];
 const tailExampleMode: TailExampleMode = "text";
 // @ts-expect-error The exported tail example keeps its literal output mode.
 const invalidTailExampleMode: TailExampleMode = "structured";
+
+type TailManifestExample = NonNullable<
+  typeof cli.manifest.commands.tail.examples
+>[number];
+type TailManifestExampleMode = Exclude<
+  TailManifestExample["outputMode"],
+  undefined
+>;
+const tailManifestExampleMode: TailManifestExampleMode = "text";
+const tailManifestStructuredExampleMode: TailManifestExampleMode = "structured";
+// @ts-expect-error The formal manifest tail example cannot select a mode outside its table.
+const invalidTailManifestExampleMode: TailManifestExampleMode = "missing";
+const tailManifestExampleWithoutMode: TailManifestExample = {
+  argv: ["tail", "--topic=source"],
+  shell: "'tool' 'tail' '--topic=source'",
+};
+
+type InspectManifestExample = NonNullable<
+  typeof cli.manifest.commands.inspect.examples
+>[number];
+type InspectManifestExampleMode = Exclude<
+  InspectManifestExample["outputMode"],
+  undefined
+>;
+const inspectManifestExampleMode: InspectManifestExampleMode = "structured";
+// @ts-expect-error The formal manifest inspect example cannot select a mode outside its table.
+const invalidInspectManifestExampleMode: InspectManifestExampleMode = "text";
+
+type ProbeManifestExample = NonNullable<
+  typeof rootCommandContract.manifest.commands.probe.examples
+>[number];
+type ProbeManifestExampleMode = Exclude<
+  ProbeManifestExample["outputMode"],
+  undefined
+>;
+const probeManifestExampleMode: ProbeManifestExampleMode = "text";
+const probeManifestStructuredExampleMode: ProbeManifestExampleMode =
+  "structured";
+// @ts-expect-error The formal manifest root example cannot select a mode outside its table.
+const invalidProbeManifestExampleMode: ProbeManifestExampleMode = "missing";
+const probeManifestExampleWithoutMode: ProbeManifestExample = {
+  argv: ["probe", "--query=alpha"],
+  shell: "'probe' '--query=alpha'",
+};
+
+// The public example type stays wide for consumers that are not bound to one table.
+const wideManifestExample: CommandExampleManifest = {
+  argv: ["tail"],
+  shell: "'tool' 'tail'",
+  outputMode: "outside-any-table",
+};
+const widenedTailExample: CommandExampleManifest =
+  tailManifestExampleWithoutMode;
+const widenedProbeExample: CommandExampleManifest =
+  probeManifestExampleWithoutMode;
 
 // @ts-expect-error 普通对象不能伪造已编译契约品牌。
 const forgedContract: typeof cli = {
@@ -312,3 +369,16 @@ void inspectExampleMode;
 void invalidInspectExampleMode;
 void tailExampleMode;
 void invalidTailExampleMode;
+void tailManifestExampleMode;
+void tailManifestStructuredExampleMode;
+void invalidTailManifestExampleMode;
+void tailManifestExampleWithoutMode;
+void inspectManifestExampleMode;
+void invalidInspectManifestExampleMode;
+void probeManifestExampleMode;
+void probeManifestStructuredExampleMode;
+void invalidProbeManifestExampleMode;
+void probeManifestExampleWithoutMode;
+void wideManifestExample;
+void widenedTailExample;
+void widenedProbeExample;

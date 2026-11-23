@@ -238,4 +238,72 @@ export const cli = define({
   },
 });
 
+export const rootCommandContract = define({
+  root: "probe",
+  help: helpCapability(),
+  usageFailureExitCode: 64,
+  commands: {
+    probe: {
+      kind: "rootCommand",
+      name: "probe",
+      description: "根命令示例",
+      fields: {
+        query: {
+          kind: "valueOption",
+          longOption: "--query",
+          description: "查询",
+        },
+        dryRun: {
+          kind: "flag",
+          longOption: "--dry-run",
+          description: "仅演练",
+        },
+      },
+      input: inspectInput,
+      examples: [
+        { input: { query: "alpha" }, outputMode: "structured" },
+        { input: { query: "beta" }, outputMode: "text" },
+        { input: { query: "alpha" } },
+      ],
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: {
+            kind: "data",
+            variants: {
+              found: {
+                description: "找到目标",
+                schema: foundPayload,
+                exitCode: 0,
+              },
+            },
+          },
+          failures: {
+            unavailable: {
+              description: "目标不可用",
+              schema: unavailablePayload,
+              exitCode: 9,
+            },
+          },
+          handler: ({ dependencies, input, outcome }) =>
+            outcome.data.found({
+              count: input.count,
+              endpoint: dependencies.endpoint,
+            }),
+        });
+        return {
+          default: "structured",
+          modes: {
+            structured: operation.structured({ description: "结构化输出" }),
+            text: operation.text({
+              description: "文本输出",
+              success: { found: (value) => text.line(String(value.count)) },
+              failures: { unavailable: (value) => text.line(value.reason) },
+            }),
+          },
+        };
+      },
+    },
+  },
+});
+
 export const wideConditionalContract: CliContract = cli;
