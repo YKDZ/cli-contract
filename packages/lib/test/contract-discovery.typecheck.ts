@@ -23,21 +23,25 @@ const cli = define({
       description: "查询对象。",
       fields: { id: { kind: "positional", description: "对象标识。" } },
       input,
-      outputs: define.outputModes("inspect", input, (mode) => ({
+      outputs: (mode) => ({
         default: "json",
         modes: {
-          json: mode.atomic({
-            description: "结构化结果。",
-            format: "structured",
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ dependencies, outcome }) => {
-              dependencies.serviceName satisfies string;
-              return outcome.completion();
-            },
-          }),
+          json: mode
+            .atomic({
+              success: {
+                kind: "completion",
+              },
+              failures: {},
+              handler: ({ dependencies, outcome }) => {
+                dependencies.serviceName satisfies string;
+                return outcome.completion();
+              },
+            })
+            .structured({
+              description: "结构化结果。",
+            }),
         },
-      })),
+      }),
     },
   },
 });

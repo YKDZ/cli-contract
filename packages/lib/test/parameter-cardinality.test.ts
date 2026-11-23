@@ -7,6 +7,7 @@ import {
   executeCli,
   parseCliInvocation,
   type CliContractRawInput,
+  type OutputExecutionFactory,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
@@ -53,22 +54,22 @@ function createArchiveCli() {
         },
         input: sharedInput0,
 
-        outputs: defineCli().outputModes(
-          "archiveFiles",
-          sharedInput0,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
-                success: { kind: "completion" },
+        outputs: (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
                 failures: {},
                 handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
               }),
-            },
-          }),
-        ),
+          },
+        }),
       },
     },
   });
@@ -206,18 +207,22 @@ function createDiagnosticCli() {
         },
         input: sharedInput1,
 
-        outputs: defineCli().outputModes("diagnose", sharedInput1, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -398,22 +403,28 @@ void test("defineCli 拒绝 variadic 后续 positional 与非法或冲突 negate
         },
         input: sharedInput2,
 
-        outputs: defineCli().outputModes(
-          "invalidCardinality",
-          sharedInput2,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
-                success: { kind: "completion" },
+        outputs: (
+          mode: OutputExecutionFactory<
+            "invalidCardinality",
+            undefined,
+            typeof sharedInput2
+          >,
+        ) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
                 failures: {},
                 handler: () => undefined as never,
+              })
+              .structured({
+                description: "结构化输出",
               }),
-            },
-          }),
-        ),
+          },
+        }),
       },
     },
   };

@@ -11,6 +11,7 @@ import {
   schemaCapability,
   text,
   versionCapability,
+  type OutputExecutionFactory,
 } from "@ykdz/cli-contract";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { z } from "zod";
@@ -70,116 +71,126 @@ function createDiscoveryCli(payloadWidth = 0) {
     usageConstraints: [
       { kind: "count", fields: ["id", "note"], min: 1, max: 2 },
     ],
-    outputs: define.outputModes("inspect", input, (mode) => ({
+    outputs: (mode) => ({
       default: "text",
       modes: {
-        structured: mode.atomic({
-          description: "供程序读取。",
-          format: "structured",
-          success: {
-            kind: "data",
-            variants: {
-              found: {
-                description: "找到项目。",
-                schema: item,
-                exitCode: 0,
+        structured: mode
+          .atomic({
+            success: {
+              kind: "data",
+              variants: {
+                found: {
+                  description: "找到项目。",
+                  schema: item,
+                  exitCode: 0,
+                },
               },
             },
-          },
-          failures: {
-            missing: {
-              description: "项目不存在。",
-              schema: missing,
-              exitCode: 1,
-            },
-          },
-          handler: ({ input, outcome }) => {
-            observed.handler += 1;
-            return outcome.data.found({ id: input.id, payload: "" });
-          },
-        }),
-        text: mode.atomic({
-          description: "供人阅读。",
-          format: "text",
-          success: {
-            kind: "data",
-            variants: {
-              found: {
-                description: "找到项目。",
-                schema: item,
-                exitCode: 0,
-                text: ({ id }) => text.lines([id]),
+            failures: {
+              missing: {
+                description: "项目不存在。",
+                schema: missing,
+                exitCode: 1,
               },
             },
-          },
-          failures: {
-            missing: {
-              description: "项目不存在。",
-              schema: missing,
-              exitCode: 1,
-              text: ({ message }) => text.lines([message]),
+            handler: ({ input, outcome }) => {
+              observed.handler += 1;
+              return outcome.data.found({ id: input.id, payload: "" });
             },
-          },
-          handler: ({ input, outcome }) => {
-            observed.handler += 1;
-            return outcome.data.found({ id: input.id, payload: "" });
-          },
-        }),
-        events: mode.stream({
-          description: "供程序读取的事件。",
-          format: "structured",
-          success: {
-            kind: "stream",
+          })
+          .structured({
+            description: "供程序读取。",
+          }),
+        text: mode
+          .atomic({
+            success: {
+              kind: "data",
+              variants: {
+                found: {
+                  description: "找到项目。",
+                  schema: item,
+                  exitCode: 0,
+                },
+              },
+            },
+            failures: {
+              missing: {
+                description: "项目不存在。",
+                schema: missing,
+                exitCode: 1,
+              },
+            },
+            handler: ({ input, outcome }) => {
+              observed.handler += 1;
+              return outcome.data.found({ id: input.id, payload: "" });
+            },
+          })
+          .text({
+            description: "供人阅读。",
+            success: {
+              found: ({ id }) => text.lines([id]),
+            },
+            failures: {
+              missing: ({ message }) => text.lines([message]),
+            },
+          }),
+        events: mode
+          .stream({
             records: {
               item: {
                 description: "项目事件。",
                 schema: record,
               },
             },
-          },
-          failures: {
-            missing: {
-              description: "项目不存在。",
-              schema: missing,
-              exitCode: 1,
+            failures: {
+              missing: {
+                description: "项目不存在。",
+                schema: missing,
+                exitCode: 1,
+              },
             },
-          },
-          async *handler({ input, outcome }) {
-            observed.handler += 1;
-            yield outcome.record.item({ id: input.id, payload: "" });
-            return outcome.streamSuccess();
-          },
-        }),
-        textEvents: mode.stream({
-          description: "供人阅读的事件。",
-          format: "text",
-          success: {
-            kind: "stream",
+            async *handler({ input, outcome }) {
+              observed.handler += 1;
+              yield outcome.record.item({ id: input.id, payload: "" });
+              return outcome.streamSuccess();
+            },
+          })
+          .structured({
+            description: "供程序读取的事件。",
+          }),
+        textEvents: mode
+          .stream({
             records: {
               item: {
                 description: "项目事件。",
                 schema: record,
-                text: ({ id }) => text.fragment(`${id}\n`),
               },
             },
-            text: () => text.silent,
-          },
-          failures: {
-            missing: {
-              description: "项目不存在。",
-              schema: missing,
-              exitCode: 1,
-              text: ({ message }) => text.lines([message]),
+            failures: {
+              missing: {
+                description: "项目不存在。",
+                schema: missing,
+                exitCode: 1,
+              },
             },
-          },
-          async *handler({ input, outcome }) {
-            observed.handler += 1;
-            yield outcome.record.item({ id: input.id, payload: "" });
-            return outcome.streamSuccess();
-          },
-        }),
+            async *handler({ input, outcome }) {
+              observed.handler += 1;
+              yield outcome.record.item({ id: input.id, payload: "" });
+              return outcome.streamSuccess();
+            },
+          })
+          .text({
+            description: "供人阅读的事件。",
+            records: {
+              item: ({ id }) => text.fragment(`${id}\n`),
+            },
+            failures: {
+              missing: ({ message }) => text.lines([message]),
+            },
+            terminal: () => text.silent,
+          }),
       },
-    })),
+    }),
   });
 
   const cli = define({
@@ -237,18 +248,24 @@ function createRootDiscoveryCli(
       },
     },
     input,
-    outputs: define.outputModes("rootApp", input, (mode) => ({
-      default: "json",
+    outputs: (
+      mode: OutputExecutionFactory<"rootApp", undefined, typeof input>,
+    ) => ({
+      default: "json" as const,
       modes: {
-        json: mode.atomic({
-          description: "结构化结果。",
-          format: "structured",
-          success: { kind: "completion" },
-          failures: {},
-          handler: ({ outcome }) => outcome.completion(),
-        }),
+        json: mode
+          .atomic({
+            success: {
+              kind: "completion",
+            },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          })
+          .structured({
+            description: "结构化结果。",
+          }),
       },
-    })),
+    }),
   };
   return define({
     root: "rootApp",
