@@ -3780,6 +3780,15 @@ type OutputModesManifestProjection<Outputs> =
       >
     : OutputModesManifest;
 
+/**
+ * Mode names an example may select. The conditional keeps `Outputs` covariant, so a
+ * closed manifest still satisfies wide consumers; a wide table stays wide.
+ */
+type ExampleModeKeys<Outputs> =
+  Outputs extends Readonly<{ readonly modes: infer Modes }>
+    ? Extract<keyof Modes, string>
+    : string;
+
 export interface RootCommandManifest<
   Outputs extends OutputModesManifest = OutputModesManifest,
 > {
@@ -3787,7 +3796,9 @@ export interface RootCommandManifest<
   readonly name: string;
   readonly description: string;
   readonly helpSupplement?: readonly string[];
-  readonly examples?: readonly CommandExampleManifest[];
+  readonly examples?: readonly CommandExampleManifest<
+    ExampleModeKeys<Outputs>
+  >[];
   readonly fields: readonly FieldGrammar[];
   readonly usageConstraints?: readonly UsageConstraintGrammar[];
   readonly input: SchemaManifest;
@@ -3813,10 +3824,10 @@ export interface ExecutableCommandManifest<
 }
 
 /** 经正式解析和输入验证的示例事实；shell 为包含根命令名的 POSIX 调用行。 */
-export interface CommandExampleManifest {
+export interface CommandExampleManifest<Mode extends string = string> {
   readonly argv: readonly string[];
   readonly shell: string;
-  readonly outputMode?: string;
+  readonly outputMode?: Mode;
 }
 
 export type { CountUsageConstraintGrammar, UsageConstraintGrammar };
