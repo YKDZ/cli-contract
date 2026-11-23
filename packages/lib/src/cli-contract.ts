@@ -511,6 +511,45 @@ type ClosedDeclaredVariants<Variants> = ClosedVariantDefinitions<
   (typeof declaredAtomicVariantProperties)[number]
 >;
 
+type UnexpectedFailureText<
+  Command extends string,
+  Name extends PropertyKey,
+> = ContractTypeError<
+  "unexpectedTextPresenter",
+  Readonly<{
+    readonly command: Command;
+    readonly location: "failure";
+    readonly variant: Name;
+    readonly unexpected: "text";
+  }>
+>;
+
+/** Infer names independently so an invalid callback cannot widen its variant to string. */
+type EmbeddedFailureText<Command extends string, Names extends PropertyKey> = {
+  readonly [Name in Names]: {
+    readonly text?: ((payload: never) => unknown) &
+      ContractTypeError<
+        "unexpectedTextPresenter",
+        Readonly<{
+          readonly command: Command;
+          readonly location: "failure";
+          readonly variant: Name;
+          readonly unexpected: "text";
+        }>
+      >;
+  };
+};
+
+type ClosedExecutionFailures<Command extends string, Variants> = {
+  readonly [Name in keyof Variants]: RejectUnknownProperties<
+    Variants[Name],
+    (typeof declaredAtomicVariantProperties)[number] | "text"
+  > &
+    ("text" extends keyof Variants[Name]
+      ? UnexpectedFailureText<Command, Name>
+      : unknown);
+};
+
 type ClosedDeclaredRecords<Records> = ClosedVariantDefinitions<
   Records,
   (typeof declaredStreamRecordProperties)[number]
@@ -907,9 +946,10 @@ export type AtomicExecutionDefinition<
   InputSchema extends ContractSchema,
   Success extends DeclaredAtomicSuccess,
   Failures extends DeclaredVariants,
+  FailureNames extends PropertyKey = keyof Failures,
 > = Readonly<{
   readonly success: Success;
-  readonly failures: Failures;
+  readonly failures: Failures & EmbeddedFailureText<Command, FailureNames>;
   readonly handler: (
     context: AtomicHandlerContext<
       Command,
@@ -925,7 +965,7 @@ export type AtomicExecutionDefinition<
   Readonly<{
     readonly success: ClosedDeclaredSuccess<NoInfer<Success>> &
       AtomicSuccessNameContract<Command, NoInfer<Success>>;
-    readonly failures: ClosedDeclaredVariants<NoInfer<Failures>> &
+    readonly failures: ClosedExecutionFailures<Command, NoInfer<Failures>> &
       FailureVariantNameContract<Command, NoInfer<Failures>>;
   }>;
 
@@ -967,8 +1007,9 @@ export interface AtomicExecutionFactory<
 > {
   <
     const RawDefinition extends object,
-    const RawSuccess extends Readonly<{ readonly kind: "completion" }>,
+    const RawSuccess extends DeclaredAtomicSuccess,
     const RawFailures extends DeclaredVariants,
+    const FailureNames extends PropertyKey = keyof RawFailures,
   >(
     definition: RawDefinition &
       AtomicExecutionDefinition<
@@ -976,28 +1017,8 @@ export interface AtomicExecutionFactory<
         Dependencies,
         InputSchema,
         RawSuccess,
-        RawFailures
-      > &
-      RejectUnknownProperties<
-        NoInfer<RawDefinition>,
-        "success" | "failures" | "handler"
-      >,
-  ): AtomicExecution<Command, InputSchema, RawSuccess, RawFailures>;
-  <
-    const RawDefinition extends object,
-    const RawSuccess extends Readonly<{
-      readonly kind: "data";
-      readonly variants: DeclaredVariants;
-    }>,
-    const RawFailures extends DeclaredVariants,
-  >(
-    definition: RawDefinition &
-      AtomicExecutionDefinition<
-        Command,
-        Dependencies,
-        InputSchema,
-        RawSuccess,
-        RawFailures
+        RawFailures,
+        FailureNames
       > &
       RejectUnknownProperties<
         NoInfer<RawDefinition>,
@@ -4142,7 +4163,11 @@ type DeclaredNodeOutputs<
   ? OutputModesFromDeclaration<Command, InputSchema, Declaration>
   : Outputs;
 
-type ExecutableNodeContract<Command extends string, Node> =
+type ExecutableNodeContract<
+  Command extends string,
+  Node,
+  CheckRaw extends boolean = true,
+> =
   Node extends Readonly<{
     readonly kind: "command" | "rootCommand";
     readonly input: infer InputSchema extends ContractSchema;
@@ -4152,7 +4177,8 @@ type ExecutableNodeContract<Command extends string, Node> =
         Command,
         Node,
         InputSchema,
-        DeclaredNodeOutputs<Command, InputSchema, RawOutputs>
+        DeclaredNodeOutputs<Command, InputSchema, RawOutputs>,
+        CheckRaw
       >
     : never;
 
@@ -4161,6 +4187,7 @@ type ExecutableNodeOutputsContract<
   Node,
   InputSchema extends ContractSchema,
   Outputs,
+  CheckRaw extends boolean,
 > =
   Outputs extends OutputModesDefinition<Command, InputSchema>
     ? Node extends Readonly<{
@@ -4171,14 +4198,18 @@ type ExecutableNodeOutputsContract<
             FieldDefinitionsForInput<ContractSchemaInput<InputSchema>> &
             FieldIdentityContract<Command, Fields>;
         }> &
-          RawFieldInputContract<Command, Fields, InputSchema> &
+          (CheckRaw extends true
+            ? RawFieldInputContract<Command, Fields, InputSchema>
+            : unknown) &
           CommandExamplesContract<Command, Node, Fields, InputSchema, Outputs>
       : Readonly<{ readonly fields?: never }> &
-          RootFallbackRawFieldInputContract<
-            Command,
-            FieldDefinitions,
-            InputSchema
-          > &
+          (CheckRaw extends true
+            ? RootFallbackRawFieldInputContract<
+                Command,
+                FieldDefinitions,
+                InputSchema
+              >
+            : unknown) &
           CommandExamplesContract<
             Command,
             Node,
@@ -4206,34 +4237,9 @@ export interface DefineCli<Dependencies> {
     command: Command,
   ) => DefineCommand<Command, Dependencies>;
 
-  /** Assemble command groups and their bound executable descendants. */
-  <
-    const Root extends string,
-    const Commands extends Readonly<Record<string, CommandNodeDefinition>>,
-    const Definition extends object,
-  >(
-    definition: Definition &
-      ClosedRootDefinition<Definition> &
-      RootCliDefinitionBase<Root> &
-      Readonly<{
-        readonly commands: Commands &
-          ClosedRootCommands<Commands> &
-          ExecutableNodesContract<Commands> &
-          Readonly<Record<Root, RootGroupDefinition>>;
-      }> &
-      ValidationIntersection<HierarchyUsageValidation<Commands>>,
-  ): CliContract<
-    Root,
-    Dependencies,
-    HierarchyRawInput<Commands>,
-    HierarchyResult<Commands>,
-    "rootGroup",
-    Commands,
-    HierarchyUsageConstraintFacts<Commands>
-  >;
-
   /**
-   * Define an executable root. Its outputs callback receives the root command context
+   * Assemble a root group and its bound descendants, or define an executable root.
+   * For an executable root the outputs callback receives the root command context
    * and runs once when the contract is defined.
    */
   <
@@ -4245,68 +4251,92 @@ export interface DefineCli<Dependencies> {
     >,
     const Fields extends FieldDefinitions,
     const Node extends object & CommandDefinitionExampleContext,
+    const Commands extends Readonly<Record<string, CommandNodeDefinition>>,
     const Definition extends object,
   >(
     definition: Definition &
       ClosedRootDefinition<NoInfer<Definition>> &
       RootCliDefinitionBase<Root> &
       Readonly<{
-        readonly commands: {
-          readonly [Command in Root]: Node &
-            Omit<
-              RootCommandDefinition<Command, Dependencies>,
-              "input" | "outputs" | "examples" | "fields"
-            > &
-            Readonly<{
-              readonly fields?: Fields;
-              readonly input: InputSchema;
-              readonly outputs: (
-                factory: OutputExecutionFactory<
-                  NoInfer<Root>,
-                  Dependencies,
-                  NoInfer<InputSchema>
-                >,
-              ) => Table & OutputModesTypeContract<NoInfer<Table>>;
-            }> &
-            ExecutableNodeContract<
-              Command,
+        readonly commands:
+          | (Commands &
+              ClosedRootCommands<Commands> &
+              ExecutableNodesContract<Commands> &
+              Readonly<Record<Root, RootGroupDefinition>>)
+          | {
+              readonly [Command in Root]: Node &
+                Omit<
+                  RootCommandDefinition<Command, Dependencies>,
+                  "input" | "outputs" | "examples" | "fields"
+                > &
+                Readonly<{
+                  readonly fields?: Fields;
+                  readonly input: InputSchema;
+                  readonly outputs: (
+                    factory: OutputExecutionFactory<
+                      NoInfer<Root>,
+                      Dependencies,
+                      NoInfer<InputSchema>
+                    >,
+                  ) => Table & OutputModesTypeContract<NoInfer<Table>>;
+                }> &
+                ExecutableNodeContract<
+                  Command,
+                  CompiledRootCommands<
+                    Command,
+                    NoInfer<Node>,
+                    NoInfer<Fields>,
+                    NoInfer<InputSchema>,
+                    NoInfer<Table>
+                  >[Command],
+                  false
+                >;
+            };
+      }> &
+      (Commands extends Readonly<Record<Root, { readonly kind: "rootGroup" }>>
+        ? ValidationIntersection<HierarchyUsageValidation<Commands>>
+        : ValidationIntersection<
+            HierarchyUsageValidation<
               CompiledRootCommands<
-                Command,
+                NoInfer<Root>,
                 NoInfer<Node>,
                 NoInfer<Fields>,
                 NoInfer<InputSchema>,
                 NoInfer<Table>
-              >[Command]
-            >;
-        };
-      }> &
-      ValidationIntersection<
-        HierarchyUsageValidation<
-          CompiledRootCommands<
-            NoInfer<Root>,
-            NoInfer<Node>,
-            NoInfer<Fields>,
-            NoInfer<InputSchema>,
-            NoInfer<Table>
-          >
-        >
-      >,
-  ): CliContract<
-    Root,
-    Dependencies,
-    RootCommandRawInput<
-      Root,
-      CompiledRootCommands<Root, Node, Fields, InputSchema, Table>
-    >,
-    OutputModesResult<Root, Table>,
-    "rootCommand",
-    never,
-    RootUsageConstraintFacts<
-      Root,
-      CompiledRootCommands<Root, Node, Fields, InputSchema, Table>
-    >,
-    OutputModesFromDeclaration<Root, InputSchema, Table>
-  >;
+              >
+            >
+          > &
+            RootFallbackRawFieldInputContract<
+              NoInfer<Root>,
+              NoInfer<Fields>,
+              NoInfer<InputSchema>
+            >),
+  ): Commands extends Readonly<Record<Root, { readonly kind: "rootGroup" }>>
+    ? CliContract<
+        Root,
+        Dependencies,
+        HierarchyRawInput<Commands>,
+        HierarchyResult<Commands>,
+        "rootGroup",
+        Commands,
+        HierarchyUsageConstraintFacts<Commands>
+      >
+    : CliContract<
+        Root,
+        Dependencies,
+        RootCommandRawInput<
+          Root,
+          CompiledRootCommands<Root, Node, Fields, InputSchema, Table>
+        >,
+        OutputModesResult<Root, Table>,
+        "rootCommand",
+        never,
+        RootUsageConstraintFacts<
+          Root,
+          CompiledRootCommands<Root, Node, Fields, InputSchema, Table>
+        >,
+        OutputModesFromDeclaration<Root, InputSchema, Table>
+      >;
 }
 /* oxlint-enable typescript/no-unnecessary-type-parameters */
 
