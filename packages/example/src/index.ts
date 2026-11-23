@@ -28,7 +28,7 @@ const lookupSuccess = {
   kind: "data" as const,
   variants: {
     found: {
-      description: "找到用户",
+      description: "User found",
       schema: userSchema,
       exitCode: 0,
     },
@@ -36,7 +36,7 @@ const lookupSuccess = {
 };
 const lookupFailures = {
   notFound: {
-    description: "用户不存在",
+    description: "User not found",
     schema: unavailableUserSchema,
     exitCode: 1,
   },
@@ -45,8 +45,8 @@ const lookup = define.command("lookup")({
   kind: "command",
   parent: "users",
   name: "get",
-  description: "查询用户",
-  fields: { id: { kind: "positional", description: "用户标识" } },
+  description: "Look up a user",
+  fields: { id: { kind: "positional", description: "User identifier" } },
   input: lookupInput,
   examples: [
     { input: { id: "alice" } },
@@ -56,7 +56,7 @@ const lookup = define.command("lookup")({
     default: "text",
     modes: {
       structured: mode.atomic({
-        description: "供程序读取的用户资料",
+        description: "User profile for programmatic consumption",
         format: "structured",
         success: lookupSuccess,
         failures: lookupFailures,
@@ -68,14 +68,14 @@ const lookup = define.command("lookup")({
         },
       }),
       text: mode.atomic({
-        description: "供人阅读的用户资料",
+        description: "User profile for human reading",
         format: "text",
         success: {
           kind: "data",
           variants: {
             found: {
               ...lookupSuccess.variants.found,
-              text: (user) => text.lines(["用户信息", user.name]),
+              text: (user) => text.lines(["User profile", user.name]),
             },
           },
         },
@@ -83,7 +83,11 @@ const lookup = define.command("lookup")({
           notFound: {
             ...lookupFailures.notFound,
             text: ({ id }) =>
-              text.lines([`用户 ${id} 不存在`, "", "请检查用户标识"]),
+              text.lines([
+                `User ${id} not found`,
+                "",
+                "Check the user identifier",
+              ]),
           },
         },
         handler({ input, outcome }) {
@@ -102,20 +106,20 @@ const logs = define.command("logs")({
   kind: "command",
   parent: "users",
   name: "logs",
-  description: "实时输出日志",
+  description: "Stream logs in real time",
   fields: {},
   input: logsInput,
   outputs: define.outputModes("logs", logsInput, (mode) => ({
     default: "text",
     modes: {
       structured: mode.stream({
-        description: "按 NDJSON 输出日志记录与终态",
+        description: "Emit log records and terminal state as NDJSON",
         format: "structured",
         success: {
           kind: "stream",
           records: {
             entry: {
-              description: "日志记录",
+              description: "Log entry",
               schema: logSchema,
             },
           },
@@ -129,13 +133,13 @@ const logs = define.command("logs")({
         },
       }),
       text: mode.stream({
-        description: "逐行输出日志文本",
+        description: "Emit log text line by line",
         format: "text",
         success: {
           kind: "stream",
           records: {
             entry: {
-              description: "日志记录",
+              description: "Log entry",
               schema: logSchema,
               text: ({ message }) => text.fragment(`${message}\n`),
             },
@@ -161,7 +165,7 @@ const validateInput = z.object({
 });
 const validateFailures = {
   emailDomainMismatch: {
-    description: "邮箱不属于指定域",
+    description: "Email does not belong to the specified domain",
     schema: emailMismatchSchema,
     exitCode: 1,
   },
@@ -183,18 +187,22 @@ const validate = define.command("validate")({
   kind: "command",
   parent: "users",
   name: "validate",
-  description: "校验用户标识格式与邮箱域",
+  description: "Validate user identifier format and email domain",
   fields: {
-    id: { kind: "valueOption", longOption: "--id", description: "用户标识" },
+    id: {
+      kind: "valueOption",
+      longOption: "--id",
+      description: "User identifier",
+    },
     email: {
       kind: "valueOption",
       longOption: "--email",
-      description: "电子邮箱",
+      description: "Email address",
     },
     domain: {
       kind: "valueOption",
       longOption: "--domain",
-      description: "邮箱域名",
+      description: "Email domain",
     },
   },
   input: validateInput,
@@ -210,7 +218,7 @@ const validate = define.command("validate")({
     default: "text",
     modes: {
       structured: mode.atomic({
-        description: "提供可由程序读取的校验失败",
+        description: "Validation failures for programmatic consumption",
         format: "structured",
         success: { kind: "completion" },
         failures: validateFailures,
@@ -222,7 +230,7 @@ const validate = define.command("validate")({
         },
       }),
       text: mode.atomic({
-        description: "提供可直接阅读的校验结果",
+        description: "Validation results for direct reading",
         format: "text",
         success: {
           kind: "completion",
@@ -232,7 +240,9 @@ const validate = define.command("validate")({
           emailDomainMismatch: {
             ...validateFailures.emailDomainMismatch,
             text: ({ email, domain }) =>
-              text.lines([`邮箱 ${email} 不属于指定域 ${domain}`]),
+              text.lines([
+                `Email ${email} does not belong to domain ${domain}`,
+              ]),
           },
         },
         handler({ input, outcome }) {
@@ -251,33 +261,35 @@ export const cli = define({
   help: helpCapability({
     shortAlias: "-h",
     headings: {
-      usage: "用法",
-      commands: "命令",
-      arguments: "参数",
-      options: "选项",
-      schema: "契约查询",
-      examples: "调用示例",
+      usage: "Usage",
+      commands: "Commands",
+      arguments: "Arguments",
+      options: "Options",
+      schema: "Contract discovery",
+      examples: "Examples",
     },
     wording: {
-      commandPlaceholder: "命令",
-      choices: "（候选：{choices}）",
-      default: "（默认：{value}）",
-      countExactly: "{fields} 恰好出现 {count} 项",
-      whenOnMatch: "当全部满足 {facts} 时，{onMatch}",
-      require: "必须提供 {fields}",
-      present: "{field} 已提供",
+      commandPlaceholder: "command",
+      choices: "(choices: {choices})",
+      default: "(default: {value})",
+      countExactly: "{fields} exactly {count}",
+      whenOnMatch: "when all of {facts}, {onMatch}",
+      require: "require {fields}",
+      present: "{field} is present",
     },
   }),
   version: versionCapability({ value: text.line(coreMetadata.version) }),
   schema: schemaCapability({
-    description: text.line("查询命令输入、结果契约与线格式。"),
+    description: text.line(
+      "Query command inputs, result contracts, and wire formats.",
+    ),
   }),
   usageFailureExitCode: 64,
   commands: {
     users: {
       kind: "rootGroup",
       name: "user",
-      description: "用户查询、标识校验与日志",
+      description: "User lookup, identifier validation, and logs",
     },
     ...lookup,
     ...logs,

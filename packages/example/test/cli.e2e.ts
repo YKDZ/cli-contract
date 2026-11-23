@@ -21,10 +21,10 @@ function invoke(...argv: string[]) {
   return result;
 }
 
-void test("help 与 version 在没有应用输入时经真实进程正常退出", () => {
+void test("help and version exit cleanly through a real process without app input", () => {
   const help = invoke("--help");
   assert.equal(help.status, 0);
-  assert.match(help.stdout, /用法/);
+  assert.match(help.stdout, /Usage/);
   assert.equal(help.stderr, "");
 
   const version = invoke("--version");
@@ -34,7 +34,7 @@ void test("help 与 version 在没有应用输入时经真实进程正常退出"
 });
 
 void test(
-  "日志 NDJSON 与文本片段都在流结束前保持各自分帧",
+  "log NDJSON and text fragments each keep their framing before the stream ends",
   { timeout: 5000 },
   async (t) => {
     async function verifyStream(mode: "structured" | "text") {
@@ -123,17 +123,17 @@ void test(
   },
 );
 
-void test("查询成功以文本行组写入 stdout 并退出零", () => {
+void test("a successful lookup writes a text line group to stdout and exits zero", () => {
   const result = invoke("get", "alice");
   assert.equal(result.status, 0);
-  assert.equal(result.stdout, "用户信息\nAlice\n");
+  assert.equal(result.stdout, "User profile\nAlice\n");
   assert.equal(result.stderr, "");
 });
 
-void test("声明示例驱动真实查询进程并在帮助中原样展示", () => {
+void test("declared examples drive the real lookup process and appear verbatim in help", () => {
   const lookup = cli.manifest.commands.lookup;
   if (lookup === undefined || lookup.kind !== "command") {
-    throw new Error("缺少 lookup 可执行命令清单");
+    throw new Error("missing lookup executable command manifest");
   }
   const examples = lookup.examples;
   assert.equal(examples?.length, 2);
@@ -151,7 +151,7 @@ void test("声明示例驱动真实查询进程并在帮助中原样展示", () 
 
   const defaultResult = invoke(...(defaultExample?.argv ?? []));
   assert.equal(defaultResult.status, 0);
-  assert.equal(defaultResult.stdout, "用户信息\nAlice\n");
+  assert.equal(defaultResult.stdout, "User profile\nAlice\n");
   assert.equal(defaultResult.stderr, "");
 
   const structuredResult = invoke(...(structuredExample?.argv ?? []));
@@ -167,12 +167,12 @@ void test("声明示例驱动真实查询进程并在帮助中原样展示", () 
   const help = invoke("get", "--help");
   assert.equal(help.status, 0);
   assert.equal(help.stderr, "");
-  assert.ok(help.stdout.includes("调用示例"));
+  assert.ok(help.stdout.includes("Examples"));
   assert.ok(help.stdout.includes(`  ${defaultExample?.shell}`));
   assert.ok(help.stdout.includes(`  ${structuredExample?.shell}`));
 });
 
-void test("摘要 next 经正式 example 进程完成契约查询且无需业务输入", () => {
+void test("summary next links complete contract discovery through the real example process without business input", () => {
   const rootDirectory = queryCliContract(cli, []);
   assert.equal(rootDirectory.kind, "directory");
   if (rootDirectory.kind !== "directory") return;
@@ -220,36 +220,38 @@ void test("摘要 next 经正式 example 进程完成契约查询且无需业务
   const help = invoke("get", "--help");
   assert.equal(help.status, 0);
   assert.equal(help.stderr, "");
-  assert.ok(help.stdout.includes("契约查询"));
+  assert.ok(help.stdout.includes("Contract discovery"));
   assert.ok(help.stdout.includes("--schema=input"));
   assert.ok(help.stdout.includes("--schema=success:structured"));
   assert.ok(help.stdout.includes(JSON.stringify(successNext.argv)));
   assert.equal(
-    help.stdout.split("查询命令输入、结果契约与线格式。").length - 1,
+    help.stdout.split(
+      "Query command inputs, result contracts, and wire formats.",
+    ).length - 1,
     1,
   );
 });
 
-void test("标识校验以完成结果正常退出", () => {
+void test("identifier validation exits normally with a completion result", () => {
   const result = invoke("validate", "--id", "alice");
   assert.equal(result.status, 0);
   assert.equal(result.stdout, "");
   assert.equal(result.stderr, "");
 });
 
-void test("电子邮箱模式通过同一校验命令完成", () => {
+void test("the email pattern completes through the same validation command", () => {
   const result = invoke("validate", "--email", "alice@example.com");
   assert.equal(result.status, 0);
   assert.equal(result.stdout, "");
   assert.equal(result.stderr, "");
 });
 
-void test("数量约束同时出现在帮助和进程用法问题中", () => {
+void test("the count constraint appears in both help and the process usage failure", () => {
   const help = invoke("validate", "--help");
   assert.equal(help.status, 0);
-  assert.ok(help.stdout.includes("id, email 恰好出现 1 项"));
+  assert.ok(help.stdout.includes("id, email exactly 1"));
   assert.ok(
-    help.stdout.includes("当全部满足 domain 已提供 时，必须提供 email"),
+    help.stdout.includes("when all of domain is present, require email"),
   );
 
   const result = invoke(
@@ -280,7 +282,7 @@ void test("数量约束同时出现在帮助和进程用法问题中", () => {
   });
 });
 
-void test("邮箱域条件在子进程中返回准确的条件失败", () => {
+void test("the email domain condition returns an accurate conditional failure in a subprocess", () => {
   const result = invoke("validate", "--id", "alice", "--domain", "example.com");
   assert.equal(result.status, 64);
   assert.equal(result.stdout, "");
@@ -303,7 +305,7 @@ void test("邮箱域条件在子进程中返回准确的条件失败", () => {
   });
 });
 
-void test("指定域不匹配保留具名应用失败与退出状态", () => {
+void test("a domain mismatch keeps the named application failure and exit status", () => {
   const result = invoke(
     "validate",
     "--email",
@@ -325,7 +327,7 @@ void test("指定域不匹配保留具名应用失败与退出状态", () => {
   });
 });
 
-void test("结构化成功保留具名事实，stderr 为空", () => {
+void test("structured success keeps the named facts with empty stderr", () => {
   const result = invoke("get", "alice", "--output", "structured");
   assert.equal(result.status, 0);
   assert.equal(result.stderr, "");
@@ -339,14 +341,17 @@ void test("结构化成功保留具名事实，stderr 为空", () => {
   });
 });
 
-void test("业务失败保留文本空行，写入 stderr 并返回非零退出码", () => {
+void test("a business failure keeps the blank text line, writes to stderr, and exits non-zero", () => {
   const result = invoke("get", "bob");
   assert.equal(result.status, 1);
   assert.equal(result.stdout, "");
-  assert.equal(result.stderr, "用户 bob 不存在\n\n请检查用户标识\n");
+  assert.equal(
+    result.stderr,
+    "User bob not found\n\nCheck the user identifier\n",
+  );
 });
 
-void test("结构化业务失败保留具名事实，stdout 为空并返回非零退出码", () => {
+void test("structured business failure keeps the named facts with empty stdout and a non-zero exit code", () => {
   const result = invoke("get", "bob", "--output", "structured");
   assert.equal(result.status, 1);
   assert.equal(result.stdout, "");
@@ -360,17 +365,17 @@ void test("结构化业务失败保留具名事实，stdout 为空并返回非�
   });
 });
 
-void test("帮助不要求领域输入，展示机械用法和显式标题", () => {
+void test("help requires no domain input and shows mechanical usage with explicit headings", () => {
   for (const flag of ["--help", "-h"]) {
     const result = invoke("get", flag);
     assert.equal(result.status, 0);
     assert.equal(result.stderr, "");
     for (const fact of [
-      "用法",
+      "Usage",
       "user get [--output <mode>] <id>",
-      "参数",
-      "用户标识",
-      "选项",
+      "Arguments",
+      "User identifier",
+      "Options",
       "--help",
       "--output",
       "structured",
@@ -380,11 +385,11 @@ void test("帮助不要求领域输入，展示机械用法和显式标题", () 
   }
 });
 
-void test("根帮助展示命令，日志帮助指向当前命令", () => {
+void test("root help lists commands and logs help points at the current command", () => {
   const root = invoke("--help");
   assert.equal(root.status, 0);
   assert.equal(root.stderr, "");
-  for (const fact of ["命令", "get", "logs", "validate"])
+  for (const fact of ["Commands", "get", "logs", "validate"])
     assert.ok(root.stdout.includes(fact));
   const logs = invoke("logs", "--help");
   assert.equal(logs.status, 0);
@@ -392,7 +397,7 @@ void test("根帮助展示命令，日志帮助指向当前命令", () => {
   assert.ok(logs.stdout.includes("user logs"));
 });
 
-void test("缺少参数返回结构化用法失败和准确的帮助调用", () => {
+void test("a missing argument returns a structured usage failure and the accurate help invocation", () => {
   const result = invoke("get");
   assert.equal(result.status, 64);
   assert.equal(result.stdout, "");

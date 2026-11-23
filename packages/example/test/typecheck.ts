@@ -7,11 +7,11 @@ import { z } from "zod";
 
 import { cli } from "../src/index.ts";
 
-// 这些反例只参与编译；约束失效后，未使用的 @ts-expect-error 会报错。
+// These negative cases only participate in compilation; if a constraint stops holding, the unused @ts-expect-error becomes an error.
 export function rejectedDeclarations() {
-  // @ts-expect-error 已声明的 lookup 缺少触发场景。
+  // @ts-expect-error the declared lookup lacks a trigger scenario.
   defineCommandScenarios(cli, {});
-  // @ts-expect-error 已声明的 notFound 缺少触发场景。
+  // @ts-expect-error the declared notFound lacks a trigger scenario.
   defineFailureScenarios(cli, { lookup: {} });
 
   const sharedInput0 = z.object({});
@@ -29,7 +29,7 @@ export function rejectedDeclarations() {
       check: {
         kind: "rootCommand",
         name: "check",
-        description: "检查类型",
+        description: "Check types",
         fields: {},
         input: sharedInput0,
 
@@ -37,13 +37,13 @@ export function rejectedDeclarations() {
           default: "text",
           modes: {
             structured: mode.atomic({
-              description: "结构化输出",
+              description: "Structured output",
               format: "structured",
               success: {
                 kind: "data",
                 variants: {
                   found: {
-                    description: "找到结果",
+                    description: "Result found",
                     schema: z.object({ name: z.string() }),
                     exitCode: 0,
                   },
@@ -51,27 +51,27 @@ export function rejectedDeclarations() {
               },
               failures: {
                 notFound: {
-                  description: "结果不存在",
+                  description: "Result not found",
                   schema: z.object({ id: z.string() }),
                   exitCode: 1,
                 },
               },
               handler({ outcome }) {
-                // @ts-expect-error 不能调用未声明的失败。
+                // @ts-expect-error cannot invoke an undeclared failure.
                 outcome.failure.unknown({});
-                // @ts-expect-error 变体载荷必须符合契约模式推导的类型。
+                // @ts-expect-error the variant payload must match the type inferred from the contract schema.
                 outcome.data.found({ name: 42 });
                 return outcome.data.found({ name: "Alice" });
               },
             }),
             text: mode.atomic({
-              description: "文本输出",
+              description: "Text output",
               format: "text",
               success: {
                 kind: "data",
                 variants: {
                   found: {
-                    description: "找到结果",
+                    description: "Result found",
                     schema: z.object({ name: z.string() }),
                     exitCode: 0,
                     text: ({ name }) => text.line(name),
@@ -80,16 +80,16 @@ export function rejectedDeclarations() {
               },
               failures: {
                 notFound: {
-                  description: "结果不存在",
+                  description: "Result not found",
                   schema: z.object({ id: z.string() }),
                   exitCode: 1,
                   text: ({ id }) => text.line(id),
                 },
               },
               handler({ outcome }) {
-                // @ts-expect-error 不能调用未声明的失败。
+                // @ts-expect-error cannot invoke an undeclared failure.
                 outcome.failure.unknown({});
-                // @ts-expect-error 变体载荷必须符合契约模式推导的类型。
+                // @ts-expect-error the variant payload must match the type inferred from the contract schema.
                 outcome.data.found({ name: 42 });
                 return outcome.data.found({ name: "Alice" });
               },
@@ -115,7 +115,7 @@ export function rejectedDeclarations() {
       missingCompletion: {
         kind: "rootCommand",
         name: "check",
-        description: "检查类型",
+        description: "Check types",
         input: sharedInput1,
 
         outputs: defineCli().outputModes(
@@ -125,15 +125,15 @@ export function rejectedDeclarations() {
             default: "text",
             modes: {
               structured: mode.atomic({
-                description: "结构化输出",
+                description: "Structured output",
                 format: "structured",
                 success: { kind: "completion" },
                 failures: {},
                 handler: ({ outcome }) => outcome.completion(),
               }),
-              // @ts-expect-error 文本完成方式必须声明当前 mode 的 presenter。
+              // @ts-expect-error a text completion mode must declare a presenter for the current mode.
               text: mode.atomic({
-                description: "文本输出",
+                description: "Text output",
                 format: "text",
                 success: { kind: "completion" },
                 failures: {},
@@ -161,7 +161,7 @@ export function rejectedDeclarations() {
       validCompletion: {
         kind: "rootCommand",
         name: "check",
-        description: "检查类型",
+        description: "Check types",
         input: sharedInput2,
 
         outputs: defineCli().outputModes(
@@ -171,14 +171,14 @@ export function rejectedDeclarations() {
             default: "text",
             modes: {
               structured: mode.atomic({
-                description: "结构化输出",
+                description: "Structured output",
                 format: "structured",
                 success: { kind: "completion" },
                 failures: {},
                 handler: ({ outcome }) => outcome.completion(),
               }),
               text: mode.atomic({
-                description: "文本输出",
+                description: "Text output",
                 format: "text",
                 success: { kind: "completion", text: () => text.silent },
                 failures: {},
