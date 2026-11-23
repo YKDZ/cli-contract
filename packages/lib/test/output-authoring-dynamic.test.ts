@@ -218,7 +218,6 @@ void test("rejects an extra presenter deleted after the text call", () => {
             "modes",
             "only",
             "success",
-            "variants",
             "extra",
           ],
         },
@@ -226,6 +225,49 @@ void test("rejects an extra presenter deleted after the text call", () => {
       return true;
     },
   );
+});
+
+void test("reads a dynamic presentation table once for the checks and the expansion", () => {
+  let reads = 0;
+  const contract = defineCli()({
+    ...cli,
+    commands: {
+      probe: {
+        ...probe,
+        outputs: ({ atomic }) => ({
+          modes: {
+            only: atomic({
+              success: {
+                kind: "data",
+                variants: {
+                  found: {
+                    description: "Result",
+                    schema: z.object({}),
+                    exitCode: 0,
+                  },
+                },
+              },
+              failures: {},
+              handler: ({ outcome }) => outcome.data.found({}),
+            }).text({
+              description: "Result",
+              get success() {
+                reads++;
+                const presenters = { found: () => text.line("Found") };
+                if (reads > 1) {
+                  Reflect.set(presenters, "extra", () => text.line("Extra"));
+                }
+                return presenters;
+              },
+              failures: {},
+            }),
+          },
+        }),
+      },
+    },
+  });
+  assert.equal(reads, 1);
+  assert.equal(contract.manifest.root, "probe");
 });
 
 void test("rejects an extra presenter on stream records deleted after the text call", () => {
@@ -272,7 +314,6 @@ void test("rejects an extra presenter on stream records deleted after the text c
             "outputs",
             "modes",
             "only",
-            "success",
             "records",
             "extra",
           ],
@@ -374,6 +415,259 @@ void test("rejects a presenter embedded in the original execution variant", () =
             "found",
             "text",
           ],
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("rejects a malformed own __proto__ variant name in a text data mode", () => {
+  assert.throws(
+    () =>
+      defineCli()({
+        ...cli,
+        commands: {
+          probe: {
+            ...probe,
+            outputs: ({ atomic }) => {
+              const variants = {
+                found: {
+                  description: "Result",
+                  schema: z.object({}),
+                  exitCode: 0,
+                },
+              };
+              const presenters = { found: () => text.line("Found") };
+              Object.defineProperty(variants, "__proto__", {
+                value: {
+                  description: "Result",
+                  schema: z.object({}),
+                  exitCode: 0,
+                },
+                enumerable: true,
+              });
+              Object.defineProperty(presenters, "__proto__", {
+                value: () => text.line("Found"),
+                enumerable: true,
+              });
+              return {
+                modes: {
+                  only: atomic({
+                    success: { kind: "data", variants },
+                    failures: {},
+                    handler: ({ outcome }) => outcome.data.found({}),
+                  }).text({
+                    description: "Result",
+                    success: presenters,
+                    failures: {},
+                  }),
+                },
+              };
+            },
+          },
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidVariantName",
+          command: "probe",
+          location: "data",
+          variant: "__proto__",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("rejects a malformed own __proto__ failure name in a text completion mode", () => {
+  assert.throws(
+    () =>
+      defineCli()({
+        ...cli,
+        commands: {
+          probe: {
+            ...probe,
+            outputs: ({ atomic }) => {
+              const failures = {};
+              const presenters = {};
+              Object.defineProperty(failures, "__proto__", {
+                value: {
+                  description: "Denied",
+                  schema: z.object({}),
+                  exitCode: 1,
+                },
+                enumerable: true,
+              });
+              Object.defineProperty(presenters, "__proto__", {
+                value: () => text.line("Denied"),
+                enumerable: true,
+              });
+              return {
+                modes: {
+                  only: atomic({
+                    success: { kind: "completion" },
+                    failures,
+                    handler: ({ outcome }) => outcome.completion(),
+                  }).text({
+                    description: "Result",
+                    success: () => text.silent,
+                    failures: presenters,
+                  }),
+                },
+              };
+            },
+          },
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidVariantName",
+          command: "probe",
+          location: "failure",
+          variant: "__proto__",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("rejects an extra text key set to undefined on a structured execution variant", () => {
+  assert.throws(
+    () =>
+      defineCli()({
+        ...cli,
+        commands: {
+          probe: {
+            ...probe,
+            outputs: ({ atomic }) => {
+              const found = {
+                description: "Result",
+                schema: z.object({}),
+                exitCode: 0,
+              };
+              Reflect.set(found, "text", undefined);
+              return {
+                modes: {
+                  only: atomic({
+                    success: { kind: "data", variants: { found } },
+                    failures: {},
+                    handler: ({ outcome }) => outcome.data.found({}),
+                  }).structured({ description: "Result" }),
+                },
+              };
+            },
+          },
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "unexpectedTextPresenter",
+          command: "probe",
+          location: "data",
+          variant: "found",
+        },
+      ]);
+      return true;
+    },
+  );
+});
+
+void test("a mode issued for another command or input reports mismatchedBinding", () => {
+  const define = defineCli();
+  let issued: unknown;
+  define({
+    ...cli,
+    commands: {
+      probe: {
+        ...probe,
+        outputs: ({ atomic }) => {
+          const mode = atomic({
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          }).structured({ description: "Result" });
+          issued = mode;
+          return { modes: { only: mode } };
+        },
+      },
+    },
+  });
+  for (const target of [
+    { ...probe, name: "other" },
+    { ...probe, input: z.object({}) },
+  ]) {
+    assert.throws(
+      () =>
+        Reflect.apply(define, undefined, [
+          {
+            ...cli,
+            root: target.name,
+            commands: {
+              [target.name]: {
+                ...target,
+                outputs: () => ({ modes: { only: issued } }),
+              },
+            },
+          },
+        ]),
+      (error: unknown) => {
+        assert.ok(error instanceof ContractDefinitionError);
+        assert.deepEqual(error.issues, [
+          {
+            code: "invalidOutputMode",
+            command: target.name,
+            mode: "only",
+            reason: "mismatchedBinding",
+          },
+        ]);
+        return true;
+      },
+    );
+  }
+});
+
+void test("a mode object that no execution issued reports invalidSuccess", () => {
+  assert.throws(
+    () =>
+      Reflect.apply(defineCli(), undefined, [
+        {
+          ...cli,
+          commands: {
+            probe: {
+              ...probe,
+              outputs: () => ({
+                modes: {
+                  only: {
+                    delivery: "atomic",
+                    description: "Result",
+                    format: "structured",
+                    success: { kind: "completion" },
+                    failures: {},
+                    handler: () => undefined,
+                  },
+                },
+              }),
+            },
+          },
+        },
+      ]),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidOutputMode",
+          command: "probe",
+          mode: "only",
+          reason: "invalidSuccess",
         },
       ]);
       return true;
