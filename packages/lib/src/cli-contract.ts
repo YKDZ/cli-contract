@@ -6392,9 +6392,15 @@ function orderHierarchy(
   if (!ids.some((id) => definition.commands[id]?.parent === definition.root)) {
     issues.push({ code: "rootGroupWithoutChildren", command: definition.root });
   }
+  const childrenByParent = new Map<string, string[]>();
   for (const id of ids) {
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- id comes from Object.keys(definition.commands); the same object is read here.
     const node = definition.commands[id] as RuntimeCommandDefinition;
+    if (node.parent !== undefined) {
+      const children = childrenByParent.get(node.parent);
+      if (children === undefined) childrenByParent.set(node.parent, [id]);
+      else children.push(id);
+    }
     if (!/^[a-z][A-Za-z0-9]*$/.test(id))
       issues.push({ code: "invalidCommandIdentity", command: id });
     if (node.name.length === 0)
@@ -6466,18 +6472,23 @@ function orderHierarchy(
     }
   }
 
+  const reachesCycle = new Map<string, boolean>();
   const cycleMembers = ids.filter((id) => {
-    const visited = new Set<string>();
+    const path = new Set<string>();
     let current: string | undefined = id;
     while (
       current !== undefined &&
-      definition.commands[current] !== undefined
+      definition.commands[current] !== undefined &&
+      !reachesCycle.has(current) &&
+      !path.has(current)
     ) {
-      if (visited.has(current)) return true;
-      visited.add(current);
+      path.add(current);
       current = definition.commands[current]?.parent;
     }
-    return false;
+    const cyclic =
+      current !== undefined && (reachesCycle.get(current) ?? path.has(current));
+    for (const member of path) reachesCycle.set(member, cyclic);
+    return cyclic;
   });
   if (cycleMembers.length > 0)
     issues.push({
@@ -6487,9 +6498,7 @@ function orderHierarchy(
 
   for (const parent of ids) {
     const spellings = new Map<string, string[]>();
-    for (const child of ids.filter(
-      (id) => definition.commands[id]?.parent === parent,
-    )) {
+    for (const child of childrenByParent.get(parent) ?? []) {
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- child comes from the key set of the same command object.
       const node = definition.commands[child] as RuntimeCommandDefinition;
       for (const spelling of [node.name, ...(node.aliases ?? [])]) {
@@ -6510,16 +6519,15 @@ function orderHierarchy(
     }
   }
 
-  const ordered: string[] = [];
+  const ordered = new Set<string>();
   const visit = (id: string): void => {
-    if (ordered.includes(id)) return;
-    ordered.push(id);
-    for (const child of ids)
-      if (definition.commands[child]?.parent === id) visit(child);
+    if (ordered.has(id)) return;
+    ordered.add(id);
+    for (const child of childrenByParent.get(id) ?? []) visit(child);
   };
   if (definition.commands[definition.root] !== undefined)
     visit(definition.root);
-  return [...ordered, ...ids.filter((id) => !ordered.includes(id))];
+  return [...ordered, ...ids.filter((id) => !ordered.has(id))];
 }
 
 function commandPath(

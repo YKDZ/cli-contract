@@ -1,4 +1,4 @@
-import type { Writable } from "node:stream";
+import { stderr, stdout } from "node:process";
 
 import {
   defineCli,
@@ -197,12 +197,7 @@ const cli = define({
   },
 });
 
-void nodeCliOutput({
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The cross-package compile matrix deliberately uses static placeholders and type probes.
-  stdout: null as unknown as Writable,
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The cross-package compile matrix deliberately uses static placeholders and type probes.
-  stderr: null as unknown as Writable,
-});
+void nodeCliOutput({ stdout, stderr });
 
 const commandScenarios = defineCommandScenarios(cli, {
   complete: { argv: ["complete"], dependencies: { available: true } },

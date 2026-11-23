@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { Writable } from "node:stream";
 import { test } from "node:test";
+import { setImmediate as nextTurn } from "node:timers/promises";
 
 import {
   CliWriteError,
@@ -57,7 +58,7 @@ void test("nodeCliOutput routes stdout and stderr to caller-provided Writables",
 });
 
 void test("nodeCliOutput awaits the Node Writable async callback and backpressure drain", async () => {
-  let completeWrite: (() => void) | undefined;
+  let completeWrite: ((error?: Error | null) => void) | undefined;
   const stdout = new Writable({
     highWaterMark: 1,
     write(_chunk, _encoding, callback) {
@@ -182,9 +183,11 @@ void test("isNodeBrokenPipe only detects Node EPIPE evidence and its cause chain
   assert.equal(isNodeBrokenPipe(new Error("EPIPE")), false);
 });
 
-void test("a stream write failure through nodeCliOutput preserves the public CliWriteError and cleans up the generator", async () => {
+void test("Node streaming preserves write errors and advances only while the Writable has capacity", async () => {
   let pulled = 0;
   let cleaned = false;
+  let declaredFailure = false;
+  let beforeSecondRecord: (() => void) | undefined;
   const sharedInput0 = z.object({});
   const cli = defineCli()({
     root: "list",
@@ -209,14 +212,23 @@ void test("a stream write failure through nodeCliOutput preserves the public Cli
                     schema: z.object({}),
                   },
                 },
-                failures: {},
+                failures: {
+                  stopped: {
+                    description: "Stopped",
+                    schema: z.object({}),
+                    exitCode: 1,
+                  },
+                },
                 async *handler({ outcome }) {
                   try {
                     pulled += 1;
                     yield outcome.record.item({});
+                    beforeSecondRecord?.();
                     pulled += 1;
                     yield outcome.record.item({});
-                    return outcome.streamSuccess();
+                    return declaredFailure
+                      ? outcome.failure.stopped({})
+                      : outcome.streamSuccess();
                   } finally {
                     cleaned = true;
                   }
@@ -238,7 +250,11 @@ void test("a stream write failure through nodeCliOutput preserves the public Cli
     writes += 1;
     const result = originalWrite(chunk, callback);
     if (writes === 1) queueMicrotask(() => stdout.complete());
-    else queueMicrotask(() => stdout.emit("error", pipe));
+    else
+      queueMicrotask(() => {
+        stdout.complete(pipe);
+        stdout.emit("error", pipe);
+      });
     return result;
   };
   const stderr = new ControlledWritable();
@@ -266,4 +282,89 @@ void test("a stream write failure through nodeCliOutput preserves the public Cli
     stdout.chunks.some((chunk) => chunk.includes("streamSuccess")),
     false,
   );
+
+  pulled = 0;
+  cleaned = false;
+  const chunks: string[] = [];
+  let completeWrite: ((error?: Error | null) => void) | undefined;
+  const bounded = new Writable({
+    objectMode: true,
+    highWaterMark: 2,
+    write(chunk: string, _encoding, callback) {
+      chunks.push(chunk);
+      completeWrite = callback;
+    },
+  });
+  let settled = false;
+  const execution = executeCli(cli, {
+    invocation: parseCliInvocation(cli, []),
+    dependencies: undefined,
+    write: nodeCliOutput({ stdout: bounded, stderr }),
+  }).then((termination) => {
+    settled = true;
+    return termination;
+  });
+  await nextTurn();
+  assert.equal(pulled, 1);
+  assert.equal(bounded.writableLength, 2);
+  assert.equal(settled, false);
+  completeWrite?.();
+  await nextTurn();
+  assert.equal(pulled, 1);
+  completeWrite?.();
+  await nextTurn();
+  assert.equal(pulled, 2);
+  assert.equal(cleaned, true);
+  assert.equal(settled, false);
+  completeWrite?.();
+  await nextTurn();
+  assert.match(chunks.at(-1) ?? "", /"kind":"streamSuccess"/);
+  assert.equal(settled, false);
+  completeWrite?.();
+  assert.equal((await execution).exitCode, 0);
+  assert.equal(chunks.length, 4);
+
+  declaredFailure = true;
+  const failedOutput = new Writable({
+    write(_chunk, _encoding, callback) {
+      completeWrite = callback;
+    },
+  });
+  const failureOutput = new ControlledWritable();
+  const declared = executeCli(cli, {
+    invocation: parseCliInvocation(cli, []),
+    dependencies: undefined,
+    write: nodeCliOutput({ stdout: failedOutput, stderr: failureOutput }),
+  });
+  await nextTurn();
+  assert.deepEqual(failureOutput.chunks, []);
+  for (let index = 0; index < 3; index++) completeWrite?.();
+  await nextTurn();
+  assert.equal(failureOutput.chunks.length, 1);
+  assert.match(failureOutput.chunks[0] ?? "", /"kind":"failure"/);
+  failureOutput.complete();
+  assert.equal((await declared).exitCode, 1);
+
+  const defect = new Error("Producer failed");
+  beforeSecondRecord = () => {
+    throw defect;
+  };
+  cleaned = false;
+  const failing = new Writable({
+    write(_chunk, _encoding, callback) {
+      completeWrite = callback;
+    },
+  });
+  const rejected = assert.rejects(
+    executeCli(cli, {
+      invocation: parseCliInvocation(cli, []),
+      dependencies: undefined,
+      write: nodeCliOutput({ stdout: failing, stderr }),
+    }),
+    (error) => error === defect,
+  );
+  await nextTurn();
+  assert.equal(cleaned, true);
+  completeWrite?.(pipe);
+  await rejected;
 });

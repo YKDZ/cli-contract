@@ -1300,9 +1300,9 @@ function verifyAuthoringLanguageService(
       installedDeclaration: "node_modules/@ykdz/cli-contract/dist/node.d.ts",
       requiredType: ["NodeCliOutputOptions", "WriteCliOutput"],
       requiredDocumentation: [
-        "write callback has fired",
-        "`drain` event has been observed",
-        "backpressure",
+        "direct call awaits the write callback",
+        "awaits `drain`",
+        "before crossing channels and before reporting termination",
         "never reads the global process, closes the streams",
         "The host awaits executeCli",
       ],

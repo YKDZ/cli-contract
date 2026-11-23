@@ -197,7 +197,10 @@ async function verifyCoreAndTesting(
           [corePackage]: `file:${candidate.core}`,
           [testingPackage]: `file:${candidate.testing}`,
         },
-        devDependencies: { typescript: compilerVersion },
+        devDependencies: {
+          "@types/node": "26.6.6",
+          typescript: compilerVersion,
+        },
       })}\n`,
     );
     await writeFixtures(project, fixtures, ["consumer.ts"]);
@@ -302,7 +305,7 @@ function tsconfigFor(
       skipLibCheck: false,
       strict: true,
       target: "ES2023",
-      types: [],
+      types: fixture === "consumer.ts" ? ["node"] : [],
     },
     files: [fixture],
   };

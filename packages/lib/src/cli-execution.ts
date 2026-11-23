@@ -59,6 +59,7 @@ import {
   createStreamSuccessEnvelope,
   createUsageFailureEnvelope,
 } from "#/outcome-wire";
+import { streamOutputs } from "#/stream-output";
 import { formatUsageConstraint } from "#/usage-constraint";
 
 type CompiledCommand = ReturnType<typeof getCompiledCli>["commands"][string];
@@ -743,16 +744,21 @@ async function executeStreamResult<
   if (outputMode.resultContract.success.kind !== "stream") {
     throw new ContractExecutionError([{ code: "invalidCliContract" }]);
   }
+  const streamOutput = streamOutputs.get(options.write)?.();
+  const write =
+    streamOutput?.write ?? ((output) => writeCliOutput(options.write, output));
   let active = true;
   try {
     if (outputMode.format === "structured") {
-      await writeCliOutput(options.write, {
+      await write({
         destination: "stdout",
         chunk: `${JSON.stringify(createStreamHeaderEnvelope(compiled.id, outputMode.id))}\n`,
       });
     }
     for (;;) {
-      const step = await generator.next();
+      const step = await (streamOutput === undefined
+        ? generator.next()
+        : streamOutput.pull(() => generator.next()));
       if (!step.done) {
         const projected = projectApplicationFact(
           compiled,
@@ -761,7 +767,7 @@ async function executeStreamResult<
           issuedOutcomeFacts,
           "record",
         );
-        await writeProjectedOutput(options.write, projected.output);
+        if (projected.output !== undefined) await write(projected.output);
         continue;
       }
       active = false;
@@ -772,7 +778,10 @@ async function executeStreamResult<
         issuedOutcomeFacts,
         "terminal",
       );
-      await writeProjectedOutput(options.write, projected.output);
+      // Do not submit a terminal frame while earlier writes can still fail.
+      await streamOutput?.finish();
+      if (projected.output !== undefined) await write(projected.output);
+      await streamOutput?.finish();
       return Object.freeze({
         kind: "applicationResult",
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The command comes from the compiled tree of the current Contract; the generic identity is restored here.
@@ -790,6 +799,11 @@ async function executeStreamResult<
       } catch {
         // Cleanup failures must not mask the write error or program defect that triggered the abort.
       }
+    }
+    try {
+      await streamOutput?.finish();
+    } catch {
+      // Preserve the error that stopped execution while pending writes settle.
     }
     throw cause;
   }

@@ -1,4 +1,5 @@
 import type { JsonObject, JsonValue } from "#/contract-schema";
+import { deepFreeze } from "#/json-value";
 import { embedSchemaResource } from "#/schema-resource";
 
 const schemaVersion = "3" as const;
@@ -167,18 +168,18 @@ export function createUsageFailureEnvelope<Command extends string>(
 export function createUsageFailureWireSchema(
   scopes: readonly UsageFailureWireScope[],
 ): JsonObject {
+  // Share a frozen subtree while preserving the inline schema in serialized manifests.
+  const issues = deepFreeze({
+    items: { oneOf: usageIssueSchemas() },
+    minItems: 1,
+    type: "array",
+  });
   return {
     $schema: "https://json-schema.org/draft/2020-12/schema",
     oneOf: scopes.map(({ command, usage, helpArgv }) =>
       createEnvelopeSchema(
         createUsageFailureEnvelope(command, null, usage, helpArgv),
-        {
-          issues: {
-            items: { oneOf: usageIssueSchemas() },
-            minItems: 1,
-            type: "array",
-          },
-        },
+        { issues },
       ),
     ),
   };
