@@ -2232,13 +2232,6 @@ export type CommandNodeDefinition =
       }>)
   | RootGroupDefinition;
 
-export type HierarchyCliDefinition<Root extends string> =
-  RootCliDefinitionBase<Root> &
-    Readonly<{
-      readonly commands: Readonly<Record<string, CommandNodeDefinition>> &
-        Readonly<Record<Root, RootGroupDefinition>>;
-    }>;
-
 type HierarchyRawInput<Commands> = {
   [Command in keyof Commands]: Commands[Command] extends Readonly<{
     readonly kind: "command";
