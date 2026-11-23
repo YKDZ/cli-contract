@@ -19,7 +19,7 @@ export function runCommand(
   if (result.error) throw result.error;
   if (result.status !== 0) {
     throw new Error(
-      `${command} ${args.join(" ")} 失败（${result.status ?? result.signal}）\n${result.stderr}\n${result.stdout}`,
+      `${command} ${args.join(" ")} failed (${result.status ?? result.signal})\n${result.stderr}\n${result.stdout}`,
     );
   }
   return result.stdout;
