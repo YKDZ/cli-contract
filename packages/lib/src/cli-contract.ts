@@ -623,6 +623,28 @@ type MissingTerminalPresenter<
 type DescriptionOnly<Options> = Readonly<{ readonly description: string }> &
   RejectUnknownProperties<Options, "description">;
 
+// Leads the .text parameter intersection: a long options alias alone truncates the first
+// diagnostic level, so the coverage evidence must also appear outside the alias.
+type AtomicTextCoverage<
+  Command extends string,
+  Success extends DeclaredAtomicSuccess,
+  Failures extends DeclaredVariants,
+  SuccessKeys extends PropertyKey,
+  FailureKeys extends PropertyKey,
+  OptionKeys extends PropertyKey,
+> = (Success extends Readonly<{
+  readonly kind: "data";
+  readonly variants: infer Variants;
+}>
+  ? PresenterCoverage<Command, "data", Variants, NoInfer<SuccessKeys>>
+  : MissingTerminalPresenter<
+      Command,
+      "completion",
+      NoInfer<OptionKeys>,
+      "success"
+    >) &
+  PresenterCoverage<Command, "failure", Failures, NoInfer<FailureKeys>>;
+
 /**
  * Precise `.text(...)` options for one atomic execution. The explicit key generics let a
  * generic wrapper forward a closed presenter table without assertions; ordinary calls infer
@@ -636,26 +658,26 @@ export type AtomicTextOptions<
   SuccessKeys extends PropertyKey,
   FailureKeys extends PropertyKey,
   OptionKeys extends PropertyKey,
-> = (Success extends Readonly<{
-  readonly kind: "data";
-  readonly variants: infer Variants;
-}>
-  ? PresenterCoverage<Command, "data", Variants, NoInfer<SuccessKeys>> &
-      Readonly<{
+> = AtomicTextCoverage<
+  Command,
+  Success,
+  Failures,
+  SuccessKeys,
+  FailureKeys,
+  OptionKeys
+> &
+  (Success extends Readonly<{
+    readonly kind: "data";
+    readonly variants: infer Variants;
+  }>
+    ? Readonly<{
         readonly success: PresenterTable<
           Variants,
           SuccessKeys,
           AtomicProjection
         >;
       }>
-  : MissingTerminalPresenter<
-      Command,
-      "completion",
-      NoInfer<OptionKeys>,
-      "success"
-    > &
-      Readonly<{ readonly success: CompletionTextPresenter }>) &
-  PresenterCoverage<Command, "failure", Failures, NoInfer<FailureKeys>> &
+    : Readonly<{ readonly success: CompletionTextPresenter }>) &
   OnlyOptionKeys<OptionKeys, "description" | "success" | "failures"> &
   Readonly<{
     readonly description: string;
@@ -676,8 +698,8 @@ type AtomicTextSuccess<Success extends DeclaredAtomicSuccess> =
         readonly text: CompletionTextPresenter;
       }>;
 
-/** Precise `.text(...)` options for one stream execution; see {@link AtomicTextOptions}. */
-export type StreamTextOptions<
+// Same first-level coverage evidence as AtomicTextCoverage, for stream executions.
+type StreamTextCoverage<
   Command extends string,
   Records extends DeclaredRecords,
   Failures extends DeclaredVariants,
@@ -691,7 +713,24 @@ export type StreamTextOptions<
   "terminal"
 > &
   PresenterCoverage<Command, "record", Records, NoInfer<RecordKeys>> &
-  PresenterCoverage<Command, "failure", Failures, NoInfer<FailureKeys>> &
+  PresenterCoverage<Command, "failure", Failures, NoInfer<FailureKeys>>;
+
+/** Precise `.text(...)` options for one stream execution; see {@link AtomicTextOptions}. */
+export type StreamTextOptions<
+  Command extends string,
+  Records extends DeclaredRecords,
+  Failures extends DeclaredVariants,
+  RecordKeys extends PropertyKey,
+  FailureKeys extends PropertyKey,
+  OptionKeys extends PropertyKey,
+> = StreamTextCoverage<
+  Command,
+  Records,
+  Failures,
+  RecordKeys,
+  FailureKeys,
+  OptionKeys
+> &
   OnlyOptionKeys<
     OptionKeys,
     "description" | "records" | "failures" | "terminal"
@@ -733,14 +772,22 @@ export interface AtomicExecution<
     const FailureKeys extends PropertyKey,
     const OptionKeys extends PropertyKey,
   >(
-    options: AtomicTextOptions<
+    options: AtomicTextCoverage<
       Command,
       Success,
       Failures,
       SuccessKeys,
       FailureKeys,
       OptionKeys
-    >,
+    > &
+      AtomicTextOptions<
+        Command,
+        Success,
+        Failures,
+        SuccessKeys,
+        FailureKeys,
+        OptionKeys
+      >,
   ): AtomicOutputModeDefinition<
     Command,
     InputSchema,
@@ -771,14 +818,22 @@ export interface StreamExecution<
     const FailureKeys extends PropertyKey,
     const OptionKeys extends PropertyKey,
   >(
-    options: StreamTextOptions<
+    options: StreamTextCoverage<
       Command,
       Records,
       Failures,
       RecordKeys,
       FailureKeys,
       OptionKeys
-    >,
+    > &
+      StreamTextOptions<
+        Command,
+        Records,
+        Failures,
+        RecordKeys,
+        FailureKeys,
+        OptionKeys
+      >,
   ): Omit<
     StreamOutputModeDefinition<
       Command,
