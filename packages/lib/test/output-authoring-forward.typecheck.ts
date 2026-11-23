@@ -1,0 +1,216 @@
+import {
+  text,
+  type AtomicExecutionDefinition,
+  type AtomicExecutionFactory,
+  type AtomicTextOptions,
+  type ContractSchema,
+  type DeclaredRecords,
+  type DeclaredVariants,
+  type StreamExecutionDefinition,
+  type StreamExecutionFactory,
+  type StreamTextOptions,
+} from "@ykdz/cli-contract";
+
+declare const input: ContractSchema<{ readonly id: string }>;
+declare const payload: ContractSchema<
+  { readonly encoded: string },
+  { readonly decoded: number }
+>;
+
+type DataSuccess<Variants extends DeclaredVariants> = Readonly<{
+  readonly kind: "data";
+  readonly variants: Variants;
+}>;
+
+// A business-agnostic wrapper forwards the precise factory parameter and the explicit-key
+// text options to the formal factory and `.text` without any assertion.
+function wrapAtomic<
+  Command extends string,
+  Dependencies,
+  InputSchema extends ContractSchema,
+  const Variants extends DeclaredVariants,
+  const Failures extends DeclaredVariants,
+  const SuccessKeys extends PropertyKey,
+  const FailureKeys extends PropertyKey,
+  const OptionKeys extends PropertyKey,
+>(
+  atomic: AtomicExecutionFactory<Command, Dependencies, InputSchema>,
+  declaration: AtomicExecutionDefinition<
+    Command,
+    Dependencies,
+    InputSchema,
+    DataSuccess<Variants>,
+    Failures
+  >,
+  presentation: AtomicTextOptions<
+    Command,
+    DataSuccess<Variants>,
+    Failures,
+    SuccessKeys,
+    FailureKeys,
+    OptionKeys
+  >,
+) {
+  const execution = atomic<object, DataSuccess<Variants>, Failures>(
+    declaration,
+  );
+  return {
+    modes: {
+      json: execution.structured({ description: "JSON" }),
+      human: execution.text<SuccessKeys, FailureKeys, OptionKeys>(presentation),
+    },
+  };
+}
+
+function wrapStream<
+  Command extends string,
+  Dependencies,
+  InputSchema extends ContractSchema,
+  const Records extends DeclaredRecords,
+  const Failures extends DeclaredVariants,
+  const RecordKeys extends PropertyKey,
+  const FailureKeys extends PropertyKey,
+  const OptionKeys extends PropertyKey,
+>(
+  stream: StreamExecutionFactory<Command, Dependencies, InputSchema>,
+  declaration: StreamExecutionDefinition<
+    Command,
+    Dependencies,
+    InputSchema,
+    Records,
+    Failures
+  >,
+  presentation: StreamTextOptions<
+    Command,
+    Records,
+    Failures,
+    RecordKeys,
+    FailureKeys,
+    OptionKeys
+  >,
+) {
+  const execution = stream<object, Records, Failures>(declaration);
+  return {
+    modes: {
+      json: execution.structured({ description: "JSON" }),
+      human: execution.text<RecordKeys, FailureKeys, OptionKeys>(presentation),
+    },
+  };
+}
+
+declare const atomicFactory: AtomicExecutionFactory<
+  "lookup",
+  { readonly network: boolean },
+  typeof input
+>;
+declare const streamFactory: StreamExecutionFactory<
+  "lookup",
+  { readonly network: boolean },
+  typeof input
+>;
+
+const found = { schema: payload, description: "Found", exitCode: 0 };
+const denied = { schema: payload, description: "Denied", exitCode: 1 };
+const say = (value: { readonly decoded: number }) =>
+  text.line(String(value.decoded));
+
+const forwarded = wrapAtomic(
+  atomicFactory,
+  {
+    success: { kind: "data", variants: { found } },
+    failures: { denied },
+    handler({ input: raw, dependencies, outcome }) {
+      if (dependencies.network) return outcome.data.found({ encoded: raw.id });
+      return outcome.failure.denied({ encoded: raw.id });
+    },
+  },
+  {
+    description: "Human",
+    success: { found: (value) => text.line(String(value.decoded)) },
+    failures: { denied: (value) => text.line(String(value.decoded)) },
+  },
+);
+
+// The wrapper preserves the closed mode keys, the schema Input/Output and the result variants.
+forwarded.modes.human.success.variants.found.schema satisfies typeof payload;
+forwarded.modes.json.success.variants.found.schema satisfies typeof payload;
+// @ts-expect-error [output-authoring-forward] Mode keys survive the wrapper.
+void forwarded.modes.missing;
+
+const forwardedStream = wrapStream(
+  streamFactory,
+  {
+    records: { update: { schema: payload, description: "Update" } },
+    failures: { denied },
+    async *handler({ outcome }) {
+      yield outcome.record.update({ encoded: "x" });
+      return outcome.streamSuccess();
+    },
+  },
+  {
+    description: "Human",
+    records: { update: (value) => text.fragment(String(value.decoded)) },
+    failures: { denied: say },
+    terminal: () => text.silent,
+  },
+);
+forwardedStream.modes.human.success.records.update
+  .schema satisfies typeof payload;
+// @ts-expect-error [output-authoring-forward] Stream mode keys survive the wrapper.
+void forwardedStream.modes.missing;
+
+// Extracted presenter tables still report missing keys, wide tables and wrong payloads early.
+const missingFailure = {
+  description: "Human",
+  success: { found: say },
+  failures: {},
+};
+wrapAtomic(
+  atomicFactory,
+  {
+    success: { kind: "data", variants: { found } },
+    failures: { denied },
+    handler: ({ outcome }) => outcome.data.found({ encoded: "x" }),
+  },
+  // @ts-expect-error [output-authoring-forward] root failure denied missing text presenter.
+  missingFailure,
+);
+
+const wideFailure: Record<string, typeof say> = {};
+wrapAtomic(
+  atomicFactory,
+  {
+    success: { kind: "data", variants: { found } },
+    failures: { denied },
+    handler: ({ outcome }) => outcome.data.found({ encoded: "x" }),
+  },
+  // @ts-expect-error [output-authoring-forward] root failure wide table.
+  { description: "Human", success: { found: say }, failures: wideFailure },
+);
+
+wrapAtomic(
+  atomicFactory,
+  {
+    success: { kind: "data", variants: { found } },
+    failures: { denied },
+    handler: ({ outcome }) => outcome.data.found({ encoded: "x" }),
+  },
+  {
+    description: "Human",
+    success: { found: say },
+    // @ts-expect-error [output-authoring-forward] root failure wrong payload.
+    failures: { denied: (value: number) => text.line(String(value)) },
+  },
+);
+
+// Ordinary authors keep auto-inference without naming any key generic.
+const ordinary = atomicFactory({
+  success: { kind: "data", variants: { found } },
+  failures: { denied },
+  handler: ({ outcome }) => outcome.data.found({ encoded: "x" }),
+});
+ordinary.text({
+  description: "Human",
+  success: { found: (value) => text.line(String(value.decoded)) },
+  failures: { denied: (value) => text.line(String(value.decoded)) },
+});
