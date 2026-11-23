@@ -31,7 +31,7 @@ function schema<Input, Output>(
     "~standard": {
       version: 1,
       vendor: "@ykdz/cli-contract-testing",
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 测试专用 schema 原样返回 fixture 值，调用方控制其类型。
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Fixture callers supply values that match the output type.
       validate: (value) => ({ value: value as Output }),
       jsonSchema: {
         input: () => jsonSchema,
@@ -78,194 +78,140 @@ const inspectCommand = define.command("inspect")({
   kind: "command",
   parent: "consumer",
   name: "inspect",
-  description: "检查目标",
+  description: "Inspect the target",
   fields: {
     target: {
       kind: "valueOption",
       longOption: "--target",
-      description: "目标",
+      description: "Target",
     },
   },
   input: inspectInputSchema,
 
-  outputs: define.outputModes("inspect", inspectInputSchema, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: {
-          kind: "data",
-          variants: {
-            found: {
-              description: "检查结果",
-              schema: inspectDataSchema,
-              exitCode: 0,
-            },
-          },
-        },
-        failures: {
-          unavailable: {
-            description: "服务不可用",
+  outputs: ({ atomic }) => {
+    const inspect = atomic({
+      success: {
+        kind: "data",
+        variants: {
+          found: {
+            description: "Inspection result",
             schema: inspectDataSchema,
-            exitCode: 9,
-          },
-          denied: {
-            description: "拒绝检查",
-            schema: inspectDataSchema,
-            exitCode: 10,
+            exitCode: 0,
           },
         },
-        handler: ({ dependencies, input, outcome }) => {
-          if (input.target === "private") {
-            return outcome.failure.denied({ message: input.target });
-          }
-          if (!dependencies.serviceAvailable) {
-            return outcome.failure.unavailable({ message: input.target });
-          }
-          return outcome.data.found({ message: input.target });
+      },
+      failures: {
+        unavailable: {
+          description: "Service unavailable",
+          schema: inspectDataSchema,
+          exitCode: 9,
         },
-      }),
-      text: mode.atomic({
-        description: "文本输出",
-        format: "text",
-        success: {
-          kind: "data",
-          variants: {
-            found: {
-              description: "检查结果",
-              schema: inspectDataSchema,
-              exitCode: 0,
-              text: (data: InspectData) => text.line(`已检查 ${data.message}`),
-            },
+        denied: {
+          description: "Inspection denied",
+          schema: inspectDataSchema,
+          exitCode: 10,
+        },
+      },
+      handler: ({ dependencies, input, outcome }) => {
+        if (input.target === "private") {
+          return outcome.failure.denied({ message: input.target });
+        }
+        if (!dependencies.serviceAvailable) {
+          return outcome.failure.unavailable({ message: input.target });
+        }
+        return outcome.data.found({ message: input.target });
+      },
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: inspect.structured({ description: "Structured output" }),
+        text: inspect.text({
+          description: "Text output",
+          success: {
+            found: ({ message }) => text.line(`Inspected ${message}`),
           },
-        },
-        failures: {
-          unavailable: {
-            description: "服务不可用",
-            schema: inspectDataSchema,
-            exitCode: 9,
-            text: (data: InspectData) =>
-              text.line(`服务不可用 ${data.message}`),
+          failures: {
+            unavailable: ({ message }) =>
+              text.line(`Service unavailable for ${message}`),
+            denied: ({ message }) =>
+              text.line(`Inspection denied for ${message}`),
           },
-          denied: {
-            description: "拒绝检查",
-            schema: inspectDataSchema,
-            exitCode: 10,
-            text: (data: InspectData) => text.line(`拒绝检查 ${data.message}`),
-          },
-        },
-        handler: ({ dependencies, input, outcome }) => {
-          if (input.target === "private") {
-            return outcome.failure.denied({ message: input.target });
-          }
-          if (!dependencies.serviceAvailable) {
-            return outcome.failure.unavailable({ message: input.target });
-          }
-          return outcome.data.found({ message: input.target });
-        },
-      }),
-    },
-  })),
+        }),
+      },
+    };
+  },
 });
 
 const watchCommand = define.command("watch")({
   kind: "command",
   parent: "consumer",
   name: "watch",
-  description: "观察目标",
+  description: "Watch the target",
   fields: {},
   input: emptyInputSchema,
 
-  outputs: define.outputModes("watch", emptyInputSchema, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.stream({
-        description: "结构化输出",
-        format: "structured",
-        success: {
-          kind: "stream",
-          records: {
-            item: {
-              description: "观察记录",
-              schema: watchDataSchema,
-            },
+  outputs: ({ stream }) => {
+    const watch = stream({
+      records: {
+        item: {
+          description: "Observation",
+          schema: watchDataSchema,
+        },
+      },
+      failures: {
+        interrupted: {
+          description: "Watch interrupted",
+          schema: watchDataSchema,
+          exitCode: 11,
+        },
+      },
+      async *handler({ dependencies, outcome }) {
+        yield outcome.record.item({ message: "第一条" });
+        if (!dependencies.serviceAvailable) {
+          return outcome.failure.interrupted({ message: "服务不可用" });
+        }
+        yield outcome.record.item({ message: "第二条" });
+        return outcome.streamSuccess();
+      },
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: watch.structured({ description: "Structured output" }),
+        text: watch.text({
+          description: "Text stream",
+          records: { item: ({ message }) => text.line(message) },
+          failures: {
+            interrupted: ({ message }) =>
+              text.line(`Watch interrupted: ${message}`),
           },
-        },
-        failures: {
-          interrupted: {
-            description: "观察中断",
-            schema: watchDataSchema,
-            exitCode: 11,
-          },
-        },
-        async *handler({ dependencies, outcome }) {
-          yield outcome.record.item({ message: "第一条" });
-          if (!dependencies.serviceAvailable) {
-            return outcome.failure.interrupted({ message: "服务不可用" });
-          }
-          yield outcome.record.item({ message: "第二条" });
-          return outcome.streamSuccess();
-        },
-      }),
-      text: mode.stream({
-        description: "文本流",
-        format: "text",
-        success: {
-          kind: "stream",
-          text: () => text.silent,
-          records: {
-            item: {
-              description: "观察记录",
-              schema: watchDataSchema,
-              text: (data: WatchData) => text.line(data.message),
-            },
-          },
-        },
-        failures: {
-          interrupted: {
-            description: "观察中断",
-            schema: watchDataSchema,
-            exitCode: 11,
-            text: (data: WatchData) => text.line(`观察中断 ${data.message}`),
-          },
-        },
-        async *handler({ dependencies, outcome }) {
-          yield outcome.record.item({ message: "第一条" });
-          if (!dependencies.serviceAvailable) {
-            return outcome.failure.interrupted({ message: "服务不可用" });
-          }
-          yield outcome.record.item({ message: "第二条" });
-          return outcome.streamSuccess();
-        },
-      }),
-    },
-  })),
+          terminal: () => text.silent,
+        }),
+      },
+    };
+  },
 });
 
 const statusCommand = define.command("status")({
   kind: "command",
   parent: "consumer",
   name: "status",
-  description: "读取状态",
+  description: "Read status",
   fields: {},
   input: emptyInputSchema,
 
-  outputs: define.outputModes("status", emptyInputSchema, (mode) => ({
-    default: "structured",
+  outputs: ({ atomic }) => ({
     modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
+      structured: atomic({
         success: { kind: "completion" },
         failures: {},
         handler: ({ outcome }) => outcome.completion(),
-      }),
+      }).structured({ description: "Structured output" }),
     },
-  })),
+  }),
 });
 
-/** 仓库唯一的正向 consumer fixture。 */
 const consumerFixture = {
   cli: define({
     root: "consumer",
@@ -282,7 +228,7 @@ const consumerFixture = {
       consumer: {
         kind: "rootGroup",
         name: "consumer",
-        description: "消费者 fixture",
+        description: "Consumer fixture",
       },
       ...inspectCommand,
       ...watchCommand,
@@ -328,7 +274,7 @@ const failureScenarios = defineFailureScenarios(consumerFixture.cli, {
 function verifyScenarioTypeErrors() {
   void defineCommandScenarios(
     consumerFixture.cli,
-    // @ts-expect-error 新增的 "watch" 命令场景不能被遗漏。
+    // @ts-expect-error the watch command needs a scenario.
     {
       inspect: {
         argv: ["inspect", "--target", "public"],
@@ -342,7 +288,7 @@ function verifyScenarioTypeErrors() {
   );
 
   void defineFailureScenarios(consumerFixture.cli, {
-    // @ts-expect-error "denied" 失败场景不能被遗漏。
+    // @ts-expect-error the denied failure needs a scenario.
     inspect: {
       unavailable: {
         argv: ["inspect", "--target", "remote"],
@@ -369,7 +315,7 @@ function verifyScenarioTypeErrors() {
       },
     },
     watch: {
-      // @ts-expect-error "unavailable" 属于 inspect，不能跨命令合并到 watch。
+      // @ts-expect-error unavailable belongs to inspect.
       unavailable: {
         argv: ["watch"],
         dependencies: { serviceAvailable: false },
@@ -390,32 +336,32 @@ function verifyScenarioTypeErrors() {
       argv: ["status"],
       dependencies: { serviceAvailable: true },
     },
-    // @ts-expect-error 场景映射不能用 default 绕过新增命令。
+    // @ts-expect-error a default scenario cannot stand in for a command.
     default: {
       argv: [],
       dependencies: { serviceAvailable: true },
     },
   });
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 测试 fixture 的泛型连接与静态类型探针需要此断言。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Widen the scenario map to exercise the closed-key requirement.
   const commandScenarioSink = null as unknown as Readonly<
     Record<string, CliScenario<typeof consumerFixture.cli>>
   >;
-  // @ts-expect-error command 场景映射必须使用显式闭合键，不能使用索引签名 sink。
+  // @ts-expect-error a command scenario map must name the commands explicitly.
   void defineCommandScenarios(consumerFixture.cli, commandScenarioSink);
 
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 测试 fixture 的泛型连接与静态类型探针需要此断言。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Widen the scenario map to exercise the closed-key requirement.
   const failureScenarioSink = null as unknown as Readonly<{
     readonly inspect: Readonly<
       Record<string, CliScenario<typeof consumerFixture.cli>>
     >;
   }>;
-  // @ts-expect-error failure 场景映射的内层键必须显式闭合。
+  // @ts-expect-error a failure scenario map must name the failures explicitly.
   void defineFailureScenarios(consumerFixture.cli, failureScenarioSink);
 }
 void verifyScenarioTypeErrors;
 
-void test("唯一 consumer fixture 贯通 argv、输入、success、failure 与 text", async () => {
+void test("scenario capture includes structured and text successes and failures", async () => {
   const structuredSuccess = await runCliScenario({
     cliContract: consumerFixture.cli,
     ...commandScenarios.inspect,
@@ -445,7 +391,7 @@ void test("唯一 consumer fixture 贯通 argv、输入、success、failure 与 
     argv: ["inspect", "--output", "text", "--target", "public"],
     dependencies: { serviceAvailable: true },
   });
-  assert.equal(textSuccess.stdout, "已检查 public\n");
+  assert.equal(textSuccess.stdout, "Inspected public\n");
   assert.equal(textSuccess.stderr, "");
 
   const textFailure = await runCliScenario({
@@ -454,10 +400,10 @@ void test("唯一 consumer fixture 贯通 argv、输入、success、failure 与 
     dependencies: { serviceAvailable: true },
   });
   assert.equal(textFailure.stdout, "");
-  assert.equal(textFailure.stderr, "拒绝检查 private\n");
+  assert.equal(textFailure.stderr, "Inspection denied for private\n");
 });
 
-void test("capture 保留 structured 与 text stream 的生产事件顺序和终止事实", async () => {
+void test("scenario capture preserves stream writes in order and reports termination", async () => {
   const structured = await runCliScenario({
     cliContract: consumerFixture.cli,
     ...commandScenarios.watch,
@@ -507,7 +453,7 @@ void test("capture 保留 structured 与 text stream 的生产事件顺序和终
   assert.ok(Object.isFrozen(textStream.writes[0]));
 });
 
-void test("写入异常保持 CliWriteError 原始 cause", async () => {
+void test("a failed write preserves the original cause in CliWriteError", async () => {
   const cause = new Error("write failure");
   await assert.rejects(
     runCliScenario({
