@@ -83,16 +83,13 @@ export type {
   DataFact,
   DataFactUnion,
   DataOutcome,
-  DataVariantDefinition,
   DataVariantDefinitions,
   FailureFact,
   FailureFactUnion,
   FailureOutcome,
-  FailureVariantDefinition,
   FailureVariantDefinitions,
   OutcomeFact,
   StreamOutcome,
-  StreamRecordDefinition,
   StreamRecordDefinitions,
   StreamRecordFact,
   StreamRecordFactUnion,
@@ -114,9 +111,9 @@ const invalidHelpFactWordingValues = new WeakMap<
   ReadonlyMap<string, unknown>
 >();
 const boundCommandNodes = new WeakMap<object, RuntimeExecutableDefinition>();
-type UnknownDefinitionPropertyIssue = Extract<
+type OutputAuthoringIssue = Extract<
   ContractDefinitionIssue,
-  { readonly code: "unknownDefinitionProperty" }
+  { readonly code: "unknownDefinitionProperty" | "invalidPresenterTable" }
 >;
 const outputModes = new WeakSet<object>();
 const outputModeMetadata = new WeakMap<
@@ -125,7 +122,7 @@ const outputModeMetadata = new WeakMap<
     readonly command: string;
     readonly input: ContractSchema;
     readonly binding: object;
-    readonly unknownProperties: readonly UnknownDefinitionPropertyIssue[];
+    readonly authoringIssues: readonly OutputAuthoringIssue[];
   }>
 >();
 const outputModeDefinitions = new WeakSet<object>();
@@ -135,7 +132,7 @@ const outputModeDefinitionMetadata = new WeakMap<
     readonly command: string;
     readonly input: ContractSchema;
     readonly binding: object;
-    readonly unknownProperties: readonly UnknownDefinitionPropertyIssue[];
+    readonly authoringIssues: readonly OutputAuthoringIssue[];
   }>
 >();
 const versionCapabilities = new WeakSet<object>();
@@ -4947,19 +4944,25 @@ type RuntimeOutputFactory = Readonly<{
 
 function captureResultTable(table: unknown): unknown {
   if (!isPlainRecord(table)) return table;
-  return Object.fromEntries(
-    Object.entries(table).map(([name, definition]) => [
-      name,
-      isPlainRecord(definition) ? { ...definition } : definition,
-    ]),
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(table).map(([name, definition]) => [
+        name,
+        isPlainRecord(definition)
+          ? Object.freeze({ ...definition })
+          : definition,
+      ]),
+    ),
   );
 }
 
 /**
  * Capture one execution's handler and result definition when it is declared, so
  * edits made between two derivations cannot split their results or exit codes.
- * Only the plain authoring records are copied: schemas, handlers and every other
- * value keep the identity the author gave them.
+ * Only the plain authoring records are copied and frozen: a structured mode
+ * exposes these framework-owned snapshots, so writing back through them is
+ * rejected. Schemas, handlers and every other author value keep the identity
+ * the author gave them and are never frozen.
  */
 function captureExecutionDeclaration(
   declaration: unknown,
@@ -4974,15 +4977,17 @@ function captureExecutionDeclaration(
     if (Object.hasOwn(captured, "records")) {
       captured.records = captureResultTable(captured.records);
     }
-    return captured;
+    return Object.freeze(captured);
   }
   const success = captured.success;
   if (isPlainRecord(success)) {
-    captured.success = Object.hasOwn(success, "variants")
-      ? { ...success, variants: captureResultTable(success.variants) }
-      : { ...success };
+    captured.success = Object.freeze(
+      Object.hasOwn(success, "variants")
+        ? { ...success, variants: captureResultTable(success.variants) }
+        : { ...success },
+    );
   }
-  return captured;
+  return Object.freeze(captured);
 }
 
 /**
@@ -5090,26 +5095,53 @@ function invokeOutputCallback(
     declaration: unknown,
     delivery: OutputDelivery,
   ): RuntimeExecution => {
-    const captured = captureExecutionDeclaration(declaration, delivery);
+    // Validate the declaration's own keys once, before reading any value: a key
+    // added or removed after atomic() must not change a later derivation, and
+    // an unknown getter must not be evaluated by the snapshot spread.
+    const declarationIssues: OutputAuthoringIssue[] = [];
+    collectUnknownOwnProperties(
+      declaration,
+      [],
+      delivery === "atomic"
+        ? ["success", "failures", "handler"]
+        : ["records", "failures", "handler"],
+      declarationIssues,
+    );
+    const captured =
+      declarationIssues.length === 0
+        ? captureExecutionDeclaration(declaration, delivery)
+        : undefined;
     const issueMode = (presentation: unknown, format: OutputFormat) => {
-      const material = capturePresentation(presentation);
-      // Check the original keys before pairing variants with presenters. The
-      // callback assigns the mode name later, so keep paths relative to it.
-      const unknownProperties: UnknownDefinitionPropertyIssue[] = [];
-      collectOutputAuthoringProperties(
-        { declaration: captured, presentation: material, delivery, format },
-        unknownProperties,
+      // Copy the fixed declaration issues, then check the options' own keys
+      // before capturing their values. Paths stay relative to the mode name.
+      const authoringIssues: OutputAuthoringIssue[] = [...declarationIssues];
+      collectUnknownOwnProperties(
+        presentation,
+        [],
+        format === "structured"
+          ? ["description"]
+          : delivery === "atomic"
+            ? ["description", "success", "failures"]
+            : ["description", "records", "failures", "terminal"],
+        authoringIssues,
       );
-      const mode =
-        unknownProperties.length === 0
-          ? buildOutputMode(captured, material, delivery, format)
-          : Object.freeze({});
+      let mode: object = Object.freeze({});
+      if (authoringIssues.length === 0) {
+        const material = capturePresentation(presentation);
+        collectOutputAuthoringProperties(
+          { declaration: captured, presentation: material, delivery, format },
+          authoringIssues,
+        );
+        if (authoringIssues.length === 0) {
+          mode = buildOutputMode(captured, material, delivery, format);
+        }
+      }
       outputModeDefinitions.add(mode);
       outputModeDefinitionMetadata.set(mode, {
         command,
         input,
         binding,
-        unknownProperties,
+        authoringIssues,
       });
       return mode;
     };
@@ -5123,12 +5155,12 @@ function invokeOutputCallback(
     stream: (declaration) => createExecution(declaration, "stream"),
   });
   const record = isPlainRecord(declared) ? declared : {};
-  const unknownProperties: UnknownDefinitionPropertyIssue[] = [];
-  collectUnknownProperties(
+  const authoringIssues: OutputAuthoringIssue[] = [];
+  collectUnknownOwnProperties(
     record,
     ["commands", command, "outputs"],
     definitionPropertyKeys.outputModes,
-    unknownProperties,
+    authoringIssues,
   );
   const declaredModes = Object.hasOwn(record, "modes")
     ? record.modes
@@ -5145,7 +5177,7 @@ function invokeOutputCallback(
     modes: Object.freeze({ ...modes }),
   });
   outputModes.add(table);
-  outputModeMetadata.set(table, { command, input, binding, unknownProperties });
+  outputModeMetadata.set(table, { command, input, binding, authoringIssues });
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- compileOutputModes validates dynamic entries and emits definition issues.
   return table as unknown as RuntimeOutputModesDefinition;
 }
@@ -6007,6 +6039,29 @@ function collectUnknownVariantProperties(
 }
 
 /**
+ * New authoring records check every own key, including the non-enumerable
+ * strings and symbols that Object.keys hides. Only the keys are inspected, so
+ * an unknown property's getter is never evaluated.
+ */
+function collectUnknownOwnProperties(
+  value: unknown,
+  path: readonly string[],
+  allowed: readonly string[],
+  issues: ContractDefinitionIssue[],
+): void {
+  if (!isPlainRecord(value)) return;
+  for (const property of Reflect.ownKeys(value)) {
+    const name = String(property);
+    if (!allowed.includes(name)) {
+      issues.push({
+        code: "unknownDefinitionProperty",
+        path: [...path, name],
+      });
+    }
+  }
+}
+
+/**
  * Check a result table together with the presenters paired with it.
  * `declarationPath` locates a key in the compiled mode, while `presenterPath`
  * locates an extra presenter in the `.text(...)` table the author wrote.
@@ -6017,7 +6072,7 @@ function collectOutputVariantProperties(
   declarationPath: readonly string[],
   presenterPath: readonly string[],
   allowed: readonly string[],
-  issues: UnknownDefinitionPropertyIssue[],
+  issues: OutputAuthoringIssue[],
 ): void {
   collectUnknownVariantProperties(
     definitions,
@@ -6025,13 +6080,22 @@ function collectOutputVariantProperties(
     allowed,
     issues,
   );
-  if (!isPlainRecord(presenters)) return;
+  if (!isPlainRecord(presenters)) {
+    // An omitted presenter table is valid for an empty result set, but an
+    // explicitly provided non-object table is not a valid empty table.
+    if (presenters !== undefined) {
+      issues.push({ code: "invalidPresenterTable", path: presenterPath });
+    }
+    return;
+  }
   const declared = isPlainRecord(definitions) ? definitions : {};
-  for (const name of Object.keys(presenters)) {
+  // Own keys include non-enumerable strings and symbols, which Object.keys
+  // hides; an extra presenter must be reported before the table is expanded.
+  for (const name of Reflect.ownKeys(presenters)) {
     if (!Object.hasOwn(declared, name)) {
       issues.push({
         code: "unknownDefinitionProperty",
-        path: [...presenterPath, name],
+        path: [...presenterPath, String(name)],
       });
     }
   }
@@ -6044,27 +6108,9 @@ function collectOutputAuthoringProperties(
     delivery: OutputDelivery;
     format: OutputFormat;
   }>,
-  issues: UnknownDefinitionPropertyIssue[],
+  issues: OutputAuthoringIssue[],
 ): void {
   const { delivery, format } = authoring;
-  collectUnknownProperties(
-    authoring.declaration,
-    [],
-    delivery === "atomic"
-      ? ["success", "failures", "handler"]
-      : ["records", "failures", "handler"],
-    issues,
-  );
-  collectUnknownProperties(
-    authoring.presentation,
-    [],
-    format === "structured"
-      ? ["description"]
-      : delivery === "atomic"
-        ? ["description", "success", "failures"]
-        : ["description", "records", "failures", "terminal"],
-    issues,
-  );
   const declaration = isPlainRecord(authoring.declaration)
     ? authoring.declaration
     : {};
@@ -6576,7 +6622,7 @@ function compileOutputModes(
       reason: "mismatchedInput",
     });
   } else {
-    for (const issue of metadata.unknownProperties) {
+    for (const issue of metadata.authoringIssues) {
       issues.push(issue);
     }
   }
@@ -6663,8 +6709,8 @@ function compileOutputModes(
       });
       continue;
     }
-    if (modeMetadata.unknownProperties.length > 0) {
-      for (const issue of modeMetadata.unknownProperties) {
+    if (modeMetadata.authoringIssues.length > 0) {
+      for (const issue of modeMetadata.authoringIssues) {
         issues.push({
           code: issue.code,
           path: [
@@ -6749,6 +6795,18 @@ function compileOutputModes(
       continue;
     }
 
+    if (
+      collectResultDefinitionIssues(
+        command,
+        modeName,
+        delivery,
+        mode.success,
+        mode.failures,
+        issues,
+      )
+    ) {
+      continue;
+    }
     const runtimeMode = mode as unknown as RuntimeOutputModeDefinition;
     const description = isSingleLineText(mode.description)
       ? mode.description
@@ -6806,6 +6864,61 @@ function outputModesGrammar(
       ]),
     ),
   });
+}
+
+function collectResultDefinitionIssues(
+  command: string,
+  mode: string,
+  delivery: OutputDelivery,
+  success: unknown,
+  failures: unknown,
+  issues: ContractDefinitionIssue[],
+): boolean {
+  let invalid = false;
+  const report = (
+    location: "data" | "failure" | "record",
+    reason: "missingTable" | "invalidEntry",
+    variant?: string,
+  ): void => {
+    issues.push({
+      code: "invalidResultDefinition",
+      command,
+      mode,
+      location,
+      reason,
+      ...(variant === undefined ? {} : { variant }),
+    });
+    invalid = true;
+  };
+  if (isPlainRecord(failures)) {
+    for (const [variant, definition] of Object.entries(failures)) {
+      if (!isPlainRecord(definition))
+        report("failure", "invalidEntry", variant);
+    }
+  }
+  if (!isPlainRecord(success)) return invalid;
+  if (delivery === "stream") {
+    if (!isPlainRecord(success.records)) {
+      report("record", "missingTable");
+    } else {
+      for (const [variant, definition] of Object.entries(success.records)) {
+        if (!isPlainRecord(definition)) {
+          report("record", "invalidEntry", variant);
+        }
+      }
+    }
+  } else if (success.kind === "data") {
+    if (!isPlainRecord(success.variants)) {
+      report("data", "missingTable");
+    } else {
+      for (const [variant, definition] of Object.entries(success.variants)) {
+        if (!isPlainRecord(definition)) {
+          report("data", "invalidEntry", variant);
+        }
+      }
+    }
+  }
+  return invalid;
 }
 
 function compileResultContract(

@@ -5,11 +5,8 @@ import {
   helpCapability,
   text,
   type ContractSchema,
-  type DataVariantDefinition,
   type EmptyCliInput,
-  type FailureVariantDefinition,
   type InvalidFieldChoiceIssue,
-  type StreamRecordDefinition,
   type UnknownCommandIssue,
   type UnknownOptionIssue,
 } from "@ykdz/cli-contract";
@@ -288,30 +285,67 @@ function negativeContractShapes(): void {
   // @ts-expect-error A scenario map cannot use an index signature to escape the closed set.
   void defineCommandScenarios(cli, scenarioSink);
 
-  const invalidDataPresenter: DataVariantDefinition<Payload, true> = {
-    description: "Wrong data",
-    schema: payload,
-    exitCode: 0,
-    // @ts-expect-error A data presenter does not accept silentText.
-    text: () => text.silent,
-  };
-  void invalidDataPresenter;
-
-  const invalidFailurePresenter: FailureVariantDefinition<Payload, true> = {
-    description: "Wrong failure",
-    schema: payload,
-    exitCode: 9,
-    // @ts-expect-error A failure presenter does not accept silentText.
-    text: () => text.silent,
-  };
-  void invalidFailurePresenter;
-
-  const invalidRecordPresenter: StreamRecordDefinition<Payload, true> = {
-    description: "Wrong record",
-    schema: payload,
-    // @ts-expect-error A stream record presenter does not accept TextLines.
-    text: () => text.lines(["Wrong location"]),
-  };
-  void invalidRecordPresenter;
+  void define.command("presenterProbes")({
+    kind: "command",
+    parent: "consumer",
+    name: "presenter-probes",
+    description: "Presenter probes",
+    fields: {},
+    input: emptyInput,
+    outputs({ atomic, stream }) {
+      const operation = atomic({
+        success: {
+          kind: "data",
+          variants: {
+            found: { description: "Found", schema: payload, exitCode: 0 },
+          },
+        },
+        failures: {
+          unavailable: {
+            description: "Unavailable",
+            schema: payload,
+            exitCode: 9,
+          },
+        },
+        handler: ({ outcome }) => outcome.data.found({ message: "public" }),
+      });
+      void operation.text({
+        description: "Wrong data",
+        // @ts-expect-error A data presenter does not accept silentText.
+        success: { found: () => text.silent },
+        failures: {
+          unavailable: (value: Payload) => text.line(value.message),
+        },
+      });
+      void operation.text({
+        description: "Wrong failure",
+        success: { found: (value: Payload) => text.line(value.message) },
+        // @ts-expect-error A failure presenter does not accept silentText.
+        failures: { unavailable: () => text.silent },
+      });
+      const streaming = stream({
+        records: { item: { description: "Record", schema: payload } },
+        failures: {},
+        async *handler({ outcome }) {
+          yield outcome.record.item({ message: "First entry" });
+          return outcome.streamSuccess();
+        },
+      });
+      void streaming.text({
+        description: "Wrong record",
+        // @ts-expect-error A stream record presenter does not accept TextLines.
+        records: { item: () => text.lines(["Wrong location"]) },
+        failures: {},
+        terminal: () => text.silent,
+      });
+      return {
+        modes: {
+          structured: operation.structured({
+            description: "Structured output",
+          }),
+        },
+      };
+    },
+  });
 }
 void negativeContractShapes;
