@@ -36,124 +36,140 @@ const hierarchy = defineHierarchy({
     workspace: {
       kind: "rootGroup",
       name: "workspace",
-      description: "工作区",
+      description: "Workspace",
     },
     ...defineHierarchy.command("inspect")({
       kind: "command",
       parent: "workspace",
       name: "inspect",
-      description: "检查",
+      description: "Inspect",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: inspectInput,
-      outputs: defineHierarchy.outputModes("inspect", inspectInput, (mode) => ({
+      outputs: (mode) => ({
         default: "structured",
         modes: {
-          structured: mode.atomic({
-            description: "结构化输出",
-            format: "structured",
-            success: {
-              kind: "data",
-              variants: {
-                found: { description: "找到", schema: payload, exitCode: 0 },
-              },
-            },
-            failures: {
-              unavailable: {
-                description: "不可用",
-                schema: payload,
-                exitCode: 9,
-              },
-            },
-            handler: ({ input, dependencies, outcome }) => {
-              input.name satisfies number;
-              dependencies.requestId satisfies string;
-              return outcome.data.found({ message: String(input.name) });
-            },
-          }),
-          text: mode.atomic({
-            description: "文本输出",
-            format: "text",
-            success: {
-              kind: "data",
-              variants: {
-                found: {
-                  description: "找到",
-                  schema: payload,
-                  exitCode: 0,
-                  text: ({ message }) => text.line(message),
+          structured: mode
+            .atomic({
+              success: {
+                kind: "data",
+                variants: {
+                  found: {
+                    description: "Found",
+                    schema: payload,
+                    exitCode: 0,
+                  },
                 },
               },
-            },
-            failures: {
-              unavailable: {
-                description: "不可用",
-                schema: payload,
-                exitCode: 9,
-                text: ({ message }) => text.line(message),
+              failures: {
+                unavailable: {
+                  description: "Unavailable",
+                  schema: payload,
+                  exitCode: 9,
+                },
               },
-            },
-            handler: ({ input, outcome }) => {
-              input.name satisfies number;
-              return outcome.data.found({ message: String(input.name) });
-            },
-          }),
+              handler: ({ input, dependencies, outcome }) => {
+                input.name satisfies number;
+                dependencies.requestId satisfies string;
+                return outcome.data.found({ message: String(input.name) });
+              },
+            })
+            .structured({
+              description: "Structured output",
+            }),
+          text: mode
+            .atomic({
+              success: {
+                kind: "data",
+                variants: {
+                  found: {
+                    description: "Found",
+                    schema: payload,
+                    exitCode: 0,
+                  },
+                },
+              },
+              failures: {
+                unavailable: {
+                  description: "Unavailable",
+                  schema: payload,
+                  exitCode: 9,
+                },
+              },
+              handler: ({ input, outcome }) => {
+                input.name satisfies number;
+                return outcome.data.found({ message: String(input.name) });
+              },
+            })
+            .text({
+              description: "Text output",
+              success: {
+                found: ({ message }) => text.line(message),
+              },
+              failures: {
+                unavailable: ({ message }) => text.line(message),
+              },
+            }),
         },
-      })),
+      }),
     }),
     ...defineHierarchy.command("watch")({
       kind: "command",
       parent: "workspace",
       name: "watch",
-      description: "监看",
+      description: "Watch",
       fields: {},
       input: emptyInput,
-      outputs: defineHierarchy.outputModes("watch", emptyInput, (mode) => ({
+      outputs: (mode) => ({
         default: "structured",
         modes: {
-          structured: mode.stream({
-            description: "结构化输出",
-            format: "structured",
-            success: {
-              kind: "stream",
-              records: {
-                update: { description: "更新", schema: payload },
-              },
-            },
-            failures: {},
-            async *handler({ dependencies, outcome }) {
-              dependencies.requestId satisfies string;
-              yield outcome.record.update({ message: "更新" });
-              return outcome.streamSuccess();
-            },
-          }),
-          text: mode.stream({
-            description: "文本流",
-            format: "text",
-            success: {
-              kind: "stream",
-              text: () => text.silent,
+          structured: mode
+            .stream({
               records: {
                 update: {
-                  description: "更新",
+                  description: "Update",
                   schema: payload,
-                  text: ({ message }) => text.line(message),
                 },
               },
-            },
-            failures: {},
-            async *handler({ outcome }) {
-              yield outcome.record.update({ message: "更新" });
-              return outcome.streamSuccess();
-            },
-          }),
+              failures: {},
+              async *handler({ dependencies, outcome }) {
+                dependencies.requestId satisfies string;
+                yield outcome.record.update({ message: "Update" });
+                return outcome.streamSuccess();
+              },
+            })
+            .structured({
+              description: "Structured output",
+            }),
+          text: mode
+            .stream({
+              records: {
+                update: {
+                  description: "Update",
+                  schema: payload,
+                },
+              },
+              failures: {},
+              async *handler({ outcome }) {
+                yield outcome.record.update({ message: "Update" });
+                return outcome.streamSuccess();
+              },
+            })
+            .text({
+              description: "Text stream",
+              records: {
+                update: ({ message }) => text.line(message),
+              },
+              failures: {},
+              terminal: () => text.silent,
+            }),
         },
-      })),
+      }),
     }),
   },
 });
@@ -174,31 +190,27 @@ defineMissingCompletion({
     missingCompletion: {
       kind: "rootGroup",
       name: "missing-completion",
-      description: "遗漏 completion",
+      description: "Missing completion",
     },
     ...defineMissingCompletion.command("leaf")({
       kind: "command",
       parent: "missingCompletion",
       name: "leaf",
-      description: "叶命令",
+      description: "Leaf command",
       input: emptyInput,
-      outputs: defineMissingCompletion.outputModes(
-        "leaf",
-        emptyInput,
-        (mode) => ({
-          default: "text",
-          modes: {
-            // @ts-expect-error [hierarchy-text-coverage] 文本完成方式缺少呈现器。
-            text: mode.atomic({
-              description: "文本输出",
-              format: "text",
+      outputs: (mode) => ({
+        default: "text",
+        modes: {
+          text: mode
+            .atomic({
               success: { kind: "completion" },
               failures: {},
               handler: ({ outcome }) => outcome.completion(),
-            }),
-          },
-        }),
-      ),
+            })
+            // @ts-expect-error [hierarchy-text-coverage] Completion needs a success presenter.
+            .text({ description: "Text output", failures: {} }),
+        },
+      }),
     }),
   },
 });
@@ -212,43 +224,48 @@ defineMissingData({
     missingData: {
       kind: "rootGroup",
       name: "missing-data",
-      description: "遗漏 data",
+      description: "Missing data",
     },
     ...defineMissingData.command("leaf")({
       kind: "command",
       parent: "missingData",
       name: "leaf",
-      description: "叶命令",
+      description: "Leaf command",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: namedInput,
-      outputs: defineMissingData.outputModes("leaf", namedInput, (mode) => ({
+      outputs: (mode) => ({
         default: "text",
         modes: {
-          // @ts-expect-error [hierarchy-text-coverage] 文本结果变体缺少呈现器。
-          text: mode.atomic({
-            description: "文本输出",
-            format: "text",
-            success: {
-              kind: "data",
-              variants: {
-                found: {
-                  description: "找到",
-                  schema: payload,
-                  exitCode: 0,
+          text: mode
+            .atomic({
+              success: {
+                kind: "data",
+                variants: {
+                  found: {
+                    description: "Found",
+                    schema: payload,
+                    exitCode: 0,
+                  },
                 },
               },
-            },
-            failures: {},
-            handler: ({ outcome }) => outcome.data.found({ message: "结果" }),
-          }),
+              failures: {},
+              handler: ({ outcome }) =>
+                outcome.data.found({ message: "Result" }),
+            })
+            // @ts-expect-error [hierarchy-text-coverage] The text mode must cover every data variant.
+            .text({
+              description: "Text output",
+              success: {},
+              failures: {},
+            }),
         },
-      })),
+      }),
     }),
   },
 });
@@ -262,33 +279,39 @@ defineMissingFailure({
     missingFailure: {
       kind: "rootGroup",
       name: "missing-failure",
-      description: "遗漏 failure",
+      description: "Missing failure",
     },
     ...defineMissingFailure.command("leaf")({
       kind: "command",
       parent: "missingFailure",
       name: "leaf",
-      description: "叶命令",
+      description: "Leaf command",
       input: emptyInput,
-      outputs: defineMissingFailure.outputModes("leaf", emptyInput, (mode) => ({
+      outputs: (mode) => ({
         default: "text",
         modes: {
-          // @ts-expect-error [hierarchy-text-coverage] 文本失败变体缺少呈现器。
-          text: mode.atomic({
-            description: "文本输出",
-            format: "text",
-            success: { kind: "completion", text: () => text.silent },
-            failures: {
-              unavailable: {
-                description: "不可用",
-                schema: payload,
-                exitCode: 9,
+          text: mode
+            .atomic({
+              success: {
+                kind: "completion",
               },
-            },
-            handler: ({ outcome }) => outcome.completion(),
-          }),
+              failures: {
+                unavailable: {
+                  description: "Unavailable",
+                  schema: payload,
+                  exitCode: 9,
+                },
+              },
+              handler: ({ outcome }) => outcome.completion(),
+            })
+            // @ts-expect-error [hierarchy-text-coverage] The text mode must cover every failure variant.
+            .text({
+              description: "Text output",
+              success: () => text.silent,
+              failures: {},
+            }),
         },
-      })),
+      }),
     }),
   },
 });
@@ -302,43 +325,47 @@ defineMissingRecord({
     missingRecord: {
       kind: "rootGroup",
       name: "missing-record",
-      description: "遗漏 record",
+      description: "Missing record",
     },
     ...defineMissingRecord.command("leaf")({
       kind: "command",
       parent: "missingRecord",
       name: "leaf",
-      description: "叶命令",
+      description: "Leaf command",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: namedInput,
-      outputs: defineMissingRecord.outputModes("leaf", namedInput, (mode) => ({
+      outputs: (mode) => ({
         default: "text",
         modes: {
-          // @ts-expect-error [hierarchy-text-coverage] 文本流记录缺少呈现器。
-          text: mode.stream({
-            description: "文本输出",
-            format: "text",
-            success: {
-              kind: "stream",
-              text: () => text.silent,
+          text: mode
+            .stream({
               records: {
-                update: { description: "更新", schema: payload },
+                update: {
+                  description: "Update",
+                  schema: payload,
+                },
               },
-            },
-            failures: {},
-            async *handler({ outcome }) {
-              yield outcome.record.update({ message: "更新" });
-              return outcome.streamSuccess();
-            },
-          }),
+              failures: {},
+              async *handler({ outcome }) {
+                yield outcome.record.update({ message: "Update" });
+                return outcome.streamSuccess();
+              },
+            })
+            // @ts-expect-error [hierarchy-text-coverage] The text mode must cover every record variant.
+            .text({
+              description: "Text output",
+              records: {},
+              failures: {},
+              terminal: () => text.silent,
+            }),
         },
-      })),
+      }),
     }),
   },
 });
@@ -352,97 +379,63 @@ defineMissingStreamSuccess({
     missingStreamSuccess: {
       kind: "rootGroup",
       name: "missing-stream-success",
-      description: "遗漏 stream success",
+      description: "Missing stream success",
     },
     ...defineMissingStreamSuccess.command("leaf")({
       kind: "command",
       parent: "missingStreamSuccess",
       name: "leaf",
-      description: "叶命令",
+      description: "Leaf command",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: namedInput,
-      outputs: defineMissingStreamSuccess.outputModes(
-        "leaf",
-        namedInput,
-        (mode) => ({
-          default: "text",
-          modes: {
-            // @ts-expect-error [hierarchy-text-coverage] 文本流终态缺少呈现器。
-            text: mode.stream({
-              description: "文本输出",
-              format: "text",
-              success: {
-                kind: "stream",
-                records: {
-                  update: {
-                    description: "更新",
-                    schema: payload,
-                    text: (value: Readonly<{ readonly message: string }>) =>
-                      text.line(value.message),
-                  },
-                },
-              },
+      outputs: (mode) => ({
+        default: "text",
+        modes: {
+          text: mode
+            .stream({
+              records: { update: { description: "Update", schema: payload } },
               failures: {},
               async *handler({ outcome }) {
-                yield outcome.record.update({ message: "更新" });
+                yield outcome.record.update({ message: "Update" });
                 return outcome.streamSuccess();
               },
+            })
+            // @ts-expect-error [hierarchy-text-coverage] Streams require a terminal presenter.
+            .text({
+              description: "Stream updates",
+              records: { update: ({ message }) => text.line(message) },
+              failures: {},
             }),
-          },
-        }),
-      ),
+        },
+      }),
     }),
   },
 });
 
-function rejectedModes() {
-  const define = defineCli();
-  const input = z.object({});
-  const badModes = define.outputModes("bad", input, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
-      // @ts-expect-error 文本完成方式必须在当前方式内声明呈现器。
-      text: mode.atomic({
-        description: "文本输出",
-        format: "text",
-        success: { kind: "completion" },
-        failures: {},
-        handler: () => undefined as never,
-      }),
-    },
-  }));
-  void badModes;
-
-  const modes = define.outputModes("structured", input, (mode) => ({
-    default: "structured",
-    modes: {
-      // @ts-expect-error structured 方式不接受呈现器。
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: {
-          kind: "completion",
-          text: () => text.silent,
-        },
-        failures: {},
-        handler: () => undefined as never,
-      }),
-    },
-  }));
-  void modes;
-}
-
-void rejectedModes;
+defineCli().command("leaf")({
+  kind: "command",
+  name: "leaf",
+  parent: "workspace",
+  description: "Run the command",
+  input: emptyInput,
+  outputs: ({ atomic }) => {
+    const completion = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    const presentation = {
+      description: "Structured output",
+      success: () => text.silent,
+    };
+    // @ts-expect-error Structured modes only accept a description.
+    const structured = completion.structured(presentation);
+    return { modes: { structured } };
+  },
+});

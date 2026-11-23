@@ -4,10 +4,10 @@ import { z } from "zod";
 const define = defineCli();
 const countHelp = helpCapability({
   wording: {
-    countExactly: "{fields} 恰好出现 {count} 项",
-    countAtLeast: "{fields} 至少出现 {min} 项",
-    countAtMost: "{fields} 至多出现 {max} 项",
-    countBetween: "{fields} 出现 {min} 到 {max} 项",
+    countExactly: "{fields} appears exactly {count} times",
+    countAtLeast: "{fields} appears at least {min} times",
+    countAtMost: "{fields} appears at most {max} times",
+    countBetween: "{fields} appears between {min} and {max} times",
   },
 });
 const dynamicCountFields: readonly ["auth" | "quiet", ...("auth" | "quiet")[]] =
@@ -39,10 +39,10 @@ const invalidChild = define.command("deploy")({
   kind: "command",
   parent: "workspace",
   name: "deploy",
-  description: "部署",
+  description: "Deploy",
   fields: {
-    auth: { kind: "flag", longOption: "--auth", description: "认证" },
-    quiet: { kind: "flag", longOption: "--quiet", description: "静默" },
+    auth: { kind: "flag", longOption: "--auth", description: "Auth" },
+    quiet: { kind: "flag", longOption: "--quiet", description: "Quiet" },
   },
   input: sharedInput0,
   usageConstraints: [
@@ -54,18 +54,19 @@ const invalidChild = define.command("deploy")({
     },
   ],
 
-  outputs: define.outputModes("deploy", sharedInput0, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
-    },
-  })),
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: operation.structured({ description: "Structured output" }),
+      },
+    };
+  },
 });
 
 const sharedInput1 = z.object({
@@ -76,10 +77,10 @@ const invalidDynamicNegativeChild = define.command("stage")({
   kind: "command",
   parent: "workspace",
   name: "stage",
-  description: "部署阶段",
+  description: "Deploy stage",
   fields: {
-    auth: { kind: "flag", longOption: "--auth", description: "认证" },
-    quiet: { kind: "flag", longOption: "--quiet", description: "静默" },
+    auth: { kind: "flag", longOption: "--auth", description: "Auth" },
+    quiet: { kind: "flag", longOption: "--quiet", description: "Quiet" },
   },
   input: sharedInput1,
   usageConstraints: [
@@ -91,18 +92,19 @@ const invalidDynamicNegativeChild = define.command("stage")({
     },
   ],
 
-  outputs: define.outputModes("stage", sharedInput1, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
-    },
-  })),
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: operation.structured({ description: "Structured output" }),
+      },
+    };
+  },
 });
 
 const sharedInput2 = z.object({
@@ -113,10 +115,10 @@ const invalidFixedMaximumChild = define.command("quota")({
   kind: "command",
   parent: "workspace",
   name: "quota",
-  description: "配额",
+  description: "Quota",
   fields: {
-    auth: { kind: "flag", longOption: "--auth", description: "认证" },
-    quiet: { kind: "flag", longOption: "--quiet", description: "静默" },
+    auth: { kind: "flag", longOption: "--auth", description: "Auth" },
+    quiet: { kind: "flag", longOption: "--quiet", description: "Quiet" },
   },
   input: sharedInput2,
   usageConstraints: [
@@ -127,18 +129,19 @@ const invalidFixedMaximumChild = define.command("quota")({
     },
   ],
 
-  outputs: define.outputModes("quota", sharedInput2, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
-    },
-  })),
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: operation.structured({ description: "Structured output" }),
+      },
+    };
+  },
 });
 
 const sharedInput3 = z.object({
@@ -149,10 +152,10 @@ const invalidCompoundChild = define.command("compound")({
   kind: "command",
   parent: "workspace",
   name: "compound",
-  description: "多个数量错误",
+  description: "Multiple count errors",
   fields: {
-    auth: { kind: "flag", longOption: "--auth", description: "认证" },
-    quiet: { kind: "flag", longOption: "--quiet", description: "静默" },
+    auth: { kind: "flag", longOption: "--auth", description: "Auth" },
+    quiet: { kind: "flag", longOption: "--quiet", description: "Quiet" },
   },
   input: sharedInput3,
   usageConstraints: [
@@ -164,18 +167,19 @@ const invalidCompoundChild = define.command("compound")({
     },
   ],
 
-  outputs: define.outputModes("compound", sharedInput3, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
-    },
-  })),
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: operation.structured({ description: "Structured output" }),
+      },
+    };
+  },
 });
 
 const sharedInput4 = z.object({
@@ -186,10 +190,10 @@ const invalidFractionalChild = define.command("fractional")({
   kind: "command",
   parent: "workspace",
   name: "fractional",
-  description: "小数端点",
+  description: "Fractional endpoint",
   fields: {
-    auth: { kind: "flag", longOption: "--auth", description: "认证" },
-    quiet: { kind: "flag", longOption: "--quiet", description: "静默" },
+    auth: { kind: "flag", longOption: "--auth", description: "Auth" },
+    quiet: { kind: "flag", longOption: "--quiet", description: "Quiet" },
   },
   input: sharedInput4,
   usageConstraints: [
@@ -200,18 +204,19 @@ const invalidFractionalChild = define.command("fractional")({
     },
   ],
 
-  outputs: define.outputModes("fractional", sharedInput4, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
-    },
-  })),
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: operation.structured({ description: "Structured output" }),
+      },
+    };
+  },
 });
 
 define({
@@ -222,8 +227,8 @@ define({
   commands: {
     workspace: {
       kind: "rootGroup",
-      name: "工作区",
-      description: "工作区",
+      name: "Workspace",
+      description: "Workspace",
     },
     ...invalidChild,
   },
@@ -237,8 +242,8 @@ define({
   commands: {
     workspace: {
       kind: "rootGroup",
-      name: "工作区",
-      description: "工作区",
+      name: "Workspace",
+      description: "Workspace",
     },
     ...invalidDynamicNegativeChild,
   },
@@ -252,8 +257,8 @@ define({
   commands: {
     workspace: {
       kind: "rootGroup",
-      name: "工作区",
-      description: "工作区",
+      name: "Workspace",
+      description: "Workspace",
     },
     ...invalidFixedMaximumChild,
   },
@@ -267,8 +272,8 @@ define({
   commands: {
     workspace: {
       kind: "rootGroup",
-      name: "工作区",
-      description: "工作区",
+      name: "Workspace",
+      description: "Workspace",
     },
     ...invalidCompoundChild,
   },
@@ -282,8 +287,8 @@ define({
   commands: {
     workspace: {
       kind: "rootGroup",
-      name: "工作区",
-      description: "工作区",
+      name: "Workspace",
+      description: "Workspace",
     },
     ...invalidFractionalChild,
   },
@@ -301,11 +306,11 @@ defineCli()({
   commands: {
     rootDeploy: {
       kind: "rootCommand",
-      name: "根部署",
-      description: "根部署",
+      name: "Root deploy",
+      description: "Root deploy",
       fields: {
-        auth: { kind: "flag", longOption: "--auth", description: "认证" },
-        quiet: { kind: "flag", longOption: "--quiet", description: "静默" },
+        auth: { kind: "flag", longOption: "--auth", description: "Auth" },
+        quiet: { kind: "flag", longOption: "--quiet", description: "Quiet" },
       },
       input: sharedInput5,
       usageConstraints: [
@@ -316,18 +321,21 @@ defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes("rootDeploy", sharedInput5, (mode) => ({
-        default: "structured",
-        modes: {
-          structured: mode.atomic({
-            description: "结构化输出",
-            format: "structured",
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
-          }),
-        },
-      })),
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
+          default: "structured",
+          modes: {
+            structured: operation.structured({
+              description: "Structured output",
+            }),
+          },
+        };
+      },
     },
   },
 });
@@ -341,10 +349,10 @@ defineCli()({
   commands: {
     rootMissingCountField: {
       kind: "rootCommand",
-      name: "根缺失字段",
-      description: "根命令中的混合数量字段组",
+      name: "Root missing field",
+      description: "Mixed count field group in a root command",
       fields: {
-        auth: { kind: "flag", longOption: "--auth", description: "认证" },
+        auth: { kind: "flag", longOption: "--auth", description: "Auth" },
       },
       input: sharedInput6,
       usageConstraints: [
@@ -355,22 +363,21 @@ defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes(
-        "rootMissingCountField",
-        sharedInput6,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
+            structured: operation.structured({
+              description: "Structured output",
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -379,10 +386,10 @@ const sharedInput7 = z.object({ auth: z.boolean().optional() });
 const invalidMixedCountChild = define.command("missingCountChild")({
   kind: "command",
   parent: "workspace",
-  name: "子命令缺失字段",
-  description: "组合展开中的混合数量字段组",
+  name: "Child command missing field",
+  description: "Mixed count field group in composition expansion",
   fields: {
-    auth: { kind: "flag", longOption: "--auth", description: "认证" },
+    auth: { kind: "flag", longOption: "--auth", description: "Auth" },
   },
   input: sharedInput7,
   usageConstraints: [
@@ -393,18 +400,19 @@ const invalidMixedCountChild = define.command("missingCountChild")({
     },
   ],
 
-  outputs: define.outputModes("missingCountChild", sharedInput7, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
-    },
-  })),
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: operation.structured({ description: "Structured output" }),
+      },
+    };
+  },
 });
 
 define({
@@ -415,8 +423,8 @@ define({
   commands: {
     workspace: {
       kind: "rootGroup",
-      name: "工作区",
-      description: "工作区",
+      name: "Workspace",
+      description: "Workspace",
     },
     ...invalidMixedCountChild,
   },
@@ -434,11 +442,11 @@ defineCli()({
   commands: {
     validBroadCounts: {
       kind: "rootCommand",
-      name: "宽泛数量字段组",
-      description: "仍合法的宽泛字段组",
+      name: "Wide count field group",
+      description: "Wide field group that is still valid",
       fields: {
-        auth: { kind: "flag", longOption: "--auth", description: "认证" },
-        quiet: { kind: "flag", longOption: "--quiet", description: "静默" },
+        auth: { kind: "flag", longOption: "--auth", description: "Auth" },
+        quiet: { kind: "flag", longOption: "--quiet", description: "Quiet" },
       },
       input: sharedInput8,
       usageConstraints: [
@@ -453,22 +461,21 @@ defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes(
-        "validBroadCounts",
-        sharedInput8,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
+            structured: operation.structured({
+              description: "Structured output",
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -482,13 +489,13 @@ defineCli()({
   commands: {
     missingSuffixCountField: {
       kind: "rootCommand",
-      name: "后缀未知字段",
-      description: "保留已知后缀字段",
+      name: "Suffix unknown field",
+      description: "Reserved known-suffix field",
       fields: {
         token: {
           kind: "valueOption",
           longOption: "--token",
-          description: "令牌",
+          description: "Token",
         },
       },
       input: sharedInput9,
@@ -496,22 +503,21 @@ defineCli()({
         { kind: "count", fields: missingSuffixCountFields, max: 1 },
       ],
 
-      outputs: defineCli().outputModes(
-        "missingSuffixCountField",
-        sharedInput9,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
+            structured: operation.structured({
+              description: "Structured output",
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -525,13 +531,14 @@ defineCli()({
   commands: {
     missingSuffixBeforeWideCountField: {
       kind: "rootCommand",
-      name: "宽成员前的后缀未知字段",
-      description: "末尾宽成员不能遮挡更早的已知必需字段",
+      name: "Suffix unknown field before a wide member",
+      description:
+        "A trailing wide member must not mask an earlier known required field",
       fields: {
         token: {
           kind: "valueOption",
           longOption: "--token",
-          description: "令牌",
+          description: "Token",
         },
       },
       input: sharedInput10,
@@ -543,22 +550,21 @@ defineCli()({
         },
       ],
 
-      outputs: defineCli().outputModes(
-        "missingSuffixBeforeWideCountField",
-        sharedInput10,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
+            structured: operation.structured({
+              description: "Structured output",
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -572,13 +578,13 @@ defineCli()({
   commands: {
     duplicateSuffixCountField: {
       kind: "rootCommand",
-      name: "后缀重复字段",
-      description: "保留已知前后缀字段",
+      name: "Suffix duplicate field",
+      description: "Reserved known prefix/suffix field",
       fields: {
         token: {
           kind: "valueOption",
           longOption: "--token",
-          description: "令牌",
+          description: "Token",
         },
       },
       input: sharedInput11,
@@ -586,22 +592,21 @@ defineCli()({
         { kind: "count", fields: duplicateSuffixCountFields, max: 1 },
       ],
 
-      outputs: defineCli().outputModes(
-        "duplicateSuffixCountField",
-        sharedInput11,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
+            structured: operation.structured({
+              description: "Structured output",
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });

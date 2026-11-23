@@ -75,9 +75,12 @@ export type ContractExecutionIssue =
     >;
 
 /**
- * 核心检测到执行契约不变量被破坏时抛出的闭合问题集合，例如非法输出或错配调用。
- * 消费者模式、handler、generator 和呈现器自行抛出的值保持原始身份，不被包装成此类。
- * 它不进入应用失败、正常终止或 CLI 线输出；诊断展示与进程状态由宿主决定。
+ * A closed set of issues thrown when the core detects a broken execution
+ * invariant, such as invalid output or a mismatched invocation. Values thrown
+ * by consumer schemas, handlers, generators, or presenters keep their original
+ * identity and are never wrapped in this class. It never becomes an application
+ * failure, a normal termination, or CLI wire output; the host owns diagnostic
+ * display and process state.
  */
 export class ContractExecutionError extends Error {
   readonly issues: readonly [

@@ -67,23 +67,27 @@ function createFixtureCli(onRun: () => void = () => undefined) {
         description: "演示最小 CLI",
         input,
 
-        outputs: define.outputModes("fixture", input, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler({ input, dependencies, outcome }) {
-                assert.deepEqual(input, {});
-                assert.equal(dependencies, undefined);
-                onRun();
-                return outcome.completion();
-              },
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler({ input, dependencies, outcome }) {
+                  assert.deepEqual(input, {});
+                  assert.equal(dependencies, undefined);
+                  onRun();
+                  return outcome.completion();
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -96,7 +100,7 @@ function readProperty(value: unknown, key: string): unknown {
   return Reflect.get(value, key);
 }
 
-void test("空调用执行 completion 契约并写出规范 JSON", async () => {
+void test("an empty invocation executes the completion contract and writes canonical JSON", async () => {
   let runCount = 0;
   const cli = createFixtureCli(() => {
     runCount += 1;
@@ -128,7 +132,7 @@ void test("空调用执行 completion 契约并写出规范 JSON", async () => {
   });
 });
 
-void test("帮助从契约机械产生且不执行 handler", async () => {
+void test("help is produced mechanically from the contract without running the handler", async () => {
   let runCount = 0;
   const cli = createFixtureCli(() => {
     runCount += 1;
@@ -158,7 +162,7 @@ void test("帮助从契约机械产生且不执行 handler", async () => {
   });
 });
 
-void test("多余 positional 产生结构化用法失败和简短 usage", async () => {
+void test("an extra positional produces a structured usage failure and a short usage line", async () => {
   let runCount = 0;
   const cli = createFixtureCli(() => {
     runCount += 1;
@@ -206,7 +210,7 @@ void test("多余 positional 产生结构化用法失败和简短 usage", async 
   });
 });
 
-void test("usage failure manifest 闭合全部问题 wire 形状", () => {
+void test("the usage failure manifest closes over every issue wire shape", () => {
   const wire = JSON.stringify(createFixtureCli().manifest.usageFailure.wire);
   for (const code of [
     "conflictingFlag",
@@ -233,7 +237,7 @@ void test("usage failure manifest 闭合全部问题 wire 形状", () => {
   assert.doesNotMatch(wire, /"exitCode"/);
 });
 
-void test("inputRejected 线格式模式允许空 evidence", () => {
+void test("the inputRejected wire schema allows empty evidence", () => {
   const wire = createFixtureCli().manifest.usageFailure.wire;
   const scopes = readProperty(wire, "oneOf");
   assert.ok(Array.isArray(scopes));
@@ -254,7 +258,7 @@ void test("inputRejected 线格式模式允许空 evidence", () => {
   assert.equal(readProperty(evidence, "minItems"), undefined);
 });
 
-void test("定义期请求两侧 Draft 2020-12 并公开不可变投影", () => {
+void test("definition time requests Draft 2020-12 on both sides and exposes immutable projections", () => {
   const requestedTargets: string[] = [];
   const schema = emptyInputSchema(requestedTargets);
   const cli = defineCli()({
@@ -269,18 +273,22 @@ void test("定义期请求两侧 Draft 2020-12 并公开不可变投影", () => 
         description: "演示最小 CLI",
         input: schema,
 
-        outputs: defineCli().outputModes("fixture", schema, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -332,7 +340,7 @@ void test("定义期请求两侧 Draft 2020-12 并公开不可变投影", () => 
   );
 });
 
-void test("执行等待输出端口完成且契约可以重复执行", async () => {
+void test("execution awaits output-seam completion and the contract can execute repeatedly", async () => {
   let releaseWrite: (() => void) | undefined;
   let writeStarted: (() => void) | undefined;
   const started = new Promise<void>((resolve) => {

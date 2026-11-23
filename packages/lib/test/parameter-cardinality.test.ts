@@ -7,6 +7,7 @@ import {
   executeCli,
   parseCliInvocation,
   type CliContractRawInput,
+  type OutputExecutionFactory,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
@@ -53,28 +54,28 @@ function createArchiveCli() {
         },
         input: sharedInput0,
 
-        outputs: defineCli().outputModes(
-          "archiveFiles",
-          sharedInput0,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
-                success: { kind: "completion" },
+        outputs: (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
                 failures: {},
                 handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
               }),
-            },
-          }),
-        ),
+          },
+        }),
       },
     },
   });
 }
 
-void test("repeatable、variadic positional 与 negated flag 形成固定 raw 值", () => {
+void test("repeatable, variadic positional, and negated flag fields form fixed raw values", () => {
   const cli = createArchiveCli();
   const negativeRawInput: CliContractRawInput<typeof cli> = { color: false };
   void negativeRawInput;
@@ -206,24 +207,28 @@ function createDiagnosticCli() {
         },
         input: sharedInput1,
 
-        outputs: defineCli().outputModes("diagnose", sharedInput1, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
 }
 
-void test("无歧义解析后按字段声明顺序聚合必填、重复与正负冲突", () => {
+void test("after unambiguous parsing, missing, duplicate, and positive/negative conflicts aggregate in field declaration order", () => {
   const cli = createDiagnosticCli();
   const usage = {
     command: "diagnose",
@@ -301,7 +306,7 @@ void test("无歧义解析后按字段声明顺序聚合必填、重复与正负
   );
 });
 
-void test("cardinality 事实同源投影到 grammar、usage、help 与 manifest", async () => {
+void test("cardinality facts project from one source into grammar, usage, help, and manifest", async () => {
   const cli = createArchiveCli();
   const fields = [
     {
@@ -357,7 +362,7 @@ void test("cardinality 事实同源投影到 grammar、usage、help 与 manifest
   ]);
 });
 
-void test("defineCli 拒绝 variadic 后续 positional 与非法或冲突 negated spelling", () => {
+void test("defineCli rejects positionals after a variadic and invalid or conflicting negated spellings", () => {
   const sharedInput2 = z.object({
     files: z.array(z.string()).optional(),
     after: z.string().optional(),
@@ -398,28 +403,34 @@ void test("defineCli 拒绝 variadic 后续 positional 与非法或冲突 negate
         },
         input: sharedInput2,
 
-        outputs: defineCli().outputModes(
-          "invalidCardinality",
-          sharedInput2,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
-                success: { kind: "completion" },
+        outputs: (
+          mode: OutputExecutionFactory<
+            "invalidCardinality",
+            undefined,
+            typeof sharedInput2
+          >,
+        ) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
                 failures: {},
                 handler: () => undefined as never,
+              })
+              .structured({
+                description: "结构化输出",
               }),
-            },
-          }),
-        ),
+          },
+        }),
       },
     },
   };
 
   assert.throws(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证定义期拒绝。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally bypasses static restrictions to verify definition-time rejection.
     () => defineCli()(definition as never),
     (error) => {
       assert.ok(error instanceof ContractDefinitionError);

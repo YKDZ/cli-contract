@@ -13,34 +13,37 @@ define({
     workspace: {
       kind: "rootGroup",
       name: "workspace",
-      description: "工作区",
+      description: "Workspace",
     },
     ...define.command("inspect")({
       kind: "command",
       parent: "workspace",
       name: "inspect",
-      description: "检查",
+      description: "Inspect",
       input: sharedInput0,
 
-      outputs: define.outputModes("inspect", sharedInput0, (mode) => ({
-        default: "structured",
-        modes: {
-          structured: mode.atomic({
-            description: "结构化输出",
-            format: "structured",
-            success: { kind: "completion" },
-            failures: {
-              permissionDenied: {
-                description: "无权限",
-                schema: z.object({ resource: z.string() }),
-                exitCode: 13,
-                text: ({ resource }) => text.line(resource),
-              },
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {
+            permissionDenied: {
+              description: "Permission denied",
+              schema: z.object({ resource: z.string() }),
+              exitCode: 13,
+              text: ({ resource }) => text.line(resource),
             },
-            handler: ({ outcome }) => outcome.completion(),
-          }),
-        },
-      })),
+          },
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
+          default: "structured",
+          modes: {
+            structured: operation.structured({
+              description: "Structured output",
+            }),
+          },
+        };
+      },
     }),
   },
 });
@@ -55,28 +58,31 @@ defineCli()({
     rootInspect: {
       kind: "rootCommand",
       name: "root-inspect",
-      description: "根检查",
+      description: "Root inspect",
       input: sharedInput1,
 
-      outputs: defineCli().outputModes("rootInspect", sharedInput1, (mode) => ({
-        default: "structured",
-        modes: {
-          structured: mode.atomic({
-            description: "结构化输出",
-            format: "structured",
-            success: { kind: "completion" },
-            failures: {
-              permissionDenied: {
-                description: "无权限",
-                schema: z.object({ resource: z.string() }),
-                exitCode: 13,
-                text: ({ resource }) => text.line(resource),
-              },
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {
+            permissionDenied: {
+              description: "Permission denied",
+              schema: z.object({ resource: z.string() }),
+              exitCode: 13,
+              text: ({ resource }) => text.line(resource),
             },
-            handler: ({ outcome }) => outcome.completion(),
-          }),
-        },
-      })),
+          },
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
+          default: "structured",
+          modes: {
+            structured: operation.structured({
+              description: "Structured output",
+            }),
+          },
+        };
+      },
     },
   },
 });

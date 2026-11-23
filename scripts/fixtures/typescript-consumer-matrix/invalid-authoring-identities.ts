@@ -10,22 +10,25 @@ defineCli()({
   commands: {
     bad_root: {
       kind: "rootCommand",
-      name: "非法根身份",
-      description: "检查根命令身份诊断",
+      name: "Invalid root identity",
+      description: "Checks root command identity diagnostics",
       input: sharedInput0,
 
-      outputs: defineCli().outputModes("bad_root", sharedInput0, (mode) => ({
-        default: "structured",
-        modes: {
-          structured: mode.atomic({
-            description: "结构化输出",
-            format: "structured",
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
-          }),
-        },
-      })),
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
+          default: "structured",
+          modes: {
+            structured: operation.structured({
+              description: "Structured output",
+            }),
+          },
+        };
+      },
     },
   },
 });
@@ -39,30 +42,34 @@ defineCli()({
   commands: {
     negatedRoot: {
       kind: "rootCommand",
-      name: "反向选项拼写",
-      description: "省略短别名时仍检查反向选项",
+      name: "Negated option spelling",
+      description:
+        "Still checks the negated option when the short alias is omitted",
       fields: {
         token: {
           kind: "flag",
           longOption: "--token",
           negatedLongOption: "--no-Bad",
-          description: "令牌",
+          description: "Token",
         },
       },
       input: sharedInput1,
 
-      outputs: defineCli().outputModes("negatedRoot", sharedInput1, (mode) => ({
-        default: "structured",
-        modes: {
-          structured: mode.atomic({
-            description: "结构化输出",
-            format: "structured",
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
-          }),
-        },
-      })),
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
+          default: "structured",
+          modes: {
+            structured: operation.structured({
+              description: "Structured output",
+            }),
+          },
+        };
+      },
     },
   },
 });
@@ -76,33 +83,32 @@ defineCli()({
   commands: {
     longOptionIdentity: {
       kind: "rootCommand",
-      name: "长选项拼写",
-      description: "检查无效长选项",
+      name: "Long option spelling",
+      description: "Checks an invalid long option",
       fields: {
         token: {
           kind: "valueOption",
           longOption: "--Bad",
-          description: "令牌",
+          description: "Token",
         },
       },
       input: sharedInput2,
 
-      outputs: defineCli().outputModes(
-        "longOptionIdentity",
-        sharedInput2,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
+            structured: operation.structured({
+              description: "Structured output",
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -116,34 +122,33 @@ defineCli()({
   commands: {
     shortAliasIdentity: {
       kind: "rootCommand",
-      name: "短别名拼写",
-      description: "检查无效短别名",
+      name: "Short alias spelling",
+      description: "Checks an invalid short alias",
       fields: {
         token: {
           kind: "valueOption",
           longOption: "--token",
           shortAlias: "-bad",
-          description: "令牌",
+          description: "Token",
         },
       },
       input: sharedInput3,
 
-      outputs: defineCli().outputModes(
-        "shortAliasIdentity",
-        sharedInput3,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
+            structured: operation.structured({
+              description: "Structured output",
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -157,33 +162,32 @@ defineCli()({
   commands: {
     fieldIdentity: {
       kind: "rootCommand",
-      name: "字段身份",
-      description: "检查字段身份",
+      name: "Field identity",
+      description: "Checks field identity",
       fields: {
         bad_field: {
           kind: "valueOption",
           longOption: "--bad-field",
-          description: "令牌",
+          description: "Token",
         },
       },
       input: sharedInput4,
 
-      outputs: defineCli().outputModes(
-        "fieldIdentity",
-        sharedInput4,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
+            structured: operation.structured({
+              description: "Structured output",
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -197,44 +201,43 @@ defineCli()({
   commands: {
     dataVariantIdentity: {
       kind: "rootCommand",
-      name: "数据变体身份",
-      description: "检查数据变体身份",
+      name: "Data variant identity",
+      description: "Checks data variant identity",
       fields: {
         token: {
           kind: "valueOption",
           longOption: "--token",
-          description: "令牌",
+          description: "Token",
         },
       },
       input: sharedInput5,
 
-      outputs: defineCli().outputModes(
-        "dataVariantIdentity",
-        sharedInput5,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: {
+            kind: "data",
+            variants: {
+              bad_name: {
+                description: "Data variant",
+                schema: z.string(),
+                exitCode: 0,
+              },
+            },
+          },
+          failures: {},
+          handler: () => {
+            throw new Error("Type-check only");
+          },
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "data",
-                variants: {
-                  bad_name: {
-                    description: "数据变体",
-                    schema: z.string(),
-                    exitCode: 0,
-                  },
-                },
-              },
-              failures: {},
-              handler: () => {
-                throw new Error("仅用于类型检查");
-              },
+            structured: operation.structured({
+              description: "Structured output",
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -248,34 +251,33 @@ defineCli()({
   commands: {
     failureVariantIdentity: {
       kind: "rootCommand",
-      name: "失败变体身份",
-      description: "检查失败变体身份",
+      name: "Failure variant identity",
+      description: "Checks failure variant identity",
       input: sharedInput6,
 
-      outputs: defineCli().outputModes(
-        "failureVariantIdentity",
-        sharedInput6,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {
+            bad_name: {
+              description: "Failure variant",
+              schema: z.string(),
+              exitCode: 1,
+            },
+          },
+          handler: () => {
+            throw new Error("Type-check only");
+          },
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {
-                bad_name: {
-                  description: "失败变体",
-                  schema: z.string(),
-                  exitCode: 1,
-                },
-              },
-              handler: () => {
-                throw new Error("仅用于类型检查");
-              },
+            structured: operation.structured({
+              description: "Structured output",
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -285,30 +287,31 @@ const sharedInput7 = z.object({ token: z.boolean().optional() });
 const invalidNegatedChild = define.command("deploy")({
   kind: "command",
   parent: "workspace",
-  name: "部署",
-  description: "命令组合中的反向选项拼写",
+  name: "Deploy",
+  description: "Negated option spelling in command composition",
   fields: {
     token: {
       kind: "flag",
       longOption: "--token",
       negatedLongOption: "--no-Bad",
-      description: "令牌",
+      description: "Token",
     },
   },
   input: sharedInput7,
 
-  outputs: define.outputModes("deploy", sharedInput7, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
-    },
-  })),
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: operation.structured({ description: "Structured output" }),
+      },
+    };
+  },
 });
 
 define({
@@ -316,12 +319,12 @@ define({
   help: helpCapability(),
 
   usageFailureExitCode: 64,
-  // @ts-expect-error 非法反向选项不能进入根命令树。
+  // @ts-expect-error An invalid negated option must not enter the root command tree.
   commands: {
     workspace: {
       kind: "rootGroup",
-      name: "工作区",
-      description: "工作区",
+      name: "Workspace",
+      description: "Workspace",
     },
     ...invalidNegatedChild,
   },
@@ -336,33 +339,33 @@ defineCli()({
   commands: {
     reservedConstructor: {
       kind: "rootCommand",
-      name: "保留字段",
-      description: "禁名不因字段形态或必填性而放行",
+      name: "Reserved field",
+      description:
+        "A reserved name is not allowed by field shape or requiredness",
       fields: {
         constructor: {
           kind: "valueOption",
           longOption: "--constructor",
-          description: "保留字段身份",
+          description: "Reserved field identity",
         },
       },
       input: sharedInput8,
 
-      outputs: defineCli().outputModes(
-        "reservedConstructor",
-        sharedInput8,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
+            structured: operation.structured({
+              description: "Structured output",
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -376,33 +379,33 @@ defineCli()({
   commands: {
     reservedHasOwnProperty: {
       kind: "rootCommand",
-      name: "保留字段",
-      description: "禁名不因字段形态或必填性而放行",
+      name: "Reserved field",
+      description:
+        "A reserved name is not allowed by field shape or requiredness",
       fields: {
         hasOwnProperty: {
           kind: "flag",
           longOption: "--hasownproperty",
-          description: "保留字段身份",
+          description: "Reserved field identity",
         },
       },
       input: sharedInput9,
 
-      outputs: defineCli().outputModes(
-        "reservedHasOwnProperty",
-        sharedInput9,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
+            structured: operation.structured({
+              description: "Structured output",
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -416,32 +419,32 @@ defineCli()({
   commands: {
     reservedIsPrototypeOf: {
       kind: "rootCommand",
-      name: "保留字段",
-      description: "禁名不因字段形态或必填性而放行",
+      name: "Reserved field",
+      description:
+        "A reserved name is not allowed by field shape or requiredness",
       fields: {
         isPrototypeOf: {
           kind: "positional",
-          description: "保留字段身份",
+          description: "Reserved field identity",
         },
       },
       input: sharedInput10,
 
-      outputs: defineCli().outputModes(
-        "reservedIsPrototypeOf",
-        sharedInput10,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
+            structured: operation.structured({
+              description: "Structured output",
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -457,33 +460,33 @@ defineCli()({
   commands: {
     reservedPropertyIsEnumerable: {
       kind: "rootCommand",
-      name: "保留字段",
-      description: "禁名不因字段形态或必填性而放行",
+      name: "Reserved field",
+      description:
+        "A reserved name is not allowed by field shape or requiredness",
       fields: {
         propertyIsEnumerable: {
           kind: "repeatableOption",
           longOption: "--propertyisenumerable",
-          description: "保留字段身份",
+          description: "Reserved field identity",
         },
       },
       input: sharedInput11,
 
-      outputs: defineCli().outputModes(
-        "reservedPropertyIsEnumerable",
-        sharedInput11,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
+            structured: operation.structured({
+              description: "Structured output",
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -497,33 +500,33 @@ defineCli()({
   commands: {
     reservedToString: {
       kind: "rootCommand",
-      name: "保留字段",
-      description: "禁名不因字段形态或必填性而放行",
+      name: "Reserved field",
+      description:
+        "A reserved name is not allowed by field shape or requiredness",
       fields: {
         toString: {
           kind: "valueOption",
           longOption: "--tostring",
-          description: "保留字段身份",
+          description: "Reserved field identity",
         },
       },
       input: sharedInput12,
 
-      outputs: defineCli().outputModes(
-        "reservedToString",
-        sharedInput12,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
+            structured: operation.structured({
+              description: "Structured output",
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -537,32 +540,32 @@ defineCli()({
   commands: {
     reservedValueOf: {
       kind: "rootCommand",
-      name: "保留字段",
-      description: "禁名不因字段形态或必填性而放行",
+      name: "Reserved field",
+      description:
+        "A reserved name is not allowed by field shape or requiredness",
       fields: {
         valueOf: {
           kind: "variadicPositional",
-          description: "保留字段身份",
+          description: "Reserved field identity",
         },
       },
       input: sharedInput13,
 
-      outputs: defineCli().outputModes(
-        "reservedValueOf",
-        sharedInput13,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
+            structured: operation.structured({
+              description: "Structured output",
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -571,7 +574,7 @@ const reservedLocaleFields = {
   toLocaleString: {
     kind: "valueOption",
     longOption: "--tolocalestring",
-    description: "保留字段身份",
+    description: "Reserved field identity",
   },
 } as const;
 
@@ -579,25 +582,23 @@ const sharedInput14 = z.object({ toLocaleString: z.string().optional() });
 define.command("reservedToLocaleString")({
   kind: "command",
   parent: "workspace",
-  name: "保留字段",
-  description: "提取字段经命令组合也应拒绝",
+  name: "Reserved field",
+  description:
+    "An extracted field is also rejected through command composition",
   fields: reservedLocaleFields,
   input: sharedInput14,
 
-  outputs: define.outputModes(
-    "reservedToLocaleString",
-    sharedInput14,
-    (mode) => ({
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
       default: "structured",
       modes: {
-        structured: mode.atomic({
-          description: "结构化输出",
-          format: "structured",
-          success: { kind: "completion" },
-          failures: {},
-          handler: ({ outcome }) => outcome.completion(),
-        }),
+        structured: operation.structured({ description: "Structured output" }),
       },
-    }),
-  ),
+    };
+  },
 });

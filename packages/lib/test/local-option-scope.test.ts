@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { englishHelpCapability } from "./english-help.ts";
 
-void test("叶命令独立声明应用选项，清单版本与执行线版本各自保持准确", async () => {
+void test("leaf commands declare application options independently, and manifest and execution wire versions each stay accurate", async () => {
   const define = defineCli();
   const sharedInput1 = z.object({ region: z.enum(["us", "cn"]).optional() });
   const sharedInput0 = z.object({ region: z.enum(["us", "eu"]) });
@@ -35,18 +35,22 @@ void test("叶命令独立声明应用选项，清单版本与执行线版本各
         },
         input: sharedInput0,
 
-        outputs: define.outputModes("deploy", sharedInput0, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       }),
       ...define.command("inspect")({
         kind: "command",
@@ -62,18 +66,22 @@ void test("叶命令独立声明应用选项，清单版本与执行线版本各
         },
         input: sharedInput1,
 
-        outputs: define.outputModes("inspect", sharedInput1, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       }),
     },
   });

@@ -17,39 +17,28 @@ const fields = {
   channel: {
     kind: "valueOption",
     longOption: "--channel",
-    description: "通道",
+    description: "Channel",
   },
   count: {
     kind: "valueOption",
     longOption: "--count",
-    description: "数量",
+    description: "Count",
   },
   enabled: {
     kind: "flag",
     longOption: "--enabled",
     negatedLongOption: "--no-enabled",
-    description: "启用",
+    description: "Enabled",
   },
   tags: {
     kind: "repeatableOption",
     longOption: "--tag",
-    description: "标签",
+    description: "Tags",
   },
-  target: { kind: "positional", description: "目标" },
-  paths: { kind: "variadicPositional", description: "路径" },
+  target: { kind: "positional", description: "Target" },
+  paths: { kind: "variadicPositional", description: "Paths" },
 } as const;
 const define = defineCli();
-const outputs = define.outputModes("inspect", input, (mode) => ({
-  modes: {
-    structured: mode.atomic({
-      description: "结构化输出",
-      format: "structured",
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
-    }),
-  },
-}));
 
 const root = define({
   root: "inspect",
@@ -59,10 +48,23 @@ const root = define({
     inspect: {
       kind: "rootCommand",
       name: "inspect",
-      description: "根命令示例",
+      description: "Root command example",
       fields,
       input,
-      outputs,
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
+          modes: {
+            structured: operation.structured({
+              description: "Structured output",
+            }),
+          },
+        };
+      },
       examples: [
         {
           input: {
@@ -94,10 +96,21 @@ const leafCommand = define.command("inspect")({
   kind: "command",
   parent: "workspace",
   name: "inspect",
-  description: "叶命令示例",
+  description: "Leaf command example",
   fields,
   input,
-  outputs,
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      modes: {
+        structured: operation.structured({ description: "Structured output" }),
+      },
+    };
+  },
   examples: [
     {
       input: {
@@ -119,7 +132,7 @@ const leaf = define({
     workspace: {
       kind: "rootGroup",
       name: "workspace",
-      description: "工作区",
+      description: "Workspace",
     },
     ...leafCommand,
   },
@@ -129,11 +142,22 @@ const invalidEnumCommand = define.command("inspect")({
   kind: "command",
   parent: "workspace",
   name: "inspect",
-  description: "枚举负例",
+  description: "Enum negative",
   fields,
   input,
-  outputs,
-  // @ts-expect-error 输入模式的枚举约束也适用于原始示例。
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      modes: {
+        structured: operation.structured({ description: "Structured output" }),
+      },
+    };
+  },
+  // @ts-expect-error The input schema's enum constraint also applies to raw examples.
   examples: [
     {
       input: {
@@ -152,11 +176,22 @@ const invalidModeCommand = define.command("inspect")({
   kind: "command",
   parent: "workspace",
   name: "inspect",
-  description: "方式负例",
+  description: "Mode negative",
   fields,
   input,
-  outputs,
-  // @ts-expect-error 固定输出方式必须属于命令的方式闭集。
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      modes: {
+        structured: operation.structured({ description: "Structured output" }),
+      },
+    };
+  },
+  // @ts-expect-error A fixed output mode must belong to the command's closed mode set.
   examples: [
     {
       input: {
@@ -172,15 +207,69 @@ const invalidModeCommand = define.command("inspect")({
   ],
 });
 
+const invalidRootModeCommand = define({
+  root: "inspect",
+  help: helpCapability(),
+  usageFailureExitCode: 64,
+  commands: {
+    inspect: {
+      kind: "rootCommand",
+      name: "inspect",
+      description: "Root mode negative",
+      fields,
+      input,
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
+          modes: {
+            structured: operation.structured({
+              description: "Structured output",
+            }),
+          },
+        };
+      },
+      // @ts-expect-error A root example cannot select a mode outside its own closed table.
+      examples: [
+        {
+          input: {
+            channel: "safe",
+            count: "3",
+            enabled: true,
+            tags: ["one"],
+            target: "build",
+            paths: ["src"],
+          },
+          outputMode: "text",
+        },
+      ],
+    },
+  },
+});
+
 const missingInputCommand = define.command("inspect")({
   kind: "command",
   parent: "workspace",
   name: "inspect",
-  description: "必填负例",
+  description: "Required negative",
   fields,
   input,
-  outputs,
-  // @ts-expect-error 输入模式必填字段不能从示例中省略。
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      modes: {
+        structured: operation.structured({ description: "Structured output" }),
+      },
+    };
+  },
+  // @ts-expect-error Required input schema fields cannot be omitted from an example.
   examples: [
     {
       input: {
@@ -203,15 +292,26 @@ const inputWithExtra = {
   paths: ["src"] as [string, ...string[]],
   extra: "not declared",
 };
-// @ts-expect-error 提取变量中的额外字段仍受输入闭集检查。
 const extraInputCommand = define.command("inspect")({
   kind: "command",
   parent: "workspace",
   name: "inspect",
-  description: "额外字段负例",
+  description: "Extra field negative",
   fields,
   input,
-  outputs,
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      modes: {
+        structured: operation.structured({ description: "Structured output" }),
+      },
+    };
+  },
+  // @ts-expect-error Extra fields in an extracted variable are still subject to the closed input check.
   examples: [{ input: inputWithExtra }],
 });
 
@@ -219,10 +319,21 @@ const misspelledMemberCommand = define.command("inspect")({
   kind: "command",
   parent: "workspace",
   name: "inspect",
-  description: "拼错成员负例",
+  description: "Misspelled member negative",
   fields,
   input,
-  outputs,
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      modes: {
+        structured: operation.structured({ description: "Structured output" }),
+      },
+    };
+  },
   examples: [
     {
       input: {
@@ -233,28 +344,39 @@ const misspelledMemberCommand = define.command("inspect")({
         target: "build",
         paths: ["src"],
       },
-      // @ts-expect-error 示例成员采用闭合拼写。
+      // @ts-expect-error Example members use closed spelling.
       outputmode: "structured",
     },
   ],
 });
 
 const readonlyTags = ["read-only"] as const;
-// @ts-expect-error 只读数组不能满足 schema 的可变数组 Input。
 const readonlyArrayCommand = define.command("inspect")({
   kind: "command",
   parent: "workspace",
   name: "inspect",
-  description: "只读数组负例",
+  description: "Readonly array negative",
   fields,
   input,
-  outputs,
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      modes: {
+        structured: operation.structured({ description: "Structured output" }),
+      },
+    };
+  },
   examples: [
     {
       input: {
         channel: "fast",
         count: "3",
         enabled: true,
+        // @ts-expect-error A readonly array cannot satisfy the schema's mutable array Input.
         tags: readonlyTags,
         target: "build",
         paths: ["src"],
@@ -263,21 +385,32 @@ const readonlyArrayCommand = define.command("inspect")({
   ],
 });
 
-// @ts-expect-error repeatable 字段必须包含至少一个原始值。
 const emptyRepeatableCommand = define.command("inspect")({
   kind: "command",
   parent: "workspace",
   name: "inspect",
-  description: "空重复数组负例",
+  description: "Empty repeatable array negative",
   fields,
   input,
-  outputs,
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      modes: {
+        structured: operation.structured({ description: "Structured output" }),
+      },
+    };
+  },
   examples: [
     {
       input: {
         channel: "fast",
         count: "3",
         enabled: true,
+        // @ts-expect-error A repeatable field must contain at least one raw value.
         tags: [],
         target: "build",
         paths: ["src"],
@@ -291,18 +424,29 @@ const unnegatedFlagFields = {
   enabled: {
     kind: "flag",
     longOption: "--enabled",
-    description: "启用",
+    description: "Enabled",
   },
 } as const;
 const unnegatedFalseFlagCommand = define.command("inspect")({
   kind: "command",
   parent: "workspace",
   name: "inspect",
-  description: "无否定flag负例",
+  description: "Non-negatable flag negative",
   fields: unnegatedFlagFields,
   input,
-  outputs,
-  // @ts-expect-error 无否定拼写的flag不能使用false原始值。
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: { kind: "completion" },
+      failures: {},
+      handler: ({ outcome }) => outcome.completion(),
+    });
+    return {
+      modes: {
+        structured: operation.structured({ description: "Structured output" }),
+      },
+    };
+  },
+  // @ts-expect-error A flag without a negated spelling cannot use a false raw value.
   examples: [
     {
       input: {
@@ -326,6 +470,7 @@ void root;
 void leaf;
 void invalidEnumCommand;
 void invalidModeCommand;
+void invalidRootModeCommand;
 void missingInputCommand;
 void extraInputCommand;
 void misspelledMemberCommand;

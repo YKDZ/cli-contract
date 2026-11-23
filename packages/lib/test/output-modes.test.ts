@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   ContractDefinitionError,
+  type OutputExecutionFactory,
   defineCli,
   executeCli,
   helpCapability,
@@ -11,79 +12,10 @@ import {
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
-void test("每个命令按具名方式选择独立结果契约并保留方式身份", async () => {
+void test("each command selects an independent result contract per named mode and keeps mode identity", async () => {
   const define = defineCli();
   const input = z.object({ name: z.string() });
   const selectedHandlers: string[] = [];
-  const output = define.outputModes("greet", input, (mode) => ({
-    default: "json",
-    modes: {
-      json: mode.atomic({
-        description: "机器读取的完整结果",
-        format: "structured",
-        success: {
-          kind: "data",
-          variants: {
-            greeting: {
-              description: "问候内容",
-              schema: z
-                .object({ message: z.string() })
-                .transform(({ message }) => ({ message: Number(message) }))
-                .pipe(z.object({ message: z.number() })),
-              exitCode: 0,
-            },
-          },
-        },
-        failures: {},
-        handler: ({ input, outcome }) => {
-          selectedHandlers.push("json");
-          return outcome.data.greeting({ message: input.name });
-        },
-      }),
-      text: mode.atomic({
-        description: "供人阅读的问候",
-        format: "text",
-        success: {
-          kind: "data",
-          variants: {
-            greeting: {
-              description: "问候内容",
-              schema: z
-                .object({ message: z.string() })
-                .transform(({ message }) => ({ message: Number(message) }))
-                .pipe(z.object({ message: z.number() })),
-              exitCode: 0,
-              text: ({ message }) => text.line(`你好，${message}`),
-            },
-          },
-        },
-        failures: {},
-        handler: ({ input, outcome }) => {
-          selectedHandlers.push("text");
-          return outcome.data.greeting({ message: input.name });
-        },
-      }),
-      follow: mode.stream({
-        description: "逐条输出问候记录",
-        format: "structured",
-        success: {
-          kind: "stream",
-          records: {
-            greeting: {
-              description: "问候记录",
-              schema: z.object({ message: z.string() }),
-            },
-          },
-        },
-        failures: {},
-        async *handler({ input, outcome }) {
-          selectedHandlers.push("follow");
-          yield outcome.record.greeting({ message: input.name });
-          return outcome.streamSuccess();
-        },
-      }),
-    },
-  }));
   const cli = define({
     root: "greet",
     help: helpCapability({
@@ -106,7 +38,85 @@ void test("每个命令按具名方式选择独立结果契约并保留方式身
           },
         },
         input,
-        outputs: output,
+        outputs: (mode) => ({
+          default: "json",
+          modes: {
+            json: mode
+              .atomic({
+                success: {
+                  kind: "data",
+                  variants: {
+                    greeting: {
+                      description: "问候内容",
+                      schema: z
+                        .object({ message: z.string() })
+                        .transform(({ message }) => ({
+                          message: Number(message),
+                        }))
+                        .pipe(z.object({ message: z.number() })),
+                      exitCode: 0,
+                    },
+                  },
+                },
+                failures: {},
+                handler: ({ input, outcome }) => {
+                  selectedHandlers.push("json");
+                  return outcome.data.greeting({ message: input.name });
+                },
+              })
+              .structured({
+                description: "机器读取的完整结果",
+              }),
+            text: mode
+              .atomic({
+                success: {
+                  kind: "data",
+                  variants: {
+                    greeting: {
+                      description: "问候内容",
+                      schema: z
+                        .object({ message: z.string() })
+                        .transform(({ message }) => ({
+                          message: Number(message),
+                        }))
+                        .pipe(z.object({ message: z.number() })),
+                      exitCode: 0,
+                    },
+                  },
+                },
+                failures: {},
+                handler: ({ input, outcome }) => {
+                  selectedHandlers.push("text");
+                  return outcome.data.greeting({ message: input.name });
+                },
+              })
+              .text({
+                description: "供人阅读的问候",
+                success: {
+                  greeting: ({ message }) => text.line(`你好，${message}`),
+                },
+                failures: {},
+              }),
+            follow: mode
+              .stream({
+                records: {
+                  greeting: {
+                    description: "问候记录",
+                    schema: z.object({ message: z.string() }),
+                  },
+                },
+                failures: {},
+                async *handler({ input, outcome }) {
+                  selectedHandlers.push("follow");
+                  yield outcome.record.greeting({ message: input.name });
+                  return outcome.streamSuccess();
+                },
+              })
+              .structured({
+                description: "逐条输出问候记录",
+              }),
+          },
+        }),
       },
     },
   });
@@ -183,18 +193,6 @@ void test("每个命令按具名方式选择独立结果契约并保留方式身
 function createSingleModeCli(defaultSelection: "implicit" | "explicit") {
   const define = defineCli();
   const input = z.object({});
-  const outputs = define.outputModes("run", input, (mode) => {
-    const json = mode.atomic({
-      description: "结构化结果",
-      format: "structured",
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
-    });
-    return defaultSelection === "implicit"
-      ? { modes: { json } }
-      : { default: "json", modes: { json } };
-  });
   return define({
     root: "run",
     help: helpCapability({
@@ -211,7 +209,22 @@ function createSingleModeCli(defaultSelection: "implicit" | "explicit") {
         description: "运行任务",
         fields: {},
         input,
-        outputs,
+        outputs: (mode) => {
+          const json = mode
+            .atomic({
+              success: {
+                kind: "completion",
+              },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            })
+            .structured({
+              description: "结构化结果",
+            });
+          return defaultSelection === "implicit"
+            ? { modes: { json } }
+            : { default: "json", modes: { json } };
+        },
       },
     },
   });
@@ -220,22 +233,24 @@ function createSingleModeCli(defaultSelection: "implicit" | "explicit") {
 function invalidSingleModeDefinition(defaultValue: unknown) {
   const define = defineCli();
   const input = z.object({});
-  const outputs = Reflect.apply(define.outputModes, define, [
-    "run",
-    input,
-    (mode: { readonly atomic: (definition: object) => object }) => ({
-      default: defaultValue,
-      modes: {
-        json: mode.atomic({
-          description: "结构化结果",
-          format: "structured",
-          success: { kind: "completion" },
+  const outputs = (
+    mode: OutputExecutionFactory<"run", undefined, typeof input>,
+  ) => ({
+    default: defaultValue,
+    modes: {
+      json: mode
+        .atomic({
+          success: {
+            kind: "completion",
+          },
           failures: {},
-          handler: () => undefined,
+          handler: ({ outcome }) => outcome.completion(),
+        })
+        .structured({
+          description: "结构化结果",
         }),
-      },
-    }),
-  ]);
+    },
+  });
   const definition = {
     root: "run",
     help: helpCapability({
@@ -264,29 +279,37 @@ function invalidSingleModeDefinition(defaultValue: unknown) {
 function invalidMultiModeDefinition() {
   const define = defineCli();
   const input = z.object({});
-  const outputs = Reflect.apply(define.outputModes, define, [
-    "run",
-    input,
-    (mode: { readonly atomic: (definition: object) => object }) => ({
-      default: "typo",
-      modes: {
-        json: mode.atomic({
+  const outputs = (
+    mode: OutputExecutionFactory<"run", undefined, typeof input>,
+  ) => ({
+    default: "typo",
+    modes: {
+      json: mode
+        .atomic({
+          success: {
+            kind: "completion",
+          },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        })
+        .structured({
           description: "结构化结果",
-          format: "structured",
-          success: { kind: "completion" },
-          failures: {},
-          handler: () => undefined,
         }),
-        text: mode.atomic({
+      text: mode
+        .atomic({
+          success: {
+            kind: "completion",
+          },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        })
+        .text({
           description: "文本结果",
-          format: "text",
-          success: { kind: "completion", text: () => text.silent },
+          success: () => text.silent,
           failures: {},
-          handler: () => undefined,
         }),
-      },
-    }),
-  ]);
+    },
+  });
   const definition = {
     root: "run",
     help: helpCapability({
@@ -312,7 +335,7 @@ function invalidMultiModeDefinition() {
   };
 }
 
-void test("默认方式只在缺省时选择唯一方式并拒绝显式无效值", async () => {
+void test("the default mode only selects the sole mode when omitted and rejects explicit invalid values", async () => {
   for (const selection of ["implicit", "explicit"] as const) {
     const cli = createSingleModeCli(selection);
     const invocation = parseCliInvocation(cli, []);

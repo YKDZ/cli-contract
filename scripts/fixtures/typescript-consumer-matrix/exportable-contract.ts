@@ -56,17 +56,17 @@ export const inspectCombination = define.command("inspect")({
   kind: "command",
   parent: "tool",
   name: "inspect",
-  description: "检查目标",
+  description: "Inspect target",
   fields: {
     query: {
       kind: "valueOption",
       longOption: "--query",
-      description: "查询",
+      description: "Query",
     },
     dryRun: {
       kind: "flag",
       longOption: "--dry-run",
-      description: "仅演练",
+      description: "Dry run only",
     },
   },
   input: inspectInput,
@@ -92,54 +92,57 @@ export const inspectCombination = define.command("inspect")({
     },
   ],
 
-  outputs: define.outputModes("inspect", inspectInput, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.atomic({
-        description: "结构化输出",
-        format: "structured",
-        success: {
-          kind: "data",
-          variants: {
-            found: {
-              description: "找到目标",
-              schema: foundPayload,
-              exitCode: 0,
-            },
+  examples: [{ input: { query: "alpha" }, outputMode: "structured" }],
+
+  outputs({ atomic }) {
+    const operation = atomic({
+      success: {
+        kind: "data",
+        variants: {
+          found: {
+            description: "Target found",
+            schema: foundPayload,
+            exitCode: 0,
           },
         },
-        failures: {
-          unavailable: {
-            description: "目标不可用",
-            schema: unavailablePayload,
-            exitCode: 9,
-          },
+      },
+      failures: {
+        unavailable: {
+          description: "Target unavailable",
+          schema: unavailablePayload,
+          exitCode: 9,
         },
-        handler: ({ dependencies, input, outcome }) =>
-          outcome.data.found({
-            count: input.count,
-            endpoint: dependencies.endpoint,
-          }),
-      }),
-    },
-  })),
+      },
+      handler: ({ dependencies, input, outcome }) =>
+        outcome.data.found({
+          count: input.count,
+          endpoint: dependencies.endpoint,
+        }),
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: operation.structured({ description: "Structured output" }),
+      },
+    };
+  },
 });
 
 export const tailCombination = define.command("tail")({
   kind: "command",
   parent: "tool",
   name: "tail",
-  description: "读取记录",
+  description: "Read records",
   fields: {
     topic: {
       kind: "valueOption",
       longOption: "--topic",
-      description: "来源",
+      description: "Source",
     },
     follow: {
       kind: "flag",
       longOption: "--follow",
-      description: "持续读取",
+      description: "Keep reading",
     },
   },
   input: tailInput,
@@ -153,80 +156,53 @@ export const tailCombination = define.command("tail")({
     },
   ],
 
-  outputs: define.outputModes("tail", tailInput, (mode) => ({
-    default: "structured",
-    modes: {
-      structured: mode.stream({
-        description: "结构化输出",
-        format: "structured",
-        success: {
-          kind: "stream",
-          records: {
-            line: {
-              description: "读取结果",
-              schema: tailLinePayload,
-            },
-          },
+  examples: [
+    { input: { topic: "source" }, outputMode: "text" },
+    { input: { topic: "mirror", follow: true } },
+  ],
+
+  outputs({ stream }) {
+    const streaming = stream({
+      records: {
+        line: {
+          description: "Read result",
+          schema: tailLinePayload,
         },
-        failures: {
-          unavailable: {
-            description: "来源不可用",
-            schema: tailUnavailablePayload,
-            exitCode: 10,
-          },
+      },
+      failures: {
+        unavailable: {
+          description: "Source unavailable",
+          schema: tailUnavailablePayload,
+          exitCode: 10,
         },
-        async *handler({ dependencies, input, outcome }) {
-          yield outcome.record.line({
-            target: input.target,
+      },
+      async *handler({ dependencies, input, outcome }) {
+        yield outcome.record.line({
+          target: input.target,
+          endpoint: dependencies.endpoint,
+        });
+        if (input.follow) {
+          return outcome.failure.unavailable({
+            reason: "offline",
             endpoint: dependencies.endpoint,
           });
-          if (input.follow) {
-            return outcome.failure.unavailable({
-              reason: "offline",
-              endpoint: dependencies.endpoint,
-            });
-          }
-          return outcome.streamSuccess();
-        },
-      }),
-      text: mode.stream({
-        description: "文本输出",
-        format: "text",
-        success: {
-          kind: "stream",
-          text: () => text.silent,
-          records: {
-            line: {
-              description: "读取结果",
-              schema: tailLinePayload,
-              text: (value) => text.line(value.target),
-            },
-          },
-        },
-        failures: {
-          unavailable: {
-            description: "来源不可用",
-            schema: tailUnavailablePayload,
-            exitCode: 10,
-            text: (value) => text.line(value.reason),
-          },
-        },
-        async *handler({ dependencies, input, outcome }) {
-          yield outcome.record.line({
-            target: input.target,
-            endpoint: dependencies.endpoint,
-          });
-          if (input.follow) {
-            return outcome.failure.unavailable({
-              reason: "offline",
-              endpoint: dependencies.endpoint,
-            });
-          }
-          return outcome.streamSuccess();
-        },
-      }),
-    },
-  })),
+        }
+        return outcome.streamSuccess();
+      },
+    });
+    return {
+      default: "structured",
+      modes: {
+        structured: streaming.structured({ description: "Structured output" }),
+        text: streaming.text({
+          description: "Text output",
+          records: { line: (value) => text.line(value.target) },
+          failures: { unavailable: (value) => text.line(value.reason) },
+          terminal: () => text.silent,
+        }),
+      },
+    };
+  },
 });
 
 type InspectUsageConstraint = UsageConstraint<
@@ -234,12 +210,12 @@ type InspectUsageConstraint = UsageConstraint<
     readonly query: {
       readonly kind: "valueOption";
       readonly longOption: "--query";
-      readonly description: "查询";
+      readonly description: "Query";
     };
     readonly dryRun: {
       readonly kind: "flag";
       readonly longOption: "--dry-run";
-      readonly description: "仅演练";
+      readonly description: "Dry run only";
     };
   },
   InspectInput
@@ -255,10 +231,80 @@ export const cli = define({
     tool: {
       kind: "rootGroup",
       name: "tool",
-      description: "工具",
+      description: "Tool",
     },
     ...inspectCombination,
     ...tailCombination,
+  },
+});
+
+export const rootCommandContract = define({
+  root: "probe",
+  help: helpCapability(),
+  usageFailureExitCode: 64,
+  commands: {
+    probe: {
+      kind: "rootCommand",
+      name: "probe",
+      description: "Root command example",
+      fields: {
+        query: {
+          kind: "valueOption",
+          longOption: "--query",
+          description: "Query",
+        },
+        dryRun: {
+          kind: "flag",
+          longOption: "--dry-run",
+          description: "Dry run only",
+        },
+      },
+      input: inspectInput,
+      examples: [
+        { input: { query: "alpha" }, outputMode: "structured" },
+        { input: { query: "beta" }, outputMode: "text" },
+        { input: { query: "alpha" } },
+      ],
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: {
+            kind: "data",
+            variants: {
+              found: {
+                description: "Target found",
+                schema: foundPayload,
+                exitCode: 0,
+              },
+            },
+          },
+          failures: {
+            unavailable: {
+              description: "Target unavailable",
+              schema: unavailablePayload,
+              exitCode: 9,
+            },
+          },
+          handler: ({ dependencies, input, outcome }) =>
+            outcome.data.found({
+              count: input.count,
+              endpoint: dependencies.endpoint,
+            }),
+        });
+        return {
+          default: "structured",
+          modes: {
+            structured: operation.structured({
+              description: "Structured output",
+            }),
+            text: operation.text({
+              description: "Text output",
+              success: { found: (value) => text.line(String(value.count)) },
+              failures: { unavailable: (value) => text.line(value.reason) },
+            }),
+          },
+        };
+      },
+    },
   },
 });
 

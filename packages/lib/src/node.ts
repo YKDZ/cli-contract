@@ -10,11 +10,17 @@ export interface NodeCliOutputOptions {
 }
 
 /**
- * 将调用方提供的 Writable 接到核心输出端口，按核心选择的 stdout/stderr 路由写入。
- * 每次写入等待 callback；write 返回 false 时还等待 drain，以承接执行内核的顺序与背压。
+ * Adapts caller-provided Writable streams to the core output seam, writing each
+ * chunk to stdout or stderr as routed by the core.
  *
- * 适配器不读取全局 process，也不关闭流、设置退出状态或接管 CLI 框架生命周期。
- * 宿主应等待 executeCli 完成，再处理退出；写入异常交回调用方，不自动忽略 EPIPE。
+ * A write is complete once the stream's write callback has fired and, when
+ * `write()` returned false, a `drain` event has been observed; the returned
+ * promise resolves only then, so the execution kernel keeps write ordering and
+ * backpressure. Write failures reject with the original error, including EPIPE.
+ *
+ * The adapter never reads the global process, closes the streams, sets the exit
+ * status, or takes over the CLI lifecycle. The host awaits executeCli before
+ * handling process exit and decides how to handle write errors.
  */
 export function nodeCliOutput({
   stdout,
@@ -24,8 +30,9 @@ export function nodeCliOutput({
 }
 
 /**
- * 检查错误对象及其 cause 链是否携带 EPIPE，可用于识别 CliWriteError 保留的断管原因。
- * 这里只检测断管，不吞掉异常、恢复写入或决定进程退出码；其他异常仍由宿主处理。
+ * Reports whether the error or any error in its cause chain carries the code
+ * "EPIPE", such as the broken-pipe cause preserved by CliWriteError. Detection
+ * only: it never swallows the error, resumes writing, or picks an exit code.
  */
 export function isNodeBrokenPipe(error: unknown): boolean {
   const seen = new Set<object>();

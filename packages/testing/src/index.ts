@@ -15,7 +15,7 @@ type ContractManifestCommands<Contract> =
     ? Commands
     : never;
 
-/** 从契约命令闭集投影出的可执行命令身份。 */
+/** Executable command identities projected from the closed command set of the contract. */
 export type CliScenarioCommand<Contract extends AnyCliContract> = {
   [
     Command in keyof ContractManifestCommands<Contract>
@@ -27,7 +27,7 @@ export type CliScenarioCommand<Contract extends AnyCliContract> = {
 }[keyof ContractManifestCommands<Contract>] &
   string;
 
-/** 某个可执行命令已声明的失败身份。 */
+/** Declared failure identities of one executable command. */
 export type CliFailureScenarioKey<
   Contract extends AnyCliContract,
   Command extends CliScenarioCommand<Contract>,
@@ -36,13 +36,13 @@ export type CliFailureScenarioKey<
   Readonly<{ readonly kind: "failure"; readonly command: Command }>
 >["variant"];
 
-/** 场景仅描述如何触发一次调用，不参与生产契约。 */
+/** A scenario only describes how to trigger one invocation; it is not part of the production contract. */
 export interface CliScenario<Contract extends AnyCliContract> {
   readonly argv: readonly string[];
   readonly dependencies: CliContractDependencies<NoInfer<Contract>>;
 }
 
-/** 每个可执行命令各有一个触发场景的闭合集合。 */
+/** A closed set with exactly one triggering scenario per executable command. */
 export type CliCommandScenarioMap<Contract extends AnyCliContract> = Readonly<{
   [Command in CliScenarioCommand<Contract>]: CliScenario<Contract>;
 }>;
@@ -55,7 +55,7 @@ type CliFailureScenarioCommand<Contract extends AnyCliContract> = {
     : Command;
 }[CliScenarioCommand<Contract>];
 
-/** 仅包含声明了失败变体的命令；没有失败的命令不需要伪键。 */
+/** Only commands that declare failure variants appear; commands without failures need no placeholder key. */
 export type CliFailureScenarioMap<Contract extends AnyCliContract> = Readonly<{
   [Command in CliFailureScenarioCommand<Contract>]: Readonly<{
     [
@@ -91,8 +91,9 @@ type FailureScenarioMapContract<Expected, Actual> = ScenarioMapContract<
     : unknown);
 
 /**
- * 校验消费者为契约中的每个可执行命令提供一个触发场景。
- * 该 helper 不执行或保存契约；返回值就是调用方提供的场景表。
+ * Checks that the consumer provides one triggering scenario for every
+ * executable command in the contract. This helper neither runs nor retains
+ * the contract; it returns the caller-provided scenario table unchanged.
  */
 export function defineCommandScenarios<
   const Contract extends AnyCliContract,
@@ -107,8 +108,8 @@ export function defineCommandScenarios<
 }
 
 /**
- * 校验消费者为每个已声明失败提供一个触发场景。
- * 没有失败变体的命令不会出现在该映射中。
+ * Checks that the consumer provides one triggering scenario for every
+ * declared failure. Commands without failure variants do not appear in the map.
  */
 export function defineFailureScenarios<
   const Contract extends AnyCliContract,
@@ -125,19 +126,19 @@ export function defineFailureScenarios<
   return scenarios;
 }
 
-/** 一次受控 CLI 调用的规范化观测。 */
+/** Normalized observation of one controlled CLI invocation. */
 export interface CliScenarioCapture<Contract extends AnyCliContract> {
-  /** 按生产写入发生顺序捕获的全部输出。 */
+  /** All output captured in production write order. */
   readonly writes: readonly CliOutput[];
-  /** 标准输出的 chunk。 */
+  /** Standard-output chunks. */
   readonly stdoutChunks: readonly string[];
-  /** 标准错误的 chunk。 */
+  /** Standard-error chunks. */
   readonly stderrChunks: readonly string[];
-  /** 合并后的标准输出。 */
+  /** Joined standard output. */
   readonly stdout: string;
-  /** 合并后的标准错误。 */
+  /** Joined standard error. */
   readonly stderr: string;
-  /** 生产执行内核返回的终止结果。 */
+  /** Termination result returned by the production execution core. */
   readonly termination: CliTermination<Contract>;
 }
 
@@ -145,12 +146,15 @@ export interface RunCliScenarioOptions<Contract extends AnyCliContract> {
   readonly cliContract: Contract;
   readonly argv: readonly string[];
   readonly dependencies: CliContractDependencies<NoInfer<Contract>>;
-  /** 仅供测试注入写入失败；在成功捕获前调用。 */
+  /** Test-only hook for injecting write failures; called before the output is captured. */
   readonly beforeWrite?: (output: CliOutput) => void | Promise<void>;
 }
 
 /**
- * 通过生产 parser 与执行内核运行一次调用，并在内存中原子捕获其可观察结果。
+ * Runs one invocation through the production parser and execution core,
+ * capturing its observable results in memory. The capture is returned only
+ * after execution settles; a thrown error rejects instead of exposing
+ * partial writes.
  */
 export async function runCliScenario<const Contract extends AnyCliContract>(
   options: RunCliScenarioOptions<Contract>,

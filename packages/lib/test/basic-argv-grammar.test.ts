@@ -6,6 +6,7 @@ import {
   defineCli,
   executeCli,
   parseCliInvocation,
+  type OutputExecutionFactory,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
@@ -52,24 +53,28 @@ function createCopyCli() {
         },
         input: sharedInput0,
 
-        outputs: defineCli().outputModes("copyFiles", sharedInput0, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
 }
 
-void test("基础 argv 语法归一化 positional、flag、option、alias 与 --", () => {
+void test("basic argv grammar normalizes positionals, flags, options, aliases, and --", () => {
   const cli = createCopyCli();
 
   assert.deepEqual(
@@ -117,7 +122,7 @@ void test("基础 argv 语法归一化 positional、flag、option、alias 与 --
   });
 });
 
-void test("词法问题保留首个可靠 token、字段与 spelling 事实", () => {
+void test("lexical issues keep the first reliable token, field, and spelling facts", () => {
   const cli = createCopyCli();
   const usage = {
     command: "copyFiles",
@@ -190,7 +195,7 @@ void test("词法问题保留首个可靠 token、字段与 spelling 事实", ()
   });
 });
 
-void test("字段事实从同一 grammar 投影到 usage、help 与 manifest", async () => {
+void test("field facts project from the same grammar into usage, help, and manifest", async () => {
   const cli = createCopyCli();
   const fields = [
     {
@@ -246,7 +251,7 @@ void test("字段事实从同一 grammar 投影到 usage、help 与 manifest", a
   ]);
 });
 
-void test("defineCli 聚合动态字段身份、spelling 与 positional 顺序冲突", () => {
+void test("defineCli aggregates dynamic field identity, spelling, and positional order conflicts", () => {
   const sharedInput1 = z.object({
     optional: z.string().optional(),
     Bad_Field: z.string().optional(),
@@ -298,24 +303,34 @@ void test("defineCli 聚合动态字段身份、spelling 与 positional 顺序�
         },
         input: sharedInput1,
 
-        outputs: defineCli().outputModes("copyFiles", sharedInput1, (mode) => ({
+        outputs: (
+          mode: OutputExecutionFactory<
+            "copyFiles",
+            undefined,
+            typeof sharedInput1
+          >,
+        ) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: () => undefined as never,
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: () => undefined as never,
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   };
 
   assert.throws(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证定义期拒绝。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally bypasses static restrictions to verify definition-time rejection.
     () => defineCli()(definition as never),
     (error) => {
       assert.ok(error instanceof ContractDefinitionError);
@@ -383,7 +398,7 @@ void test("defineCli 聚合动态字段身份、spelling 与 positional 顺序�
   );
 });
 
-void test("输入字段固定禁名覆盖全部字段形态，并区分拼写错误", () => {
+void test("fixed reserved input field names cover every field shape and distinguish spelling errors", () => {
   const entries = [
     ["constructor", "positional"],
     ["hasOwnProperty", "flag"],
@@ -433,24 +448,34 @@ void test("输入字段固定禁名覆盖全部字段形态，并区分拼写错
         ),
         input: sharedInput2,
 
-        outputs: defineCli().outputModes("inspect", sharedInput2, (mode) => ({
+        outputs: (
+          mode: OutputExecutionFactory<
+            "inspect",
+            undefined,
+            typeof sharedInput2
+          >,
+        ) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: () => undefined as never,
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: () => undefined as never,
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   };
 
   assert.throws(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 动态负例通过公开定义入口验证身份规则。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The dynamic negative case verifies identity rules through the public definition entry.
     () => defineCli()(definition as never),
     (error) => {
       assert.ok(error instanceof ContractDefinitionError);
@@ -504,17 +529,17 @@ void test("输入字段固定禁名覆盖全部字段形态，并区分拼写错
           reason: "reservedName",
         },
       ]);
-      assert.match(error.message, /constructor.*保留/);
-      assert.match(error.message, /模式 Input/);
-      assert.match(error.message, /引用/);
-      assert.match(error.message, /CLI 拼写可保留/);
+      assert.match(error.message, /constructor.*reserved/);
+      assert.match(error.message, /schema Input/);
+      assert.match(error.message, /references/);
+      assert.match(error.message, /CLI spelling may stay unchanged/);
       assert.match(error.message, /bad_field.*lowerCamelCase/);
       return true;
     },
   );
 });
 
-void test("叶命令必填字段同样拒绝保留名称", () => {
+void test("required fields of leaf commands also reject reserved names", () => {
   const sharedInput0 = z.object({ constructor: z.string() });
   const definition = {
     root: "tool",
@@ -533,23 +558,33 @@ void test("叶命令必填字段同样拒绝保留名称", () => {
         },
         input: sharedInput0,
 
-        outputs: defineCli().outputModes("inspect", sharedInput0, (mode) => ({
+        outputs: (
+          mode: OutputExecutionFactory<
+            "inspect",
+            undefined,
+            typeof sharedInput0
+          >,
+        ) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: () => undefined as never,
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: () => undefined as never,
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   };
   assert.throws(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例验证层级叶命令的定义期检查。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case verifies definition-time checks for hierarchical leaf commands.
     () => defineCli()(definition as never),
     (error) => {
       assert.ok(error instanceof ContractDefinitionError);
@@ -566,10 +601,10 @@ void test("叶命令必填字段同样拒绝保留名称", () => {
   );
 });
 
-void test("字段身份更名可保留 CLI 拼写，其他命名域继续合法", async () => {
+void test("renaming a field identity can keep the CLI spelling while other naming domains stay legal", async () => {
   const sharedInput3 = z.object({
     constructorName: z.string().default("fallback"),
-    // oxlint-disable-next-line unicorn/no-thenable -- 测试合法的 then 字段身份。
+    // oxlint-disable-next-line unicorn/no-thenable -- Tests a legal then field identity.
     then: z.string().optional(),
   });
   const cli = defineCli()({
@@ -588,7 +623,7 @@ void test("字段身份更名可保留 CLI 拼写，其他命名域继续合法"
             longOption: "--constructor",
             description: "构造器名称",
           },
-          // oxlint-disable-next-line unicorn/no-thenable -- 应用自定义字段身份，并非条件分支或 Promise。
+          // oxlint-disable-next-line unicorn/no-thenable -- A custom field identity in the application, not a conditional branch or Promise.
           then: {
             kind: "valueOption",
             longOption: "--then",
@@ -597,15 +632,11 @@ void test("字段身份更名可保留 CLI 拼写，其他命名域继续合法"
         },
         input: sharedInput3,
 
-        outputs: defineCli().outputModes(
-          "constructor",
-          sharedInput3,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
+        outputs: (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
                 success: {
                   kind: "data",
                   variants: {
@@ -613,7 +644,7 @@ void test("字段身份更名可保留 CLI 拼写，其他命名域继续合法"
                       description: "构造器资料",
                       schema: z.object({
                         constructor: z.string(),
-                        // oxlint-disable-next-line unicorn/no-thenable -- 任意 JSON 载荷键不受条件分支更名影响。
+                        // oxlint-disable-next-line unicorn/no-thenable -- Arbitrary JSON payload keys are unaffected by the conditional-branch rename.
                         then: z.string(),
                       }),
                       exitCode: 0,
@@ -624,32 +655,35 @@ void test("字段身份更名可保留 CLI 拼写，其他命名域继续合法"
                 handler: ({ input, outcome }) =>
                   outcome.data.toString({
                     constructor: input.constructorName,
-                    // oxlint-disable-next-line unicorn/no-thenable -- JSON 载荷中的普通数据键。
+                    // oxlint-disable-next-line unicorn/no-thenable -- An ordinary data key in the JSON payload.
                     then: input.then ?? "absent",
                   }),
+              })
+              .structured({
+                description: "结构化输出",
               }),
-            },
-          }),
-        ),
+          },
+        }),
       },
     },
   });
 
   for (const [argv, expected] of [
-    // oxlint-disable-next-line unicorn/no-thenable -- 应用 JSON 载荷的预期值。
+    // oxlint-disable-next-line unicorn/no-thenable -- The expected value of the application JSON payload.
     [[], { constructor: "fallback", then: "absent" }],
     [
       ["--constructor", "named", "--then", "later"],
-      // oxlint-disable-next-line unicorn/no-thenable -- 应用 JSON 载荷的预期值。
+      // oxlint-disable-next-line unicorn/no-thenable -- The expected value of the application JSON payload.
       { constructor: "named", then: "later" },
     ],
   ] as const) {
     const invocation = parseCliInvocation(cli, argv);
     assert.equal(invocation.kind, "parsed");
-    if (invocation.kind !== "parsed") throw new Error("应解析为可执行调用");
+    if (invocation.kind !== "parsed")
+      throw new Error("expected a parsed executable invocation");
     assert.deepEqual(
       invocation.input,
-      // oxlint-disable-next-line unicorn/no-thenable -- 应用自定义字段的原始输入预期值。
+      // oxlint-disable-next-line unicorn/no-thenable -- The expected raw input value of the custom application field.
       argv.length === 0 ? {} : { constructorName: "named", then: "later" },
     );
     let stdout = "";
@@ -672,7 +706,7 @@ void test("字段身份更名可保留 CLI 拼写，其他命名域继续合法"
   }
 });
 
-void test("defineCli 拒绝动态非法命令身份", () => {
+void test("defineCli rejects dynamic invalid command identities", () => {
   const sharedInput1 = z.object({});
   const definition = {
     root: "copy-files",
@@ -686,28 +720,34 @@ void test("defineCli 拒绝动态非法命令身份", () => {
         description: "复制文件",
         input: sharedInput1,
 
-        outputs: defineCli().outputModes(
-          "copy-files",
-          sharedInput1,
-          (mode) => ({
-            default: "structured",
-            modes: {
-              structured: mode.atomic({
-                description: "结构化输出",
-                format: "structured",
-                success: { kind: "completion" },
+        outputs: (
+          mode: OutputExecutionFactory<
+            "copy-files",
+            undefined,
+            typeof sharedInput1
+          >,
+        ) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
                 failures: {},
                 handler: () => undefined as never,
+              })
+              .structured({
+                description: "结构化输出",
               }),
-            },
-          }),
-        ),
+          },
+        }),
       },
     },
   };
 
   assert.throws(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证定义期拒绝。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally bypasses static restrictions to verify definition-time rejection.
     () => defineCli()(definition as never),
     (error) => {
       assert.ok(error instanceof ContractDefinitionError);

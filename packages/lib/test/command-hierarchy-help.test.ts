@@ -47,23 +47,27 @@ function createWorkspaceCli() {
         },
         input: sharedInput0,
 
-        outputs: define.outputModes("addPackage", sharedInput0, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ input, outcome }) => {
-                input satisfies { name: string };
-                // @ts-expect-error completion 命令不暴露 data 构造器。
-                void outcome.data;
-                return outcome.completion();
-              },
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ input, outcome }) => {
+                  input satisfies { name: string };
+                  // @ts-expect-error A completion command does not expose data constructors.
+                  void outcome.data;
+                  return outcome.completion();
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       }),
       ...define.command("listPackages")({
         kind: "command",
@@ -72,24 +76,28 @@ function createWorkspaceCli() {
         description: "列出包",
         input: sharedInput1,
 
-        outputs: define.outputModes("listPackages", sharedInput1, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       }),
     },
   });
 }
 
-void test("命令路径通过可见名称或 alias 选择叶命令", () => {
+void test("command paths select leaf commands by visible name or alias", () => {
   const cli = createWorkspaceCli();
 
   assert.deepEqual(parseCliInvocation(cli, ["package", "add", "core"]), {
@@ -106,7 +114,7 @@ void test("命令路径通过可见名称或 alias 选择叶命令", () => {
   });
 });
 
-void test("group 自然结束与路径内 help 产生对应节点的局部帮助", () => {
+void test("a natural group end and in-path help produce local help for the corresponding node", () => {
   const cli = createWorkspaceCli();
 
   assert.deepEqual(parseCliInvocation(cli, []), {
@@ -131,7 +139,7 @@ void test("group 自然结束与路径内 help 产生对应节点的局部帮助
   });
 });
 
-void test("未知路径产生 unknownCommand，不回退到 group 或默认命令", () => {
+void test("an unknown path produces unknownCommand without falling back to a group or default command", () => {
   const cli = createWorkspaceCli();
 
   assert.deepEqual(parseCliInvocation(cli, ["package", "remove"]), {
@@ -142,7 +150,7 @@ void test("未知路径产生 unknownCommand，不回退到 group 或默认命�
   });
 });
 
-void test("grammar、manifest 与完整帮助投影同一父前子后层级", async () => {
+void test("grammar, manifest, and full help project the same parent-before-child hierarchy", async () => {
   const cli = createWorkspaceCli();
   const rootId: "workspace" = cli.grammar.root.id;
   type GrammarNode = (typeof cli.grammar.nodes)[number];
@@ -204,7 +212,7 @@ void test("grammar、manifest 与完整帮助投影同一父前子后层级", as
   ]);
 });
 
-void test("defineCli 聚合拒绝无效 parent、环与同级 spelling 冲突", () => {
+void test("defineCli aggregates rejection of invalid parents, cycles, and sibling spelling conflicts", () => {
   const definition = {
     root: "workspace",
     help: englishHelpCapability(),
@@ -265,7 +273,7 @@ void test("defineCli 聚合拒绝无效 parent、环与同级 spelling 冲突", 
 
   assert.throws(
     () =>
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 负例故意绕过静态限制，以验证定义期拒绝。
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally bypasses static restrictions to verify definition-time rejection.
       defineCli()({
         root: "invalidRoot",
         help: englishHelpCapability(),

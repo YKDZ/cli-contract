@@ -41,6 +41,19 @@ type CliDiagnosticExpectation =
       readonly forbidden?: readonly string[];
     }
   | {
+      readonly kind: "fieldSet";
+      readonly expectedDiagnostics: number;
+      readonly required: readonly string[];
+      readonly requiredAny?: readonly string[];
+      readonly forbidden?: readonly string[];
+    }
+  | {
+      readonly kind: "forward";
+      readonly expectedDiagnostics: number;
+      readonly required: readonly string[];
+      readonly forbidden?: readonly string[];
+    }
+  | {
       readonly kind: "hierarchy";
       readonly required: readonly string[];
       readonly forbidden?: readonly string[];
@@ -84,7 +97,7 @@ async function verifyHierarchyTextCoverageDiagnostic(
     diagnostic.cli.kind !== "hierarchy" ||
     diagnostic.derivation.kind !== "removeMarkedTsExpectError"
   ) {
-    throw new Error("hierarchy 诊断场景配置无效");
+    throw new Error("Invalid hierarchy diagnostic case configuration");
   }
   const fixture = diagnostic.derivation.fixture;
   const { cli } = diagnostic;
@@ -132,7 +145,7 @@ async function verifyHierarchyTextCoverageDiagnostic(
   }
 }
 
-const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
+export const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
   {
     fixture: "invalid-authoring-identities.ts",
     sourcePath:
@@ -160,7 +173,8 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
         'field: "valueOf"',
         'field: "toLocaleString"',
         'reason: "reservedName"',
-        "更换字段键，同步模式 Input 键及引用；CLI 拼写可保留",
+        "rename the field key and update the schema Input key and its references; the CLI spelling may stay unchanged",
+        "start with a lowercase letter, letters and digits only",
         'command: "dataVariantIdentity"',
         'location: "data"',
         'command: "failureVariantIdentity"',
@@ -305,7 +319,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
       forbidden: ["No overload matches this call", "StreamHandlerContext"],
     },
     languageService: {
-      count: 2,
+      count: 1,
       required: [],
     },
   },
@@ -552,6 +566,46 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
     },
   },
   {
+    fixture: "missing-raw-field.ts",
+    sourcePath:
+      "scripts/fixtures/typescript-consumer-matrix/missing-raw-field.ts",
+    derivation: {
+      kind: "copy",
+    },
+    common: {
+      required: [],
+      codes: [
+        {
+          code: "fieldSetDoesNotMatchSchemaInput",
+          cliMultiplicity: 2,
+        },
+      ],
+    },
+    cli: {
+      kind: "fieldSet",
+      expectedDiagnostics: 2,
+      required: [
+        "schemaInputWithoutFields:",
+        '"name"',
+        '"count"',
+        'command: "missingRawField"',
+        'command: "missingUnionRawField"',
+      ],
+      forbidden: [
+        "No overload matches this call",
+        "implicitly has an 'any'",
+        "Unused '@ts-expect-error'",
+      ],
+    },
+    languageService: {
+      count: 2,
+      required: [
+        'MissingRootFallbackFieldsContract<"missingRawField"',
+        'MissingRootFallbackFieldsContract<"missingUnionRawField"',
+      ],
+    },
+  },
+  {
     fixture: "completion-missing.ts",
     sourcePath:
       "scripts/fixtures/typescript-consumer-matrix/completion-missing.ts",
@@ -560,7 +614,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
     },
     common: {
       required: [],
-      codes: [{ code: "missingTextPresenter" }],
+      codes: [{ code: "missingTextPresenter", languageServiceRequired: true }],
     },
     cli: {
       kind: "completion",
@@ -576,6 +630,15 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
         "implicitly has an 'any'",
       ],
     },
+    languageService: {
+      count: 2,
+      required: [
+        'command: "missingCompletion"',
+        'command: "missingCompletionWithField"',
+        'location: "completion"',
+        'missing: "text"',
+      ],
+    },
   },
   {
     fixture: "named-variant-missing.ts",
@@ -586,7 +649,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
     },
     common: {
       required: [],
-      codes: [{ code: "missingTextPresenter" }],
+      codes: [{ code: "missingTextPresenter", languageServiceRequired: true }],
     },
     cli: {
       kind: "namedVariant",
@@ -603,6 +666,95 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
         'missing: "text"',
       ],
     },
+    languageService: {
+      count: 3,
+      required: [
+        'command: "missingDataVariantText"',
+        'command: "missingDataFailureText"',
+        'command: "missingCompletionFailureText"',
+        'location: "data"',
+        'location: "failure"',
+        'variant: "deferred"',
+        'variant: "forbidden"',
+        'missing: "text"',
+      ],
+    },
+  },
+  {
+    fixture: "text-options-variable.ts",
+    sourcePath:
+      "scripts/fixtures/typescript-consumer-matrix/text-options-variable.ts",
+    derivation: {
+      kind: "copy",
+    },
+    common: {
+      required: [],
+      codes: [{ code: "missingTextPresenter", languageServiceRequired: true }],
+    },
+    cli: {
+      kind: "namedVariant",
+      expectedDiagnostics: 2,
+      required: [
+        "text-options-variable.ts",
+        'command: "extractedMissingFailure"',
+        'command: "extractedMissingData"',
+        'location: "failure"',
+        'location: "data"',
+        'variant: "unavailable"',
+        'variant: "found"',
+        'missing: "text"',
+      ],
+    },
+    languageService: {
+      count: 2,
+      required: [
+        'command: "extractedMissingFailure"',
+        'command: "extractedMissingData"',
+        'location: "failure"',
+        'location: "data"',
+        'variant: "unavailable"',
+        'variant: "found"',
+        'missing: "text"',
+      ],
+    },
+  },
+  {
+    fixture: "generic-text-forward.ts",
+    sourcePath:
+      "scripts/fixtures/typescript-consumer-matrix/generic-text-forward.ts",
+    derivation: {
+      kind: "removeAllTsExpectError",
+      fixture: "generic-text-forward-unchecked.ts",
+    },
+    common: {
+      required: ['command: "lookup"'],
+      codes: [{ code: "missingTextPresenter", cliMultiplicity: 3 }],
+    },
+    cli: {
+      kind: "forward",
+      expectedDiagnostics: 8,
+      required: [
+        'location: "failure"',
+        'location: "record"',
+        'variant: "denied"',
+        'variant: "update"',
+        'missing: "text"',
+        "Property 'missing' does not exist",
+        "not assignable to type 'never'",
+        "VariantPresenter<",
+        "AtomicProjection",
+        "RecordProjection",
+        'AtomicTextOptions<"lookup"',
+        'StreamTextOptions<"lookup"',
+      ],
+      forbidden: [
+        "implicitly has an 'any'",
+        "Unused '@ts-expect-error'",
+        "No overload matches this call",
+        "TS7031",
+        "TS7006",
+      ],
+    },
   },
   {
     fixture: "stream-text-coverage.ts",
@@ -614,11 +766,22 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
     },
     common: {
       required: [],
-      codes: [{ code: "missingTextPresenter" }],
+      codes: [{ code: "missingTextPresenter", languageServiceRequired: true }],
     },
     cli: {
       kind: "streamText",
       expectedDiagnostics: 2,
+      required: [
+        'command: "missingRecord"',
+        'command: "missingSuccess"',
+        'location: "record"',
+        'location: "streamSuccess"',
+        'variant: "item"',
+        'missing: "text"',
+      ],
+    },
+    languageService: {
+      count: 2,
       required: [
         'command: "missingRecord"',
         'command: "missingSuccess"',
@@ -639,11 +802,20 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
     },
     common: {
       required: [],
-      codes: [{ code: "invalidVariantName" }],
+      codes: [{ code: "invalidVariantName", languageServiceRequired: true }],
     },
     cli: {
       kind: "streamRecordName",
       expectedDiagnostics: 1,
+      required: [
+        'command: "invalidRecordName"',
+        'location: "record"',
+        'variant: "bad_name"',
+        'reason: "lowerCamelCase"',
+      ],
+    },
+    languageService: {
+      count: 1,
       required: [
         'command: "invalidRecordName"',
         'location: "record"',
@@ -710,9 +882,13 @@ const authoringDiscoverySources: readonly AuthoringDiagnosticSource[] = [
     sourcePath:
       "scripts/fixtures/typescript-consumer-matrix/exportable-contract.ts",
   },
+  {
+    fixture: "core-node.ts",
+    sourcePath: "scripts/fixtures/typescript-consumer-matrix/core-node.ts",
+  },
 ] as const;
 
-async function readAuthoringDiagnosticFixtures(): Promise<
+export async function readAuthoringDiagnosticFixtures(): Promise<
   Readonly<Record<string, string>>
 > {
   const repositoryRoot = resolve(import.meta.dirname, "..");
@@ -743,7 +919,7 @@ async function readAuthoringDiagnosticFixtures(): Promise<
             ),
           ];
         }
-        throw new Error(`作者来源未声明：${fixture}`);
+        throw new Error(`Authoring source not declared: ${fixture}`);
       }),
     ),
   );
@@ -793,7 +969,9 @@ function expectedCliCodes(
       ({ cliMultiplicity }) => cliMultiplicity === undefined,
     )
   ) {
-    throw new Error(`场景未完整声明 CLI 错误码数量：${diagnostic.fixture}`);
+    throw new Error(
+      `Case does not declare CLI error-code multiplicity completely: ${diagnostic.fixture}`,
+    );
   }
   return diagnostic.common.codes.flatMap(({ code, cliMultiplicity }) =>
     cliMultiplicity === undefined
@@ -847,7 +1025,7 @@ async function verifyAuthoringDiagnostic(
   diagnostic: (typeof authoringDiagnosticCases)[number],
 ): Promise<void> {
   if (diagnostic.cli.kind !== "codes") {
-    throw new Error("该场景应使用编译器错误码适配器");
+    throw new Error("This case must use the compiler error-code adapter");
   }
   const { fixture, common, cli } = diagnostic;
   const expectedCodes = expectedCliCodes(diagnostic);
@@ -884,16 +1062,18 @@ async function verifyAuthoringDiagnostic(
   ) {
     throw new Error(
       [
-        `已发布作者诊断的首层信息不完整：${fixture}`,
-        `预期错误码：${expectedCodes.join(", ")}`,
-        `实际错误码：${firstLevelCodes.join(", ")}`,
-        `缺少首层证据：${required
+        `Published authoring diagnostic first-level evidence is incomplete: ${fixture}`,
+        `Expected codes: ${expectedCodes.join(", ")}`,
+        `Actual codes: ${firstLevelCodes.join(", ")}`,
+        `Missing first-level evidence: ${required
           .filter((fragment) => !observation.firstLevel.includes(fragment))
           .join(", ")}`,
         ...requiredAnyGroups.flatMap((group) =>
           group.some((fragment) => observation.firstLevel.includes(fragment))
             ? []
-            : [`缺少以下任一首层证据：${group.join(" 或 ")}`],
+            : [
+                `Missing any of these first-level fragments: ${group.join(" or ")}`,
+              ],
         ),
         observation.firstLevel,
       ].join("\n"),
@@ -913,12 +1093,13 @@ interface AuthoringLanguageServiceCase {
   readonly marker: string;
   readonly token: string;
   readonly declaredType?: boolean;
+  readonly installedDeclaration?: string;
   readonly requiredType: readonly string[];
   readonly requiredDocumentation?: readonly string[];
   readonly requiredSignature?: readonly string[];
 }
 
-function verifyAuthoringLanguageService(
+export function verifyAuthoringLanguageService(
   project: string,
   resolution: (typeof resolutions)[number],
   fixtures: Readonly<Record<string, string>>,
@@ -929,7 +1110,7 @@ function verifyAuthoringLanguageService(
       marker: "defineCli<Dependencies>",
       token: "defineCli",
       requiredType: ["DefineCli<Dependencies>"],
-      requiredDocumentation: ["闭合 CLI 契约", "结果投影"],
+      requiredDocumentation: ["closed CLI contract", "result projections"],
       requiredSignature: ["DefineCli<Dependencies>"],
     },
     {
@@ -937,7 +1118,11 @@ function verifyAuthoringLanguageService(
       marker: 'define.command("lookup")',
       token: "command",
       requiredType: ["DefineCommand<Command, Dependencies>"],
-      requiredDocumentation: ["创建可执行后代", "最终", "装配"],
+      requiredDocumentation: [
+        "Bind a leaf command",
+        "Spread the returned record",
+        "command tree",
+      ],
       requiredSignature: [
         "command: Command",
         "DefineCommand<Command, Dependencies>",
@@ -948,18 +1133,48 @@ function verifyAuthoringLanguageService(
       marker: "help: helpCapability(",
       token: "helpCapability",
       requiredType: ["HelpCapability"],
-      requiredDocumentation: ["装配全树帮助", "wording"],
+      requiredDocumentation: ["Assemble help for the whole tree", "wording"],
       requiredSignature: ["definition"],
     },
     {
       fixture: "authoring-example.ts",
-      marker: 'outputModes("lookup", lookupInput',
-      token: "outputModes",
-      requiredType: ["OutputModesFromDeclaration"],
-      requiredDocumentation: ["具名输出方式", "atomic", "stream"],
+      marker: "const lookupUser = atomic({",
+      token: "atomic",
+      requiredType: ['AtomicExecutionFactory<"lookup", Dependencies'],
       requiredSignature: [
-        "OutputModeFactory<Command, Dependencies, InputSchema>",
+        "DeclaredVariants",
+        "RejectUnknownProperties",
+        "handler:",
       ],
+    },
+    {
+      fixture: "authoring-example.ts",
+      marker: "const readLogs = stream({",
+      token: "stream",
+      requiredType: ['StreamExecutionFactory<"logs", Dependencies'],
+      requiredSignature: [
+        "DeclaredRecords",
+        "RejectUnknownProperties",
+        "AsyncGenerator",
+      ],
+    },
+    {
+      fixture: "authoring-example.ts",
+      marker: "text: lookupUser.text({",
+      token: "text",
+      requiredType: ['AtomicOutputModeDefinition<"lookup"', '"text"'],
+    },
+    {
+      fixture: "authoring-example.ts",
+      marker: "structured: lookupUser.structured({",
+      token: "structured",
+      requiredType: ['AtomicOutputModeDefinition<"lookup"', '"structured"'],
+    },
+    {
+      fixture: "authoring-example.ts",
+      marker: "text: readLogs.text({",
+      token: "text",
+      requiredType: ['StreamOutputModeDefinition<"logs"', '"text"'],
     },
     {
       fixture: "authoring-example.ts",
@@ -1013,7 +1228,11 @@ function verifyAuthoringLanguageService(
       marker: "lines([",
       token: "lines",
       requiredType: ["TextLines"],
-      requiredDocumentation: ["非空元组行组", "completion", "stream record"],
+      requiredDocumentation: [
+        "non-empty tuple of lines",
+        "completion",
+        "stream records",
+      ],
       requiredSignature: ["readonly [string, ...string[]]"],
     },
     {
@@ -1021,7 +1240,7 @@ function verifyAuthoringLanguageService(
       marker: "fragment(`",
       token: "fragment",
       requiredType: ["TextFragment"],
-      requiredDocumentation: ["stream record", "增量文本"],
+      requiredDocumentation: ["stream records", "incremental text"],
       requiredSignature: ["value: string"],
     },
     {
@@ -1029,7 +1248,7 @@ function verifyAuthoringLanguageService(
       marker: "text.silent",
       token: "silent",
       requiredType: ["SilentText"],
-      requiredDocumentation: ["completion 成功", "呈现器"],
+      requiredDocumentation: ["completion success", "presenter"],
     },
     {
       fixture: "exportable-contract.ts",
@@ -1053,11 +1272,12 @@ function verifyAuthoringLanguageService(
       declaredType: true,
       requiredType: ["ContractSchema<Input, Output>"],
       requiredDocumentation: [
-        "运行时验证",
-        "JSON Schema 投影",
-        "输入字段的必填",
-        "候选值",
-        "格式",
+        "runtime validation",
+        "JSON Schema projection",
+        "Required",
+        "input fields",
+        "choices",
+        "format rules",
       ],
     },
     {
@@ -1070,8 +1290,23 @@ function verifyAuthoringLanguageService(
         "parser",
         "Draft 2020-12",
         "forbiddenCombination",
-        "具名失败",
+        "named failures",
       ],
+    },
+    {
+      fixture: "core-node.ts",
+      marker: "nodeCliOutput({",
+      token: "nodeCliOutput",
+      installedDeclaration: "node_modules/@ykdz/cli-contract/dist/node.d.ts",
+      requiredType: ["NodeCliOutputOptions", "WriteCliOutput"],
+      requiredDocumentation: [
+        "write callback has fired",
+        "`drain` event has been observed",
+        "backpressure",
+        "never reads the global process, closes the streams",
+        "The host awaits executeCli",
+      ],
+      requiredSignature: ["NodeCliOutputOptions", "WriteCliOutput"],
     },
   ];
 
@@ -1101,12 +1336,12 @@ function verifyAuthoringLanguageService(
     for (const authoringCase of authoringCases) {
       const source = fixtures[authoringCase.fixture];
       if (source === undefined)
-        throw new Error(`缺少作者夹具：${authoringCase.fixture}`);
+        throw new Error(`Missing authoring fixture: ${authoringCase.fixture}`);
       const markerPosition = source.indexOf(authoringCase.marker);
       const tokenOffset = authoringCase.marker.indexOf(authoringCase.token);
       if (markerPosition < 0 || tokenOffset < 0) {
         throw new Error(
-          `找不到作者标记：${authoringCase.fixture} ${authoringCase.marker}`,
+          `Authoring marker not found: ${authoringCase.fixture} ${authoringCase.marker}`,
         );
       }
       const position = markerPosition + tokenOffset;
@@ -1117,11 +1352,13 @@ function verifyAuthoringLanguageService(
       const snapshot = api.updateSnapshot({ openProject: config });
       try {
         const target = snapshot.getProject(config);
-        if (target === undefined) throw new Error(`无法加载项目：${config}`);
+        if (target === undefined)
+          throw new Error(`Cannot load project: ${config}`);
         const file = resolve(project, authoringCase.fixture);
         const installedDeclaration = resolve(
           project,
-          "node_modules/@ykdz/cli-contract/dist/index.d.ts",
+          authoringCase.installedDeclaration ??
+            "node_modules/@ykdz/cli-contract/dist/index.d.ts",
         );
         if (
           !target.program
@@ -1129,13 +1366,13 @@ function verifyAuthoringLanguageService(
             .some((name) => resolve(name) === installedDeclaration)
         ) {
           throw new Error(
-            `作者夹具未加载已安装的公开声明：${authoringCase.fixture}`,
+            `Authoring fixture did not load the installed public declarations: ${authoringCase.fixture}`,
           );
         }
         const diagnostics = target.program.getSemanticDiagnostics(file);
         if (diagnostics.length > 0) {
           throw new Error(
-            `作者夹具仍有类型诊断：${authoringCase.fixture}\n${diagnostics
+            `Authoring fixture still has type diagnostics: ${authoringCase.fixture}\n${diagnostics
               .map((diagnostic) => diagnostic.text)
               .join("\n")}`,
           );
@@ -1144,7 +1381,7 @@ function verifyAuthoringLanguageService(
         const symbol = target.checker.getSymbolAtPosition(file, position);
         if (valueType === undefined || symbol === undefined) {
           throw new Error(
-            `无法获取作者位置的悬停信息：${authoringCase.fixture} ${authoringCase.marker}`,
+            `Cannot read hover information at the authoring position: ${authoringCase.fixture} ${authoringCase.marker}`,
           );
         }
         const resolvedSymbol =
@@ -1193,13 +1430,13 @@ function verifyAuthoringLanguageService(
         ) {
           throw new Error(
             [
-              `作者夹具的已安装接口提示信息不完整：${authoringCase.fixture}，位置 ${authoringCase.marker}`,
-              `缺少类型证据：${requiredType.join(", ")}`,
-              `缺少文档证据：${requiredDocumentation.join(", ")}`,
-              `缺少签名证据：${requiredSignature.join(", ")}`,
-              `类型：${typeText}`,
-              `文档：${documentation}`,
-              `签名：${signatureHelp}`,
+              `Installed interface hover evidence is incomplete: ${authoringCase.fixture}, at ${authoringCase.marker}`,
+              `Missing type evidence: ${requiredType.join(", ")}`,
+              `Missing documentation evidence: ${requiredDocumentation.join(", ")}`,
+              `Missing signature evidence: ${requiredSignature.join(", ")}`,
+              `Type: ${typeText}`,
+              `Documentation: ${documentation}`,
+              `Signature: ${signatureHelp}`,
             ].join("\n"),
           );
         }
@@ -1215,7 +1452,8 @@ function verifyAuthoringLanguageService(
       const snapshot = api.updateSnapshot({ openProject: config });
       try {
         const target = snapshot.getProject(config);
-        if (target === undefined) throw new Error(`无法加载项目：${config}`);
+        if (target === undefined)
+          throw new Error(`Cannot load project: ${config}`);
         const diagnostics = target.program.getSemanticDiagnostics(
           resolve(project, fixture),
         );
@@ -1249,7 +1487,7 @@ async function verifyMissingStreamDiagnostic(
   diagnostic: AuthoringDiagnosticCase,
 ): Promise<void> {
   if (diagnostic.cli.kind !== "streamText") {
-    throw new Error("该场景应使用流文本诊断适配器");
+    throw new Error("This case must use the stream-text diagnostic adapter");
   }
   const fixture =
     diagnostic.derivation.kind === "copy"
@@ -1265,7 +1503,7 @@ async function verifyMissingStreamDiagnostic(
     observation.allHeaders.length !== observation.headers.length
   ) {
     throw new Error(
-      `流记录诊断首层没有只暴露局部契约证据\n首层诊断：\n${observation.firstLevel}\n完整诊断：\n${observation.diagnostics}`,
+      `Stream-text diagnostic first level did not expose only local contract evidence\nFirst level:\n${observation.firstLevel}\nFull diagnostics:\n${observation.diagnostics}`,
     );
   }
 }
@@ -1276,7 +1514,9 @@ async function verifyInvalidStreamRecordNameDiagnostic(
   diagnostic: AuthoringDiagnosticCase,
 ): Promise<void> {
   if (diagnostic.cli.kind !== "streamRecordName") {
-    throw new Error("该场景应使用流记录名称诊断适配器");
+    throw new Error(
+      "This case must use the stream-record-name diagnostic adapter",
+    );
   }
   const fixture =
     diagnostic.derivation.kind === "copy"
@@ -1292,7 +1532,106 @@ async function verifyInvalidStreamRecordNameDiagnostic(
     observation.allHeaders.length !== observation.headers.length
   ) {
     throw new Error(
-      `流记录名称诊断首层没有暴露局部契约证据\n首层诊断：\n${observation.firstLevel}\n完整诊断：\n${observation.diagnostics}`,
+      `Stream-record-name diagnostic first level did not expose local contract evidence\nFirst level:\n${observation.firstLevel}\nFull diagnostics:\n${observation.diagnostics}`,
+    );
+  }
+}
+
+async function verifyFieldSetDiagnostic(
+  project: string,
+  resolution: Resolution,
+  diagnostic: AuthoringDiagnosticCase,
+): Promise<void> {
+  if (diagnostic.cli.kind !== "fieldSet") {
+    throw new Error("This case must use the field-set diagnostic adapter");
+  }
+  const { fixture, cli } = diagnostic;
+  const observation = observeCliDiagnostic(project, resolution, fixture);
+  const required = [...commonEvidence(diagnostic), ...cli.required];
+  const requiredAnyGroups = [
+    diagnostic.common.requiredAny,
+    cli.requiredAny,
+  ].filter((group): group is readonly string[] => group !== undefined);
+  const forbidden = cli.forbidden ?? [];
+  const [code] = expectedCliCodes(diagnostic);
+  const brandedCount =
+    observation.diagnostics.split(`ContractTypeError<"${code}"`).length - 1;
+  // The compact leaf form gives TS 6 and TS 7 a common TS2345 position at the
+  // command definition argument (the root form diverged to a TS2769 overload at
+  // the define call). The branded field evidence stays unsuppressed in both.
+  // TS 6 prints it on the first message line; TS 7 nests it one level deeper
+  // under the MissingRootFallbackFieldsContract wrapper elaboration, so the
+  // field evidence is asserted on the whole diagnostic while the editor
+  // first-level check below covers the wrapper that names the command.
+  if (
+    observation.status === 0 ||
+    observation.headers.length !== cli.expectedDiagnostics ||
+    observation.allHeaders.length !== observation.headers.length ||
+    observation.headers.some((header) => !header.includes(": error TS2345:")) ||
+    brandedCount !== cli.expectedDiagnostics ||
+    required.some((fragment) => !observation.diagnostics.includes(fragment)) ||
+    requiredAnyGroups.some(
+      (group) =>
+        !group.some((fragment) => observation.diagnostics.includes(fragment)),
+    ) ||
+    forbidden.some((fragment) => observation.diagnostics.includes(fragment))
+  ) {
+    throw new Error(
+      `Field-set diagnostic did not expose local contract evidence at the command definition\n${observation.diagnostics}`,
+    );
+  }
+}
+
+async function verifyGenericForwardDiagnostic(
+  project: string,
+  resolution: Resolution,
+  diagnostic: AuthoringDiagnosticCase,
+): Promise<void> {
+  if (diagnostic.cli.kind !== "forward") {
+    throw new Error(
+      "This case must use the generic-forward diagnostic adapter",
+    );
+  }
+  const { cli } = diagnostic;
+  // The marker version must compile clean: assertion-free generic forwarding plus
+  // every closed-set negative caught by its own @ts-expect-error.
+  await compileFixture(project, resolution, diagnostic.fixture);
+  const fixture =
+    diagnostic.derivation.kind === "copy"
+      ? diagnostic.fixture
+      : diagnostic.derivation.fixture;
+  const observation = observeCliDiagnostic(project, resolution, fixture);
+  const expectedCodes = expectedCliCodes(diagnostic);
+  const required = [...commonEvidence(diagnostic), ...cli.required];
+  const forbidden = cli.forbidden ?? [];
+  const firstLevelCodes = observation.firstLevelMessages.flatMap((line) => {
+    const match = /^  [^ ].*ContractTypeError<"([^"]+)"/.exec(line);
+    const code = match?.[1];
+    return code === undefined ? [] : [code];
+  });
+  // A wrapper author names the long AtomicTextOptions/StreamTextOptions alias as
+  // the parameter, so the call-site header is that alias and the branded coverage
+  // evidence lands on the elaboration child (still tsc first level). The closed
+  // mode-key, extra-key and wrong-payload rejections surface as TS2339/TS2322
+  // without a branded code. This pins the exact mixed-form set; the formal
+  // root/leaf `.text` entries expand the branded coverage in the header itself and
+  // are covered by the codes adapter.
+  if (
+    observation.status === 0 ||
+    observation.headers.length !== cli.expectedDiagnostics ||
+    observation.allHeaders.length !== observation.headers.length ||
+    firstLevelCodes.length !== expectedCodes.length ||
+    firstLevelCodes
+      .sort((left, right) => left.localeCompare(right))
+      .join(",") !==
+      [...expectedCodes]
+        .sort((left, right) => left.localeCompare(right))
+        .join(",") ||
+    required.some((fragment) => !observation.firstLevel.includes(fragment)) ||
+    forbidden.some((fragment) => observation.firstLevel.includes(fragment))
+  ) {
+    throw new Error(
+      `Generic-forward diagnostic did not expose the closed-set call-site evidence\nFirst level:\n${observation.firstLevel}\nFull diagnostics:\n${observation.diagnostics}`,
     );
   }
 }
@@ -1303,7 +1642,7 @@ async function verifyMissingCompletionDiagnostic(
   diagnostic: AuthoringDiagnosticCase,
 ): Promise<void> {
   if (diagnostic.cli.kind !== "completion") {
-    throw new Error("该场景应使用 completion 诊断适配器");
+    throw new Error("This case must use the completion diagnostic adapter");
   }
   const { fixture } = diagnostic;
   const observation = observeCliDiagnostic(project, resolution, fixture);
@@ -1313,7 +1652,7 @@ async function verifyMissingCompletionDiagnostic(
     required.some((fragment) => !observation.firstLevel.includes(fragment))
   ) {
     throw new Error(
-      `补全诊断首层没有暴露局部契约证据\n首层诊断：\n${observation.firstLevel}\n完整诊断：\n${observation.diagnostics}`,
+      `Completion diagnostic first level did not expose local contract evidence\nFirst level:\n${observation.firstLevel}\nFull diagnostics:\n${observation.diagnostics}`,
     );
   }
   if (
@@ -1333,7 +1672,7 @@ async function verifyMissingNamedVariantDiagnostic(
   diagnostic: AuthoringDiagnosticCase,
 ): Promise<void> {
   if (diagnostic.cli.kind !== "namedVariant") {
-    throw new Error("该场景应使用 named variant 诊断适配器");
+    throw new Error("This case must use the named-variant diagnostic adapter");
   }
   const { fixture } = diagnostic;
   const { cli } = diagnostic;
@@ -1344,7 +1683,7 @@ async function verifyMissingNamedVariantDiagnostic(
     required.some((fragment) => !observation.firstLevel.includes(fragment))
   ) {
     throw new Error(
-      `具名变体诊断首层没有暴露局部契约证据\n首层诊断：\n${observation.firstLevel}\n完整诊断：\n${observation.diagnostics}`,
+      `Named-variant diagnostic first level did not expose local contract evidence\nFirst level:\n${observation.firstLevel}\nFull diagnostics:\n${observation.diagnostics}`,
     );
   }
   if (
@@ -1400,7 +1739,7 @@ const authoringDiagnosticFixtureNames = [
   ]),
 ];
 
-async function prepareAuthoringDiagnosticCases(
+export async function prepareAuthoringDiagnosticCases(
   project: string,
   resolution: Resolution,
   fixtures: Readonly<Record<string, string>>,
@@ -1411,7 +1750,9 @@ async function prepareAuthoringDiagnosticCases(
     if (diagnostic.derivation.kind === "copy") continue;
     const source = fixtures[diagnostic.fixture];
     if (source === undefined) {
-      throw new Error(`缺少作者期诊断源文件：${diagnostic.fixture}`);
+      throw new Error(
+        `Missing authoring diagnostic source fixture: ${diagnostic.fixture}`,
+      );
     }
     const derived = deriveDiagnosticSource(source, diagnostic.derivation);
     await writeFile(resolve(project, diagnostic.derivation.fixture), derived);
@@ -1438,6 +1779,54 @@ function deriveDiagnosticSource(
   );
 }
 
+export async function verifySingleAuthoringDiagnosticCase(
+  project: string,
+  resolution: Resolution,
+  diagnostic: AuthoringDiagnosticCase,
+): Promise<void> {
+  switch (diagnostic.cli.kind) {
+    case "codes":
+      await verifyAuthoringDiagnostic(project, resolution, diagnostic);
+      break;
+    case "fieldSet":
+      await verifyFieldSetDiagnostic(project, resolution, diagnostic);
+      break;
+    case "forward":
+      await verifyGenericForwardDiagnostic(project, resolution, diagnostic);
+      break;
+    case "completion":
+      await verifyMissingCompletionDiagnostic(project, resolution, diagnostic);
+      break;
+    case "namedVariant":
+      await verifyMissingNamedVariantDiagnostic(
+        project,
+        resolution,
+        diagnostic,
+      );
+      break;
+    case "streamText":
+      await compileFixture(project, resolution, diagnostic.fixture);
+      await verifyMissingStreamDiagnostic(project, resolution, diagnostic);
+      break;
+    case "streamRecordName":
+      await compileFixture(project, resolution, diagnostic.fixture);
+      await verifyInvalidStreamRecordNameDiagnostic(
+        project,
+        resolution,
+        diagnostic,
+      );
+      break;
+    case "hierarchy":
+      await compileFixture(project, resolution, diagnostic.fixture);
+      await verifyHierarchyTextCoverageDiagnostic(
+        project,
+        resolution,
+        diagnostic,
+      );
+      break;
+  }
+}
+
 export async function verifyAuthoringDiagnosticCases(
   project: string,
   resolution: Resolution,
@@ -1447,45 +1836,7 @@ export async function verifyAuthoringDiagnosticCases(
   await prepareAuthoringDiagnosticCases(project, resolution, fixtures);
   await compileFixture(project, resolution, "authoring-example.ts");
   for (const diagnostic of authoringDiagnosticCases) {
-    switch (diagnostic.cli.kind) {
-      case "codes":
-        await verifyAuthoringDiagnostic(project, resolution, diagnostic);
-        break;
-      case "completion":
-        await verifyMissingCompletionDiagnostic(
-          project,
-          resolution,
-          diagnostic,
-        );
-        break;
-      case "namedVariant":
-        await verifyMissingNamedVariantDiagnostic(
-          project,
-          resolution,
-          diagnostic,
-        );
-        break;
-      case "streamText":
-        await compileFixture(project, resolution, diagnostic.fixture);
-        await verifyMissingStreamDiagnostic(project, resolution, diagnostic);
-        break;
-      case "streamRecordName":
-        await compileFixture(project, resolution, diagnostic.fixture);
-        await verifyInvalidStreamRecordNameDiagnostic(
-          project,
-          resolution,
-          diagnostic,
-        );
-        break;
-      case "hierarchy":
-        await compileFixture(project, resolution, diagnostic.fixture);
-        await verifyHierarchyTextCoverageDiagnostic(
-          project,
-          resolution,
-          diagnostic,
-        );
-        break;
-    }
+    await verifySingleAuthoringDiagnosticCase(project, resolution, diagnostic);
   }
   if (compilerVersion === "7.0.2" && resolution === "nodenext") {
     verifyAuthoringLanguageService(project, resolution, fixtures);

@@ -48,24 +48,28 @@ function createCombinationCli(input: ContractSchema<CombinationRawInput>) {
         },
         input,
 
-        outputs: defineCli().outputModes("combination", input, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
 }
 
-void test("Zod 的直接 enum 同源投影到 grammar、manifest、synopsis 与完整帮助", async () => {
+void test("direct Zod enums project from one source into grammar, manifest, synopsis, and full help", async () => {
   const input = z.object({
     mode: z.enum(["interactive", "allow-all"]),
     files: z.array(z.enum(['a"b', "line\nbreak"])).optional(),
@@ -121,18 +125,22 @@ void test("Zod 的直接 enum 同源投影到 grammar、manifest、synopsis 与�
         },
         input,
 
-        outputs: defineCli().outputModes("choose", input, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -176,7 +184,7 @@ void test("Zod 的直接 enum 同源投影到 grammar、manifest、synopsis 与�
   ]);
   assert.equal(invalidChoices.kind, "usageFailure");
   if (invalidChoices.kind !== "usageFailure")
-    assert.fail("候选值必须由 parser 拒绝");
+    assert.fail("choices must be rejected by the parser");
   assert.deepEqual(
     invalidChoices.issues.map((issue) => issue.code),
     ["invalidFieldChoice", "invalidFieldChoice", "invalidFieldChoice"],
@@ -192,7 +200,7 @@ void test("Zod 的直接 enum 同源投影到 grammar、manifest、synopsis 与�
   }
 });
 
-void test("Valibot 的直接 enum 同样覆盖单值与 repeatable option", () => {
+void test("direct Valibot enums also cover single-value and repeatable options", () => {
   const input = toStandardJsonSchema(
     v.object({
       mode: v.optional(v.picklist(["interactive", "allow-all"])),
@@ -223,18 +231,22 @@ void test("Valibot 的直接 enum 同样覆盖单值与 repeatable option", () =
         },
         input,
 
-        outputs: defineCli().outputModes("valibotChoices", input, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -245,7 +257,7 @@ void test("Valibot 的直接 enum 同样覆盖单值与 repeatable option", () =
   });
 });
 
-void test("每个显式字段候选值在 parser 聚合并在 validation 与 handler 前终止", async () => {
+void test("every explicit field choice aggregates in the parser and terminates before validation and the handler", async () => {
   const source = z.object({
     mode: z.enum(["safe", "force"]),
     files: z.array(z.enum(["keep", "drop"])).optional(),
@@ -291,21 +303,25 @@ void test("每个显式字段候选值在 parser 聚合并在 validation 与 han
         },
         input,
 
-        outputs: defineCli().outputModes("choices", input, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => {
-                handlerCalls += 1;
-                return outcome.completion();
-              },
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => {
+                  handlerCalls += 1;
+                  return outcome.completion();
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -324,7 +340,8 @@ void test("每个显式字段候选值在 parser 聚合并在 validation 与 han
     "outside-separated",
   ]);
   assert.equal(invocation.kind, "usageFailure");
-  if (invocation.kind !== "usageFailure") assert.fail("必须是 usage failure");
+  if (invocation.kind !== "usageFailure")
+    assert.fail("expected a usage failure");
   assert.deepEqual(invocation.issues, [
     {
       code: "invalidFieldChoice",
@@ -395,7 +412,7 @@ void test("每个显式字段候选值在 parser 聚合并在 validation 与 han
   assert.equal(handlerCalls, 0);
 });
 
-void test("缺席 default、没有候选值和其余 schema 约束保持原有职责", async () => {
+void test("absent defaults, missing choices, and other schema constraints keep their original responsibilities", async () => {
   const source = z.object({
     defaultMode: z.enum(["safe", "force"]).optional().default("safe"),
     constrained: z.string().min(3).optional(),
@@ -425,22 +442,26 @@ void test("缺席 default、没有候选值和其余 schema 约束保持原有�
         },
         input: source,
 
-        outputs: defineCli().outputModes("defaults", source, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ input, outcome }) => {
-                handlerCalls += 1;
-                assert.equal(input.defaultMode, "safe");
-                return outcome.completion();
-              },
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ input, outcome }) => {
+                  handlerCalls += 1;
+                  assert.equal(input.defaultMode, "safe");
+                  return outcome.completion();
+                },
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });
@@ -472,7 +493,7 @@ void test("缺席 default、没有候选值和其余 schema 约束保持原有�
   assert.equal(handlerCalls, 1);
 });
 
-void test("真实 Zod 与 Valibot 的 union 投影不会被求解为字段候选值", () => {
+void test("real Zod and Valibot union projections are not resolved into field choices", () => {
   const inputs = [
     z.object({
       mode: z.union([z.literal("interactive"), z.literal("allow-all")]),
@@ -485,7 +506,7 @@ void test("真实 Zod 与 Valibot 的 union 投影不会被求解为字段候选
   ] as const;
 
   for (const producer of inputs) {
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 测试模式由 fixture 提供 Standard Schema 能力。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The test schema's Standard Schema capability is provided by the fixture.
     const input = producer as unknown as ContractSchema<CombinationRawInput>;
     const exported = producer["~standard"].jsonSchema.input({
       target: "draft-2020-12",
@@ -500,7 +521,7 @@ void test("真实 Zod 与 Valibot 的 union 投影不会被求解为字段候选
         const [issue] = error.issues;
         assert.equal(issue?.code, "schemaFieldDoesNotAcceptRawValue");
         if (issue?.code !== "schemaFieldDoesNotAcceptRawValue") {
-          assert.fail("预期得到输入模式 raw 冲突问题");
+          assert.fail("expected an input schema raw conflict issue");
         }
         assert.equal(issue.command, "combination");
         assert.equal(issue.location, "input");
@@ -518,7 +539,7 @@ void test("真实 Zod 与 Valibot 的 union 投影不会被求解为字段候选
   }
 });
 
-void test("组合、引用、条件和非字符串 enum 不推断候选值", async () => {
+void test("compositions, references, conditionals, and non-string enums do not infer choices", async () => {
   const validator = z.object({
     anyOf: z.string().optional(),
     oneOf: z.string().optional(),
@@ -588,18 +609,22 @@ void test("组合、引用、条件和非字符串 enum 不推断候选值", asy
         },
         input,
 
-        outputs: defineCli().outputModes("counterexample", input, (mode) => ({
+        outputs: (mode) => ({
           default: "structured",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
+            structured: mode
+              .atomic({
+                success: {
+                  kind: "completion",
+                },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({
+                description: "结构化输出",
+              }),
           },
-        })),
+        }),
       },
     },
   });

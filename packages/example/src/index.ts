@@ -23,181 +23,137 @@ export interface Dependencies {
 
 const define = defineCli<Dependencies>();
 
-const lookupInput = z.object({ id: z.string().min(1) });
-const lookupSuccess = {
-  kind: "data" as const,
-  variants: {
-    found: {
-      description: "找到用户",
-      schema: userSchema,
-      exitCode: 0,
-    },
-  },
-};
-const lookupFailures = {
-  notFound: {
-    description: "用户不存在",
-    schema: unavailableUserSchema,
-    exitCode: 1,
-  },
-};
 const lookup = define.command("lookup")({
   kind: "command",
   parent: "users",
   name: "get",
-  description: "查询用户",
-  fields: { id: { kind: "positional", description: "用户标识" } },
-  input: lookupInput,
+  description: "Look up a user",
+  fields: { id: { kind: "positional", description: "User identifier" } },
+  input: z.object({ id: z.string().min(1) }),
   examples: [
     { input: { id: "alice" } },
     { input: { id: "alice" }, outputMode: "structured" },
   ],
-  outputs: define.outputModes("lookup", lookupInput, (mode) => ({
-    default: "text",
-    modes: {
-      structured: mode.atomic({
-        description: "供程序读取的用户资料",
-        format: "structured",
-        success: lookupSuccess,
-        failures: lookupFailures,
-        handler({ input, outcome }) {
-          const user = users.get(input.id);
-          return user
-            ? outcome.data.found(user)
-            : outcome.failure.notFound({ id: input.id });
-        },
-      }),
-      text: mode.atomic({
-        description: "供人阅读的用户资料",
-        format: "text",
-        success: {
-          kind: "data",
-          variants: {
-            found: {
-              ...lookupSuccess.variants.found,
-              text: (user) => text.lines(["用户信息", user.name]),
-            },
+  outputs: ({ atomic }) => {
+    const lookupUser = atomic({
+      success: {
+        kind: "data",
+        variants: {
+          found: {
+            description: "User found",
+            schema: userSchema,
+            exitCode: 0,
           },
         },
-        failures: {
-          notFound: {
-            ...lookupFailures.notFound,
-            text: ({ id }) =>
-              text.lines([`用户 ${id} 不存在`, "", "请检查用户标识"]),
+      },
+      failures: {
+        notFound: {
+          description: "User not found",
+          schema: unavailableUserSchema,
+          exitCode: 1,
+        },
+      },
+      handler({ input, outcome }) {
+        const user = users.get(input.id);
+        return user
+          ? outcome.data.found(user)
+          : outcome.failure.notFound({ id: input.id });
+      },
+    });
+    return {
+      default: "text",
+      modes: {
+        structured: lookupUser.structured({
+          description: "User profile for programmatic consumption",
+        }),
+        text: lookupUser.text({
+          description: "User profile for human reading",
+          success: {
+            found: (user) => text.lines(["User profile", user.name]),
           },
-        },
-        handler({ input, outcome }) {
-          const user = users.get(input.id);
-          return user
-            ? outcome.data.found(user)
-            : outcome.failure.notFound({ id: input.id });
-        },
-      }),
-    },
-  })),
+          failures: {
+            notFound: ({ id }) =>
+              text.lines([
+                `User ${id} not found`,
+                "",
+                "Check the user identifier",
+              ]),
+          },
+        }),
+      },
+    };
+  },
 });
 
-const logsInput = z.object({});
 const logs = define.command("logs")({
   kind: "command",
   parent: "users",
   name: "logs",
-  description: "实时输出日志",
+  description: "Stream logs in real time",
   fields: {},
-  input: logsInput,
-  outputs: define.outputModes("logs", logsInput, (mode) => ({
-    default: "text",
-    modes: {
-      structured: mode.stream({
-        description: "按 NDJSON 输出日志记录与终态",
-        format: "structured",
-        success: {
-          kind: "stream",
+  input: z.object({}),
+  outputs: ({ stream }) => {
+    const readLogs = stream({
+      records: {
+        entry: {
+          description: "Log entry",
+          schema: logSchema,
+        },
+      },
+      failures: {},
+      async *handler({ dependencies, outcome }) {
+        for await (const entry of dependencies.readLogs()) {
+          yield outcome.record.entry(entry);
+        }
+        return outcome.streamSuccess();
+      },
+    });
+    return {
+      default: "text",
+      modes: {
+        structured: readLogs.structured({
+          description: "Emit log records and terminal state as NDJSON",
+        }),
+        text: readLogs.text({
+          description: "Emit log text line by line",
           records: {
-            entry: {
-              description: "日志记录",
-              schema: logSchema,
-            },
+            entry: ({ message }) => text.fragment(`${message}\n`),
           },
-        },
-        failures: {},
-        async *handler({ dependencies, outcome }) {
-          for await (const entry of dependencies.readLogs()) {
-            yield outcome.record.entry(entry);
-          }
-          return outcome.streamSuccess();
-        },
-      }),
-      text: mode.stream({
-        description: "逐行输出日志文本",
-        format: "text",
-        success: {
-          kind: "stream",
-          records: {
-            entry: {
-              description: "日志记录",
-              schema: logSchema,
-              text: ({ message }) => text.fragment(`${message}\n`),
-            },
-          },
-          text: () => text.silent,
-        },
-        failures: {},
-        async *handler({ dependencies, outcome }) {
-          for await (const entry of dependencies.readLogs()) {
-            yield outcome.record.entry(entry);
-          }
-          return outcome.streamSuccess();
-        },
-      }),
-    },
-  })),
+          failures: {},
+          terminal: () => text.silent,
+        }),
+      },
+    };
+  },
 });
 
-const validateInput = z.object({
-  id: z.string().min(1).optional(),
-  email: z.email().optional(),
-  domain: z.string().min(1).optional(),
-});
-const validateFailures = {
-  emailDomainMismatch: {
-    description: "邮箱不属于指定域",
-    schema: emailMismatchSchema,
-    exitCode: 1,
-  },
-};
-function validateUser(input: z.output<typeof validateInput>) {
-  if (input.email !== undefined && input.domain !== undefined) {
-    const emailDomain = input.email.slice(input.email.lastIndexOf("@") + 1);
-    if (emailDomain.toLowerCase() !== input.domain.toLowerCase()) {
-      return {
-        kind: "emailDomainMismatch" as const,
-        email: input.email,
-        domain: input.domain,
-      };
-    }
-  }
-  return { kind: "valid" as const };
-}
 const validate = define.command("validate")({
   kind: "command",
   parent: "users",
   name: "validate",
-  description: "校验用户标识格式与邮箱域",
+  description: "Validate user identifier format and email domain",
   fields: {
-    id: { kind: "valueOption", longOption: "--id", description: "用户标识" },
+    id: {
+      kind: "valueOption",
+      longOption: "--id",
+      description: "User identifier",
+    },
     email: {
       kind: "valueOption",
       longOption: "--email",
-      description: "电子邮箱",
+      description: "Email address",
     },
     domain: {
       kind: "valueOption",
       longOption: "--domain",
-      description: "邮箱域名",
+      description: "Email domain",
     },
   },
-  input: validateInput,
+  input: z.object({
+    id: z.string().min(1).optional(),
+    email: z.email().optional(),
+    domain: z.string().min(1).optional(),
+  }),
   usageConstraints: [
     { kind: "count", fields: ["id", "email"], min: 1, max: 1 },
     {
@@ -206,44 +162,45 @@ const validate = define.command("validate")({
       onMatch: { require: ["email"] },
     },
   ],
-  outputs: define.outputModes("validate", validateInput, (mode) => ({
-    default: "text",
-    modes: {
-      structured: mode.atomic({
-        description: "提供可由程序读取的校验失败",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: validateFailures,
-        handler({ input, outcome }) {
-          const result = validateUser(input);
-          return result.kind === "valid"
-            ? outcome.completion()
-            : outcome.failure.emailDomainMismatch(result);
+  outputs: ({ atomic }) => {
+    const validation = atomic({
+      success: { kind: "completion" },
+      failures: {
+        emailDomainMismatch: {
+          description: "Email does not belong to the specified domain",
+          schema: emailMismatchSchema,
+          exitCode: 1,
         },
-      }),
-      text: mode.atomic({
-        description: "提供可直接阅读的校验结果",
-        format: "text",
-        success: {
-          kind: "completion",
-          text: () => text.silent,
-        },
-        failures: {
-          emailDomainMismatch: {
-            ...validateFailures.emailDomainMismatch,
-            text: ({ email, domain }) =>
-              text.lines([`邮箱 ${email} 不属于指定域 ${domain}`]),
+      },
+      handler({ input: { email, domain }, outcome }) {
+        if (email !== undefined && domain !== undefined) {
+          const emailDomain = email.slice(email.lastIndexOf("@") + 1);
+          if (emailDomain.toLowerCase() !== domain.toLowerCase()) {
+            return outcome.failure.emailDomainMismatch({ email, domain });
+          }
+        }
+        return outcome.completion();
+      },
+    });
+    return {
+      default: "text",
+      modes: {
+        structured: validation.structured({
+          description: "Validation failures for programmatic consumption",
+        }),
+        text: validation.text({
+          description: "Validation results for direct reading",
+          success: () => text.silent,
+          failures: {
+            emailDomainMismatch: ({ email, domain }) =>
+              text.lines([
+                `Email ${email} does not belong to domain ${domain}`,
+              ]),
           },
-        },
-        handler({ input, outcome }) {
-          const result = validateUser(input);
-          return result.kind === "valid"
-            ? outcome.completion()
-            : outcome.failure.emailDomainMismatch(result);
-        },
-      }),
-    },
-  })),
+        }),
+      },
+    };
+  },
 });
 
 export const cli = define({
@@ -251,33 +208,35 @@ export const cli = define({
   help: helpCapability({
     shortAlias: "-h",
     headings: {
-      usage: "用法",
-      commands: "命令",
-      arguments: "参数",
-      options: "选项",
-      schema: "契约查询",
-      examples: "调用示例",
+      usage: "Usage",
+      commands: "Commands",
+      arguments: "Arguments",
+      options: "Options",
+      schema: "Contract discovery",
+      examples: "Examples",
     },
     wording: {
-      commandPlaceholder: "命令",
-      choices: "（候选：{choices}）",
-      default: "（默认：{value}）",
-      countExactly: "{fields} 恰好出现 {count} 项",
-      whenOnMatch: "当全部满足 {facts} 时，{onMatch}",
-      require: "必须提供 {fields}",
-      present: "{field} 已提供",
+      commandPlaceholder: "command",
+      choices: "(choices: {choices})",
+      default: "(default: {value})",
+      countExactly: "{fields} exactly {count}",
+      whenOnMatch: "when all of {facts}, {onMatch}",
+      require: "require {fields}",
+      present: "{field} is present",
     },
   }),
   version: versionCapability({ value: text.line(coreMetadata.version) }),
   schema: schemaCapability({
-    description: text.line("查询命令输入、结果契约与线格式。"),
+    description: text.line(
+      "Query command inputs, result contracts, and wire formats.",
+    ),
   }),
   usageFailureExitCode: 64,
   commands: {
     users: {
       kind: "rootGroup",
       name: "user",
-      description: "用户查询、标识校验与日志",
+      description: "User lookup, identifier validation, and logs",
     },
     ...lookup,
     ...logs,

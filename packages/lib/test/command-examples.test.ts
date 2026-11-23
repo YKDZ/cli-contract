@@ -11,6 +11,7 @@ import {
   text,
   type ContractSchema,
   type FieldDefinitions,
+  type OutputExecutionFactory,
   type UsageConstraint,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
@@ -46,31 +47,43 @@ function createCli(
   includeExamplesHeading = true,
 ) {
   const define = defineCli();
-  const outputs = define.outputModes("inspect", exampleInput, (mode) => ({
+  const outputs = (
+    mode: OutputExecutionFactory<"inspect", undefined, typeof exampleInput>,
+  ) => ({
     default: defaultOutputMode,
     modes: {
-      structured: mode.atomic({
-        description: "机器读取结果",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => {
-          handlerCalls += 1;
-          return outcome.completion();
-        },
-      }),
-      text: mode.atomic({
-        description: "供人阅读结果",
-        format: "text",
-        success: { kind: "completion", text: () => text.silent },
-        failures: {},
-        handler: ({ outcome }) => {
-          handlerCalls += 1;
-          return outcome.completion();
-        },
-      }),
+      structured: mode
+        .atomic({
+          success: {
+            kind: "completion",
+          },
+          failures: {},
+          handler: ({ outcome }) => {
+            handlerCalls += 1;
+            return outcome.completion();
+          },
+        })
+        .structured({
+          description: "机器读取结果",
+        }),
+      text: mode
+        .atomic({
+          success: {
+            kind: "completion",
+          },
+          failures: {},
+          handler: ({ outcome }) => {
+            handlerCalls += 1;
+            return outcome.completion();
+          },
+        })
+        .text({
+          description: "供人阅读结果",
+          success: () => text.silent,
+          failures: {},
+        }),
     },
-  }));
+  });
 
   return define({
     root: "workspace",
@@ -163,17 +176,23 @@ function createDynamicCli(
   usageConstraints?: readonly UsageConstraint[],
 ) {
   const define = defineCli();
-  const outputs = define.outputModes("check", input, (mode) => ({
+  const outputs = (
+    mode: OutputExecutionFactory<"check", undefined, ContractSchema>,
+  ) => ({
     modes: {
-      structured: mode.atomic({
-        description: "结构化结果",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
+      structured: mode
+        .atomic({
+          success: {
+            kind: "completion",
+          },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        })
+        .structured({
+          description: "结构化结果",
+        }),
     },
-  }));
+  });
   return Reflect.apply(define, undefined, [
     {
       root: "check",
@@ -202,7 +221,7 @@ function getExampleError(action: () => unknown): ContractDefinitionError {
     if (error instanceof ContractDefinitionError) return error;
     throw error;
   }
-  throw new Error("预期 defineCli 拒绝无效命令示例");
+  throw new Error("expected defineCli to reject invalid command examples");
 }
 
 function getExampleIssue(action: () => unknown) {
@@ -210,24 +229,31 @@ function getExampleIssue(action: () => unknown) {
   const issue = error.issues.find(
     (candidate) => candidate.code === "invalidCommandExample",
   );
-  if (issue === undefined) throw new Error("缺少命令示例定义诊断");
+  if (issue === undefined)
+    throw new Error("missing command example definition diagnostic");
   return issue;
 }
 
 function createGroupWithExample() {
   const define = defineCli();
   const input = z.object({});
-  const outputs = define.outputModes("run", input, (mode) => ({
+  const outputs = (
+    mode: OutputExecutionFactory<"run", undefined, typeof input>,
+  ) => ({
     modes: {
-      structured: mode.atomic({
-        description: "结构化结果",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: {},
-        handler: ({ outcome }) => outcome.completion(),
-      }),
+      structured: mode
+        .atomic({
+          success: {
+            kind: "completion",
+          },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        })
+        .structured({
+          description: "结构化结果",
+        }),
     },
-  }));
+  });
   return Reflect.apply(define, undefined, [
     {
       root: "tool",
@@ -264,7 +290,7 @@ function createGroupWithExample() {
   ]);
 }
 
-void test("定义期验证类型化示例并从同一 argv 生成帮助与可往返 shell", async () => {
+void test("definition time validates typed examples and generates help and round-trippable shell from the same argv", async () => {
   const cli = createCli();
   assert.equal(handlerCalls, 0);
   assert.deepEqual(validatedRawCounts.slice(0, 2), ["4", "5"]);
@@ -370,7 +396,7 @@ void test("定义期验证类型化示例并从同一 argv 生成帮助与可往
   assert.ok(help.includes("  保留自由补充说明"));
 
   const firstExample = examples?.[0];
-  if (firstExample === undefined) throw new Error("缺少调用示例");
+  if (firstExample === undefined) throw new Error("missing command example");
   const displayedStart = help.indexOf(`  ${firstExample.shell}\n`);
   assert.ok(displayedStart >= 0);
   const displayedShell = help.slice(
@@ -430,7 +456,7 @@ void test("定义期验证类型化示例并从同一 argv 生成帮助与可往
   assert.equal(handlerCalls, 0);
 });
 
-void test("公开 defineCli 会拒绝无法往返、约束失败或模式拒绝的样本", () => {
+void test("public defineCli rejects examples that cannot round-trip, fail constraints, or are rejected by the schema", () => {
   const stringField = {
     name: {
       kind: "valueOption",
@@ -541,7 +567,7 @@ void test("公开 defineCli 会拒绝无法往返、约束失败或模式拒绝�
   );
 });
 
-void test("未配置 examples 标题时仍显示独立的调用示例内容", async () => {
+void test("example content still appears as its own segment when no examples heading is configured", async () => {
   const cli = createCli("structured", false);
   const writes: string[] = [];
   await executeCli(cli, {

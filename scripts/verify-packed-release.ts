@@ -57,12 +57,14 @@ async function main(): Promise<void> {
     );
     if (packed === undefined) {
       process.stderr.write(
-        "Changesets 发布计划为空，本次没有可消费的发布制品；已跳过制品验收。\n",
+        "Changesets publish plan is empty; no release artifacts to consume, so artifact verification was skipped.\n",
       );
       return;
     }
 
-    process.stderr.write("检查同批制品的独立安装与公开运行时入口\n");
+    process.stderr.write(
+      "Verifying standalone installation and public runtime entries of the packed artifacts\n",
+    );
     await withInstalledConsumer(
       {
         name: "cli-contract-packed-consumer",
@@ -77,7 +79,9 @@ async function main(): Promise<void> {
       verifyInstalledRuntime,
     );
 
-    process.stderr.write("检查 TypeScript 6/7 的独立消费者矩阵\n");
+    process.stderr.write(
+      "Verifying the standalone TypeScript 6/7 consumer matrix\n",
+    );
     const typecheckOutput = runCommand(
       "pnpm",
       [
@@ -92,7 +96,9 @@ async function main(): Promise<void> {
     );
     if (typecheckOutput.length > 0) process.stdout.write(typecheckOutput);
 
-    process.stderr.write("检查示例对同批制品的真实进程消费\n");
+    process.stderr.write(
+      "Verifying real-process example consumption of the packed artifacts\n",
+    );
     const exampleOutput = runCommand(
       "pnpm",
       [
@@ -133,7 +139,7 @@ function parsePackDirectory(args: readonly string[]): string | undefined {
     values[1] === undefined
   ) {
     throw new Error(
-      "用法：pnpm product:verify [-- --pack-dir <Changesets pack-dir>]",
+      "Usage: pnpm product:verify [-- --pack-dir <Changesets pack-dir>]",
     );
   }
   return resolve(repositoryRoot, values[1]);
@@ -146,7 +152,9 @@ async function readPackedRelease(
 ): Promise<PackedRelease | undefined> {
   const directoryStatus = await lstat(packDirectory);
   if (!directoryStatus.isDirectory() || directoryStatus.isSymbolicLink()) {
-    throw new Error(`Changesets pack-dir 不是普通目录：${packDirectory}`);
+    throw new Error(
+      `Changesets pack-dir is not a regular directory: ${packDirectory}`,
+    );
   }
 
   const plan = parsePublishPlan(
@@ -155,7 +163,9 @@ async function readPackedRelease(
   const releases = plan.flat().filter((item) => item.kind === "publish");
   if (releases.length === 0) {
     if (requirePackages) {
-      throw new Error("显式 pack-dir 没有可消费的 Changesets 发布计划");
+      throw new Error(
+        "The explicit pack-dir has no consumable Changesets publish plan",
+      );
     }
     return undefined;
   }
@@ -166,18 +176,22 @@ async function readPackedRelease(
     !releases.some((release) => release.name === corePackage) ||
     !releases.some((release) => release.name === testingPackage)
   ) {
-    throw new Error("Changesets 发布计划必须只包含 core 与 testing 两个公共包");
+    throw new Error(
+      "The Changesets publish plan must contain exactly the two public packages core and testing",
+    );
   }
 
   const packedPackages = await Promise.all(
     releases.map(async (release) => {
       if (release.tarball === undefined) {
-        throw new Error(`Changesets 未为 ${release.name} 记录 tarball`);
+        throw new Error(
+          `Changesets did not record a tarball for ${release.name}`,
+        );
       }
       const tarball = resolve(packDirectory, release.tarball.path);
       if (!isWithinDirectory(packDirectory, tarball)) {
         throw new Error(
-          `Changesets tarball 路径越出 pack-dir：${release.name}`,
+          `Changesets tarball path escapes the pack-dir: ${release.name}`,
         );
       }
       const status = await lstat(tarball);
@@ -186,12 +200,16 @@ async function readPackedRelease(
         status.isSymbolicLink() ||
         !tarball.endsWith(".tgz")
       ) {
-        throw new Error(`Changesets tarball 不是普通 tgz：${tarball}`);
+        throw new Error(
+          `Changesets tarball is not a regular tgz file: ${tarball}`,
+        );
       }
       await verifyIntegrity(tarball, release.tarball.integrity);
       const pkg = await inspectTarball(tarball, release.name, expectedLicense);
       if (pkg.version !== release.version) {
-        throw new Error(`Changesets 计划版本与 ${release.name} 制品版本不一致`);
+        throw new Error(
+          `Changesets plan version does not match the artifact version of ${release.name}`,
+        );
       }
       return pkg;
     }),
@@ -200,7 +218,9 @@ async function readPackedRelease(
   const core = packedPackages.find((pkg) => pkg.name === corePackage);
   const testing = packedPackages.find((pkg) => pkg.name === testingPackage);
   if (core === undefined || testing === undefined) {
-    throw new Error("Changesets pack-dir 缺少 core 或 testing 制品");
+    throw new Error(
+      "Changesets pack-dir is missing the core or testing artifact",
+    );
   }
   verifyLockstep(core, testing);
 
@@ -212,7 +232,9 @@ async function readPackedRelease(
     packageEntries.length !== expectedEntries.size ||
     packageEntries.some((entry) => !expectedEntries.has(entry))
   ) {
-    throw new Error("Changesets pack-dir 中的 tgz 与发布计划不一致");
+    throw new Error(
+      "The tgz files in the Changesets pack-dir do not match the publish plan",
+    );
   }
 
   return {
@@ -237,13 +259,14 @@ function parsePublishPlan(
   try {
     value = JSON.parse(text);
   } catch {
-    throw new Error("Changesets publish-plan.json 不是有效 JSON");
+    throw new Error("Changesets publish-plan.json is not valid JSON");
   }
   if (!isRecord(value) || value.version !== 1 || !Array.isArray(value.plan)) {
-    throw new Error("Changesets publish-plan.json 格式无效");
+    throw new Error("Changesets publish-plan.json has an invalid format");
   }
   return value.plan.map((group) => {
-    if (!Array.isArray(group)) throw new Error("发布计划分组格式无效");
+    if (!Array.isArray(group))
+      throw new Error("Publish plan group has an invalid format");
     return group.map((entry) => {
       if (
         !isRecord(entry) ||
@@ -251,7 +274,7 @@ function parsePublishPlan(
         typeof entry.name !== "string" ||
         typeof entry.version !== "string"
       ) {
-        throw new Error("发布计划包含无效条目");
+        throw new Error("Publish plan contains an invalid entry");
       }
       const rawTarball = entry.tarball;
       if (rawTarball === undefined) {
@@ -266,7 +289,9 @@ function parsePublishPlan(
         typeof rawTarball.path !== "string" ||
         typeof rawTarball.integrity !== "string"
       ) {
-        throw new Error(`发布计划中的 ${entry.name} tarball 信息无效`);
+        throw new Error(
+          `Invalid tarball info for ${entry.name} in the publish plan`,
+        );
       }
       return {
         kind: entry.kind,
@@ -289,7 +314,9 @@ async function verifyIntegrity(
     .update(await readFile(tarball))
     .digest("base64")}`;
   if (actual !== expected) {
-    throw new Error(`Changesets tarball 完整性与发布计划不一致：${tarball}`);
+    throw new Error(
+      `Changesets tarball integrity does not match the publish plan: ${tarball}`,
+    );
   }
 }
 
@@ -303,17 +330,21 @@ async function inspectTarball(
   const manifest = parseManifest(readTarText(tarball, "package/package.json"));
   verifyManifestMetadata(manifest, expectedName);
   verifyManifestTargets(manifest, entries);
-  const version = requiredString(manifest, "version", "制品 package.json");
+  const version = requiredString(manifest, "version", "artifact package.json");
   verifyPublicSourceLinks(tarball, version, manifest, entries);
   const license = readTarText(tarball, "package/LICENSE");
   if (license !== expectedLicense) {
-    throw new Error(`制品 LICENSE 与仓库许可证不一致：${tarball}`);
+    throw new Error(
+      `Artifact LICENSE does not match the repository license: ${tarball}`,
+    );
   }
   if (
     !license.includes("MIT License") ||
     !license.includes("Copyright (c) 2026 YKDZ")
   ) {
-    throw new Error(`制品 LICENSE 缺少 MIT 许可证内容：${tarball}`);
+    throw new Error(
+      `Artifact LICENSE is missing MIT license content: ${tarball}`,
+    );
   }
   return {
     name: expectedName,
@@ -335,16 +366,18 @@ function verifyPublicSourceLinks(
     (target) => target.endsWith(".js") || target.endsWith(".d.ts"),
   );
   if (publicEntries.length === 0) {
-    throw new Error("制品没有可核对源码链接的公开 JS/类型入口");
+    throw new Error(
+      "Artifact has no public JS/type entries for source-link verification",
+    );
   }
   for (const target of publicEntries) {
     const entry = target.slice(2);
     if (!entries.includes(entry)) {
-      throw new Error(`制品缺少公开入口 ${target}`);
+      throw new Error(`Artifact is missing public entry ${target}`);
     }
     if (!readTarText(tarball, `package/${entry}`).includes(expected)) {
       throw new Error(
-        `制品入口 ${target} 的示例链接未指向对应 Changesets 源码 tag`,
+        `Example link in artifact entry ${target} does not point to the matching Changesets source tag`,
       );
     }
   }
@@ -356,12 +389,12 @@ function tarEntries(tarball: string): readonly string[] {
     .filter((entry) => entry.length > 0)
     .map((entry) => {
       if (!entry.startsWith("package/")) {
-        throw new Error(`tgz 包含 package/ 之外的路径：${entry}`);
+        throw new Error(`tgz contains a path outside package/: ${entry}`);
       }
       return entry.slice("package/".length);
     });
   if (new Set(entries).size !== entries.length) {
-    throw new Error(`tgz 包含重复路径：${tarball}`);
+    throw new Error(`tgz contains duplicate paths: ${tarball}`);
   }
   return entries;
 }
@@ -373,24 +406,26 @@ function verifyArchiveContents(
   const required = new Set(["package.json", "LICENSE"]);
   for (const entry of entries) {
     if (entry === "" || entry.includes("..") || entry.startsWith("/")) {
-      throw new Error(`tgz 包含无效路径：${entry}`);
+      throw new Error(`tgz contains an invalid path: ${entry}`);
     }
     if (isDeniedArchivePath(entry)) {
-      throw new Error(`tgz 包含非公开目录内容：${entry}`);
+      throw new Error(
+        `tgz contains content from a non-public directory: ${entry}`,
+      );
     }
     if (required.has(entry)) {
       required.delete(entry);
       continue;
     }
     if (!isPublishedDistFile(entry)) {
-      throw new Error(`tgz 包含 dist/ 之外的内容：${entry}`);
+      throw new Error(`tgz contains content outside dist/: ${entry}`);
     }
   }
   if (required.size > 0) {
-    throw new Error(`tgz 缺少 ${[...required].join("、")}`);
+    throw new Error(`tgz is missing ${[...required].join(", ")}`);
   }
   if (!entries.some((entry) => entry.startsWith("dist/"))) {
-    throw new Error(`tgz 不包含构建输出：${tarball}`);
+    throw new Error(`tgz contains no build output: ${tarball}`);
   }
 }
 
@@ -426,12 +461,13 @@ function parseManifest(text: string): Readonly<Record<string, unknown>> {
   try {
     value = JSON.parse(text);
   } catch {
-    throw new Error("制品 package.json 不是有效 JSON");
+    throw new Error("Artifact package.json is not valid JSON");
   }
-  if (!isRecord(value)) throw new Error("制品 package.json 必须是对象");
+  if (!isRecord(value))
+    throw new Error("Artifact package.json must be an object");
   const workspaceReference = findWorkspaceOrCatalog(value);
   if (workspaceReference !== undefined) {
-    throw new Error(`制品 package.json 保留了 ${workspaceReference}`);
+    throw new Error(`Artifact package.json retains ${workspaceReference}`);
   }
   return value;
 }
@@ -462,31 +498,37 @@ function verifyManifestMetadata(
   manifest: Readonly<Record<string, unknown>>,
   expectedName: string,
 ): void {
-  if (requiredString(manifest, "name", "制品 package.json") !== expectedName) {
-    throw new Error(`制品包身份与 ${expectedName} 不一致`);
-  }
   if (
-    !isStableVersion(requiredString(manifest, "version", "制品 package.json"))
+    requiredString(manifest, "name", "artifact package.json") !== expectedName
   ) {
-    throw new Error("制品版本不是稳定的三段版本号");
-  }
-  if (manifest.private === true) throw new Error("制品包仍标记为 private");
-  if (requiredString(manifest, "type", "制品 package.json") !== "module") {
-    throw new Error("制品包不是 ESM");
-  }
-  if (requiredString(manifest, "license", "制品 package.json") !== "MIT") {
-    throw new Error("制品 package.json 的许可证不是 MIT");
+    throw new Error(`Artifact package identity does not match ${expectedName}`);
   }
   if (
-    requiredString(manifest, "homepage", "制品 package.json") !==
+    !isStableVersion(
+      requiredString(manifest, "version", "artifact package.json"),
+    )
+  ) {
+    throw new Error("Artifact version is not a stable three-part version");
+  }
+  if (manifest.private === true)
+    throw new Error("Artifact package is still marked private");
+  if (requiredString(manifest, "type", "artifact package.json") !== "module") {
+    throw new Error("Artifact package is not ESM");
+  }
+  if (requiredString(manifest, "license", "artifact package.json") !== "MIT") {
+    throw new Error("Artifact package.json license is not MIT");
+  }
+  if (
+    requiredString(manifest, "homepage", "artifact package.json") !==
     "https://github.com/YKDZ/cli-contract"
   ) {
-    throw new Error("制品 homepage 元数据不正确");
+    throw new Error("Artifact homepage metadata is incorrect");
   }
   if (
-    requiredString(manifest, "description", "制品 package.json").length === 0
+    requiredString(manifest, "description", "artifact package.json").length ===
+    0
   ) {
-    throw new Error("制品 description 不能为空");
+    throw new Error("Artifact description must not be empty");
   }
   const keywords = manifest.keywords;
   if (
@@ -494,31 +536,33 @@ function verifyManifestMetadata(
     keywords.length === 0 ||
     !keywords.every((keyword) => typeof keyword === "string")
   ) {
-    throw new Error("制品 keywords 缺失");
+    throw new Error("Artifact keywords are missing");
   }
-  const engines = requiredRecord(manifest, "engines", "制品 package.json");
+  const engines = requiredRecord(manifest, "engines", "artifact package.json");
   if (engines.node !== "^26.13.0") {
-    throw new Error("制品包没有要求 Node ^26.13.0");
+    throw new Error("Artifact package does not require Node ^26.13.0");
   }
   const publishConfig = requiredRecord(
     manifest,
     "publishConfig",
-    "制品 package.json",
+    "artifact package.json",
   );
   if (publishConfig.access !== "public") {
-    throw new Error("制品包没有请求公开 npm 发布范围");
+    throw new Error(
+      "Artifact package does not request public npm publish access",
+    );
   }
   const repository = requiredRecord(
     manifest,
     "repository",
-    "制品 package.json",
+    "artifact package.json",
   );
   if (repository.url !== "git+https://github.com/YKDZ/cli-contract.git") {
-    throw new Error("制品 repository 元数据不正确");
+    throw new Error("Artifact repository metadata is incorrect");
   }
-  const bugs = requiredRecord(manifest, "bugs", "制品 package.json");
+  const bugs = requiredRecord(manifest, "bugs", "artifact package.json");
   if (bugs.url !== "https://github.com/YKDZ/cli-contract/issues") {
-    throw new Error("制品 bugs 元数据不正确");
+    throw new Error("Artifact bugs metadata is incorrect");
   }
 }
 
@@ -532,14 +576,16 @@ function verifyManifestTargets(
     ...targetStrings(manifest.types, "types"),
   ];
   if (targets.length === 0) {
-    throw new Error("制品 package.json 没有公开入口");
+    throw new Error("Artifact package.json has no public entries");
   }
   for (const target of targets) {
     if (!target.startsWith("./") || target.includes("..")) {
-      throw new Error(`制品入口不是包内路径：${target}`);
+      throw new Error(
+        `Artifact entry is not a package-relative path: ${target}`,
+      );
     }
     if (!entries.some((entry) => matchesTarget(target.slice(2), entry))) {
-      throw new Error(`制品入口未包含在 tgz 中：${target}`);
+      throw new Error(`Artifact entry is not included in the tgz: ${target}`);
     }
   }
   for (const field of [
@@ -550,11 +596,13 @@ function verifyManifestTargets(
     const dependencies = manifest[field];
     if (dependencies === undefined) continue;
     if (!isRecord(dependencies)) {
-      throw new Error(`制品 package.json 的 ${field} 必须是对象`);
+      throw new Error(`Artifact package.json ${field} must be an object`);
     }
     for (const [name, version] of Object.entries(dependencies)) {
       if (typeof version !== "string" || !isRegistryVersionSpecifier(version)) {
-        throw new Error(`制品依赖没有固定 registry 版本：${name}`);
+        throw new Error(
+          `Artifact dependency is not pinned to a registry version: ${name}`,
+        );
       }
     }
   }
@@ -571,7 +619,7 @@ function targetStrings(value: unknown, field: string): readonly string[] {
       targetStrings(member, field),
     );
   }
-  throw new Error(`制品 package.json 的 ${field} 含有无效入口`);
+  throw new Error(`Artifact package.json ${field} contains an invalid entry`);
 }
 
 function matchesTarget(pattern: string, entry: string): boolean {
@@ -593,15 +641,17 @@ function isStableVersion(value: string): boolean {
 
 function verifyLockstep(core: PackedPackage, testing: PackedPackage): void {
   if (core.version !== testing.version) {
-    throw new Error("Changesets pack 中 core/testing 版本不一致");
+    throw new Error("core/testing versions differ in the Changesets pack");
   }
   const dependencies = requiredRecord(
     testing.manifest,
     "dependencies",
-    "testing 制品 package.json",
+    "testing artifact package.json",
   );
   if (dependencies[corePackage] !== core.version) {
-    throw new Error("testing 制品没有精确依赖同批 core 版本");
+    throw new Error(
+      "testing artifact does not depend on the exact core version from the same pack",
+    );
   }
 }
 
@@ -620,7 +670,7 @@ function requiredString(
 ): string {
   const value = record[key];
   if (typeof value !== "string") {
-    throw new Error(`${context} 缺少字符串字段 ${key}`);
+    throw new Error(`${context} is missing string field ${key}`);
   }
   return value;
 }
@@ -631,7 +681,8 @@ function requiredRecord(
   context: string,
 ): Readonly<Record<string, unknown>> {
   const value = record[key];
-  if (!isRecord(value)) throw new Error(`${context} 缺少对象字段 ${key}`);
+  if (!isRecord(value))
+    throw new Error(`${context} is missing object field ${key}`);
   return value;
 }
 
@@ -660,7 +711,7 @@ function runCommand(
   if (result.error !== undefined) throw result.error;
   if (result.status !== 0) {
     throw new Error(
-      `${basename(command)} ${args.join(" ")} 失败（${result.status ?? "未知状态"}）\n${result.stderr}\n${result.stdout}`,
+      `${basename(command)} ${args.join(" ")} failed (${result.status ?? "unknown status"})\n${result.stderr}\n${result.stdout}`,
     );
   }
   return result.stdout;
@@ -668,6 +719,6 @@ function runCommand(
 
 void main().catch((error: unknown) => {
   const detail = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`制品验收失败：${detail}\n`);
+  process.stderr.write(`Artifact verification failed: ${detail}\n`);
   process.exitCode = 1;
 });

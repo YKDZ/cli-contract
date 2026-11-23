@@ -10,14 +10,9 @@ import { z } from "zod";
 
 const emptyInput = z.object({});
 const textInput = z.object({ name: z.string().optional() });
-const countInput = z.object({ count: z.number() });
 const optionalCountInput = z.object({ count: z.number().optional() });
 const eitherAcceptsEmptyInput = z.union([
   z.object({ count: z.number().optional() }),
-  z.object({ name: z.string() }),
-]);
-const requiredEitherInput = z.union([
-  z.object({ count: z.number() }),
   z.object({ name: z.string() }),
 ]);
 const messagePayload = z.object({ message: z.string() });
@@ -32,29 +27,30 @@ const contract = define({
     consumer: {
       kind: "rootCommand",
       name: "consumer",
-      description: "根入口",
+      description: "Root entry",
       fields: {},
       input: emptyInput,
 
-      outputs: define.outputModes("consumer", emptyInput, (mode) => ({
-        default: "text",
-        modes: {
-          structured: mode.atomic({
-            description: "结构化输出",
-            format: "structured",
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
-          }),
-          text: mode.atomic({
-            description: "文本输出",
-            format: "text",
-            success: { kind: "completion", text: () => text.silent },
-            failures: {},
-            handler: ({ outcome }) => outcome.completion(),
-          }),
-        },
-      })),
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
+          default: "text",
+          modes: {
+            structured: operation.structured({
+              description: "Structured output",
+            }),
+            text: operation.text({
+              description: "Text output",
+              success: () => text.silent,
+              failures: {},
+            }),
+          },
+        };
+      },
     },
   },
 });
@@ -71,32 +67,29 @@ const textCompletionWithoutField = defineCli()({
     emptyTextCompletion: {
       kind: "rootCommand",
       name: "empty-text-completion",
-      description: "无字段的文本 completion",
+      description: "Text completion without fields",
       input: emptyInput,
 
-      outputs: defineCli().outputModes(
-        "emptyTextCompletion",
-        emptyInput,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "text",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
+            structured: operation.structured({
+              description: "Structured output",
             }),
-            text: mode.atomic({
-              description: "文本输出",
-              format: "text",
-              success: { kind: "completion", text: () => text.silent },
+            text: operation.text({
+              description: "Text output",
+              success: () => text.silent,
               failures: {},
-              handler: ({ outcome }) => outcome.completion(),
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -116,32 +109,29 @@ const optionalCompletionWithoutField = defineCli()({
     optionalTextCompletion: {
       kind: "rootCommand",
       name: "optional-text-completion",
-      description: "可选字段的文本 completion",
+      description: "Text completion with an optional field",
       input: optionalCountInput,
 
-      outputs: defineCli().outputModes(
-        "optionalTextCompletion",
-        optionalCountInput,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "text",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
+            structured: operation.structured({
+              description: "Structured output",
             }),
-            text: mode.atomic({
-              description: "文本输出",
-              format: "text",
-              success: { kind: "completion", text: () => text.silent },
+            text: operation.text({
+              description: "Text output",
+              success: () => text.silent,
               failures: {},
-              handler: ({ outcome }) => outcome.completion(),
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -156,32 +146,29 @@ const unionCompletionAcceptingEmpty = defineCli()({
     unionTextCompletion: {
       kind: "rootCommand",
       name: "union-text-completion",
-      description: "可接受空对象的联合 completion",
+      description: "Union completion accepting an empty object",
       input: eitherAcceptsEmptyInput,
 
-      outputs: defineCli().outputModes(
-        "unionTextCompletion",
-        eitherAcceptsEmptyInput,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "text",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
+            structured: operation.structured({
+              description: "Structured output",
             }),
-            text: mode.atomic({
-              description: "文本输出",
-              format: "text",
-              success: { kind: "completion", text: () => text.silent },
+            text: operation.text({
+              description: "Text output",
+              success: () => text.silent,
               failures: {},
-              handler: ({ outcome }) => outcome.completion(),
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -196,111 +183,80 @@ const completeNamedVariants = defineCli()({
     completeNamedVariants: {
       kind: "rootCommand",
       name: "complete-named-variants",
-      description: "完整具名变体",
+      description: "Complete named variants",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: textInput,
 
-      outputs: defineCli().outputModes(
-        "completeNamedVariants",
-        textInput,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: {
+            kind: "data",
+            variants: {
+              accepted: {
+                description: "Accepted",
+                schema: messagePayload,
+                exitCode: 0,
+              },
+              deferred: {
+                description: "Deferred",
+                schema: messagePayload,
+                exitCode: 0,
+              },
+            },
+          },
+          failures: {
+            unavailable: {
+              description: "Unavailable",
+              schema: messagePayload,
+              exitCode: 9,
+            },
+          },
+          handler: ({ outcome }) => {
+            const accepted = outcome.data.accepted({
+              message: "Request accepted",
+            });
+            accepted.variant satisfies "accepted";
+            const unavailable = outcome.failure.unavailable({
+              message: "Temporarily unavailable",
+            });
+            unavailable.variant satisfies "unavailable";
+            return accepted;
+          },
+        });
+        return {
           default: "text",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "data",
-                variants: {
-                  accepted: {
-                    description: "已接受",
-                    schema: messagePayload,
-                    exitCode: 0,
-                  },
-                  deferred: {
-                    description: "已延后",
-                    schema: messagePayload,
-                    exitCode: 0,
-                  },
-                },
-              },
-              failures: {
-                unavailable: {
-                  description: "不可用",
-                  schema: messagePayload,
-                  exitCode: 9,
-                },
-              },
-              handler: ({ outcome }) => {
-                const accepted = outcome.data.accepted({
-                  message: "已接受请求",
-                });
-                accepted.variant satisfies "accepted";
-                const unavailable = outcome.failure.unavailable({
-                  message: "暂不可用",
-                });
-                unavailable.variant satisfies "unavailable";
-                return accepted;
-              },
+            structured: operation.structured({
+              description: "Structured output",
             }),
-            text: mode.atomic({
-              description: "文本输出",
-              format: "text",
+            text: operation.text({
+              description: "Text output",
               success: {
-                kind: "data",
-                variants: {
-                  accepted: {
-                    description: "已接受",
-                    schema: messagePayload,
-                    exitCode: 0,
-                    text: (payload) => {
-                      payload.message satisfies string;
-                      return text.line(payload.message);
-                    },
-                  },
-                  deferred: {
-                    description: "已延后",
-                    schema: messagePayload,
-                    exitCode: 0,
-                    text: (payload) => {
-                      payload.message satisfies string;
-                      return text.line(payload.message);
-                    },
-                  },
+                accepted: (payload) => {
+                  payload.message satisfies string;
+                  return text.line(payload.message);
+                },
+                deferred: (payload) => {
+                  payload.message satisfies string;
+                  return text.line(payload.message);
                 },
               },
               failures: {
-                unavailable: {
-                  description: "不可用",
-                  schema: messagePayload,
-                  exitCode: 9,
-                  text: (payload) => {
-                    payload.message satisfies string;
-                    return text.line(payload.message);
-                  },
+                unavailable: (payload) => {
+                  payload.message satisfies string;
+                  return text.line(payload.message);
                 },
-              },
-              handler: ({ outcome }) => {
-                const accepted = outcome.data.accepted({
-                  message: "已接受请求",
-                });
-                accepted.variant satisfies "accepted";
-                const unavailable = outcome.failure.unavailable({
-                  message: "暂不可用",
-                });
-                unavailable.variant satisfies "unavailable";
-                return accepted;
               },
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -315,64 +271,48 @@ const completeCompletionFailures = defineCli()({
     completeCompletionFailures: {
       kind: "rootCommand",
       name: "complete-completion-failures",
-      description: "completion 的完整 failure presenter",
+      description: "Complete failure presenter for completion",
       input: emptyInput,
 
-      outputs: defineCli().outputModes(
-        "completeCompletionFailures",
-        emptyInput,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {
+            unavailable: {
+              description: "Unavailable",
+              schema: messagePayload,
+              exitCode: 9,
+            },
+          },
+          handler: ({ outcome }) => {
+            const completion = outcome.completion();
+            completion.kind satisfies "completion";
+            const unavailable = outcome.failure.unavailable({
+              message: "Temporarily unavailable",
+            });
+            unavailable.variant satisfies "unavailable";
+            return completion;
+          },
+        });
+        return {
           default: "text",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {
-                unavailable: {
-                  description: "不可用",
-                  schema: messagePayload,
-                  exitCode: 9,
-                },
-              },
-              handler: ({ outcome }) => {
-                const completion = outcome.completion();
-                completion.kind satisfies "completion";
-                const unavailable = outcome.failure.unavailable({
-                  message: "暂不可用",
-                });
-                unavailable.variant satisfies "unavailable";
-                return completion;
-              },
+            structured: operation.structured({
+              description: "Structured output",
             }),
-            text: mode.atomic({
-              description: "文本输出",
-              format: "text",
-              success: { kind: "completion", text: () => text.silent },
+            text: operation.text({
+              description: "Text output",
+              success: () => text.silent,
               failures: {
-                unavailable: {
-                  description: "不可用",
-                  schema: messagePayload,
-                  exitCode: 9,
-                  text: (payload) => {
-                    payload.message satisfies string;
-                    return text.line(payload.message);
-                  },
+                unavailable: (payload) => {
+                  payload.message satisfies string;
+                  return text.line(payload.message);
                 },
-              },
-              handler: ({ outcome }) => {
-                const completion = outcome.completion();
-                completion.kind satisfies "completion";
-                const unavailable = outcome.failure.unavailable({
-                  message: "暂不可用",
-                });
-                unavailable.variant satisfies "unavailable";
-                return completion;
               },
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -387,74 +327,57 @@ defineCli()({
     missingDataVariantText: {
       kind: "rootCommand",
       name: "missing-data-variant-text",
-      description: "遗漏 data presenter",
+      description: "Missing data presenter",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: textInput,
 
-      outputs: defineCli().outputModes(
-        "missingDataVariantText",
-        textInput,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: {
+            kind: "data",
+            variants: {
+              accepted: {
+                description: "Accepted",
+                schema: messagePayload,
+                exitCode: 0,
+              },
+              deferred: {
+                description: "Deferred",
+                schema: messagePayload,
+                exitCode: 0,
+              },
+            },
+          },
+          failures: {},
+          handler: ({ outcome }) =>
+            outcome.data.accepted({ message: "Request accepted" }),
+        });
+        return {
           default: "text",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "data",
-                variants: {
-                  accepted: {
-                    description: "已接受",
-                    schema: messagePayload,
-                    exitCode: 0,
-                  },
-                  deferred: {
-                    description: "已延后",
-                    schema: messagePayload,
-                    exitCode: 0,
-                  },
-                },
-              },
-              failures: {},
-              handler: ({ outcome }) =>
-                outcome.data.accepted({ message: "已接受请求" }),
+            structured: operation.structured({
+              description: "Structured output",
             }),
-            // @ts-expect-error 文本方式的每个 data 变体都必须声明 presenter。
-            text: mode.atomic({
-              description: "文本输出",
-              format: "text",
+            // @ts-expect-error Every data variant of a text mode must declare a presenter.
+            text: operation.text({
+              description: "Text output",
               success: {
-                kind: "data",
-                variants: {
-                  accepted: {
-                    description: "已接受",
-                    schema: messagePayload,
-                    exitCode: 0,
-                    text: (payload: z.output<typeof messagePayload>) => {
-                      payload.message satisfies string;
-                      return text.line(payload.message);
-                    },
-                  },
-                  deferred: {
-                    description: "已延后",
-                    schema: messagePayload,
-                    exitCode: 0,
-                  },
+                accepted: (payload: z.output<typeof messagePayload>) => {
+                  payload.message satisfies string;
+                  return text.line(payload.message);
                 },
               },
               failures: {},
-              handler: ({ outcome }) =>
-                outcome.data.accepted({ message: "已接受请求" }),
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -468,90 +391,68 @@ defineCli()({
     missingDataFailureText: {
       kind: "rootCommand",
       name: "missing-data-failure-text",
-      description: "data 的遗漏 failure presenter",
+      description: "Missing failure presenter for data",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: textInput,
 
-      outputs: defineCli().outputModes(
-        "missingDataFailureText",
-        textInput,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: {
+            kind: "data",
+            variants: {
+              accepted: {
+                description: "Accepted",
+                schema: messagePayload,
+                exitCode: 0,
+              },
+            },
+          },
+          failures: {
+            unavailable: {
+              description: "Unavailable",
+              schema: messagePayload,
+              exitCode: 9,
+            },
+            forbidden: {
+              description: "Forbidden",
+              schema: messagePayload,
+              exitCode: 13,
+            },
+          },
+          handler: ({ outcome }) =>
+            outcome.data.accepted({ message: "Request accepted" }),
+        });
+        return {
           default: "text",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: {
-                kind: "data",
-                variants: {
-                  accepted: {
-                    description: "已接受",
-                    schema: messagePayload,
-                    exitCode: 0,
-                  },
-                },
-              },
-              failures: {
-                unavailable: {
-                  description: "不可用",
-                  schema: messagePayload,
-                  exitCode: 9,
-                },
-                forbidden: {
-                  description: "禁止",
-                  schema: messagePayload,
-                  exitCode: 13,
-                },
-              },
-              handler: ({ outcome }) =>
-                outcome.data.accepted({ message: "已接受请求" }),
+            structured: operation.structured({
+              description: "Structured output",
             }),
-            // @ts-expect-error 文本方式的 failure 变体必须声明 presenter。
-            text: mode.atomic({
-              description: "文本输出",
-              format: "text",
+            // @ts-expect-error Failure variants of a text mode must declare a presenter.
+            text: operation.text({
+              description: "Text output",
               success: {
-                kind: "data",
-                variants: {
-                  accepted: {
-                    description: "已接受",
-                    schema: messagePayload,
-                    exitCode: 0,
-                    text: (payload: z.output<typeof messagePayload>) => {
-                      payload.message satisfies string;
-                      return text.line(payload.message);
-                    },
-                  },
+                accepted: (payload: z.output<typeof messagePayload>) => {
+                  payload.message satisfies string;
+                  return text.line(payload.message);
                 },
               },
               failures: {
-                unavailable: {
-                  description: "不可用",
-                  schema: messagePayload,
-                  exitCode: 9,
-                  text: (payload: z.output<typeof messagePayload>) => {
-                    payload.message satisfies string;
-                    return text.line(payload.message);
-                  },
-                },
-                forbidden: {
-                  description: "禁止",
-                  schema: messagePayload,
-                  exitCode: 13,
+                unavailable: (payload: z.output<typeof messagePayload>) => {
+                  payload.message satisfies string;
+                  return text.line(payload.message);
                 },
               },
-              handler: ({ outcome }) =>
-                outcome.data.accepted({ message: "已接受请求" }),
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -565,99 +466,46 @@ defineCli()({
     missingCompletionFailureText: {
       kind: "rootCommand",
       name: "missing-completion-failure-text",
-      description: "completion 的遗漏 failure presenter",
+      description: "Missing failure presenter for completion",
       input: emptyInput,
 
-      outputs: defineCli().outputModes(
-        "missingCompletionFailureText",
-        emptyInput,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {
+            unavailable: {
+              description: "Unavailable",
+              schema: messagePayload,
+              exitCode: 9,
+            },
+            forbidden: {
+              description: "Forbidden",
+              schema: messagePayload,
+              exitCode: 13,
+            },
+          },
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "text",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
+            structured: operation.structured({
+              description: "Structured output",
+            }),
+            // @ts-expect-error Completion failure variants of a text mode must declare a presenter.
+            text: operation.text({
+              description: "Text output",
+              success: () => text.silent,
               failures: {
-                unavailable: {
-                  description: "不可用",
-                  schema: messagePayload,
-                  exitCode: 9,
-                },
-                forbidden: {
-                  description: "禁止",
-                  schema: messagePayload,
-                  exitCode: 13,
+                unavailable: (payload) => {
+                  payload.message satisfies string;
+                  return text.line(payload.message);
                 },
               },
-              handler: ({ outcome }) => outcome.completion(),
-            }),
-            // @ts-expect-error 文本方式的 completion failure 变体必须声明 presenter。
-            text: mode.atomic({
-              description: "文本输出",
-              format: "text",
-              success: { kind: "completion", text: () => text.silent },
-              failures: {
-                unavailable: {
-                  description: "不可用",
-                  schema: messagePayload,
-                  exitCode: 9,
-                  text: (payload) => {
-                    payload.message satisfies string;
-                    return text.line(payload.message);
-                  },
-                },
-                forbidden: {
-                  description: "禁止",
-                  schema: messagePayload,
-                  exitCode: 13,
-                },
-              },
-              handler: ({ outcome }) => outcome.completion(),
             }),
           },
-        }),
-      ),
-    },
-  },
-});
-
-defineCli()({
-  root: "missingRawField",
-  help: helpCapability(),
-
-  usageFailureExitCode: 64,
-  commands: {
-    // @ts-expect-error 没有 raw 字段时输入模式不能要求 count。
-    missingRawField: {
-      kind: "rootCommand",
-      name: "missing-raw-field",
-      description: "缺少 raw 字段",
-      input: countInput,
-
-      outputs: defineCli().outputModes(
-        "missingRawField",
-        countInput,
-        (mode) => ({
-          default: "text",
-          modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
-            text: mode.atomic({
-              description: "文本输出",
-              format: "text",
-              success: { kind: "completion", text: () => text.silent },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
-          },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -671,73 +519,29 @@ defineCli()({
     missingCompletion: {
       kind: "rootCommand",
       name: "missing-completion",
-      description: "缺少 completion presenter",
+      description: "Missing completion presenter",
       input: emptyInput,
 
-      outputs: defineCli().outputModes(
-        "missingCompletion",
-        emptyInput,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "text",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
+            structured: operation.structured({
+              description: "Structured output",
             }),
-            // @ts-expect-error 文本 completion 必须声明当前方式的 presenter。
-            text: mode.atomic({
-              description: "文本输出",
-              format: "text",
-              success: { kind: "completion" },
+            // @ts-expect-error A text completion must declare a presenter for the current mode.
+            text: operation.text({
+              description: "Text output",
               failures: {},
-              handler: ({ outcome }) => outcome.completion(),
             }),
           },
-        }),
-      ),
-    },
-  },
-});
-
-defineCli()({
-  root: "missingUnionRawField",
-  help: helpCapability(),
-
-  usageFailureExitCode: 64,
-  commands: {
-    // @ts-expect-error 没有对应 raw 字段时联合输入不能要求 count 或 name。
-    missingUnionRawField: {
-      kind: "rootCommand",
-      name: "missing-union-raw-field",
-      description: "互异必需字段的联合输入",
-      input: requiredEitherInput,
-
-      outputs: defineCli().outputModes(
-        "missingUnionRawField",
-        requiredEitherInput,
-        (mode) => ({
-          default: "text",
-          modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
-            text: mode.atomic({
-              description: "文本输出",
-              format: "text",
-              success: { kind: "completion", text: () => text.silent },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
-            }),
-          },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -751,41 +555,39 @@ const textCompletionWithField = defineCli()({
     textCompletion: {
       kind: "rootCommand",
       name: "text-completion",
-      description: "带字段的 completion",
+      description: "Completion with a field",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: textInput,
 
-      outputs: defineCli().outputModes("textCompletion", textInput, (mode) => ({
-        default: "text",
-        modes: {
-          structured: mode.atomic({
-            description: "结构化输出",
-            format: "structured",
-            success: { kind: "completion" },
-            failures: {},
-            handler: ({ input, outcome }) => {
-              input.name satisfies string | undefined;
-              return outcome.completion();
-            },
-          }),
-          text: mode.atomic({
-            description: "文本输出",
-            format: "text",
-            success: { kind: "completion", text: () => text.silent },
-            failures: {},
-            handler: ({ input, outcome }) => {
-              input.name satisfies string | undefined;
-              return outcome.completion();
-            },
-          }),
-        },
-      })),
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ input, outcome }) => {
+            input.name satisfies string | undefined;
+            return outcome.completion();
+          },
+        });
+        return {
+          default: "text",
+          modes: {
+            structured: operation.structured({
+              description: "Structured output",
+            }),
+            text: operation.text({
+              description: "Text output",
+              success: () => text.silent,
+              failures: {},
+            }),
+          },
+        };
+      },
     },
   },
 });
@@ -800,38 +602,32 @@ defineCli()({
     completionCannotReturnData: {
       kind: "rootCommand",
       name: "completion-cannot-return-data",
-      description: "completion 结果闭合",
+      description: "Completion result closure",
       input: emptyInput,
 
-      outputs: defineCli().outputModes(
-        "completionCannotReturnData",
-        emptyInput,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => {
+            // @ts-expect-error A completion handler does not accept the data result category.
+            return outcome.data.value({ value: "nope" });
+          },
+        });
+        return {
           default: "text",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => {
-                // @ts-expect-error completion handler 不接受 data 结果类别。
-                return outcome.data.value({ value: "nope" });
-              },
+            structured: operation.structured({
+              description: "Structured output",
             }),
-            text: mode.atomic({
-              description: "文本输出",
-              format: "text",
-              success: { kind: "completion", text: () => text.silent },
+            text: operation.text({
+              description: "Text output",
+              success: () => text.silent,
               failures: {},
-              handler: ({ outcome }) => {
-                // @ts-expect-error completion handler 不接受 data 结果类别。
-                return outcome.data.value({ value: "nope" });
-              },
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -845,46 +641,39 @@ defineCli()({
     missingCompletionWithField: {
       kind: "rootCommand",
       name: "missing-completion-with-field",
-      description: "带字段但缺少 completion presenter",
+      description: "Missing completion presenter with a field",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: textInput,
 
-      outputs: defineCli().outputModes(
-        "missingCompletionWithField",
-        textInput,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ input, outcome }) => {
+            input.name satisfies string | undefined;
+            return outcome.completion();
+          },
+        });
+        return {
           default: "text",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ input, outcome }) => {
-                input.name satisfies string | undefined;
-                return outcome.completion();
-              },
+            structured: operation.structured({
+              description: "Structured output",
             }),
-            // @ts-expect-error 文本 completion 必须声明当前方式的 presenter。
-            text: mode.atomic({
-              description: "文本输出",
-              format: "text",
-              success: { kind: "completion" },
+            // @ts-expect-error A text completion must declare a presenter for the current mode.
+            text: operation.text({
+              description: "Text output",
               failures: {},
-              handler: ({ input, outcome }) => {
-                input.name satisfies string | undefined;
-                return outcome.completion();
-              },
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });

@@ -10,7 +10,7 @@ export function isSingleLineText(value: unknown): value is string {
 
 export function copySingleLineText(value: unknown, label: string): string {
   if (!isSingleLineText(value)) {
-    throw new TypeError(`${label}必须是合法单行文本`);
+    throw new TypeError(`${label} must be valid single-line text`);
   }
   return value;
 }

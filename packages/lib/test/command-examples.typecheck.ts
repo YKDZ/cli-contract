@@ -3,6 +3,7 @@ import {
   helpCapability,
   text,
   type CommandExampleManifest,
+  type OutputExecutionFactory,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
@@ -19,49 +20,52 @@ const exampleFields = {
   count: {
     kind: "valueOption",
     longOption: "--count",
-    description: "数量",
+    description: "Count",
   },
   channel: {
     kind: "valueOption",
     longOption: "--channel",
-    description: "通道",
+    description: "Channel",
   },
   enabled: {
     kind: "flag",
     longOption: "--enabled",
     negatedLongOption: "--no-enabled",
-    description: "启用",
+    description: "Enabled",
   },
   tags: {
     kind: "repeatableOption",
     longOption: "--tag",
-    description: "标签",
+    description: "Tag",
   },
-  first: { kind: "positional", description: "首项" },
-  second: { kind: "positional", description: "次项" },
-  paths: { kind: "variadicPositional", description: "路径" },
+  first: { kind: "positional", description: "First item" },
+  second: { kind: "positional", description: "Second item" },
+  paths: { kind: "variadicPositional", description: "Paths" },
 } as const;
 
 const define = defineCli();
-const outputs = define.outputModes("inspect", exampleInput, (mode) => ({
-  default: "structured",
-  modes: {
-    structured: mode.atomic({
-      description: "机器读取结果",
-      format: "structured",
-      success: { kind: "completion" },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
-    }),
-    text: mode.atomic({
-      description: "供人阅读结果",
-      format: "text",
-      success: { kind: "completion", text: () => text.silent },
-      failures: {},
-      handler: ({ outcome }) => outcome.completion(),
-    }),
-  },
-}));
+const outputs = ({
+  atomic,
+}: OutputExecutionFactory<"inspect", undefined, typeof exampleInput>) => {
+  const completion = atomic({
+    success: { kind: "completion" },
+    failures: {},
+    handler: ({ outcome }) => outcome.completion(),
+  });
+  return {
+    default: "structured",
+    modes: {
+      structured: completion.structured({
+        description: "Machine-readable result",
+      }),
+      text: completion.text({
+        description: "Human-readable result",
+        success: () => text.silent,
+        failures: {},
+      }),
+    },
+  } as const;
+};
 
 const root = define({
   root: "inspect",
@@ -76,7 +80,7 @@ const root = define({
     inspect: {
       kind: "rootCommand",
       name: "tool",
-      description: "检查输入",
+      description: "Inspect input",
       fields: exampleFields,
       input: exampleInput,
       outputs,
@@ -111,7 +115,7 @@ const leafCommand = define.command("inspect")({
   kind: "command",
   parent: "workspace",
   name: "inspect",
-  description: "检查输入",
+  description: "Inspect input",
   fields: exampleFields,
   input: exampleInput,
   outputs,
@@ -141,7 +145,7 @@ const leaf = define({
     workspace: {
       kind: "rootGroup",
       name: "workspace",
-      description: "工作区",
+      description: "Workspace",
     },
     ...leafCommand,
   },
@@ -156,11 +160,11 @@ define.command("inspect")({
   kind: "command",
   parent: "workspace",
   name: "inspect",
-  description: "检查输入",
+  description: "Inspect input",
   fields: exampleFields,
   input: exampleInput,
   outputs,
-  // @ts-expect-error Input 枚举值来自契约模式
+  // @ts-expect-error Input enum values come from the contract schema
   examples: [
     {
       input: {
@@ -178,11 +182,11 @@ define.command("inspect")({
   kind: "command",
   parent: "workspace",
   name: "inspect",
-  description: "检查输入",
+  description: "Inspect input",
   fields: exampleFields,
   input: exampleInput,
   outputs,
-  // @ts-expect-error 固定输出方式必须来自本命令的方式闭集
+  // @ts-expect-error A pinned output mode must come from this command's closed mode set
   examples: [
     {
       input: {
@@ -201,11 +205,11 @@ define.command("inspect")({
   kind: "command",
   parent: "workspace",
   name: "inspect",
-  description: "检查输入",
+  description: "Inspect input",
   fields: exampleFields,
   input: exampleInput,
   outputs,
-  // @ts-expect-error schema Input 的必填字段也必须出现在样本中
+  // @ts-expect-error Required schema Input fields must also appear in the sample
   examples: [
     {
       input: {
@@ -226,15 +230,15 @@ const inputWithExtraField = {
   paths: ["first"] as [string, ...string[]],
   extra: "not declared",
 };
-// @ts-expect-error 提取变量保留字段闭集检查，额外字段不能经 raw input 进入示例
 define.command("inspect")({
   kind: "command",
   parent: "workspace",
   name: "inspect",
-  description: "检查输入",
+  description: "Inspect input",
   fields: exampleFields,
   input: exampleInput,
   outputs,
+  // @ts-expect-error Extracted inputs must use declared field keys.
   examples: [{ input: inputWithExtraField }],
 });
 
@@ -242,10 +246,11 @@ define.command("inspect")({
   kind: "command",
   parent: "workspace",
   name: "inspect",
-  description: "检查输入",
+  description: "Inspect input",
   fields: exampleFields,
   input: exampleInput,
   outputs,
+  // @ts-expect-error Example members must use their declared spellings.
   examples: [
     {
       input: {
@@ -255,19 +260,17 @@ define.command("inspect")({
         tags: ["one"],
         paths: ["first"],
       },
-      // @ts-expect-error 示例成员名称受闭集约束
       outputmode: "text",
     },
   ],
 });
 
 const readonlyTags = ["readonly"] as const;
-// @ts-expect-error 显式只读数组不满足 schema 的可变 Input 数组
 define.command("inspect")({
   kind: "command",
   parent: "workspace",
   name: "inspect",
-  description: "检查输入",
+  description: "Inspect input",
   fields: exampleFields,
   input: exampleInput,
   outputs,
@@ -277,6 +280,7 @@ define.command("inspect")({
         count: "4",
         channel: "fast",
         enabled: true,
+        // @ts-expect-error The raw schema expects a mutable array.
         tags: readonlyTags,
         paths: ["first"],
       },
@@ -289,18 +293,18 @@ const unnegatedFlagFields = {
   enabled: {
     kind: "flag",
     longOption: "--enabled",
-    description: "启用",
+    description: "Enabled",
   },
 } as const;
 define.command("inspect")({
   kind: "command",
   parent: "workspace",
   name: "inspect",
-  description: "检查输入",
+  description: "Inspect input",
   fields: unnegatedFlagFields,
   input: exampleInput,
   outputs,
-  // @ts-expect-error 无否定拼写的 flag 不能以 false 作为 raw 样本
+  // @ts-expect-error A flag without a negated spelling cannot use false as a raw sample
   examples: [
     {
       input: {
@@ -317,7 +321,7 @@ define.command("inspect")({
 const rootGroupWithExamples = {
   kind: "rootGroup",
   name: "workspace",
-  description: "工作区",
+  description: "Workspace",
   examples: [{ input: {} }],
 } as const;
 define({
@@ -331,7 +335,7 @@ define({
   }),
   usageFailureExitCode: 64,
   commands: {
-    // @ts-expect-error 命令组不是可执行节点，不能声明调用示例
+    // @ts-expect-error A command group is not executable and cannot declare invocation examples
     workspace: {
       ...rootGroupWithExamples,
     },

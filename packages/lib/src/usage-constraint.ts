@@ -35,7 +35,7 @@ export const usageConstraintDefinitionPropertyKeys = {
   },
 } as const;
 
-/** 已校验并补全默认端点的数量约束。 */
+/** A count constraint with validated fields and defaulted endpoints. */
 export interface CountUsageConstraintGrammar {
   readonly kind: "count";
   readonly fields: readonly [string, ...string[]];
@@ -168,7 +168,7 @@ type CountHelpFact =
       readonly values: HelpFactTemplateParameters["countBetween"];
     }>;
 
-/** 从规范化数量规则派生帮助槽位及对应占位符。 */
+/** Derives the help slot and its placeholders from a normalized count rule. */
 function countHelpFactForConstraint(
   constraint: CountUsageConstraintGrammar,
 ): CountHelpFact {
@@ -201,7 +201,7 @@ function countHelpFactForConstraint(
   };
 }
 
-/** 校验动态数量定义并生成不可变的规范化事实。 */
+/** Validates a dynamic count definition and produces an immutable normalized fact. */
 function compileCountUsageConstraint(
   candidate: Readonly<Record<string, unknown>>,
   fields: readonly Readonly<{ readonly key: string }>[],
@@ -335,7 +335,7 @@ function compileCountUsageConstraint(
   ) {
     return undefined;
   }
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- fields 已检查非空且每项都是字符串。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- fields was checked non-empty with string entries.
   const nonEmptyFields = Object.freeze([...stringFieldNames]) as [
     string,
     ...string[],
@@ -417,7 +417,7 @@ function normalizeCountEndpoint(
   return { value, valid: true };
 }
 
-/** 在原始输入上求值一条已规范化的数量规则。 */
+/** Evaluates one normalized count rule against the raw input. */
 function evaluateCountUsageConstraint(
   constraint: CountUsageConstraintGrammar,
   input: Readonly<Record<string, unknown>>,
@@ -451,7 +451,7 @@ function evaluateCountUsageConstraint(
   };
 }
 
-/** 将一条非冗余数量规则投影为输入模式中的 JSON Schema。 */
+/** Projects a non-redundant count rule into JSON Schema within the input schema. */
 function projectCountUsageConstraint(
   constraint: CountUsageConstraintGrammar,
   definitions: Record<string, JsonValue>,
@@ -483,11 +483,11 @@ function projectCountUsageConstraint(
         definitions[definitionName] = {};
         continue;
       }
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- position < fieldCount，索引来自已校验的非空元组。
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- position < fieldCount; the index comes from a validated non-empty tuple.
       const field = constraint.fields[position] as string;
       definitions[definitionName] = {
         if: { required: [field] },
-        // oxlint-disable-next-line unicorn/no-thenable -- Draft 2020-12 固定关键字。
+        // oxlint-disable-next-line unicorn/no-thenable -- Fixed Draft 2020-12 keyword.
         then: {
           $ref: `#/$defs/${countStateDefinitionName(prefix, position + 1, present + 1)}`,
         },
@@ -560,7 +560,7 @@ export function compileUsageConstraints(
       });
       continue;
     }
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 定义条目已通过非 null 对象检查，此处读取动态属性。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The definition entry passed the non-null object check; reading a dynamic property here.
     const candidate = definition as Readonly<Record<string, unknown>>;
     if (
       candidate.kind !== "count" &&
@@ -622,14 +622,15 @@ export function compileUsageConstraints(
           received: "when",
           member: "effects",
           path: ["commands", command, "usageConstraints", index],
-          expected: "至少一个分支包含非空 require 或 forbid 字段组",
+          expected:
+            "at least one branch with a non-empty require or forbid field group",
         });
       }
       if (facts.valid && onMatch.valid && otherwise.valid && hasEffect) {
         compiled.push(
           deepFreeze({
             kind: "when" as const,
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- compileUsageFacts仅在all非空且所有事实合法时返回valid。
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- compileUsageFacts returns valid only when all is non-empty and every fact is legal.
             all: facts.facts as [UsageFact, ...UsageFact[]],
             ...(onMatch.effect === undefined
               ? {}
@@ -655,7 +656,7 @@ export function compileUsageConstraints(
         compiled.push(
           deepFreeze({
             kind: "forbiddenCombination" as const,
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- compileUsageFacts仅在all非空且所有事实合法时返回valid。
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- compileUsageFacts returns valid only when all is non-empty and every fact is legal.
             all: facts.facts as [UsageFact, ...UsageFact[]],
           }),
         );
@@ -725,7 +726,7 @@ function compileUsageFacts(
       received: constraint,
       member: "all",
       path: ["commands", command, "usageConstraints", index, "all"],
-      expected: "非空字段事实数组",
+      expected: "a non-empty array of field facts",
     });
     return { facts: [], valid: false };
   }
@@ -752,7 +753,7 @@ function compileUsageFacts(
         received: candidateFact,
         member: "all",
         path,
-        expected: "present 或 equals 字段事实对象",
+        expected: "a present or equals field fact object",
       });
       continue;
     }
@@ -799,7 +800,7 @@ function compileUsageFacts(
       received: candidateFact.kind,
       member: "all",
       path,
-      expected: "present{field} 或 equals{field,value}",
+      expected: "present{field} or equals{field,value}",
     });
   }
 
@@ -977,7 +978,8 @@ function compileUsageEffect(
       received: definition,
       member: branch,
       path,
-      expected: "只包含 require 和 forbid 字段数组的效果对象",
+      expected:
+        "an effect object containing only require and forbid field arrays",
     });
     return { valid: false, hasEffect: false };
   }
@@ -998,7 +1000,7 @@ function compileUsageEffect(
         received: values,
         member: `${branch}.${member}`,
         path: [...path, member],
-        expected: "字段名称数组",
+        expected: "an array of field names",
       });
       continue;
     }
@@ -1015,7 +1017,7 @@ function compileUsageEffect(
           received: field,
           member: `${branch}.${member}`,
           path: [...path, member, fieldIndex],
-          expected: "字段名称字符串",
+          expected: "a field name string",
         });
         continue;
       }
@@ -1066,7 +1068,7 @@ function projectUsageConstraints(
   const countDefinitions: Record<string, JsonValue> = isPlainRecord(
     schema.inputSchema.$defs,
   )
-    ? // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- inputSchema 的 $defs 是已验证 JSON Schema 对象。
+    ? // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- inputSchema's $defs is a validated JSON Schema object.
       { ...(schema.inputSchema.$defs as JsonObject) }
     : {};
   let countConstraintIndex = 0;
@@ -1101,7 +1103,7 @@ function projectUsageConstraints(
         ((onMatch.require?.length ?? 0) > 0 ||
           (onMatch.forbid?.length ?? 0) > 0)
       ) {
-        // oxlint-disable-next-line unicorn/no-thenable -- Draft 2020-12 固定关键字。
+        // oxlint-disable-next-line unicorn/no-thenable -- Fixed Draft 2020-12 keyword.
         effects.then = usageEffectSchema(onMatch);
       }
       const otherwise = constraint.otherwise;

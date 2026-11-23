@@ -149,9 +149,9 @@ export function compileInputFields(
     });
     return [];
   }
-  // oxlint-disable-next-line unicorn/no-array-sort -- Object.keys 新建的数组只在此处使用，原地排序不会影响共享状态。
+  // oxlint-disable-next-line unicorn/no-array-sort -- The array freshly created by Object.keys is used only here; sorting in place cannot affect shared state.
   const schemaKeys = Object.keys(schemaProperties).sort();
-  // oxlint-disable-next-line unicorn/no-array-sort -- Object.keys 新建的数组只在此处使用，原地排序不会影响共享状态。
+  // oxlint-disable-next-line unicorn/no-array-sort -- The array freshly created by Object.keys is used only here; sorting in place cannot affect shared state.
   const fieldKeys = Object.keys(definitions).sort();
   if (schemaKeys.join("\0") !== fieldKeys.join("\0")) {
     issues.push({
@@ -276,7 +276,7 @@ export function compileInputFields(
             : null,
       });
     }
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 字段 kind 与拼写已按声明检查，展开后保留对应联合成员。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Field kind and spellings were checked against the declaration; the spread keeps the matching union member.
     return {
       ...field,
       key,
@@ -306,7 +306,7 @@ export function compileInputFields(
         code: "duplicateFieldLongOption",
         command,
         longOption,
-        // oxlint-disable-next-line unicorn/no-array-sort -- 集合展开后是新数组，原地排序不修改源字段。
+        // oxlint-disable-next-line unicorn/no-array-sort -- Spreading the set creates a new array; sorting in place does not modify the source fields.
         fields: [...new Set(matchingFields.map((field) => field.key))].sort(),
       });
     }
@@ -330,7 +330,7 @@ export function compileInputFields(
         code: "duplicateFieldOptionSpelling",
         command,
         spelling,
-        // oxlint-disable-next-line unicorn/no-array-sort -- map 新建的数组只用于本条问题，原地排序不修改源字段。
+        // oxlint-disable-next-line unicorn/no-array-sort -- The array freshly created by map is used only for this issue; sorting in place does not modify the source fields.
         fields: matchingFields.map((field) => field.key).sort(),
       });
     }
@@ -395,7 +395,7 @@ function projectPropertyDescriptions(
 ): JsonObject {
   const properties = readSchemaProperties(schema);
   if (properties === undefined) return schema;
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 来源是已复制的 JSON Schema 属性，替换值仍是 JSON 值。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The source is a copied JSON Schema property, and the replacement value is still a JSON value.
   const projectedProperties = Object.fromEntries(
     Object.entries(properties).map(([key, property]) => {
       const field = fields.find((candidate) => candidate.key === key);
@@ -600,7 +600,7 @@ function readSchemaProperties(schema: JsonObject): JsonObject | undefined {
   ) {
     return undefined;
   }
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 已在上方排除 null 和数组；TS 对只读数组联合仍需收窄。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- null and arrays were excluded above; TS still needs narrowing for the readonly-array union.
   return properties as JsonObject;
 }
 
@@ -615,7 +615,7 @@ function readSchemaDefault(
   ) {
     return undefined;
   }
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 模式投影在进入本函数前已复制并验证为 JSON 值。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The schema projection was copied and validated as a JSON value before entering this function.
   const defaultValue = (propertySchema as JsonObject).default;
   if (defaultValue === undefined) return undefined;
   return {

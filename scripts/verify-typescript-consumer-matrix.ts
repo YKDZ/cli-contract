@@ -34,6 +34,7 @@ async function readFixtures(): Promise<Readonly<Record<string, string>>> {
         "core-root.ts",
         "exportable-contract.ts",
         "exportable-contract-reconsumer.ts",
+        "generic-text-forward.ts",
         "schema-input.ts",
         "typed-command-examples.ts",
         "public-contract-discovery.ts",
@@ -128,6 +129,7 @@ async function verifyCoreOnly(
     await writeFixtures(project, fixtures, [
       "core-node.ts",
       "core-root.ts",
+      "generic-text-forward.ts",
       "schema-input.ts",
       "typed-command-examples.ts",
       "public-contract-discovery.ts",
@@ -153,6 +155,7 @@ async function verifyCoreOnly(
       for (const fixture of [
         "core-root.ts",
         "core-node.ts",
+        "generic-text-forward.ts",
         "schema-input.ts",
         "typed-command-examples.ts",
         "public-contract-discovery.ts",
@@ -232,7 +235,7 @@ async function verifyExportableDeclarations(
   const consumerFixture = "exportable-contract-reconsumer.ts";
   const consumerSource = fixtures[consumerFixture];
   if (consumerSource === undefined)
-    throw new Error("缺少可导出声明的消费者夹具");
+    throw new Error("Missing exportable-declaration consumer fixture");
   await writeFixtures(project, fixtures, [producerFixture]);
   await writeFile(
     resolve(project, consumerFixture),

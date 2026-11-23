@@ -65,7 +65,24 @@ export {
   type OutputDelivery,
   type OutputFormat,
   type OutputModeDefinition,
-  type OutputModeFactory,
+  type OutputModeTableDeclaration,
+  type OutputExecutionFactory,
+  type AtomicExecutionFactory,
+  type StreamExecutionFactory,
+  type AtomicExecution,
+  type StreamExecution,
+  type AtomicExecutionDefinition,
+  type StreamExecutionDefinition,
+  type AtomicTextOptions,
+  type StreamTextOptions,
+  type DeclaredAtomicVariant,
+  type DeclaredStreamRecord,
+  type DeclaredVariants,
+  type DeclaredRecords,
+  type DeclaredAtomicSuccess,
+  type CompletionHandlerContext,
+  type DataHandlerContext,
+  type OutputModeGrammar,
   type OutputModeManifest,
   type OutputModesDefinition,
   type OutputModesGrammar,
@@ -115,7 +132,11 @@ export {
   type CountUsageConstraintGrammar,
   type WhenUsageConstraint,
 } from "#/cli-contract";
-export type { AtomicTextPresenter } from "#/outcome-fact";
+export type {
+  AtomicTextPresenter,
+  CompletionTextPresenter,
+  StreamTextPresenter,
+} from "#/outcome-fact";
 export {
   queryCliContract,
   type ContractDirectoryChild,

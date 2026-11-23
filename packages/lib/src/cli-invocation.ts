@@ -23,8 +23,10 @@ const cliInvocationType = Symbol("CliInvocation.type");
 const invocationContracts = new WeakMap<object, object>();
 
 /**
- * 已通过调用语法检查的原始输入；契约模式尚未验证、转换或填充默认值。
- * 业务处理器应使用执行内核交付的已验证输入，而不是直接消费此处的 input。
+ * Raw input that has passed invocation syntax checks; the contract schema has
+ * not validated, transformed, or defaulted it yet. Business handlers should
+ * consume the validated input delivered by the execution kernel, not the input
+ * here.
  */
 export interface ParsedInvocation<Command extends string, Input = unknown> {
   readonly kind: "parsed";
@@ -117,7 +119,7 @@ export interface ConflictingFlagIssue {
   ];
 }
 
-/** 一条数量规则失败，按字段声明顺序划分 raw 输入中出现与缺席的字段。 */
+/** One failed count rule, splitting raw-input fields into present and absent in field declaration order. */
 export interface CountConstraintViolationIssue {
   readonly code: "countConstraintViolation";
   readonly min: number;
@@ -126,20 +128,20 @@ export interface CountConstraintViolationIssue {
   readonly absentFields: readonly string[];
 }
 
-/** 禁配事实组全部在 raw argv 中成立时发出的单条用法问题。 */
+/** A single usage issue emitted when every fact in a forbidden combination holds in the raw argv. */
 export interface ForbiddenCombinationViolationIssue {
   readonly code: "forbiddenCombinationViolation";
   readonly facts: readonly [UsageFact, ...UsageFact[]];
 }
 
-/** present 事实的 raw argv 观察只报告字段和是否出现。 */
+/** The raw argv observation of a present fact reports only the field and whether it occurred. */
 export interface PresentUsageObservation<Field extends string = string> {
   readonly kind: "present";
   readonly field: Field;
   readonly present: boolean;
 }
 
-/** equals 观察在字段缺席时省略 actual；出现时 actual 保持 raw 基础标量域。 */
+/** An equals observation omits actual when the field is absent; when present, actual stays in the raw primitive scalar domain. */
 export type EqualsUsageObservation<
   Field extends string = string,
   Expected extends boolean | string = boolean | string,
@@ -188,7 +190,7 @@ type EffectFields<
     : never
   : never;
 
-/** 一条条件规则的完整 raw 观察和分支效果；每条失败规则只产生这一条问题。 */
+/** The complete raw observations and branch effect of one conditional rule; each failed rule produces exactly this one issue. */
 export interface ConditionalConstraintViolationIssue<
   Conditions extends readonly unknown[] = readonly UsageConstraintObservation[],
   Branch extends "onMatch" | "otherwise" = "onMatch" | "otherwise",
@@ -372,7 +374,7 @@ export interface UsageFailure<
   readonly usage: CommandUsage<Command>;
 }
 
-/** 解析器签发的闭合调用事实，只能交还产生它的同一个契约执行；不要自行拼装。 */
+/** A closed invocation fact issued by the parser; it may only be handed back to the same contract for execution. Do not assemble one yourself. */
 export type CliInvocation<Contract extends AnyCliContract = AnyCliContract> =
   UnboundCliInvocation<Contract> & {
     readonly [cliInvocationType]: Contract;
@@ -386,12 +388,16 @@ type UnboundCliInvocation<Contract extends AnyCliContract> =
   | UsageFailuresForContract<Contract>;
 
 /**
- * 将宿主提供的参数 token 同步、无副作用地解析为同一契约的调用事实。
- * 参数从命令路径或字段开始，不包含 Node 可执行文件和脚本路径；来源与 shell 拆词由宿主负责。
+ * Parses host-provided argument tokens into an invocation fact of the same
+ * contract, synchronously and without side effects. Arguments start at the
+ * command path or a field and exclude the Node executable and script path; the
+ * host owns argument sourcing and shell word splitting.
  *
- * 解析器检查调用语法与用法约束，保留帮助、版本、发现和用法失败等闭合分支；
- * 已解析的 raw input 尚未经过契约模式验证。它不读取进程或环境，不执行 handler，也不写输出。
- * 将返回值交给 {@link executeCli}，由执行内核完成后续验证与投影。
+ * The parser checks invocation syntax and usage constraints and keeps the
+ * closed branches for help, version, discovery, and usage failure; the parsed
+ * raw input has not passed contract schema validation yet. It reads no process
+ * or environment, runs no handler, and writes no output. Hand the result to
+ * {@link executeCli}, which completes validation and projection.
  */
 export function parseCliInvocation<const Contract extends AnyCliContract>(
   cliContract: Contract,
@@ -411,7 +417,7 @@ export function parseCliInvocation<const Contract extends AnyCliContract>(
     if (token === undefined) {
       return bindInvocation(cliContract, {
         kind: "help",
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令 id 来自当前 Contract 编译结果，泛型身份在此恢复。
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The command id comes from the compiled result of the current Contract; the generic identity is restored here.
         command: selected.id as CliContractRoot<Contract>,
       });
     }
@@ -439,9 +445,9 @@ export function parseCliInvocation<const Contract extends AnyCliContract>(
       if (option.kind === "issue") {
         return usageFailure(
           cliContract,
-          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令 id 来自当前 Contract 编译结果，泛型身份在此恢复。
+          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The command id comes from the compiled result of the current Contract; the generic identity is restored here.
           selected.id as CliContractRoot<Contract>,
-          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- usage 与同一已编译命令一同产生，泛型身份在此恢复。
+          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- usage was produced together with the same compiled command; the generic identity is restored here.
           selected.usage as CommandUsage<CliContractRoot<Contract>>,
           option.issue,
         );
@@ -472,9 +478,9 @@ export function parseCliInvocation<const Contract extends AnyCliContract>(
       };
       return usageFailure(
         cliContract,
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令 id 来自当前 Contract 编译结果，泛型身份在此恢复。
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The command id comes from the compiled result of the current Contract; the generic identity is restored here.
         selected.id as CliContractRoot<Contract>,
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- usage 与同一已编译命令一同产生，泛型身份在此恢复。
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- usage was produced together with the same compiled command; the generic identity is restored here.
         selected.usage as CommandUsage<CliContractRoot<Contract>>,
         issue,
       );
@@ -482,9 +488,9 @@ export function parseCliInvocation<const Contract extends AnyCliContract>(
     selected = child;
     position += 1;
   }
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令 id 来自当前 Contract 编译结果，泛型身份在此恢复。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The command id comes from the compiled result of the current Contract; the generic identity is restored here.
   const command = selected.id as CliContractRoot<Contract>;
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- usage 与同一已编译命令一同产生，泛型身份在此恢复。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- usage was produced together with the same compiled command; the generic identity is restored here.
   const usage = selected.usage as CommandUsage<CliContractRoot<Contract>>;
   const fields = selected.fields;
 
@@ -495,7 +501,7 @@ export function parseCliInvocation<const Contract extends AnyCliContract>(
   let positionalIndex = 0;
   let optionsEnabled = true;
   for (; position < argv.length; position += 1) {
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- position 受 argv.length 限制，argv 的公共类型保证元素为字符串。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- position is bounded by argv.length, and the public type of argv guarantees string elements.
     const token = argv[position] as string;
     if (optionsEnabled && token === "--") {
       optionsEnabled = false;
@@ -580,7 +586,7 @@ export function parseCliInvocation<const Contract extends AnyCliContract>(
       cliContract,
       command,
       usage,
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- structuralIssues.length 已检查为正数。
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- structuralIssues.length was already checked to be positive.
       structuralIssues as [UsageIssue, ...UsageIssue[]],
     );
   }
@@ -588,7 +594,7 @@ export function parseCliInvocation<const Contract extends AnyCliContract>(
   return bindInvocation(cliContract, {
     kind: "parsed",
     command,
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- raw input 由此 Contract 的字段语法解析并冻结，泛型形状在此恢复。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The raw input was parsed and frozen by this Contract's field grammar; the generic shape is restored here.
     input: freezeRawInput(input) as CliContractRawInput<Contract>,
     outputMode: outputOccurrences[0]?.mode ?? selected.defaultOutputMode,
   });
@@ -630,9 +636,9 @@ function handleEagerControl<Contract extends AnyCliContract>(
   token: string,
   position: number,
 ): CliInvocation<Contract> {
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 命令来自当前 Contract 的编译树。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The command comes from the compiled tree of the current Contract.
   const commandId = command.id as CliContractRoot<Contract>;
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 用法与同一已编译命令一同产生。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- usage was produced together with the same compiled command.
   const usage = command.usage as CommandUsage<CliContractRoot<Contract>>;
   if (control !== "schema") {
     return bindInvocation(cliContract, { kind: control, command: commandId });
@@ -686,7 +692,7 @@ function consumeOutputControl(
   | Readonly<{ readonly kind: "notControl" }>
   | Readonly<{ readonly kind: "consumed"; readonly nextPosition: number }>
   | Readonly<{ readonly kind: "issue"; readonly issue: UsageIssue }> {
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 调用点均传入当前位置的 argv token，公共类型保证字符串。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Every call site passes the argv token at the current position; the public type guarantees a string.
   const token = argv[position] as string;
   const option = readOptionToken(token);
   if (option.spelling === "--output") {
@@ -743,7 +749,7 @@ function selectOutputMode(
     kind: "issue",
     issue: {
       code: "conflictingOutputMode",
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 此前已排除单次出现，冲突证据至少有两项。
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- A single occurrence was already excluded, so the conflict evidence has at least two entries.
       occurrences: Object.freeze([
         ...occurrences,
       ]) as ConflictingOutputModeIssue["occurrences"],
@@ -770,7 +776,7 @@ function consumeOption(
 ):
   | Readonly<{ readonly kind: "consumed"; readonly nextPosition: number }>
   | Readonly<{ readonly kind: "issue"; readonly issue: UsageIssue }> {
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 调用点均传入当前位置的 argv token，公共类型保证字符串。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Every call site passes the argv token at the current position; the public type guarantees a string.
   const token = argv[position] as string;
   const option = readOptionToken(token);
   const field = fields.find(
@@ -935,11 +941,11 @@ function collectStructuralIssues(
           issues.push({
             code: "conflictingFlag",
             field: field.key,
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 正负出现次数均已检查为正数。
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Both positive and negative occurrence counts were checked to be positive.
             positiveOccurrences: freezeOccurrenceEvidence(
               positiveOccurrences,
             ) as [OptionOccurrenceEvidence, ...OptionOccurrenceEvidence[]],
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 正负出现次数均已检查为正数。
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Both positive and negative occurrence counts were checked to be positive.
             negativeOccurrences: freezeOccurrenceEvidence(
               negativeOccurrences,
             ) as [OptionOccurrenceEvidence, ...OptionOccurrenceEvidence[]],
@@ -951,7 +957,7 @@ function collectStructuralIssues(
         issues.push({
           code: "repeatedOption",
           field: field.key,
-          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- occurrences.length 已检查大于一。
+          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- occurrences.length was already checked to be greater than one.
           occurrences: freezeOccurrenceEvidence(occurrences) as [
             OptionOccurrenceEvidence,
             OptionOccurrenceEvidence,
@@ -1152,7 +1158,7 @@ function usageFailureFromIssues<Contract extends AnyCliContract>(
   return bindInvocation(contract, {
     kind: "usageFailure",
     command,
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 每个条件问题都由同一已编译契约的 raw 字段事实生成。
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Every conditional issue is generated from raw field facts of the same compiled contract.
     issues: Object.freeze(
       issues.map((issue) => Object.freeze(issue)),
     ) as NonEmptyCliUsageIssues<Contract>,
@@ -1171,7 +1177,7 @@ function bindInvocation<Contract extends AnyCliContract>(
   contract: Contract,
   invocation: UnboundCliInvocation<Contract>,
 ): CliInvocation<Contract> {
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 调用事实由本工厂签发并登记到 invocationContracts。
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invocation fact is issued by this factory and registered in invocationContracts.
   const bound = Object.freeze(invocation) as CliInvocation<Contract>;
   invocationContracts.set(bound, contract);
   return bound;

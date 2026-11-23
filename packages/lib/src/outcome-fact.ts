@@ -28,10 +28,13 @@ export interface TextFragment {
   readonly [textProjectionType]: true;
 }
 
+/** Presents a completion or stream-success terminal state; may return text.silent. */
 export type CompletionTextPresenter = () => TextLine | TextLines | SilentText;
+/** Presents one atomic data or failure payload as a line or line group. */
 export type AtomicTextPresenter<Payload> = {
   bivarianceHack(payload: Payload): TextLine | TextLines;
 }["bivarianceHack"];
+/** Presents one stream record as a line or fragment. */
 export type StreamTextPresenter<Payload> = {
   bivarianceHack(payload: Payload): TextLine | TextFragment;
 }["bivarianceHack"];
@@ -60,7 +63,7 @@ export type TextValueErrorIssue =
         | "carriageReturn"
         | "lineFeed"
         | "nullCharacter";
-      /** `text.lines` 中从 0 开始的非法成员位置。 */
+      /** Zero-based position of the invalid member within `text.lines`. */
       readonly line: number;
     }>
   | Readonly<{
@@ -70,13 +73,14 @@ export type TextValueErrorIssue =
   | Readonly<{
       readonly code: "invalidTextFragment";
       readonly reason: "nullCharacter";
-      /** 片段中从 0 开始、含 NUL 的行号，按 LF 计数。 */
+      /** Zero-based LF-counted line number of the NUL within the fragment. */
       readonly line: number;
     }>;
 
 /**
- * 文本构造器发现动态值违反分帧规则时抛出的 TypeError。
- * `message` 保留稳定 code；`issue` 给出闭合原因和适用的 0 基行位置，且不包含文本内容。
+ * TypeError thrown when a text constructor finds a dynamic value that violates the
+ * framing rules. `message` keeps the stable code; `issue` gives the closed reason and
+ * the applicable zero-based line position, without the text content.
  */
 export class TextValueError extends TypeError {
   readonly issue: TextValueErrorIssue;
@@ -88,7 +92,7 @@ export class TextValueError extends TypeError {
   }
 }
 
-/* oxlint-disable typescript/no-unsafe-type-assertion -- 文本投影仅由这些工厂签发，运行时身份由 WeakSet 核对。 */
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Text projections are issued only by these factories; runtime identity is checked via the WeakSet. */
 function createTextLine(value: string): TextLine {
   if (typeof value !== "string") {
     throw new TextValueError({ code: "invalidTextLine", reason: "notString" });
@@ -201,33 +205,44 @@ function createTextFragment(value: string): TextFragment {
 /* oxlint-enable typescript/no-unsafe-type-assertion */
 
 /**
- * 在呈现器中显式构造文本投影；这里只验证文本值，实际通道路由与分帧由执行内核负责。
- * 动态值违反构造规则时抛出 {@link TextValueError}，其 message 是稳定 code，issue 不含原文。
+ * Construct text projections explicitly inside presenters; only text values are
+ * validated here, while channel routing and framing belong to the execution kernel.
+ * Dynamic values that violate the construction rules throw {@link TextValueError},
+ * whose message is the stable code and whose issue carries no original text.
  */
 export const text = Object.freeze({
   /**
-   * 构造非空原始字符串单行，拒绝 CR、LF、NUL；核心写出时追加恰好一个 LF。
-   * 适用于 completion、data、failure、stream success 终态和普通 stream record；
-   * 呈现器提供完整文本，核心不补写文案。动态非字符串以 notString 拒绝且不附文本或行号；
-   * 调用方可显式调用 String 转换，转换后的字符串仍按内容规则检查。
+   * Construct one non-empty raw string line, rejecting CR, LF and NUL; the core
+   * appends exactly one LF when writing. Valid for completion, data, failure and
+   * stream-success terminal states and for ordinary stream records. Presenters
+   * supply the full text; the core writes no copy of its own. Dynamic non-strings
+   * are rejected as notString without text or line position; callers may convert
+   * with String explicitly, and the converted string is still checked by content.
    */
   line: createTextLine,
   /**
-   * 构造非空元组行组（readonly [string, ...string[]]），至少一个成员非空；每行拒绝 CR、LF、NUL。
-   * 空成员可显式保留空白行。核心以 LF 连接并追加一个终止 LF；动态非法成员会报告其 0 基位置。
-   * 适用于 completion、data、failure、stream success 终态及帮助补充，不适用于 stream record。
-   * 例如 `text.lines(["处理完成", "", "详细说明"])`。
+   * Construct a non-empty tuple of lines (readonly [string, ...string[]]) with at
+   * least one non-empty member; each line rejects CR, LF and NUL. Empty members may
+   * deliberately keep blank lines. The core joins with LF and appends one trailing
+   * LF; dynamic invalid members report their zero-based position. Valid for
+   * completion, data, failure and stream-success terminal states and for help
+   * supplements, but not for stream records. For example
+   * `text.lines(["Done", "", "Details"])`.
    */
   lines: createTextLines,
   /**
-   * 仅用于 stream record 中需要连续拼接的增量文本；必须是非空原始字符串且不含 NUL，可以含 LF。
-   * 动态非字符串以 notString 拒绝且不附文本或行号；调用方可显式调用 String 转换，转换后的字符串仍按内容规则检查。
-   * 核心原样写出，不追加或转换字符，因此不承诺一行对应一条记录；NUL 的错误位置按 0 基行号给出。
+   * Only for incremental text that stream records concatenate verbatim; must be a
+   * non-empty raw string without NUL, and may contain LF. Dynamic non-strings are
+   * rejected as notString without text or line position; callers may convert with
+   * String explicitly, and the converted string is still checked by content. The
+   * core writes it verbatim without appending or converting characters, so one line
+   * per record is not promised; NUL errors report a zero-based line number.
    */
   fragment: createTextFragment,
   /**
-   * 仅供 completion 成功或 stream success 终态显式选择不写文本字节；仍须由呈现器返回此值。
-   * 省略呈现器不等于静默；data、failure 和 stream record 都必须产生文本。
+   * Only for completion success or the stream-success terminal state to explicitly
+   * write no text bytes; the presenter must still return this value. Omitting a
+   * presenter is not silence; data, failure and stream records must all produce text.
    */
   silent: silentText,
 });
@@ -287,6 +302,10 @@ function encodeApplicationText(
   throw new ContractExecutionError([{ code: "invalidCliContract" }]);
 }
 
+/**
+ * One named data-success variant. Outcome constructors accept the schema Input;
+ * the text presenter receives the validated and transformed schema Output.
+ */
 export type DataVariantDefinition<
   Input = unknown,
   TextEnabled extends boolean = boolean,
@@ -314,6 +333,10 @@ export type DataVariantDefinitions<_TextEnabled extends boolean = boolean> =
     >
   >;
 
+/**
+ * One named stream record. Outcome constructors accept the schema Input; the text
+ * presenter receives the validated and transformed schema Output.
+ */
 export type StreamRecordDefinition<
   Input = unknown,
   TextEnabled extends boolean = boolean,
@@ -340,6 +363,10 @@ export type StreamRecordDefinitions<_TextEnabled extends boolean = boolean> =
     >
   >;
 
+/**
+ * One named failure variant. Outcome constructors accept the schema Input; the text
+ * presenter receives the validated and transformed schema Output.
+ */
 export type FailureVariantDefinition<
   Input = unknown,
   TextEnabled extends boolean = boolean,
@@ -422,6 +449,7 @@ export type OutcomeFact =
   | StreamRecordFact
   | StreamSuccessFact;
 
+/** Constructs the completion fact of an atomic execution that succeeds without data. */
 export interface CompletionOutcome<Command extends string> {
   completion(): CompletionFact<Command>;
 }
@@ -445,6 +473,7 @@ export type DataFactUnion<
   >;
 }[keyof Variants & string];
 
+/** Named data-success constructors scoped to one execution; each accepts its variant schema's Input. */
 export type DataOutcome<
   Command extends string,
   Variants extends DataVariantDefinitions,
@@ -482,6 +511,7 @@ export type FailureFactUnion<
   >;
 }[keyof Failures & string];
 
+/** Named failure constructors scoped to one execution; each accepts its variant schema's Input. */
 export type FailureOutcome<
   Command extends string,
   Failures extends object,
@@ -516,6 +546,10 @@ export type StreamRecordFactUnion<
   >;
 }[keyof Records & string];
 
+/**
+ * Record constructors and the successful terminal constructor scoped to one stream
+ * execution. Yield record facts one by one; return streamSuccess() as the terminal fact.
+ */
 export type StreamOutcome<
   Command extends string,
   Records extends StreamRecordDefinitions,
@@ -532,7 +566,7 @@ export type StreamOutcome<
   streamSuccess(): StreamSuccessFact<Command>;
 }>;
 
-/* oxlint-disable typescript/no-unsafe-type-assertion -- 结果事实的私有类型品牌由签发工厂与 WeakSet 共同保证。 */
+/* oxlint-disable typescript/no-unsafe-type-assertion -- The private type brand of outcome facts is guaranteed jointly by the issuing factories and the WeakSet. */
 export function createCompletionFact<Command extends string>(
   command: Command,
   issuedOutcomeFacts: WeakSet<object>,

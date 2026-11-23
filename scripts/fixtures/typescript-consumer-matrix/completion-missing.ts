@@ -13,32 +13,28 @@ defineCli()({
     missingCompletion: {
       kind: "rootCommand",
       name: "missing-completion",
-      description: "缺少 completion presenter",
+      description: "Missing completion presenter",
       input: emptyInput,
 
-      outputs: defineCli().outputModes(
-        "missingCompletion",
-        emptyInput,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        });
+        return {
           default: "text",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ outcome }) => outcome.completion(),
+            structured: operation.structured({
+              description: "Structured output",
             }),
-            text: mode.atomic({
-              description: "文本输出",
-              format: "text",
-              success: { kind: "completion" },
+            text: operation.text({
+              description: "Text output",
               failures: {},
-              handler: ({ outcome }) => outcome.completion(),
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
@@ -52,45 +48,38 @@ defineCli()({
     missingCompletionWithField: {
       kind: "rootCommand",
       name: "missing-completion-with-field",
-      description: "带字段但缺少 completion presenter",
+      description: "Missing completion presenter with a field",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: textInput,
 
-      outputs: defineCli().outputModes(
-        "missingCompletionWithField",
-        textInput,
-        (mode) => ({
+      outputs({ atomic }) {
+        const operation = atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ input, outcome }) => {
+            input.name satisfies string | undefined;
+            return outcome.completion();
+          },
+        });
+        return {
           default: "text",
           modes: {
-            structured: mode.atomic({
-              description: "结构化输出",
-              format: "structured",
-              success: { kind: "completion" },
-              failures: {},
-              handler: ({ input, outcome }) => {
-                input.name satisfies string | undefined;
-                return outcome.completion();
-              },
+            structured: operation.structured({
+              description: "Structured output",
             }),
-            text: mode.atomic({
-              description: "文本输出",
-              format: "text",
-              success: { kind: "completion" },
+            text: operation.text({
+              description: "Text output",
               failures: {},
-              handler: ({ input, outcome }) => {
-                input.name satisfies string | undefined;
-                return outcome.completion();
-              },
             }),
           },
-        }),
-      ),
+        };
+      },
     },
   },
 });
