@@ -27,7 +27,7 @@ const contract = define({
     consumer: {
       kind: "rootCommand",
       name: "consumer",
-      description: "根入口",
+      description: "Root entry",
       fields: {},
       input: emptyInput,
 
@@ -40,9 +40,11 @@ const contract = define({
         return {
           default: "text",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               success: () => text.silent,
               failures: {},
             }),
@@ -65,7 +67,7 @@ const textCompletionWithoutField = defineCli()({
     emptyTextCompletion: {
       kind: "rootCommand",
       name: "empty-text-completion",
-      description: "无字段的文本 completion",
+      description: "Text completion without fields",
       input: emptyInput,
 
       outputs({ atomic }) {
@@ -77,9 +79,11 @@ const textCompletionWithoutField = defineCli()({
         return {
           default: "text",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               success: () => text.silent,
               failures: {},
             }),
@@ -105,7 +109,7 @@ const optionalCompletionWithoutField = defineCli()({
     optionalTextCompletion: {
       kind: "rootCommand",
       name: "optional-text-completion",
-      description: "可选字段的文本 completion",
+      description: "Text completion with an optional field",
       input: optionalCountInput,
 
       outputs({ atomic }) {
@@ -117,9 +121,11 @@ const optionalCompletionWithoutField = defineCli()({
         return {
           default: "text",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               success: () => text.silent,
               failures: {},
             }),
@@ -140,7 +146,7 @@ const unionCompletionAcceptingEmpty = defineCli()({
     unionTextCompletion: {
       kind: "rootCommand",
       name: "union-text-completion",
-      description: "可接受空对象的联合 completion",
+      description: "Union completion accepting an empty object",
       input: eitherAcceptsEmptyInput,
 
       outputs({ atomic }) {
@@ -152,9 +158,11 @@ const unionCompletionAcceptingEmpty = defineCli()({
         return {
           default: "text",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               success: () => text.silent,
               failures: {},
             }),
@@ -175,12 +183,12 @@ const completeNamedVariants = defineCli()({
     completeNamedVariants: {
       kind: "rootCommand",
       name: "complete-named-variants",
-      description: "完整具名变体",
+      description: "Complete named variants",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: textInput,
@@ -191,12 +199,12 @@ const completeNamedVariants = defineCli()({
             kind: "data",
             variants: {
               accepted: {
-                description: "已接受",
+                description: "Accepted",
                 schema: messagePayload,
                 exitCode: 0,
               },
               deferred: {
-                description: "已延后",
+                description: "Deferred",
                 schema: messagePayload,
                 exitCode: 0,
               },
@@ -204,18 +212,18 @@ const completeNamedVariants = defineCli()({
           },
           failures: {
             unavailable: {
-              description: "不可用",
+              description: "Unavailable",
               schema: messagePayload,
               exitCode: 9,
             },
           },
           handler: ({ outcome }) => {
             const accepted = outcome.data.accepted({
-              message: "已接受请求",
+              message: "Request accepted",
             });
             accepted.variant satisfies "accepted";
             const unavailable = outcome.failure.unavailable({
-              message: "暂不可用",
+              message: "Temporarily unavailable",
             });
             unavailable.variant satisfies "unavailable";
             return accepted;
@@ -224,9 +232,11 @@ const completeNamedVariants = defineCli()({
         return {
           default: "text",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               success: {
                 accepted: (payload) => {
                   payload.message satisfies string;
@@ -261,7 +271,7 @@ const completeCompletionFailures = defineCli()({
     completeCompletionFailures: {
       kind: "rootCommand",
       name: "complete-completion-failures",
-      description: "completion 的完整 failure presenter",
+      description: "Complete failure presenter for completion",
       input: emptyInput,
 
       outputs({ atomic }) {
@@ -269,7 +279,7 @@ const completeCompletionFailures = defineCli()({
           success: { kind: "completion" },
           failures: {
             unavailable: {
-              description: "不可用",
+              description: "Unavailable",
               schema: messagePayload,
               exitCode: 9,
             },
@@ -278,7 +288,7 @@ const completeCompletionFailures = defineCli()({
             const completion = outcome.completion();
             completion.kind satisfies "completion";
             const unavailable = outcome.failure.unavailable({
-              message: "暂不可用",
+              message: "Temporarily unavailable",
             });
             unavailable.variant satisfies "unavailable";
             return completion;
@@ -287,9 +297,11 @@ const completeCompletionFailures = defineCli()({
         return {
           default: "text",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               success: () => text.silent,
               failures: {
                 unavailable: (payload) => {
@@ -315,12 +327,12 @@ defineCli()({
     missingDataVariantText: {
       kind: "rootCommand",
       name: "missing-data-variant-text",
-      description: "遗漏 data presenter",
+      description: "Missing data presenter",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: textInput,
@@ -331,12 +343,12 @@ defineCli()({
             kind: "data",
             variants: {
               accepted: {
-                description: "已接受",
+                description: "Accepted",
                 schema: messagePayload,
                 exitCode: 0,
               },
               deferred: {
-                description: "已延后",
+                description: "Deferred",
                 schema: messagePayload,
                 exitCode: 0,
               },
@@ -344,15 +356,17 @@ defineCli()({
           },
           failures: {},
           handler: ({ outcome }) =>
-            outcome.data.accepted({ message: "已接受请求" }),
+            outcome.data.accepted({ message: "Request accepted" }),
         });
         return {
           default: "text",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
-            // @ts-expect-error 文本方式的每个 data 变体都必须声明 presenter。
+            structured: operation.structured({
+              description: "Structured output",
+            }),
+            // @ts-expect-error Every data variant of a text mode must declare a presenter.
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               success: {
                 accepted: (payload: z.output<typeof messagePayload>) => {
                   payload.message satisfies string;
@@ -377,12 +391,12 @@ defineCli()({
     missingDataFailureText: {
       kind: "rootCommand",
       name: "missing-data-failure-text",
-      description: "data 的遗漏 failure presenter",
+      description: "Missing failure presenter for data",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: textInput,
@@ -393,7 +407,7 @@ defineCli()({
             kind: "data",
             variants: {
               accepted: {
-                description: "已接受",
+                description: "Accepted",
                 schema: messagePayload,
                 exitCode: 0,
               },
@@ -401,26 +415,28 @@ defineCli()({
           },
           failures: {
             unavailable: {
-              description: "不可用",
+              description: "Unavailable",
               schema: messagePayload,
               exitCode: 9,
             },
             forbidden: {
-              description: "禁止",
+              description: "Forbidden",
               schema: messagePayload,
               exitCode: 13,
             },
           },
           handler: ({ outcome }) =>
-            outcome.data.accepted({ message: "已接受请求" }),
+            outcome.data.accepted({ message: "Request accepted" }),
         });
         return {
           default: "text",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
-            // @ts-expect-error 文本方式的 failure 变体必须声明 presenter。
+            structured: operation.structured({
+              description: "Structured output",
+            }),
+            // @ts-expect-error Failure variants of a text mode must declare a presenter.
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               success: {
                 accepted: (payload: z.output<typeof messagePayload>) => {
                   payload.message satisfies string;
@@ -450,7 +466,7 @@ defineCli()({
     missingCompletionFailureText: {
       kind: "rootCommand",
       name: "missing-completion-failure-text",
-      description: "completion 的遗漏 failure presenter",
+      description: "Missing failure presenter for completion",
       input: emptyInput,
 
       outputs({ atomic }) {
@@ -458,12 +474,12 @@ defineCli()({
           success: { kind: "completion" },
           failures: {
             unavailable: {
-              description: "不可用",
+              description: "Unavailable",
               schema: messagePayload,
               exitCode: 9,
             },
             forbidden: {
-              description: "禁止",
+              description: "Forbidden",
               schema: messagePayload,
               exitCode: 13,
             },
@@ -473,10 +489,12 @@ defineCli()({
         return {
           default: "text",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
-            // @ts-expect-error 文本方式的 completion failure 变体必须声明 presenter。
+            structured: operation.structured({
+              description: "Structured output",
+            }),
+            // @ts-expect-error Completion failure variants of a text mode must declare a presenter.
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               success: () => text.silent,
               failures: {
                 unavailable: (payload) => {
@@ -501,7 +519,7 @@ defineCli()({
     missingCompletion: {
       kind: "rootCommand",
       name: "missing-completion",
-      description: "缺少 completion presenter",
+      description: "Missing completion presenter",
       input: emptyInput,
 
       outputs({ atomic }) {
@@ -513,10 +531,12 @@ defineCli()({
         return {
           default: "text",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
-            // @ts-expect-error 文本 completion 必须声明当前方式的 presenter。
+            structured: operation.structured({
+              description: "Structured output",
+            }),
+            // @ts-expect-error A text completion must declare a presenter for the current mode.
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               failures: {},
             }),
           },
@@ -535,12 +555,12 @@ const textCompletionWithField = defineCli()({
     textCompletion: {
       kind: "rootCommand",
       name: "text-completion",
-      description: "带字段的 completion",
+      description: "Completion with a field",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: textInput,
@@ -557,9 +577,11 @@ const textCompletionWithField = defineCli()({
         return {
           default: "text",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               success: () => text.silent,
               failures: {},
             }),
@@ -580,7 +602,7 @@ defineCli()({
     completionCannotReturnData: {
       kind: "rootCommand",
       name: "completion-cannot-return-data",
-      description: "completion 结果闭合",
+      description: "Completion result closure",
       input: emptyInput,
 
       outputs({ atomic }) {
@@ -588,16 +610,18 @@ defineCli()({
           success: { kind: "completion" },
           failures: {},
           handler: ({ outcome }) => {
-            // @ts-expect-error completion handler 不接受 data 结果类别。
+            // @ts-expect-error A completion handler does not accept the data result category.
             return outcome.data.value({ value: "nope" });
           },
         });
         return {
           default: "text",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               success: () => text.silent,
               failures: {},
             }),
@@ -617,12 +641,12 @@ defineCli()({
     missingCompletionWithField: {
       kind: "rootCommand",
       name: "missing-completion-with-field",
-      description: "带字段但缺少 completion presenter",
+      description: "Missing completion presenter with a field",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: textInput,
@@ -639,10 +663,12 @@ defineCli()({
         return {
           default: "text",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
-            // @ts-expect-error 文本 completion 必须声明当前方式的 presenter。
+            structured: operation.structured({
+              description: "Structured output",
+            }),
+            // @ts-expect-error A text completion must declare a presenter for the current mode.
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               failures: {},
             }),
           },

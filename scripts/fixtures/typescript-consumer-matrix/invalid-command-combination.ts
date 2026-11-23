@@ -19,12 +19,12 @@ export const inspect = define.command("inspect")({
   kind: "command",
   parent: "tool",
   name: "inspect",
-  description: "检查配置",
+  description: "Inspect configuration",
   fields: {
     mode: {
       kind: "valueOption",
       longOption: "--mode",
-      description: "模式",
+      description: "Mode",
     },
   },
   input: sharedInput0,
@@ -39,7 +39,7 @@ export const inspect = define.command("inspect")({
     return {
       default: "structured",
       modes: {
-        structured: operation.structured({ description: "结构化输出" }),
+        structured: operation.structured({ description: "Structured output" }),
       },
     };
   },

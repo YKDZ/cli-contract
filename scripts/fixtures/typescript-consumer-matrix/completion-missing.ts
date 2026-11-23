@@ -13,7 +13,7 @@ defineCli()({
     missingCompletion: {
       kind: "rootCommand",
       name: "missing-completion",
-      description: "缺少 completion presenter",
+      description: "Missing completion presenter",
       input: emptyInput,
 
       outputs({ atomic }) {
@@ -25,9 +25,11 @@ defineCli()({
         return {
           default: "text",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               failures: {},
             }),
           },
@@ -46,12 +48,12 @@ defineCli()({
     missingCompletionWithField: {
       kind: "rootCommand",
       name: "missing-completion-with-field",
-      description: "带字段但缺少 completion presenter",
+      description: "Missing completion presenter with a field",
       fields: {
         name: {
           kind: "valueOption",
           longOption: "--name",
-          description: "名称",
+          description: "Name",
         },
       },
       input: textInput,
@@ -68,9 +70,11 @@ defineCli()({
         return {
           default: "text",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               failures: {},
             }),
           },

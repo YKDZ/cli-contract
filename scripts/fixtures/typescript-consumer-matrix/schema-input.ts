@@ -26,32 +26,32 @@ const zodCli = defineCli()({
     zodSchemaInput: {
       kind: "rootCommand",
       name: "zod-schema-input",
-      description: "Zod 输入",
+      description: "Zod input",
       fields: {
         mode: {
           kind: "valueOption",
           longOption: "--mode",
-          description: "模式",
+          description: "Mode",
         },
         tags: {
           kind: "repeatableOption",
           longOption: "--tag",
-          description: "标签",
+          description: "Tags",
         },
         readonlyTags: {
           kind: "repeatableOption",
           longOption: "--readonly-tag",
-          description: "只读标签",
+          description: "Readonly tags",
         },
         defaultMode: {
           kind: "valueOption",
           longOption: "--default-mode",
-          description: "默认模式",
+          description: "Default mode",
         },
         limit: {
           kind: "valueOption",
           longOption: "--limit",
-          description: "上限",
+          description: "Limit",
         },
       },
       input: zodInput,
@@ -68,15 +68,15 @@ const zodCli = defineCli()({
               | undefined;
             input.defaultMode satisfies "fast" | "slow";
             input.limit satisfies number;
-            // @ts-expect-error enum Output 不得扩宽为任意字符串。
+            // @ts-expect-error The enum Output must not widen to an arbitrary string.
             const invalidMode: "other" = input.mode;
-            // @ts-expect-error array enum Output 不得扩宽为任意元素。
+            // @ts-expect-error The array enum Output must not widen to arbitrary elements.
             const invalidTag: "other" = input.tags?.[0];
-            // @ts-expect-error readonly array Output 不得获得 mutable 方法。
+            // @ts-expect-error A readonly array Output must not gain mutable methods.
             input.readonlyTags?.push("small");
-            // @ts-expect-error default 的 Output 不得扩宽为任意字符串。
+            // @ts-expect-error The default Output must not widen to an arbitrary string.
             const invalidDefault: "other" = input.defaultMode;
-            // @ts-expect-error handler 使用 schema Output，不能回退成原始字符串。
+            // @ts-expect-error The handler uses the schema Output and must not fall back to the raw string.
             input.limit satisfies string;
             void invalidMode;
             void invalidTag;
@@ -87,7 +87,9 @@ const zodCli = defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },
@@ -112,22 +114,22 @@ const valibotCli = defineCli()({
     valibotSchemaInput: {
       kind: "rootCommand",
       name: "valibot-schema-input",
-      description: "Valibot 输入",
+      description: "Valibot input",
       fields: {
         mode: {
           kind: "valueOption",
           longOption: "--mode",
-          description: "模式",
+          description: "Mode",
         },
         tags: {
           kind: "repeatableOption",
           longOption: "--tag",
-          description: "标签",
+          description: "Tags",
         },
         defaultMode: {
           kind: "valueOption",
           longOption: "--default-mode",
-          description: "默认模式",
+          description: "Default mode",
         },
       },
       input: valibotInput,
@@ -140,11 +142,11 @@ const valibotCli = defineCli()({
             input.mode satisfies "safe" | "force";
             input.tags satisfies ("red" | "green")[] | undefined;
             input.defaultMode satisfies "fast" | "slow";
-            // @ts-expect-error enum Output 不得扩宽为任意字符串。
+            // @ts-expect-error The enum Output must not widen to an arbitrary string.
             const invalidMode: "other" = input.mode;
-            // @ts-expect-error array enum Output 不得扩宽为任意元素。
+            // @ts-expect-error The array enum Output must not widen to arbitrary elements.
             const invalidTag: "other" = input.tags?.[0];
-            // @ts-expect-error default 的 Output 不得扩宽为任意字符串。
+            // @ts-expect-error The default Output must not widen to an arbitrary string.
             const invalidDefault: "other" = input.defaultMode;
             void invalidMode;
             void invalidTag;
@@ -155,7 +157,9 @@ const valibotCli = defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },

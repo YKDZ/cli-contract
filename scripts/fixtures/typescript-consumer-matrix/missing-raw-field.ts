@@ -12,7 +12,7 @@ const missingRawField = define.command("missingRawField")({
   kind: "command",
   parent: "workspace",
   name: "missing-raw-field",
-  description: "缺少 raw 字段",
+  description: "Missing raw field",
   input: countInput,
   outputs({ atomic }) {
     const operation = atomic({
@@ -23,7 +23,7 @@ const missingRawField = define.command("missingRawField")({
     return {
       default: "structured",
       modes: {
-        structured: operation.structured({ description: "结构化输出" }),
+        structured: operation.structured({ description: "Structured output" }),
       },
     };
   },
@@ -34,7 +34,7 @@ const missingUnionRawField = define.command("missingUnionRawField")({
   kind: "command",
   parent: "workspace",
   name: "missing-union-raw-field",
-  description: "互异必需字段的联合输入",
+  description: "Union input with disjoint required fields",
   input: requiredEitherInput,
   outputs({ atomic }) {
     const operation = atomic({
@@ -45,7 +45,7 @@ const missingUnionRawField = define.command("missingUnionRawField")({
     return {
       default: "structured",
       modes: {
-        structured: operation.structured({ description: "结构化输出" }),
+        structured: operation.structured({ description: "Structured output" }),
       },
     };
   },

@@ -13,21 +13,21 @@ defineCli()({
     invalidRecordName: {
       kind: "rootCommand",
       name: "invalid-record-name",
-      description: "非法 record 身份",
+      description: "Invalid record identity",
       input: sharedInput0,
 
       outputs({ stream }) {
         const operation = stream({
-          // @ts-expect-error 流记录名称必须使用 lowerCamelCase。
+          // @ts-expect-error Stream record names must use lowerCamelCase.
           records: {
             bad_name: {
-              description: "非法记录",
+              description: "Invalid record",
               schema: payload,
             },
           },
           failures: {
             unavailable: {
-              description: "不可用",
+              description: "Unavailable",
               schema: payload,
               exitCode: 9,
             },
@@ -40,7 +40,9 @@ defineCli()({
         return {
           default: "structured",
           modes: {
-            structured: operation.structured({ description: "结构化输出" }),
+            structured: operation.structured({
+              description: "Structured output",
+            }),
           },
         };
       },

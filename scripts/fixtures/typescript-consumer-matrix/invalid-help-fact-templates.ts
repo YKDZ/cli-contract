@@ -32,7 +32,7 @@ type CallableWordingUnion =
   | (() => string);
 const extractedCallableWordingUnion: CallableWordingUnion =
   Math.random() < 0.5 ? { choices: "候选 {choices}" } : () => "候选 {choices}";
-// @ts-expect-error 文案联合中包含函数时仍需拒绝整个声明。
+// @ts-expect-error A wording union containing a function must still reject the whole declaration.
 helpCapability({ wording: extractedCallableWordingUnion });
 
 type OptionalInvalidTemplate = {
@@ -66,10 +66,10 @@ const optionalCallableWording: OptionalCallableWording = {
   shortAlias: "-h",
   wording: () => "候选 {choices}",
 };
-// @ts-expect-error 可选 wording 声明也不能包含函数。
+// @ts-expect-error An optional wording declaration must not contain a function either.
 helpCapability(optionalCallableWording);
 
-// @ts-expect-error wording 必须保持为非函数对象。
+// @ts-expect-error wording must remain a non-function object.
 helpCapability({ wording: () => "候选 {choices}" });
 
 const extractedTemplate = {

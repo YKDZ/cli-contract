@@ -16,20 +16,20 @@ const complete = defineCli()({
     completeStream: {
       kind: "rootCommand",
       name: "complete-stream",
-      description: "完整流",
+      description: "Complete stream",
       input,
 
       outputs({ stream }) {
         const operation = stream({
           records: {
             item: {
-              description: "记录",
+              description: "Record",
               schema: payload,
             },
           },
           failures: {
             unavailable: {
-              description: "不可用",
+              description: "Unavailable",
               schema: payload,
               exitCode: 9,
             },
@@ -43,7 +43,7 @@ const complete = defineCli()({
           default: "text",
           modes: {
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               records: {
                 item: (value) => text.line(value.message),
               },
@@ -67,17 +67,17 @@ defineCli()({
     missingRecord: {
       kind: "rootCommand",
       name: "missing-record",
-      description: "遗漏记录",
+      description: "Missing record",
       input,
 
       outputs({ stream }) {
         const operation = stream({
           records: {
-            item: { description: "记录", schema: payload },
+            item: { description: "Record", schema: payload },
           },
           failures: {
             unavailable: {
-              description: "不可用",
+              description: "Unavailable",
               schema: payload,
               exitCode: 9,
             },
@@ -90,9 +90,9 @@ defineCli()({
         return {
           default: "text",
           modes: {
-            // @ts-expect-error 文本流缺少记录呈现器。
+            // @ts-expect-error The text stream is missing a record presenter.
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               records: {},
               failures: {
                 unavailable: (value) => text.line(value.message),
@@ -113,20 +113,20 @@ defineCli()({
     missingSuccess: {
       kind: "rootCommand",
       name: "missing-success",
-      description: "遗漏成功",
+      description: "Missing success",
       input,
 
       outputs({ stream }) {
         const operation = stream({
           records: {
             item: {
-              description: "记录",
+              description: "Record",
               schema: payload,
             },
           },
           failures: {
             unavailable: {
-              description: "不可用",
+              description: "Unavailable",
               schema: payload,
               exitCode: 9,
             },
@@ -139,9 +139,9 @@ defineCli()({
         return {
           default: "text",
           modes: {
-            // @ts-expect-error 文本流缺少终态呈现器。
+            // @ts-expect-error The text stream is missing a terminal presenter.
             text: operation.text({
-              description: "文本输出",
+              description: "Text output",
               records: {
                 item: (value) => text.line(value.message),
               },

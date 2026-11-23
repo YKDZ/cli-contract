@@ -235,7 +235,7 @@ async function verifyExportableDeclarations(
   const consumerFixture = "exportable-contract-reconsumer.ts";
   const consumerSource = fixtures[consumerFixture];
   if (consumerSource === undefined)
-    throw new Error("缺少可导出声明的消费者夹具");
+    throw new Error("Missing exportable-declaration consumer fixture");
   await writeFixtures(project, fixtures, [producerFixture]);
   await writeFile(
     resolve(project, consumerFixture),
