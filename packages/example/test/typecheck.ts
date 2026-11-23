@@ -14,7 +14,6 @@ export function rejectedDeclarations() {
   // @ts-expect-error the declared notFound lacks a trigger scenario.
   defineFailureScenarios(cli, { lookup: {} });
 
-  const sharedInput0 = z.object({});
   defineCli()({
     root: "check",
     help: helpCapability({
@@ -31,76 +30,53 @@ export function rejectedDeclarations() {
         name: "check",
         description: "Check types",
         fields: {},
-        input: sharedInput0,
+        input: z.object({}),
 
-        outputs: defineCli().outputModes("check", sharedInput0, (mode) => ({
-          default: "text",
-          modes: {
-            structured: mode.atomic({
-              description: "Structured output",
-              format: "structured",
-              success: {
-                kind: "data",
-                variants: {
-                  found: {
-                    description: "Result found",
-                    schema: z.object({ name: z.string() }),
-                    exitCode: 0,
-                  },
+        outputs: ({ atomic }) => {
+          const lookup = atomic({
+            success: {
+              kind: "data",
+              variants: {
+                found: {
+                  description: "Result found",
+                  schema: z.object({ name: z.string() }),
+                  exitCode: 0,
                 },
               },
-              failures: {
-                notFound: {
-                  description: "Result not found",
-                  schema: z.object({ id: z.string() }),
-                  exitCode: 1,
-                },
+            },
+            failures: {
+              notFound: {
+                description: "Result not found",
+                schema: z.object({ id: z.string() }),
+                exitCode: 1,
               },
-              handler({ outcome }) {
-                // @ts-expect-error cannot invoke an undeclared failure.
-                outcome.failure.unknown({});
-                // @ts-expect-error the variant payload must match the type inferred from the contract schema.
-                outcome.data.found({ name: 42 });
-                return outcome.data.found({ name: "Alice" });
-              },
-            }),
-            text: mode.atomic({
-              description: "Text output",
-              format: "text",
-              success: {
-                kind: "data",
-                variants: {
-                  found: {
-                    description: "Result found",
-                    schema: z.object({ name: z.string() }),
-                    exitCode: 0,
-                    text: ({ name }) => text.line(name),
-                  },
-                },
-              },
-              failures: {
-                notFound: {
-                  description: "Result not found",
-                  schema: z.object({ id: z.string() }),
-                  exitCode: 1,
-                  text: ({ id }) => text.line(id),
-                },
-              },
-              handler({ outcome }) {
-                // @ts-expect-error cannot invoke an undeclared failure.
-                outcome.failure.unknown({});
-                // @ts-expect-error the variant payload must match the type inferred from the contract schema.
-                outcome.data.found({ name: 42 });
-                return outcome.data.found({ name: "Alice" });
-              },
-            }),
-          },
-        })),
+            },
+            handler({ outcome }) {
+              // @ts-expect-error cannot invoke an undeclared failure.
+              outcome.failure.unknown({});
+              // @ts-expect-error the payload must match the contract schema input.
+              outcome.data.found({ name: 42 });
+              return outcome.data.found({ name: "Alice" });
+            },
+          });
+          return {
+            default: "text",
+            modes: {
+              structured: lookup.structured({
+                description: "Structured output",
+              }),
+              text: lookup.text({
+                description: "Text output",
+                success: { found: ({ name }) => text.line(name) },
+                failures: { notFound: ({ id }) => text.line(id) },
+              }),
+            },
+          };
+        },
       },
     },
   });
 
-  const sharedInput1 = z.object({});
   defineCli()({
     root: "missingCompletion",
     help: helpCapability({
@@ -116,37 +92,29 @@ export function rejectedDeclarations() {
         kind: "rootCommand",
         name: "check",
         description: "Check types",
-        input: sharedInput1,
+        input: z.object({}),
 
-        outputs: defineCli().outputModes(
-          "missingCompletion",
-          sharedInput1,
-          (mode) => ({
+        outputs: ({ atomic }) => {
+          const complete = atomic({
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          });
+          return {
             default: "text",
             modes: {
-              structured: mode.atomic({
+              structured: complete.structured({
                 description: "Structured output",
-                format: "structured",
-                success: { kind: "completion" },
-                failures: {},
-                handler: ({ outcome }) => outcome.completion(),
               }),
-              // @ts-expect-error a text completion mode must declare a presenter for the current mode.
-              text: mode.atomic({
-                description: "Text output",
-                format: "text",
-                success: { kind: "completion" },
-                failures: {},
-                handler: () => undefined as never,
-              }),
+              // @ts-expect-error a text completion mode must declare a success presenter.
+              text: complete.text({ description: "Text output", failures: {} }),
             },
-          }),
-        ),
+          };
+        },
       },
     },
   });
 
-  const sharedInput2 = z.object({});
   defineCli()({
     root: "validCompletion",
     help: helpCapability({
@@ -162,31 +130,28 @@ export function rejectedDeclarations() {
         kind: "rootCommand",
         name: "check",
         description: "Check types",
-        input: sharedInput2,
+        input: z.object({}),
 
-        outputs: defineCli().outputModes(
-          "validCompletion",
-          sharedInput2,
-          (mode) => ({
+        outputs: ({ atomic }) => {
+          const complete = atomic({
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          });
+          return {
             default: "text",
             modes: {
-              structured: mode.atomic({
+              structured: complete.structured({
                 description: "Structured output",
-                format: "structured",
-                success: { kind: "completion" },
-                failures: {},
-                handler: ({ outcome }) => outcome.completion(),
               }),
-              text: mode.atomic({
+              text: complete.text({
                 description: "Text output",
-                format: "text",
-                success: { kind: "completion", text: () => text.silent },
+                success: () => text.silent,
                 failures: {},
-                handler: ({ outcome }) => outcome.completion(),
               }),
             },
-          }),
-        ),
+          };
+        },
       },
     },
   });

@@ -23,166 +23,110 @@ export interface Dependencies {
 
 const define = defineCli<Dependencies>();
 
-const lookupInput = z.object({ id: z.string().min(1) });
-const lookupSuccess = {
-  kind: "data" as const,
-  variants: {
-    found: {
-      description: "User found",
-      schema: userSchema,
-      exitCode: 0,
-    },
-  },
-};
-const lookupFailures = {
-  notFound: {
-    description: "User not found",
-    schema: unavailableUserSchema,
-    exitCode: 1,
-  },
-};
 const lookup = define.command("lookup")({
   kind: "command",
   parent: "users",
   name: "get",
   description: "Look up a user",
   fields: { id: { kind: "positional", description: "User identifier" } },
-  input: lookupInput,
+  input: z.object({ id: z.string().min(1) }),
   examples: [
     { input: { id: "alice" } },
     { input: { id: "alice" }, outputMode: "structured" },
   ],
-  outputs: define.outputModes("lookup", lookupInput, (mode) => ({
-    default: "text",
-    modes: {
-      structured: mode.atomic({
-        description: "User profile for programmatic consumption",
-        format: "structured",
-        success: lookupSuccess,
-        failures: lookupFailures,
-        handler({ input, outcome }) {
-          const user = users.get(input.id);
-          return user
-            ? outcome.data.found(user)
-            : outcome.failure.notFound({ id: input.id });
-        },
-      }),
-      text: mode.atomic({
-        description: "User profile for human reading",
-        format: "text",
-        success: {
-          kind: "data",
-          variants: {
-            found: {
-              ...lookupSuccess.variants.found,
-              text: (user) => text.lines(["User profile", user.name]),
-            },
+  outputs: ({ atomic }) => {
+    const lookupUser = atomic({
+      success: {
+        kind: "data",
+        variants: {
+          found: {
+            description: "User found",
+            schema: userSchema,
+            exitCode: 0,
           },
         },
-        failures: {
-          notFound: {
-            ...lookupFailures.notFound,
-            text: ({ id }) =>
+      },
+      failures: {
+        notFound: {
+          description: "User not found",
+          schema: unavailableUserSchema,
+          exitCode: 1,
+        },
+      },
+      handler({ input, outcome }) {
+        const user = users.get(input.id);
+        return user
+          ? outcome.data.found(user)
+          : outcome.failure.notFound({ id: input.id });
+      },
+    });
+    return {
+      default: "text",
+      modes: {
+        structured: lookupUser.structured({
+          description: "User profile for programmatic consumption",
+        }),
+        text: lookupUser.text({
+          description: "User profile for human reading",
+          success: {
+            found: (user) => text.lines(["User profile", user.name]),
+          },
+          failures: {
+            notFound: ({ id }) =>
               text.lines([
                 `User ${id} not found`,
                 "",
                 "Check the user identifier",
               ]),
           },
-        },
-        handler({ input, outcome }) {
-          const user = users.get(input.id);
-          return user
-            ? outcome.data.found(user)
-            : outcome.failure.notFound({ id: input.id });
-        },
-      }),
-    },
-  })),
+        }),
+      },
+    };
+  },
 });
 
-const logsInput = z.object({});
 const logs = define.command("logs")({
   kind: "command",
   parent: "users",
   name: "logs",
   description: "Stream logs in real time",
   fields: {},
-  input: logsInput,
-  outputs: define.outputModes("logs", logsInput, (mode) => ({
-    default: "text",
-    modes: {
-      structured: mode.stream({
-        description: "Emit log records and terminal state as NDJSON",
-        format: "structured",
-        success: {
-          kind: "stream",
+  input: z.object({}),
+  outputs: ({ stream }) => {
+    const readLogs = stream({
+      records: {
+        entry: {
+          description: "Log entry",
+          schema: logSchema,
+        },
+      },
+      failures: {},
+      async *handler({ dependencies, outcome }) {
+        for await (const entry of dependencies.readLogs()) {
+          yield outcome.record.entry(entry);
+        }
+        return outcome.streamSuccess();
+      },
+    });
+    return {
+      default: "text",
+      modes: {
+        structured: readLogs.structured({
+          description: "Emit log records and terminal state as NDJSON",
+        }),
+        text: readLogs.text({
+          description: "Emit log text line by line",
           records: {
-            entry: {
-              description: "Log entry",
-              schema: logSchema,
-            },
+            entry: ({ message }) => text.fragment(`${message}\n`),
           },
-        },
-        failures: {},
-        async *handler({ dependencies, outcome }) {
-          for await (const entry of dependencies.readLogs()) {
-            yield outcome.record.entry(entry);
-          }
-          return outcome.streamSuccess();
-        },
-      }),
-      text: mode.stream({
-        description: "Emit log text line by line",
-        format: "text",
-        success: {
-          kind: "stream",
-          records: {
-            entry: {
-              description: "Log entry",
-              schema: logSchema,
-              text: ({ message }) => text.fragment(`${message}\n`),
-            },
-          },
-          text: () => text.silent,
-        },
-        failures: {},
-        async *handler({ dependencies, outcome }) {
-          for await (const entry of dependencies.readLogs()) {
-            yield outcome.record.entry(entry);
-          }
-          return outcome.streamSuccess();
-        },
-      }),
-    },
-  })),
+          failures: {},
+          terminal: () => text.silent,
+        }),
+      },
+    };
+  },
 });
 
-const validateInput = z.object({
-  id: z.string().min(1).optional(),
-  email: z.email().optional(),
-  domain: z.string().min(1).optional(),
-});
-const validateFailures = {
-  emailDomainMismatch: {
-    description: "Email does not belong to the specified domain",
-    schema: emailMismatchSchema,
-    exitCode: 1,
-  },
-};
-function validateUser(input: z.output<typeof validateInput>) {
-  if (input.email !== undefined && input.domain !== undefined) {
-    const emailDomain = input.email.slice(input.email.lastIndexOf("@") + 1);
-    if (emailDomain.toLowerCase() !== input.domain.toLowerCase()) {
-      return {
-        kind: "emailDomainMismatch" as const,
-        email: input.email,
-        domain: input.domain,
-      };
-    }
-  }
-  return { kind: "valid" as const };
-}
 const validate = define.command("validate")({
   kind: "command",
   parent: "users",
@@ -205,7 +149,11 @@ const validate = define.command("validate")({
       description: "Email domain",
     },
   },
-  input: validateInput,
+  input: z.object({
+    id: z.string().min(1).optional(),
+    email: z.email().optional(),
+    domain: z.string().min(1).optional(),
+  }),
   usageConstraints: [
     { kind: "count", fields: ["id", "email"], min: 1, max: 1 },
     {
@@ -214,46 +162,45 @@ const validate = define.command("validate")({
       onMatch: { require: ["email"] },
     },
   ],
-  outputs: define.outputModes("validate", validateInput, (mode) => ({
-    default: "text",
-    modes: {
-      structured: mode.atomic({
-        description: "Validation failures for programmatic consumption",
-        format: "structured",
-        success: { kind: "completion" },
-        failures: validateFailures,
-        handler({ input, outcome }) {
-          const result = validateUser(input);
-          return result.kind === "valid"
-            ? outcome.completion()
-            : outcome.failure.emailDomainMismatch(result);
+  outputs: ({ atomic }) => {
+    const validation = atomic({
+      success: { kind: "completion" },
+      failures: {
+        emailDomainMismatch: {
+          description: "Email does not belong to the specified domain",
+          schema: emailMismatchSchema,
+          exitCode: 1,
         },
-      }),
-      text: mode.atomic({
-        description: "Validation results for direct reading",
-        format: "text",
-        success: {
-          kind: "completion",
-          text: () => text.silent,
-        },
-        failures: {
-          emailDomainMismatch: {
-            ...validateFailures.emailDomainMismatch,
-            text: ({ email, domain }) =>
+      },
+      handler({ input: { email, domain }, outcome }) {
+        if (email !== undefined && domain !== undefined) {
+          const emailDomain = email.slice(email.lastIndexOf("@") + 1);
+          if (emailDomain.toLowerCase() !== domain.toLowerCase()) {
+            return outcome.failure.emailDomainMismatch({ email, domain });
+          }
+        }
+        return outcome.completion();
+      },
+    });
+    return {
+      default: "text",
+      modes: {
+        structured: validation.structured({
+          description: "Validation failures for programmatic consumption",
+        }),
+        text: validation.text({
+          description: "Validation results for direct reading",
+          success: () => text.silent,
+          failures: {
+            emailDomainMismatch: ({ email, domain }) =>
               text.lines([
                 `Email ${email} does not belong to domain ${domain}`,
               ]),
           },
-        },
-        handler({ input, outcome }) {
-          const result = validateUser(input);
-          return result.kind === "valid"
-            ? outcome.completion()
-            : outcome.failure.emailDomainMismatch(result);
-        },
-      }),
-    },
-  })),
+        }),
+      },
+    };
+  },
 });
 
 export const cli = define({

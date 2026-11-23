@@ -27,7 +27,7 @@ void test("consumer runner captures schema termination without application input
       vendor: "@ykdz/cli-contract-testing",
       validate: (value) => {
         validations += 1;
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 此 fixture 用公开 JSON Schema 约束输入形状。
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The fixture declares the shape through its public input schema.
         return { value: value as Readonly<{ readonly id: string }> };
       },
       jsonSchema: {
@@ -44,30 +44,31 @@ void test("consumer runner captures schema termination without application input
         default: "(default: {value})",
       },
     }),
-    schema: schemaCapability({ description: text.line("查询输入契约。") }),
+    schema: schemaCapability({
+      description: text.line("Query input contracts."),
+    }),
     usageFailureExitCode: 64,
     commands: {
       inspect: {
         kind: "rootCommand",
         name: "inspect",
-        description: "检查对象。",
-        fields: { id: { kind: "positional", description: "对象标识。" } },
+        description: "Inspect an object",
+        fields: {
+          id: { kind: "positional", description: "Object identifier" },
+        },
         input,
-        outputs: define.outputModes("inspect", input, (mode) => ({
-          default: "json",
+        outputs: ({ atomic }) => ({
           modes: {
-            json: mode.atomic({
-              description: "结构化结果。",
-              format: "structured",
+            json: atomic({
               success: { kind: "completion" },
               failures: {},
               handler: ({ outcome }) => {
                 handlerRuns += 1;
                 return outcome.completion();
               },
-            }),
+            }).structured({ description: "Structured result" }),
           },
-        })),
+        }),
       },
     },
   });
