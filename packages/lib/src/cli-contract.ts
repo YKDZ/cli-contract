@@ -4856,19 +4856,86 @@ type RuntimeOutputFactory = Readonly<{
   readonly stream: (declaration: unknown) => RuntimeExecution;
 }>;
 
+function captureResultTable(table: unknown): unknown {
+  if (!isPlainRecord(table)) return table;
+  return Object.fromEntries(
+    Object.entries(table).map(([name, definition]) => [
+      name,
+      isPlainRecord(definition) ? { ...definition } : definition,
+    ]),
+  );
+}
+
+/**
+ * Capture one execution's handler and result definition when it is declared, so
+ * edits made between two derivations cannot split their results or exit codes.
+ * Only the plain authoring records are copied: schemas, handlers and every other
+ * value keep the identity the author gave them.
+ */
+function captureExecutionDeclaration(
+  declaration: unknown,
+  delivery: OutputDelivery,
+): unknown {
+  if (!isPlainRecord(declaration)) return declaration;
+  const captured: Record<string, unknown> = { ...declaration };
+  if (Object.hasOwn(captured, "failures")) {
+    captured.failures = captureResultTable(captured.failures);
+  }
+  if (delivery === "stream") {
+    if (Object.hasOwn(captured, "records")) {
+      captured.records = captureResultTable(captured.records);
+    }
+    return captured;
+  }
+  const success = captured.success;
+  if (isPlainRecord(success)) {
+    captured.success = Object.hasOwn(success, "variants")
+      ? { ...success, variants: captureResultTable(success.variants) }
+      : { ...success };
+  }
+  return captured;
+}
+
+/**
+ * Read each presentation property at most once, on demand. The key checks and
+ * the expansion have to work from the same material, and a presentation that
+ * fails the checks must not be expanded.
+ */
+function capturePresentation(presentation: unknown): unknown {
+  if (!isPlainRecord(presentation)) return presentation;
+  const source = presentation;
+  const reads = new Map<string, unknown>();
+  const captured = {};
+  for (const key of Object.keys(source)) {
+    Object.defineProperty(captured, key, {
+      enumerable: true,
+      get: () => {
+        if (!reads.has(key)) reads.set(key, Reflect.get(source, key));
+        return reads.get(key);
+      },
+    });
+  }
+  return captured;
+}
+
 function presentVariants(definitions: unknown, presenters: unknown): unknown {
   if (!isPlainRecord(definitions)) return definitions;
   const table = isPlainRecord(presenters) ? presenters : {};
-  const presented: Record<string, unknown> = {};
-  for (const [name, definition] of Object.entries(definitions)) {
-    presented[name] = isPlainRecord(definition)
-      ? Object.freeze({
-          ...definition,
-          text: Object.hasOwn(table, name) ? table[name] : undefined,
-        })
-      : definition;
-  }
-  return Object.freeze(presented);
+  // Assigning a variant named __proto__ would move it to the prototype and hide
+  // it from the naming checks, so define every entry as an own property.
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(definitions).map(([name, definition]) => [
+        name,
+        isPlainRecord(definition)
+          ? Object.freeze({
+              ...definition,
+              text: Object.hasOwn(table, name) ? table[name] : undefined,
+            })
+          : definition,
+      ]),
+    ),
+  );
 }
 
 function buildOutputMode(
@@ -4934,17 +5001,19 @@ function invokeOutputCallback(
     declaration: unknown,
     delivery: OutputDelivery,
   ): RuntimeExecution => {
+    const captured = captureExecutionDeclaration(declaration, delivery);
     const issueMode = (presentation: unknown, format: OutputFormat) => {
+      const material = capturePresentation(presentation);
       // Check the original keys before pairing variants with presenters. The
       // callback assigns the mode name later, so keep paths relative to it.
       const unknownProperties: UnknownDefinitionPropertyIssue[] = [];
       collectOutputAuthoringProperties(
-        { declaration, presentation, delivery, format },
+        { declaration: captured, presentation: material, delivery, format },
         unknownProperties,
       );
       const mode =
         unknownProperties.length === 0
-          ? buildOutputMode(declaration, presentation, delivery, format)
+          ? buildOutputMode(captured, material, delivery, format)
           : Object.freeze({});
       outputModeDefinitions.add(mode);
       outputModeDefinitionMetadata.set(mode, {
@@ -5848,21 +5917,32 @@ function collectUnknownVariantProperties(
   }
 }
 
+/**
+ * Check a result table together with the presenters paired with it.
+ * `declarationPath` locates a key in the compiled mode, while `presenterPath`
+ * locates an extra presenter in the `.text(...)` table the author wrote.
+ */
 function collectOutputVariantProperties(
   definitions: unknown,
   presenters: unknown,
-  path: readonly string[],
+  declarationPath: readonly string[],
+  presenterPath: readonly string[],
   allowed: readonly string[],
   issues: UnknownDefinitionPropertyIssue[],
 ): void {
-  collectUnknownVariantProperties(definitions, path, allowed, issues);
+  collectUnknownVariantProperties(
+    definitions,
+    declarationPath,
+    allowed,
+    issues,
+  );
   if (!isPlainRecord(presenters)) return;
   const declared = isPlainRecord(definitions) ? definitions : {};
   for (const name of Object.keys(presenters)) {
     if (!Object.hasOwn(declared, name)) {
       issues.push({
         code: "unknownDefinitionProperty",
-        path: [...path, name],
+        path: [...presenterPath, name],
       });
     }
   }
@@ -5913,6 +5993,7 @@ function collectOutputAuthoringProperties(
     declaration.failures,
     presenters.failures,
     ["failures"],
+    ["failures"],
     atomicVariantProperties,
     issues,
   );
@@ -5921,6 +6002,7 @@ function collectOutputAuthoringProperties(
       declaration.records,
       presenters.records,
       ["success", "records"],
+      ["records"],
       format === "text"
         ? declaredStreamRecordProperties
         : definitionPropertyKeys.streamRecord,
@@ -5942,6 +6024,7 @@ function collectOutputAuthoringProperties(
       success.variants,
       presenters.success,
       ["success", "variants"],
+      ["success"],
       atomicVariantProperties,
       issues,
     );
@@ -6466,12 +6549,7 @@ function compileOutputModes(
     }
     const mode = rawMode;
     const modeMetadata = outputModeDefinitionMetadata.get(mode);
-    if (
-      !outputModeDefinitions.has(mode) ||
-      modeMetadata === undefined ||
-      modeMetadata.command !== command ||
-      modeMetadata.input !== input
-    ) {
+    if (!outputModeDefinitions.has(mode) || modeMetadata === undefined) {
       issues.push({
         code: "invalidOutputMode",
         command,
@@ -6480,7 +6558,14 @@ function compileOutputModes(
       });
       continue;
     }
-    if (metadata === undefined || modeMetadata.binding !== metadata.binding) {
+    // An issued mode belongs to the construction that declared its execution,
+    // so a foreign command, input or binding is a mis-binding, not a bad shape.
+    if (
+      modeMetadata.command !== command ||
+      modeMetadata.input !== input ||
+      metadata === undefined ||
+      modeMetadata.binding !== metadata.binding
+    ) {
       issues.push({
         code: "invalidOutputMode",
         command,
@@ -6812,8 +6897,12 @@ function collectTextPresenterIssue(
   issues: ContractDefinitionIssue[],
   variant?: string,
 ): void {
-  const hasPresenter =
-    "text" in definition && typeof definition.text === "function";
+  // A structured declaration owns no presenter slot, so an explicit undefined
+  // still counts as an embedded presenter. A text mode supplies the slot itself
+  // and only a callable presenter fills it.
+  const hasPresenter = textEnabled
+    ? "text" in definition && typeof definition.text === "function"
+    : Object.hasOwn(definition, "text");
   if (textEnabled === hasPresenter) return;
   issues.push({
     code: textEnabled ? "missingTextPresenter" : "unexpectedTextPresenter",

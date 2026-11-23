@@ -9,6 +9,7 @@ import {
   queryCliContract,
   schemaCapability,
   text,
+  type CompletionFact,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
 
@@ -391,5 +392,182 @@ void test("another command construction rejects a bound leaf output table with t
       );
       return true;
     });
+  }
+});
+
+void test("a shared execution keeps the handler declared before its first derivation", async () => {
+  const calls: string[] = [];
+  type ProbeCompletion = Readonly<{
+    outcome: Readonly<{ completion: () => CompletionFact<"probe"> }>;
+  }>;
+  const cli = defineCli()({
+    root: "probe",
+    help: englishHelpCapability(),
+    usageFailureExitCode: 64,
+    commands: {
+      probe: {
+        kind: "rootCommand",
+        name: "probe",
+        description: "Complete a shared execution",
+        input: z.object({}),
+        outputs: ({ atomic }) => {
+          const declaration: {
+            success: { kind: "completion" };
+            failures: {};
+            handler: (context: ProbeCompletion) => CompletionFact<"probe">;
+          } = {
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => {
+              calls.push("declared");
+              return outcome.completion();
+            },
+          };
+          const execution = atomic(declaration);
+          const plain = execution.text({
+            description: "Complete silently",
+            success: () => text.silent,
+            failures: {},
+          });
+          declaration.handler = ({ outcome }) => {
+            calls.push("replaced");
+            return outcome.completion();
+          };
+          const json = execution.structured({
+            description: "Complete as JSON",
+          });
+          return { default: "plain", modes: { plain, json } };
+        },
+      },
+    },
+  });
+  for (const mode of ["plain", "json"] as const) {
+    const termination = await executeCli(cli, {
+      invocation: parseCliInvocation(cli, ["--output", mode]),
+      dependencies: undefined,
+      write: () => undefined,
+    });
+    assert.equal(termination.kind, "applicationResult");
+    assert.equal(termination.exitCode, 0);
+  }
+  assert.deepEqual(calls, ["declared", "declared"]);
+});
+
+void test("a shared execution keeps the result contract declared before its first derivation", async () => {
+  const cli = defineCli()({
+    root: "probe",
+    help: englishHelpCapability(),
+    schema: schemaCapability({ description: text.line("Read the contract") }),
+    usageFailureExitCode: 64,
+    commands: {
+      probe: {
+        kind: "rootCommand",
+        name: "probe",
+        description: "Read a user profile",
+        input: z.object({}),
+        outputs: ({ atomic }) => {
+          const found = {
+            description: "The matching user profile",
+            schema: userProfileSchema,
+            exitCode: 0,
+          };
+          const execution = atomic({
+            success: { kind: "data", variants: { found } },
+            failures: {},
+            handler: ({ outcome }) =>
+              outcome.data.found({ id: "ada", name: "Ada Lovelace" }),
+          });
+          const short = execution.text({
+            description: "Show the user's name",
+            success: { found: (user) => text.line(user.name) },
+            failures: {},
+          });
+          found.exitCode = 9;
+          const json = execution.structured({
+            description: "Return the user profile as JSON",
+          });
+          return { default: "short", modes: { short, json } };
+        },
+      },
+    },
+  });
+  assert.equal(Object.isFrozen(userProfileSchema), false);
+  for (const mode of ["short", "json"] as const) {
+    const query = queryCliContract(cli, [], `success:${mode}`);
+    assert.equal(query.kind, "success");
+    if (query.kind !== "success") continue;
+    assert.equal(query.success.kind, "data");
+    if (query.success.kind !== "data") continue;
+    assert.equal(query.success.variants.found?.exitCode, 0);
+    const termination = await executeCli(cli, {
+      invocation: parseCliInvocation(cli, ["--output", mode]),
+      dependencies: undefined,
+      write: () => undefined,
+    });
+    assert.equal(termination.kind, "applicationResult");
+    assert.equal(termination.exitCode, 0);
+  }
+});
+
+void test("a shared stream keeps the result contract declared before its first derivation", async () => {
+  const cli = defineCli()({
+    root: "probe",
+    help: englishHelpCapability(),
+    schema: schemaCapability({ description: text.line("Read the contract") }),
+    usageFailureExitCode: 64,
+    commands: {
+      probe: {
+        kind: "rootCommand",
+        name: "probe",
+        description: "Read user changes",
+        input: z.object({}),
+        outputs: ({ stream }) => {
+          const closed = {
+            description: "The change feed closed early",
+            schema: z.string(),
+            exitCode: 3,
+          };
+          const execution = stream({
+            records: {
+              entry: { description: "One change", schema: z.string() },
+            },
+            failures: { closed },
+            async *handler({ outcome }) {
+              yield outcome.record.entry("first");
+              return outcome.failure.closed("end");
+            },
+          });
+          const events = execution.text({
+            description: "Show changes",
+            records: { entry: (value) => text.line(value) },
+            failures: { closed: (reason) => text.line(reason) },
+            terminal: () => text.silent,
+          });
+          closed.exitCode = 9;
+          const ndjson = execution.structured({
+            description: "Stream changes as NDJSON",
+          });
+          return { default: "events", modes: { events, ndjson } };
+        },
+      },
+    },
+  });
+  for (const mode of ["events", "ndjson"] as const) {
+    const query = queryCliContract(cli, [], `failures:${mode}`);
+    assert.equal(query.kind, "failures");
+    if (query.kind !== "failures") continue;
+    assert.equal(query.failures.closed?.exitCode, 3);
+    const writes: Array<Readonly<{ destination: string; chunk: string }>> = [];
+    const termination = await executeCli(cli, {
+      invocation: parseCliInvocation(cli, ["--output", mode]),
+      dependencies: undefined,
+      write: (output) => {
+        writes.push(output);
+      },
+    });
+    assert.equal(termination.kind, "applicationResult");
+    assert.equal(termination.exitCode, 3);
+    assert.equal(writes[0]?.destination, "stdout");
+    assert.equal(writes.at(-1)?.destination, "stderr");
   }
 });
