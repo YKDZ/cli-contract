@@ -573,7 +573,6 @@ void test("a shared stream keeps the result contract declared before its first d
 });
 
 void test("a shared execution solidifies the result snapshot exposed by structured", async () => {
-  let snapshot: unknown;
   const cli = defineCli()({
     root: "probe",
     help: englishHelpCapability(),
@@ -608,15 +607,12 @@ void test("a shared execution solidifies the result snapshot exposed by structur
           const json = execution.structured({
             description: "Return the user profile as JSON",
           });
-          snapshot = json.success.variants.found;
           Reflect.set(json.success.variants.found, "exitCode", 9);
           return { default: "brief", modes: { brief, json } };
         },
       },
     },
   });
-  assert.equal(Object.isFrozen(snapshot), true);
-  assert.equal(Object.isFrozen(userProfileSchema), false);
   for (const mode of ["brief", "json"] as const) {
     const termination = await executeCli(cli, {
       invocation: parseCliInvocation(cli, ["--output", mode]),

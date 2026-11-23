@@ -5095,27 +5095,47 @@ function invokeOutputCallback(
     declaration: unknown,
     delivery: OutputDelivery,
   ): RuntimeExecution => {
-    const captured = captureExecutionDeclaration(declaration, delivery);
+    // Validate the declaration's own keys once, before reading any value: a key
+    // added or removed after atomic() must not change a later derivation, and
+    // an unknown getter must not be evaluated by the snapshot spread.
+    const declarationIssues: OutputAuthoringIssue[] = [];
+    collectUnknownOwnProperties(
+      declaration,
+      [],
+      delivery === "atomic"
+        ? ["success", "failures", "handler"]
+        : ["records", "failures", "handler"],
+      declarationIssues,
+    );
+    const captured =
+      declarationIssues.length === 0
+        ? captureExecutionDeclaration(declaration, delivery)
+        : undefined;
     const issueMode = (presentation: unknown, format: OutputFormat) => {
-      const material = capturePresentation(presentation);
-      // Check the original keys before pairing variants with presenters. The
-      // callback assigns the mode name later, so keep paths relative to it.
-      const authoringIssues: OutputAuthoringIssue[] = [];
-      collectOutputAuthoringProperties(
-        {
-          declaration: captured,
-          presentation: material,
-          rawDeclaration: declaration,
-          rawPresentation: presentation,
-          delivery,
-          format,
-        },
+      // Copy the fixed declaration issues, then check the options' own keys
+      // before capturing their values. Paths stay relative to the mode name.
+      const authoringIssues: OutputAuthoringIssue[] = [...declarationIssues];
+      collectUnknownOwnProperties(
+        presentation,
+        [],
+        format === "structured"
+          ? ["description"]
+          : delivery === "atomic"
+            ? ["description", "success", "failures"]
+            : ["description", "records", "failures", "terminal"],
         authoringIssues,
       );
-      const mode =
-        authoringIssues.length === 0
-          ? buildOutputMode(captured, material, delivery, format)
-          : Object.freeze({});
+      let mode: object = Object.freeze({});
+      if (authoringIssues.length === 0) {
+        const material = capturePresentation(presentation);
+        collectOutputAuthoringProperties(
+          { declaration: captured, presentation: material, delivery, format },
+          authoringIssues,
+        );
+        if (authoringIssues.length === 0) {
+          mode = buildOutputMode(captured, material, delivery, format);
+        }
+      }
       outputModeDefinitions.add(mode);
       outputModeDefinitionMetadata.set(mode, {
         command,
@@ -6085,34 +6105,12 @@ function collectOutputAuthoringProperties(
   authoring: Readonly<{
     declaration: unknown;
     presentation: unknown;
-    rawDeclaration: unknown;
-    rawPresentation: unknown;
     delivery: OutputDelivery;
     format: OutputFormat;
   }>,
   issues: OutputAuthoringIssue[],
 ): void {
   const { delivery, format } = authoring;
-  // The snapshots drop non-enumerable and symbol keys, so the top-level key
-  // checks read the author's original records; value checks use the snapshots.
-  collectUnknownOwnProperties(
-    authoring.rawDeclaration,
-    [],
-    delivery === "atomic"
-      ? ["success", "failures", "handler"]
-      : ["records", "failures", "handler"],
-    issues,
-  );
-  collectUnknownOwnProperties(
-    authoring.rawPresentation,
-    [],
-    format === "structured"
-      ? ["description"]
-      : delivery === "atomic"
-        ? ["description", "success", "failures"]
-        : ["description", "records", "failures", "terminal"],
-    issues,
-  );
   const declaration = isPlainRecord(authoring.declaration)
     ? authoring.declaration
     : {};

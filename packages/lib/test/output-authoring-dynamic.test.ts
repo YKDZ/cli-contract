@@ -1095,6 +1095,93 @@ void test("rejects extra own keys on the outer authoring records without reading
   }
 });
 
+void test("validates execution declaration keys once at capture time", () => {
+  type CompletionDeclaration = AtomicExecutionDefinition<
+    "probe",
+    undefined,
+    typeof input,
+    { kind: "completion" },
+    {}
+  >;
+  for (const enumerable of [false, true]) {
+    assert.throws(
+      () =>
+        defineCli()({
+          ...cli,
+          commands: {
+            probe: {
+              ...probe,
+              outputs: ({ atomic }) => {
+                const declaration: CompletionDeclaration = {
+                  success: { kind: "completion" },
+                  failures: {},
+                  handler: ({ outcome }) => outcome.completion(),
+                };
+                Object.defineProperty(declaration, "unexpected", {
+                  configurable: true,
+                  enumerable,
+                  get: () =>
+                    assert.fail(
+                      "The unknown declaration property must not be read",
+                    ),
+                });
+                const execution = atomic(declaration);
+                Reflect.deleteProperty(declaration, "unexpected");
+                return {
+                  modes: {
+                    only: execution.structured({ description: "Only" }),
+                  },
+                };
+              },
+            },
+          },
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof ContractDefinitionError);
+        assert.deepEqual(error.issues, [
+          {
+            code: "unknownDefinitionProperty",
+            path: [
+              "commands",
+              "probe",
+              "outputs",
+              "modes",
+              "only",
+              "unexpected",
+            ],
+          },
+        ]);
+        return true;
+      },
+    );
+  }
+  assert.doesNotThrow(() =>
+    defineCli()({
+      ...cli,
+      commands: {
+        probe: {
+          ...probe,
+          outputs: ({ atomic }) => {
+            const declaration: CompletionDeclaration = {
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            };
+            const execution = atomic(declaration);
+            const first = execution.structured({ description: "First" });
+            Object.defineProperty(declaration, "unexpected", {
+              get: () =>
+                assert.fail("A property added after capture must not be read"),
+            });
+            const second = execution.structured({ description: "Second" });
+            return { default: "first", modes: { first, second } };
+          },
+        },
+      },
+    }),
+  );
+});
+
 void test("a mode issued for another command or input reports mismatchedBinding", () => {
   const define = defineCli();
   let issued: unknown;
