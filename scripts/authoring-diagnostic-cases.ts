@@ -732,7 +732,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
     },
     cli: {
       kind: "forward",
-      expectedDiagnostics: 8,
+      expectedDiagnostics: 10,
       required: [
         'location: "failure"',
         'location: "record"',

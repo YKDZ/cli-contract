@@ -1,5 +1,11 @@
 import { toStandardJsonSchema } from "@valibot/to-json-schema";
-import { defineCli, helpCapability } from "@ykdz/cli-contract";
+import {
+  defineCli,
+  helpCapability,
+  text,
+  type CompletionTextPresenter,
+  type TextPresenterContext,
+} from "@ykdz/cli-contract";
 import * as v from "valibot";
 import { z } from "zod";
 
@@ -169,3 +175,74 @@ const valibotCli = defineCli()({
 
 void zodCli;
 void valibotCli;
+
+function presentValidated<Input>(
+  present: CompletionTextPresenter<Input>,
+  input: Input,
+) {
+  return present({ input });
+}
+
+function presentField<Input extends { id: string }, Key extends keyof Input>(
+  context: TextPresenterContext<Input>,
+  key: Key,
+  replacement: Input[Key],
+) {
+  const value: Input[Key] = context.input[key];
+  // @ts-expect-error Generic indexing must preserve shallow readonly.
+  context.input[key] = replacement;
+  // @ts-expect-error An existing field value cannot be written back either.
+  context.input[key] = value;
+  return value;
+}
+void presentField;
+
+declare const unknownInput: unknown;
+declare const presentUnknown: CompletionTextPresenter<unknown>;
+presentUnknown({ input: unknownInput });
+presentUnknown({ input: null });
+presentUnknown({ input: undefined });
+
+interface Formatter {
+  label: string;
+  (value: number): string;
+  (value: string): number;
+}
+const presentFormatter: CompletionTextPresenter<Formatter> = ({ input }) => {
+  input(1) satisfies string;
+  input("one") satisfies number;
+  // @ts-expect-error The overloads accept only numbers and strings.
+  input(false);
+  // @ts-expect-error A callable input's own fields are readonly.
+  input.label = "changed";
+  return text.line(input.label);
+};
+declare const formatter: Formatter;
+presentValidated(presentFormatter, formatter);
+// @ts-expect-error The validated formatter must also be callable.
+presentFormatter({ input: { label: "plain" } });
+
+interface Factory {
+  label: string;
+  new <Value>(value: Value): { value: Value };
+}
+const presentFactory: CompletionTextPresenter<Factory> = ({ input }) => {
+  new input("one" as const).value satisfies "one";
+  // @ts-expect-error The constructor requires exactly one argument.
+  new input("one", "two");
+  // @ts-expect-error Constructor fields are readonly.
+  input.label = "changed";
+  return text.line(input.label);
+};
+// @ts-expect-error A properties-only value is missing the construct signature.
+presentFactory({ input: { label: "plain" } });
+
+declare const identity: <Value>(value: Value) => Value;
+declare const plainFunction: TextPresenterContext<typeof identity>;
+plainFunction.input("one") satisfies "one";
+declare const namedFunction: TextPresenterContext<
+  typeof identity & { label: string }
+>;
+namedFunction.input("one") satisfies "one";
+// @ts-expect-error The generic function requires exactly one argument.
+namedFunction.input("one", "two");
