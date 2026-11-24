@@ -173,7 +173,7 @@ void test("declared examples drive the real lookup process and appear verbatim i
 });
 
 void test("summary next links complete contract discovery through the real example process without business input", () => {
-  const rootDirectory = queryCliContract(cli, []);
+  const rootDirectory = queryCliContract(cli, { path: [] });
   assert.equal(rootDirectory.kind, "directory");
   if (rootDirectory.kind !== "directory") return;
   const rootResult = invoke("--schema");
@@ -186,11 +186,11 @@ void test("summary next links complete contract discovery through the real examp
     assert.equal(childResult.stderr, "");
     assert.deepEqual(
       JSON.parse(childResult.stdout),
-      queryCliContract(cli, child.path),
+      queryCliContract(cli, { path: child.path }),
     );
   }
 
-  const summary = queryCliContract(cli, ["get"]);
+  const summary = queryCliContract(cli, { path: ["get"] });
   assert.equal(summary.kind, "summary");
   if (summary.kind !== "summary") return;
 
@@ -202,7 +202,7 @@ void test("summary next links complete contract discovery through the real examp
   assert.equal(inputResult.stderr, "");
   assert.deepEqual(
     JSON.parse(inputResult.stdout),
-    queryCliContract(cli, ["get"], "input"),
+    queryCliContract(cli, { path: ["get"], target: "input" }),
   );
 
   const successNext = summary.next.find(
@@ -214,7 +214,7 @@ void test("summary next links complete contract discovery through the real examp
   assert.equal(successResult.stderr, "");
   assert.deepEqual(
     JSON.parse(successResult.stdout),
-    queryCliContract(cli, ["get"], "success:structured"),
+    queryCliContract(cli, { path: ["get"], target: "success:structured" }),
   );
 
   const help = invoke("get", "--help");

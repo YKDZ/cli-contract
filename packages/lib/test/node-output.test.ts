@@ -178,7 +178,10 @@ void test("isNodeBrokenPipe only detects Node EPIPE evidence and its cause chain
   const pipe = Object.assign(new Error("write EPIPE"), { code: "EPIPE" });
 
   assert.equal(isNodeBrokenPipe(pipe), true);
-  assert.equal(isNodeBrokenPipe(new CliWriteError("stdout", pipe)), true);
+  assert.equal(
+    isNodeBrokenPipe(new CliWriteError({ destination: "stdout", cause: pipe })),
+    true,
+  );
   assert.equal(isNodeBrokenPipe({ code: "ECONNRESET" }), false);
   assert.equal(isNodeBrokenPipe(new Error("EPIPE")), false);
 });

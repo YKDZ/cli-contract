@@ -644,6 +644,7 @@ void test("one stream handler projects to structured NDJSON or text line, fragme
 });
 
 void test("text stream success writes one deterministic terminal chunk via text.lines", async () => {
+  let handlerInput: unknown;
   const cli = defineCli()({
     root: "list",
     help: englishHelpCapability(),
@@ -654,7 +655,8 @@ void test("text stream success writes one deterministic terminal chunk via text.
         kind: "rootCommand",
         name: "list",
         description: "列出项目",
-        input: emptyInput,
+        fields: { label: { kind: "positional", description: "Stream label" } },
+        input: z.object({ label: z.string() }),
 
         outputs: (mode) => ({
           default: "text",
@@ -685,19 +687,25 @@ void test("text stream success writes one deterministic terminal chunk via text.
                   },
                 },
                 failures: {},
-                async *handler({ outcome }) {
-                  yield* [] as Iterable<never>;
+                async *handler({ input, outcome }) {
+                  handlerInput = input;
+                  yield outcome.record.item({ value: "one" });
                   return outcome.streamSuccess();
                 },
               })
               .text({
                 description: "文本输出",
                 records: {
-                  item: (data: Readonly<{ readonly value: string }>) =>
-                    text.line(data.value),
+                  item: ({ value }, { input }) => {
+                    assert.equal(input, handlerInput);
+                    return text.line(`${input.label}: ${value}`);
+                  },
                 },
                 failures: {},
-                terminal: () => text.lines(["完成", "", "没有更多项目"]),
+                terminal: ({ input }) => {
+                  assert.equal(input, handlerInput);
+                  return text.lines([input.label, "", "Done"]);
+                },
               }),
           },
         }),
@@ -706,13 +714,13 @@ void test("text stream success writes one deterministic terminal chunk via text.
   });
   const writes: string[] = [];
   await executeCli(cli, {
-    invocation: parseCliInvocation(cli, []),
+    invocation: parseCliInvocation(cli, ["batch"]),
     dependencies: undefined,
     write: ({ chunk }) => {
       writes.push(chunk);
     },
   });
-  assert.deepEqual(writes, ["完成\n\n没有更多项目\n"]);
+  assert.deepEqual(writes, ["batch: one\n", "batch\n\nDone\n"]);
 });
 
 void test("text stream failure keeps written records, stable identity, and stderr; a write rejection stops pulling and cleans up", async () => {
@@ -728,7 +736,8 @@ void test("text stream failure keeps written records, stable identity, and stder
         kind: "rootCommand",
         name: "list",
         description: "列出项目",
-        input: emptyInput,
+        fields: { label: { kind: "positional", description: "Stream label" } },
+        input: z.object({ label: z.string() }),
 
         outputs: (mode) => ({
           default: "text",
@@ -793,8 +802,8 @@ void test("text stream failure keeps written records, stable identity, and stder
                     text.line(data.value),
                 },
                 failures: {
-                  stopped: (data: Readonly<{ readonly value: string }>) =>
-                    text.line(data.value),
+                  stopped: ({ value }, { input }) =>
+                    text.line(`${input.label}: ${value}`),
                 },
                 terminal: () => text.silent,
               }),
@@ -805,7 +814,7 @@ void test("text stream failure keeps written records, stable identity, and stder
   });
   const writes: Array<Readonly<{ destination: string; chunk: string }>> = [];
   const failure = await executeCli(cli, {
-    invocation: parseCliInvocation(cli, []),
+    invocation: parseCliInvocation(cli, ["batch"]),
     dependencies: undefined,
     write: (output) => {
       writes.push(output);
@@ -815,14 +824,14 @@ void test("text stream failure keeps written records, stable identity, and stder
   assert.equal(failure.exitCode, 8);
   assert.deepEqual(writes, [
     { destination: "stdout", chunk: "first\n" },
-    { destination: "stderr", chunk: "quota\n" },
+    { destination: "stderr", chunk: "batch: quota\n" },
   ]);
 
   pulled = 0;
   cleaned = false;
   await assert.rejects(
     executeCli(cli, {
-      invocation: parseCliInvocation(cli, []),
+      invocation: parseCliInvocation(cli, ["batch"]),
       dependencies: undefined,
       write: ({ chunk }) => {
         if (chunk === "first\n") return Promise.reject(new Error("closed"));

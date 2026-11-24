@@ -130,6 +130,7 @@ export {
   type WhenUsageConstraint,
 } from "#/cli-contract";
 export type {
+  TextPresenterContext,
   AtomicTextPresenter,
   CompletionTextPresenter,
   StreamTextPresenter,
@@ -144,6 +145,7 @@ export {
   type ContractQueryFailure,
   type ContractQueryFailureReason,
   type ContractQueryNext,
+  type ContractQueryOptions,
   type ContractQueryResult,
   type ContractRecordsQuery,
   type ContractSuccessManifest,

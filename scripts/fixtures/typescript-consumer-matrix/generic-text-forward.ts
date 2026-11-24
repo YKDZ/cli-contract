@@ -3,15 +3,22 @@ import {
   type AtomicExecutionDefinition,
   type AtomicExecutionFactory,
   type AtomicTextOptions,
+  type AtomicTextPresenter,
+  type CompletionTextPresenter,
   type ContractSchema,
+  type ContractSchemaOutput,
   type DeclaredRecords,
   type DeclaredVariants,
   type StreamExecutionDefinition,
   type StreamExecutionFactory,
   type StreamTextOptions,
+  type StreamTextPresenter,
 } from "@ykdz/cli-contract";
 
-declare const input: ContractSchema<{ readonly id: string }>;
+declare const input: ContractSchema<
+  { readonly rawId: string },
+  { id: string; display: { limit: number } }
+>;
 declare const payload: ContractSchema<
   { readonly encoded: string },
   { readonly decoded: number }
@@ -44,6 +51,7 @@ function wrapAtomic<
   >,
   presentation: AtomicTextOptions<
     Command,
+    InputSchema,
     DataSuccess<Variants>,
     Failures,
     SuccessKeys,
@@ -82,6 +90,7 @@ function wrapStream<
   >,
   presentation: StreamTextOptions<
     Command,
+    InputSchema,
     Records,
     Failures,
     RecordKeys,
@@ -126,14 +135,22 @@ const forwarded = wrapAtomic(
   },
   {
     description: "Human",
-    success: { found: (value) => text.line(String(value.decoded)) },
-    failures: { denied: (value) => text.line(String(value.decoded)) },
+    success: {
+      found: (value, { input }) => text.line(input.id + value.decoded),
+    },
+    failures: {
+      denied: (value, { input }) => text.line(input.id + value.decoded),
+    },
   },
 );
 
 // The wrapper preserves the closed mode keys and the schema Input/Output transform.
 forwarded.modes.human.success.variants.found.schema satisfies typeof payload;
 forwarded.modes.json.success.variants.found.schema satisfies typeof payload;
+forwarded.modes.human.success.variants.found.text satisfies AtomicTextPresenter<
+  ContractSchemaOutput<typeof payload>,
+  ContractSchemaOutput<typeof input>
+>;
 // @ts-expect-error Mode keys survive the wrapper.
 void forwarded.modes.missing;
 
@@ -149,13 +166,23 @@ const forwardedStream = wrapStream(
   },
   {
     description: "Human",
-    records: { update: (value) => text.fragment(String(value.decoded)) },
+    records: {
+      update: (value, { input }) => text.fragment(input.id + value.decoded),
+    },
     failures: { denied: say },
-    terminal: () => text.silent,
+    terminal: ({ input }) => text.line(input.id),
   },
 );
 forwardedStream.modes.human.success.records.update
   .schema satisfies typeof payload;
+forwardedStream.modes.human.success.records.update
+  .text satisfies StreamTextPresenter<
+  ContractSchemaOutput<typeof payload>,
+  ContractSchemaOutput<typeof input>
+>;
+forwardedStream.modes.human.success.text satisfies CompletionTextPresenter<
+  ContractSchemaOutput<typeof input>
+>;
 // @ts-expect-error Stream mode keys survive the wrapper.
 void forwardedStream.modes.missing;
 

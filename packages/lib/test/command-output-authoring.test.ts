@@ -9,6 +9,7 @@ import {
   queryCliContract,
   schemaCapability,
   text,
+  type AtomicTextPresenter,
   type CompletionFact,
 } from "@ykdz/cli-contract";
 import { z } from "zod";
@@ -95,7 +96,7 @@ function createRootCli() {
               detail: lookup.text({
                 description: "Show the user's ID and name",
                 success: {
-                  found: (user) => text.lines([user.id, user.name]),
+                  found: (user, { input }) => text.lines([input.id, user.name]),
                 },
                 failures: failureText,
               }),
@@ -149,7 +150,7 @@ void test("executable root command shares one execution across two text modes an
 
   const detailWrites: string[] = [];
   await executeCli(cli, {
-    invocation: parseCliInvocation(cli, ["--id", "ada", "--output", "detail"]),
+    invocation: parseCliInvocation(cli, ["--id", "ADA", "--output", "detail"]),
     dependencies: undefined,
     write: ({ chunk }) => {
       detailWrites.push(chunk);
@@ -181,7 +182,7 @@ void test("executable root command shares one execution across two text modes an
     exitCode: 0,
   });
 
-  const summary = queryCliContract(cli, []);
+  const summary = queryCliContract(cli, { path: [] });
   assert.equal(summary.kind, "summary");
   if (summary.kind !== "summary") return;
   assert.deepEqual(summary.outputs, {
@@ -204,6 +205,159 @@ void test("executable root command shares one execution across two text modes an
       },
     },
   });
+});
+
+void test("QA text filters use each invocation's input while the complete report determines its exit code", async () => {
+  const reportSchema = z.object({
+    checks: z.record(z.string(), z.array(z.string())),
+  });
+  const inputSchema = z.object({
+    severity: z.enum(["warning", "error"]).optional(),
+    maxPerCheck: z
+      .string()
+      .default("10")
+      .transform(Number)
+      .pipe(z.number().int().positive()),
+  });
+  const present: AtomicTextPresenter<
+    z.output<typeof reportSchema>,
+    z.output<typeof inputSchema>
+  > = ({ checks }, { input }) => {
+    const rows = Object.entries(checks).flatMap(([check, diagnostics]) =>
+      diagnostics
+        .filter((severity) => !input.severity || severity === input.severity)
+        .slice(0, input.maxPerCheck)
+        .map((severity) => `${check}: ${severity}`),
+    );
+    return text.line(rows.join(", ") || "No matching diagnostics");
+  };
+  const cli = defineCli<{ runQa: () => z.output<typeof reportSchema> }>()({
+    root: "qa",
+    help: englishHelpCapability(),
+    usageFailureExitCode: 64,
+    commands: {
+      qa: {
+        kind: "rootCommand",
+        name: "qa",
+        description: "Check a project",
+        fields: {
+          severity: {
+            kind: "valueOption",
+            longOption: "--severity",
+            description: "Severity to show",
+          },
+          maxPerCheck: {
+            kind: "valueOption",
+            longOption: "--max-per-check",
+            description: "Visible diagnostics per check",
+          },
+        },
+        input: inputSchema,
+        outputs: ({ atomic }) => {
+          const qa = atomic({
+            success: {
+              kind: "data",
+              variants: {
+                passed: {
+                  description: "All checks passed",
+                  schema: reportSchema,
+                  exitCode: 0,
+                },
+              },
+            },
+            failures: {
+              rejected: {
+                description: "A check reported errors",
+                schema: reportSchema,
+                exitCode: 1,
+              },
+            },
+            handler({ dependencies, outcome }) {
+              const result = dependencies.runQa();
+              return Object.values(result.checks).some((rows) =>
+                rows.includes("error"),
+              )
+                ? outcome.failure.rejected(result)
+                : outcome.data.passed(result);
+            },
+          });
+          return {
+            default: "text",
+            modes: {
+              structured: qa.structured({ description: "Complete QA report" }),
+              text: qa.text({
+                description: "Show selected diagnostics",
+                success: { passed: present },
+                failures: { rejected: present },
+              }),
+            },
+          };
+        },
+      },
+    },
+  });
+  const filter = ["--severity", "warning", "--max-per-check", "1"];
+  const failed = {
+    checks: { imports: ["error", "warning", "warning"], types: ["warning"] },
+  };
+  const passed = { checks: { imports: ["warning", "warning"] } };
+  await Promise.all(
+    [
+      {
+        argv: [],
+        report: failed,
+        code: 1,
+        visible:
+          "imports: error, imports: warning, imports: warning, types: warning",
+      },
+      {
+        argv: filter,
+        report: failed,
+        code: 1,
+        visible: "imports: warning, types: warning",
+      },
+      { argv: [...filter, "--output", "structured"], report: failed, code: 1 },
+      { argv: filter, report: passed, code: 0, visible: "imports: warning" },
+      { argv: [...filter, "--output", "structured"], report: passed, code: 0 },
+    ].map(async (scenario) => {
+      let runs = 0;
+      const chunks: string[] = [];
+      const termination = await executeCli(cli, {
+        invocation: parseCliInvocation(cli, scenario.argv),
+        dependencies: {
+          runQa() {
+            runs++;
+            return scenario.report;
+          },
+        },
+        write: ({ chunk }) => {
+          chunks.push(chunk);
+        },
+      });
+      assert.equal(runs, 1);
+      assert.equal(termination.exitCode, scenario.code);
+      assert.equal(termination.kind, "applicationResult");
+      const kind = scenario.code === 0 ? "data" : "failure";
+      const variant = scenario.code === 0 ? "passed" : "rejected";
+      assert.deepEqual(termination.result, {
+        kind,
+        command: "qa",
+        variant,
+        data: scenario.report,
+      });
+      const expected =
+        scenario.visible ??
+        JSON.stringify({
+          schemaVersion: "3",
+          command: "qa",
+          outputMode: "structured",
+          kind,
+          variant,
+          data: scenario.report,
+        });
+      assert.deepEqual(chunks, [`${expected}\n`]);
+    }),
+  );
 });
 
 void test("shared execution reports its declared failure through every text mode", async () => {
@@ -296,7 +450,7 @@ void test("a leaf binds shared and independent executions when its command is co
   } as const;
   const first = define(directory);
   const second = define(directory);
-  const summary = queryCliContract(first, ["inspect"]);
+  const summary = queryCliContract(first, { path: ["inspect"] });
   assert.equal(summary.kind, "summary");
   if (summary.kind !== "summary") return;
   assert.equal(summary.outputs.default, "name");
@@ -426,7 +580,10 @@ void test("a shared execution keeps the handler declared before its first deriva
           const execution = atomic(declaration);
           const plain = execution.text({
             description: "Complete silently",
-            success: () => text.silent,
+            success: ({ input }) => {
+              assert.deepEqual(input, {});
+              return text.silent;
+            },
             failures: {},
           });
           declaration.handler = ({ outcome }) => {
@@ -493,7 +650,10 @@ void test("a shared execution keeps the result contract declared before its firs
   });
   assert.equal(Object.isFrozen(userProfileSchema), false);
   for (const mode of ["short", "json"] as const) {
-    const query = queryCliContract(cli, [], `success:${mode}`);
+    const query = queryCliContract(cli, {
+      path: [],
+      target: `success:${mode}`,
+    });
     assert.equal(query.kind, "success");
     if (query.kind !== "success") continue;
     assert.equal(query.success.kind, "data");
@@ -553,7 +713,10 @@ void test("a shared stream keeps the result contract declared before its first d
     },
   });
   for (const mode of ["events", "ndjson"] as const) {
-    const query = queryCliContract(cli, [], `failures:${mode}`);
+    const query = queryCliContract(cli, {
+      path: [],
+      target: `failures:${mode}`,
+    });
     assert.equal(query.kind, "failures");
     if (query.kind !== "failures") continue;
     assert.equal(query.failures.closed?.exitCode, 3);

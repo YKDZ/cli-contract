@@ -1,5 +1,15 @@
 # @ykdz/cli-contract
 
+## 0.7.0
+
+### Minor Changes
+
+- Text presenters receive the same validated command input as the handler. Data, failure and record presenters take `(payload, { input })`. Completion and stream-success presenters take `({ input })`. The runtime always supplies the context. If a formatter previously used that argument position for an optional parameter, register a wrapper such as `(payload) => format(payload)` to keep its default. Pass the context explicitly when calling a typed presenter directly.
+
+  Presenter types now take the validated input type, for example `AtomicTextPresenter<Report, Input>`. Generic wrappers using `AtomicTextOptions` or `StreamTextOptions` take the command input schema as their second type argument.
+
+  Use `queryCliContract(cli, { path, target })` for discovery and `new CliWriteError({ destination, cause })` to construct a write error.
+
 ## 0.6.0
 
 ### Minor Changes

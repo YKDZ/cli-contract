@@ -158,11 +158,15 @@ export interface ContractQueryFailure {
 
 export type ContractQueryResult = ContractQueryDocument | ContractQueryFailure;
 
+export interface ContractQueryOptions {
+  readonly path: readonly string[];
+  readonly target?: string | undefined;
+}
+
 /** Queries discovery facts by the canonical command-name path below the root; internal ids and aliases are not accepted. */
 export function queryCliContract(
   contract: AnyCliContract,
-  path: readonly string[],
-  target?: string,
+  { path, target }: ContractQueryOptions,
 ): ContractQueryResult {
   const compiled = getCompiledCli(contract);
   const canonicalPath = Object.freeze([...path]);

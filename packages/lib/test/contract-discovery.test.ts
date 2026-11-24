@@ -292,7 +292,7 @@ void test("public discovery query uses canonical paths and projects one exact se
     description: "查询命令输入、输出方式和线表示。",
   });
   assert.deepEqual(cli.manifest.controls.schema, cli.grammar.controls.schema);
-  const directory = queryCliContract(cli, []);
+  const directory = queryCliContract(cli, { path: [] });
   assert.equal(directory.kind, "directory");
   if (directory.kind !== "directory") return;
   assert.deepEqual(
@@ -301,7 +301,7 @@ void test("public discovery query uses canonical paths and projects one exact se
   );
   assert.deepEqual(directory.children[0]?.nextArgv, ["tools", "--schema"]);
 
-  const toolsDirectory = queryCliContract(cli, ["tools"]);
+  const toolsDirectory = queryCliContract(cli, { path: ["tools"] });
   assert.equal(toolsDirectory.kind, "directory");
   if (toolsDirectory.kind !== "directory") return;
   assert.deepEqual(toolsDirectory.children[0]?.path, ["tools", "inspect"]);
@@ -311,7 +311,7 @@ void test("public discovery query uses canonical paths and projects one exact se
     "--schema",
   ]);
 
-  const summary = queryCliContract(cli, ["tools", "inspect"]);
+  const summary = queryCliContract(cli, { path: ["tools", "inspect"] });
   assert.equal(summary.kind, "summary");
   if (summary.kind !== "summary") return;
   assert.deepEqual(summary.path, ["tools", "inspect"]);
@@ -344,11 +344,10 @@ void test("public discovery query uses canonical paths and projects one exact se
     "sample",
   ]);
 
-  const failures = queryCliContract(
-    cli,
-    ["tools", "inspect"],
-    "failures:structured",
-  );
+  const failures = queryCliContract(cli, {
+    path: ["tools", "inspect"],
+    target: "failures:structured",
+  });
   assert.equal(failures.kind, "failures");
   if (failures.kind !== "failures") return;
   assert.deepEqual(Object.keys(failures.failures), ["missing"]);
@@ -361,38 +360,62 @@ void test("public discovery query uses canonical paths and projects one exact se
   assert.equal(validateMissing({ message: "missing" }), true);
   assert.equal(validateMissing({ message: 1 }), false);
 
-  assert.equal(queryCliContract(cli, ["tools", "show"]).kind, "queryFailure");
   assert.equal(
-    queryCliContract(cli, ["tools", "inspect"], "wire:text").kind,
+    queryCliContract(cli, { path: ["tools", "show"] }).kind,
     "queryFailure",
   );
   assert.equal(
-    queryCliContract(cli, ["tools", "inspect"], "records:structured").kind,
-    "queryFailure",
-  );
-  assert.equal(
-    queryCliContract(cli, ["tools", "inspect"], "future:structured").kind,
-    "queryFailure",
-  );
-  assert.equal(
-    queryCliContract(cli, ["tools", "inspect"], "success:unknown").kind,
-    "queryFailure",
-  );
-  assert.equal(
-    queryCliContract(cli, ["tools", "inspect"], "success:toString").kind,
-    "queryFailure",
-  );
-  assert.equal(
-    queryCliContract(cli, ["tools", "inspect"], "success:structured:extra")
+    queryCliContract(cli, { path: ["tools", "inspect"], target: "wire:text" })
       .kind,
     "queryFailure",
   );
-  const emptyTarget = queryCliContract(cli, ["tools", "inspect"], "");
+  assert.equal(
+    queryCliContract(cli, {
+      path: ["tools", "inspect"],
+      target: "records:structured",
+    }).kind,
+    "queryFailure",
+  );
+  assert.equal(
+    queryCliContract(cli, {
+      path: ["tools", "inspect"],
+      target: "future:structured",
+    }).kind,
+    "queryFailure",
+  );
+  assert.equal(
+    queryCliContract(cli, {
+      path: ["tools", "inspect"],
+      target: "success:unknown",
+    }).kind,
+    "queryFailure",
+  );
+  assert.equal(
+    queryCliContract(cli, {
+      path: ["tools", "inspect"],
+      target: "success:toString",
+    }).kind,
+    "queryFailure",
+  );
+  assert.equal(
+    queryCliContract(cli, {
+      path: ["tools", "inspect"],
+      target: "success:structured:extra",
+    }).kind,
+    "queryFailure",
+  );
+  const emptyTarget = queryCliContract(cli, {
+    path: ["tools", "inspect"],
+    target: "",
+  });
   assert.equal(emptyTarget.kind, "queryFailure");
   if (emptyTarget.kind === "queryFailure") {
     assert.equal(emptyTarget.reason, "invalidSyntax");
   }
-  assert.equal(queryCliContract(cli, ["tools"], "input").kind, "queryFailure");
+  assert.equal(
+    queryCliContract(cli, { path: ["tools"], target: "input" }).kind,
+    "queryFailure",
+  );
   assert.deepEqual(
     Object.keys(
       cli.manifest.commands.inspect.outputs.modes.structured!.failures,
@@ -400,7 +423,10 @@ void test("public discovery query uses canonical paths and projects one exact se
     ["missing"],
   );
 
-  const input = queryCliContract(cli, ["tools", "inspect"], "input");
+  const input = queryCliContract(cli, {
+    path: ["tools", "inspect"],
+    target: "input",
+  });
   assert.equal(input.kind, "input");
   if (input.kind !== "input") return;
   assert.deepEqual(input.fields[0]?.choices, ["json", "text"]);
@@ -415,11 +441,10 @@ void test("public discovery query uses canonical paths and projects one exact se
   assert.equal(validateInput({ format: "text", id: "sample" }), true);
   assert.equal(validateInput({ format: "other", id: "sample" }), false);
 
-  const success = queryCliContract(
-    cli,
-    ["tools", "inspect"],
-    "success:structured",
-  );
+  const success = queryCliContract(cli, {
+    path: ["tools", "inspect"],
+    target: "success:structured",
+  });
   assert.equal(success.kind, "success");
   if (success.kind !== "success") return;
   assert.deepEqual(
@@ -437,27 +462,28 @@ void test("public discovery query uses canonical paths and projects one exact se
     assert.equal(validate({ id: "sample", payload: 1 }), false);
   }
 
-  const wire = queryCliContract(cli, ["tools", "inspect"], "wire:structured");
+  const wire = queryCliContract(cli, {
+    path: ["tools", "inspect"],
+    target: "wire:structured",
+  });
   assert.equal(wire.kind, "wire");
   if (wire.kind !== "wire") return;
   assert.deepEqual(Object.keys(wire.wire.data ?? {}), ["found"]);
   assert.deepEqual(Object.keys(wire.wire.failure ?? {}), ["missing"]);
   assert.equal("usageFailure" in wire, false);
 
-  const streamSuccess = queryCliContract(
-    cli,
-    ["tools", "inspect"],
-    "success:events",
-  );
+  const streamSuccess = queryCliContract(cli, {
+    path: ["tools", "inspect"],
+    target: "success:events",
+  });
   assert.equal(streamSuccess.kind, "success");
   if (streamSuccess.kind !== "success") return;
   assert.deepEqual(streamSuccess.success, { kind: "stream" });
 
-  const textSuccess = queryCliContract(
-    cli,
-    ["tools", "inspect"],
-    "success:textEvents",
-  );
+  const textSuccess = queryCliContract(cli, {
+    path: ["tools", "inspect"],
+    target: "success:textEvents",
+  });
   assert.equal(textSuccess.kind, "success");
   if (textSuccess.kind !== "success") return;
   assert.deepEqual(textSuccess.success, {
@@ -465,7 +491,10 @@ void test("public discovery query uses canonical paths and projects one exact se
     text: { recordFraming: "fragment" },
   });
 
-  const records = queryCliContract(cli, ["tools", "inspect"], "records:events");
+  const records = queryCliContract(cli, {
+    path: ["tools", "inspect"],
+    target: "records:events",
+  });
   assert.equal(records.kind, "records");
   if (records.kind !== "records") return;
   assert.deepEqual(Object.keys(records.records), ["item"]);
@@ -475,20 +504,25 @@ void test("public discovery query uses canonical paths and projects one exact se
   assert.equal(validateRecord({ id: "sample", payload: "" }), true);
   assert.equal(validateRecord({ id: "sample", payload: 1 }), false);
 
-  const textRecords = queryCliContract(
-    cli,
-    ["tools", "inspect"],
-    "records:textEvents",
-  );
+  const textRecords = queryCliContract(cli, {
+    path: ["tools", "inspect"],
+    target: "records:textEvents",
+  });
   assert.equal(textRecords.kind, "records");
   if (textRecords.kind !== "records") return;
   assert.deepEqual(Object.keys(textRecords.records), ["item"]);
   assert.equal(
-    queryCliContract(cli, ["tools", "inspect"], "wire:textEvents").kind,
+    queryCliContract(cli, {
+      path: ["tools", "inspect"],
+      target: "wire:textEvents",
+    }).kind,
     "queryFailure",
   );
 
-  const streamWire = queryCliContract(cli, ["tools", "inspect"], "wire:events");
+  const streamWire = queryCliContract(cli, {
+    path: ["tools", "inspect"],
+    target: "wire:events",
+  });
   assert.equal(streamWire.kind, "wire");
   if (streamWire.kind !== "wire") return;
   assert.equal(streamWire.wire.stream?.records.item !== undefined, true);
@@ -519,11 +553,10 @@ void test("CLI discovery reuses the public query and stops at the first eager re
   });
   assert.equal(termination.kind, "schema");
   if (termination.kind !== "schema") return;
-  const queried = queryCliContract(
-    cli,
-    ["tools", "inspect"],
-    "success:structured",
-  );
+  const queried = queryCliContract(cli, {
+    path: ["tools", "inspect"],
+    target: "success:structured",
+  });
   assert.deepEqual(termination.document, queried);
   assert.equal(writes.length, 1);
   assert.equal(writes[0]?.destination, "stdout");
@@ -716,12 +749,18 @@ void test("root executable discovery needs no app input and is absent unless ins
   assert.deepEqual(invocation.document.path, []);
   assert.deepEqual(invocation.document.next[0]?.argv, ["--schema=input"]);
 
-  const completion = queryCliContract(cli, [], "success:json");
+  const completion = queryCliContract(cli, {
+    path: [],
+    target: "success:json",
+  });
   assert.equal(completion.kind, "success");
   if (completion.kind === "success") {
     assert.deepEqual(completion.success, { kind: "completion" });
   }
-  const emptyFailures = queryCliContract(cli, [], "failures:json");
+  const emptyFailures = queryCliContract(cli, {
+    path: [],
+    target: "failures:json",
+  });
   assert.equal(emptyFailures.kind, "failures");
   if (emptyFailures.kind === "failures") {
     assert.deepEqual(emptyFailures.failures, {});
@@ -763,7 +802,7 @@ void test("root executable discovery needs no app input and is absent unless ins
       ),
     );
   }
-  const unavailable = queryCliContract(withoutDiscovery, []);
+  const unavailable = queryCliContract(withoutDiscovery, { path: [] });
   assert.equal(unavailable.kind, "queryFailure");
   if (unavailable.kind === "queryFailure") {
     assert.equal(unavailable.reason, "discoveryNotInstalled");
@@ -796,15 +835,15 @@ void test("every summary next argv succeeds through the formal parser and execut
     });
     assert.equal(termination.kind, "schema", JSON.stringify(argv));
     if (termination.kind !== "schema") return;
-    assert.deepEqual(termination.document, queryCliContract(cli, path));
+    assert.deepEqual(termination.document, queryCliContract(cli, { path }));
   };
 
-  const rootDirectory = queryCliContract(cli, []);
+  const rootDirectory = queryCliContract(cli, { path: [] });
   assert.equal(rootDirectory.kind, "directory");
   if (rootDirectory.kind !== "directory") return;
   for (const child of rootDirectory.children) {
     await replayBare(child.nextArgv, child.path);
-    const childDirectory = queryCliContract(cli, child.path);
+    const childDirectory = queryCliContract(cli, { path: child.path });
     assert.equal(childDirectory.kind, "directory");
     if (childDirectory.kind !== "directory") continue;
     for (const nestedChild of childDirectory.children) {
@@ -812,7 +851,7 @@ void test("every summary next argv succeeds through the formal parser and execut
     }
   }
 
-  const summary = queryCliContract(cli, ["tools", "inspect"]);
+  const summary = queryCliContract(cli, { path: ["tools", "inspect"] });
   assert.equal(summary.kind, "summary");
   if (summary.kind !== "summary") return;
 
@@ -829,7 +868,7 @@ void test("every summary next argv succeeds through the formal parser and execut
     if (termination.kind !== "schema") continue;
     assert.deepEqual(
       termination.document,
-      queryCliContract(cli, summary.path, next.target),
+      queryCliContract(cli, { path: summary.path, target: next.target }),
     );
   }
 });
@@ -840,12 +879,12 @@ void test("directory and summary size ignore wider result and failure payload sc
   const bytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
 
   assert.equal(
-    bytes(queryCliContract(small, [])),
-    bytes(queryCliContract(large, [])),
+    bytes(queryCliContract(small, { path: [] })),
+    bytes(queryCliContract(large, { path: [] })),
   );
   assert.equal(
-    bytes(queryCliContract(small, ["tools", "inspect"])),
-    bytes(queryCliContract(large, ["tools", "inspect"])),
+    bytes(queryCliContract(small, { path: ["tools", "inspect"] })),
+    bytes(queryCliContract(large, { path: ["tools", "inspect"] })),
   );
   assert.ok(bytes(large.manifest) > bytes(small.manifest));
 
@@ -855,8 +894,8 @@ void test("directory and summary size ignore wider result and failure payload sc
     "wire:structured",
   ]) {
     assert.ok(
-      bytes(queryCliContract(large, ["tools", "inspect"], target)) >
-        bytes(queryCliContract(small, ["tools", "inspect"], target)),
+      bytes(queryCliContract(large, { path: ["tools", "inspect"], target })) >
+        bytes(queryCliContract(small, { path: ["tools", "inspect"], target })),
       target,
     );
   }

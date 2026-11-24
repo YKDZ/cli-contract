@@ -58,21 +58,18 @@ const cli = defineCli<Readonly<{ readonly service: string }>>()({
   },
 });
 
-void runCliScenario({
-  cliContract: cli,
+void runCliScenario(cli, {
   argv: ["--help"],
   dependencies: { service: "billing" },
 });
 
-void runCliScenario({
-  cliContract: cli,
+void runCliScenario(cli, {
   argv: [],
   // @ts-expect-error help scenarios still need the declared dependencies.
   dependencies: { service: 1 },
 });
 
-void runCliScenario({
-  cliContract: cli,
+void runCliScenario(cli, {
   argv: [],
   // @ts-expect-error unknown does not satisfy the declared dependencies.
   dependencies: {} as unknown,
@@ -175,8 +172,7 @@ const scenarioCli = defineScenarioCli({
   },
 });
 const widenedScenarioCli: CliContract = scenarioCli;
-void runCliScenario({
-  cliContract: widenedScenarioCli,
+void runCliScenario(widenedScenarioCli, {
   argv: ["replay"],
   dependencies: undefined,
 }).then(({ termination }) => {
@@ -188,8 +184,7 @@ void runCliScenario({
   }
 });
 
-void runCliScenario({
-  cliContract: scenarioCli,
+void runCliScenario(scenarioCli, {
   argv: ["replay", "--mode", "after"],
   dependencies: undefined,
 }).then(({ termination }) => {

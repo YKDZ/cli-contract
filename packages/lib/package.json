@@ -1,6 +1,6 @@
 {
   "name": "@ykdz/cli-contract",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Framework-agnostic, executable CLI contracts for Node.js.",
   "keywords": [
     "cli",

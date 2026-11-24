@@ -646,11 +646,10 @@ function handleEagerControl<Contract extends AnyCliContract>(
 
   const target =
     token === "--schema" ? undefined : token.slice("--schema=".length);
-  const document = queryCliContract(
-    cliContract,
-    canonicalCommandPath(compiled.commands, command.id),
+  const document = queryCliContract(cliContract, {
+    path: canonicalCommandPath(compiled.commands, command.id),
     target,
-  );
+  });
   if (document.kind === "queryFailure") {
     return usageFailure(cliContract, commandId, usage, {
       code: "invalidSchemaQuery",

@@ -89,7 +89,7 @@ void test("parse grammar and contract manifest share the count and conditional r
 // The assertions below verify that each scenario actually triggers its expected result.
 for (const [command, scenario] of Object.entries(commands)) {
   void test(`${command} success scenario`, async () => {
-    const capture = await runCliScenario({ cliContract: cli, ...scenario });
+    const capture = await runCliScenario(cli, scenario);
     assert.equal(capture.termination.exitCode, 0);
     assert.equal(capture.stderr, "");
     if (command === "validate") {
@@ -128,8 +128,7 @@ for (const [command, scenario] of Object.entries(commands)) {
 }
 
 void test("base input schema rejection produces inputRejected at the execution stage", async () => {
-  const capture = await runCliScenario({
-    cliContract: cli,
+  const capture = await runCliScenario(cli, {
     argv: ["validate", "--email", "not-an-email", "--domain", "example.com"],
     dependencies,
   });
@@ -156,8 +155,7 @@ void test("identifier validation requires exactly one input field", async () => 
       [],
     ],
   ] as const) {
-    const capture = await runCliScenario({
-      cliContract: cli,
+    const capture = await runCliScenario(cli, {
       argv,
       dependencies,
     });
@@ -181,8 +179,7 @@ void test("identifier validation requires exactly one input field", async () => 
 });
 
 void test("specifying an email domain also requires the email", async () => {
-  const capture = await runCliScenario({
-    cliContract: cli,
+  const capture = await runCliScenario(cli, {
     argv: ["validate", "--id", "alice", "--domain", "example.com"],
     dependencies,
   });
@@ -205,8 +202,7 @@ void test("specifying an email domain also requires the email", async () => {
 });
 
 void test("a valid email and matching domain complete after satisfying the conditional branch", async () => {
-  const capture = await runCliScenario({
-    cliContract: cli,
+  const capture = await runCliScenario(cli, {
     argv: [
       "validate",
       "--email",
@@ -224,7 +220,7 @@ void test("a valid email and matching domain complete after satisfying the condi
 for (const [command, scenarios] of Object.entries(failures)) {
   for (const [failure, scenario] of Object.entries(scenarios)) {
     void test(`${command} ${failure} failure scenario`, async () => {
-      const capture = await runCliScenario({ cliContract: cli, ...scenario });
+      const capture = await runCliScenario(cli, scenario);
       assert.equal(capture.termination.exitCode, 1);
       assert.equal(capture.stdout, "");
       if (command === "lookup") {

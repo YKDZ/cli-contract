@@ -468,8 +468,7 @@ for (const withValue of [false, true]) {
       },
     },
   });
-  const capture = await testingModule.runCliScenario({
-    cliContract: cli,
+  const capture = await testingModule.runCliScenario(cli, {
     argv: [],
     dependencies: undefined,
   });
@@ -1119,8 +1118,7 @@ assert.deepEqual(readProperty(conditionalEnvelope, "issues"), [
 ]);
 assert.equal(validateUsageWire(conditionalEnvelope), true);
 
-const conditionalCapture = await testingModule.runCliScenario({
-  cliContract: constrainedCli,
+const conditionalCapture = await testingModule.runCliScenario(constrainedCli, {
   argv: ["--mode", "after", "--format", "json", "--reference", "stable"],
   dependencies: undefined,
 });
@@ -1321,7 +1319,9 @@ const recursiveTree = recursiveDefine({
 });
 assert.equal(recursiveTree.manifest.schemaVersion, "5");
 
-const recursiveSummary = coreModule.queryCliContract(recursiveTree, []);
+const recursiveSummary = coreModule.queryCliContract(recursiveTree, {
+  path: [],
+});
 assert.equal(recursiveSummary.kind, "summary");
 if (recursiveSummary.kind !== "summary") {
   throw new Error(
@@ -1336,11 +1336,10 @@ const wireNext = recursiveSummary.next.find(
 assert.ok(wireNext);
 assert.deepEqual(wireNext.argv, ["--schema=wire:structured"]);
 
-const wireQuery = coreModule.queryCliContract(
-  recursiveTree,
-  [],
-  "wire:structured",
-);
+const wireQuery = coreModule.queryCliContract(recursiveTree, {
+  path: [],
+  target: "wire:structured",
+});
 assert.equal(wireQuery.kind, "wire");
 if (wireQuery.kind !== "wire") {
   throw new Error(
@@ -1454,11 +1453,10 @@ const streamFailureCli = streamFailureDefine({
     },
   },
 });
-const streamFailureWireQuery = coreModule.queryCliContract(
-  streamFailureCli,
-  [],
-  "wire:structured",
-);
+const streamFailureWireQuery = coreModule.queryCliContract(streamFailureCli, {
+  path: [],
+  target: "wire:structured",
+});
 assert.equal(streamFailureWireQuery.kind, "wire");
 if (streamFailureWireQuery.kind !== "wire") {
   throw new Error(

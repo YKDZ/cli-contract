@@ -11,7 +11,13 @@ export class CliWriteError extends Error {
   readonly destination: CliOutputDestination;
   override readonly cause: unknown;
 
-  constructor(destination: CliOutputDestination, cause: unknown) {
+  constructor({
+    destination,
+    cause,
+  }: {
+    readonly destination: CliOutputDestination;
+    readonly cause: unknown;
+  }) {
     super("cliWriteError", { cause });
     this.name = "CliWriteError";
     this.destination = destination;

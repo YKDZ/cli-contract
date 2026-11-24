@@ -1,5 +1,16 @@
 # @ykdz/cli-contract-testing
 
+## 0.7.0
+
+### Minor Changes
+
+- Pass the contract as the first argument to `runCliScenario(cli, scenario)`. Entries from `defineCommandScenarios` and `defineFailureScenarios` can be passed directly as the second argument.
+
+### Patch Changes
+
+- Updated dependencies
+  - @ykdz/cli-contract@0.7.0
+
 ## 0.6.0
 
 ### Minor Changes

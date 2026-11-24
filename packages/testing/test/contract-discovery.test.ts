@@ -73,8 +73,7 @@ void test("consumer runner captures schema termination without application input
     },
   });
 
-  const capture = await runCliScenario({
-    cliContract: cli,
+  const capture = await runCliScenario(cli, {
     argv: ["--schema=input"],
     dependencies: undefined,
   });

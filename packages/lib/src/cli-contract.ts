@@ -27,6 +27,7 @@ import type { reservedFieldNames } from "#/field-identity";
 import { deepFreeze, isPlainRecord } from "#/json-value";
 import type {
   CompletionFact,
+  TextPresenterContext,
   CompletionTextPresenter,
   CompletionOutcome,
   DataFactUnion,
@@ -434,23 +435,34 @@ export interface StreamOutputModeDefinition<
   readonly success: Readonly<{
     readonly kind: "stream";
     readonly records: Records;
-    readonly text?: CompletionTextPresenter;
-  }>;
+  }> &
+    (Format extends "text"
+      ? Readonly<{
+          readonly text: CompletionTextPresenter<
+            ContractSchemaOutput<InputSchema>
+          >;
+        }>
+      : Readonly<{ readonly text?: never }>);
   readonly failures: Failures;
   readonly handler: unknown;
   readonly [cliContractType]: Readonly<{
     readonly command: Command;
-    readonly input: InputSchema;
+    readonly input: ModeInputSchema<InputSchema>;
   }>;
 }
 
+// An unbound mode retains its command identity but has no input with which to call a presenter.
+type ModeInputSchema<Schema extends ContractSchema> = [Schema] extends [never]
+  ? ContractSchema
+  : Schema;
+
 export type OutputModeDefinition<
   Command extends string = string,
-  InputSchema extends ContractSchema = ContractSchema,
+  InputSchema extends ContractSchema = never,
 > =
   | AtomicOutputModeDefinition<
       Command,
-      InputSchema,
+      ModeInputSchema<InputSchema>,
       OutputFormat,
       | Readonly<{ readonly kind: "completion" }>
       | Readonly<{
@@ -462,7 +474,14 @@ export type OutputModeDefinition<
   | StreamOutputModeDefinition<
       Command,
       InputSchema,
-      OutputFormat,
+      "structured",
+      StreamRecordDefinitions,
+      object
+    >
+  | StreamOutputModeDefinition<
+      Command,
+      InputSchema,
+      "text",
       StreamRecordDefinitions,
       object
     >;
@@ -573,13 +592,16 @@ type ClosedDeclaredSuccess<Success> = RejectUnknownProperties<
 type AtomicProjection = TextLine | TextLines;
 type RecordProjection = TextLine | TextFragment;
 
-type VariantPresenter<Variant, Projection> = (
+type VariantPresenter<Variant, Projection, Input> = (
   payload: DeclaredVariantOutput<Variant>,
+  context: TextPresenterContext<Input>,
 ) => Projection;
 
-type TextPresentedVariants<Variants, Projection> = Readonly<{
+type TextPresentedVariants<Variants, Projection, Input> = Readonly<{
   readonly [Name in keyof Variants]: Variants[Name] &
-    Readonly<{ readonly text: VariantPresenter<Variants[Name], Projection> }>;
+    Readonly<{
+      readonly text: VariantPresenter<Variants[Name], Projection, Input>;
+    }>;
 }>;
 
 /** A string index signature cannot prove that every closed variant key is covered. */
@@ -594,10 +616,12 @@ type PresenterTable<
   Definitions,
   Provided extends PropertyKey,
   Projection,
+  Input,
 > = Readonly<{
   readonly [Name in Provided]: VariantPresenter<
     Definitions[Name & keyof Definitions],
-    Projection
+    Projection,
+    Input
   >;
 }> &
   Readonly<{
@@ -694,6 +718,7 @@ type AtomicTextCoverage<
  */
 export type AtomicTextOptions<
   Command extends string,
+  InputSchema extends ContractSchema,
   Success extends DeclaredAtomicSuccess,
   Failures extends DeclaredVariants,
   SuccessKeys extends PropertyKey,
@@ -715,28 +740,42 @@ export type AtomicTextOptions<
         readonly success: PresenterTable<
           Variants,
           SuccessKeys,
-          AtomicProjection
+          AtomicProjection,
+          ContractSchemaOutput<InputSchema>
         >;
       }>
-    : Readonly<{ readonly success: CompletionTextPresenter }>) &
+    : Readonly<{
+        readonly success: CompletionTextPresenter<
+          ContractSchemaOutput<InputSchema>
+        >;
+      }>) &
   OnlyOptionKeys<OptionKeys, "description" | "success" | "failures"> &
   Readonly<{
     readonly description: string;
-    readonly failures: PresenterTable<Failures, FailureKeys, AtomicProjection>;
+    readonly failures: PresenterTable<
+      Failures,
+      FailureKeys,
+      AtomicProjection,
+      ContractSchemaOutput<InputSchema>
+    >;
   }>;
 
-type AtomicTextSuccess<Success extends DeclaredAtomicSuccess> =
+type AtomicTextSuccess<Success extends DeclaredAtomicSuccess, Input> =
   Success extends Readonly<{
     readonly kind: "data";
     readonly variants: infer Variants;
   }>
     ? Readonly<{
         readonly kind: "data";
-        readonly variants: TextPresentedVariants<Variants, AtomicProjection>;
+        readonly variants: TextPresentedVariants<
+          Variants,
+          AtomicProjection,
+          Input
+        >;
       }>
     : Readonly<{
         readonly kind: "completion";
-        readonly text: CompletionTextPresenter;
+        readonly text: CompletionTextPresenter<Input>;
       }>;
 
 // Same first-level coverage evidence as AtomicTextCoverage, for stream executions.
@@ -759,6 +798,7 @@ type StreamTextCoverage<
 /** Precise `.text(...)` options for one stream execution; see {@link AtomicTextOptions}. */
 export type StreamTextOptions<
   Command extends string,
+  InputSchema extends ContractSchema,
   Records extends DeclaredRecords,
   Failures extends DeclaredVariants,
   RecordKeys extends PropertyKey,
@@ -778,22 +818,29 @@ export type StreamTextOptions<
   > &
   Readonly<{
     readonly description: string;
-    readonly records: PresenterTable<Records, RecordKeys, RecordProjection>;
-    readonly failures: PresenterTable<Failures, FailureKeys, AtomicProjection>;
-    readonly terminal: CompletionTextPresenter;
+    readonly records: PresenterTable<
+      Records,
+      RecordKeys,
+      RecordProjection,
+      ContractSchemaOutput<InputSchema>
+    >;
+    readonly failures: PresenterTable<
+      Failures,
+      FailureKeys,
+      AtomicProjection,
+      ContractSchemaOutput<InputSchema>
+    >;
+    readonly terminal: CompletionTextPresenter<
+      ContractSchemaOutput<InputSchema>
+    >;
   }>;
-
-type StreamTextSuccess<Records extends DeclaredRecords> = Readonly<{
-  readonly kind: "stream";
-  readonly records: TextPresentedVariants<Records, RecordProjection>;
-  readonly text: CompletionTextPresenter;
-}>;
 
 /**
  * Derive modes for one atomic handler and result contract. All derived modes share
  * the handler and result contract, and a CLI invocation runs only the selected mode.
  * Each text mode provides its own success and failure presenters. Outcome constructors
- * accept the result schema's Input; presenters receive the validated schema Output.
+ * accept the result schema's Input. Payload presenters receive its validated Output followed
+ * by the command input context. A completion presenter receives only that context.
  */
 export interface AtomicExecution<
   Command extends string,
@@ -825,6 +872,7 @@ export interface AtomicExecution<
     > &
       AtomicTextOptions<
         Command,
+        InputSchema,
         Success,
         Failures,
         SuccessKeys,
@@ -835,8 +883,12 @@ export interface AtomicExecution<
     Command,
     InputSchema,
     "text",
-    AtomicTextSuccess<Success>,
-    TextPresentedVariants<Failures, AtomicProjection>
+    AtomicTextSuccess<Success, ContractSchemaOutput<InputSchema>>,
+    TextPresentedVariants<
+      Failures,
+      AtomicProjection,
+      ContractSchemaOutput<InputSchema>
+    >
   >;
 }
 
@@ -844,7 +896,8 @@ export interface AtomicExecution<
  * Derive modes for one stream handler and result contract. The handler yields record
  * facts and returns a streamSuccess or failure fact as the terminal state. Each text
  * mode presents its records, failures and successful termination; record presenters
- * may return lines or fragments, while the terminal presenter may return text.silent.
+ * receive the record and command input context and may return lines or fragments.
+ * The terminal presenter receives just the context and may return text.silent.
  */
 export interface StreamExecution<
   Command extends string,
@@ -876,23 +929,28 @@ export interface StreamExecution<
     > &
       StreamTextOptions<
         Command,
+        InputSchema,
         Records,
         Failures,
         RecordKeys,
         FailureKeys,
         OptionKeys
       >,
-  ): Omit<
-    StreamOutputModeDefinition<
-      Command,
-      InputSchema,
-      "text",
-      TextPresentedVariants<Records, RecordProjection>,
-      TextPresentedVariants<Failures, AtomicProjection>
+  ): StreamOutputModeDefinition<
+    Command,
+    InputSchema,
+    "text",
+    TextPresentedVariants<
+      Records,
+      RecordProjection,
+      ContractSchemaOutput<InputSchema>
     >,
-    "success"
-  > &
-    Readonly<{ readonly success: StreamTextSuccess<Records> }>;
+    TextPresentedVariants<
+      Failures,
+      AtomicProjection,
+      ContractSchemaOutput<InputSchema>
+    >
+  >;
 }
 
 type AtomicHandlerContext<

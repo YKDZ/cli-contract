@@ -1,13 +1,11 @@
 import type { ContractDefinitionIssue } from "#/contract-definition-error";
-import type { ContractSchema, JsonObject } from "#/contract-schema";
+import type { JsonObject } from "#/contract-schema";
 import { compileContractSchema } from "#/contract-schema-compiler";
 import { isSingleLineText } from "#/description";
 import { deepFreeze } from "#/json-value";
-import type { StreamRecordDefinition } from "#/outcome-fact";
+import type { StreamRecordDefinitions } from "#/outcome-fact";
 
-export type RuntimeStreamRecord = StreamRecordDefinition & {
-  readonly schema: ContractSchema;
-};
+export type RuntimeStreamRecord = StreamRecordDefinitions[string];
 
 export interface StreamRecordManifest {
   readonly description: string;
@@ -17,7 +15,7 @@ export interface StreamRecordManifest {
 
 export function compileStreamRecords(
   command: string,
-  definitions: Readonly<Record<string, StreamRecordDefinition>>,
+  definitions: StreamRecordDefinitions,
   issues: ContractDefinitionIssue[],
 ): Readonly<{
   readonly runtime: Readonly<Record<string, RuntimeStreamRecord>>;

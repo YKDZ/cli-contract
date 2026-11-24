@@ -142,10 +142,9 @@ export interface CliScenarioCapture<Contract extends AnyCliContract> {
   readonly termination: CliTermination<Contract>;
 }
 
-export interface RunCliScenarioOptions<Contract extends AnyCliContract> {
-  readonly cliContract: Contract;
-  readonly argv: readonly string[];
-  readonly dependencies: CliContractDependencies<NoInfer<Contract>>;
+export interface RunCliScenarioOptions<
+  Contract extends AnyCliContract,
+> extends CliScenario<Contract> {
   /** Test-only hook for injecting write failures; called before the output is captured. */
   readonly beforeWrite?: (output: CliOutput) => void | Promise<void>;
 }
@@ -157,13 +156,14 @@ export interface RunCliScenarioOptions<Contract extends AnyCliContract> {
  * partial writes.
  */
 export async function runCliScenario<const Contract extends AnyCliContract>(
+  cliContract: Contract,
   options: RunCliScenarioOptions<Contract>,
 ): Promise<CliScenarioCapture<Contract>> {
   const writes: CliOutput[] = [];
   const stdoutChunks: string[] = [];
   const stderrChunks: string[] = [];
-  const invocation = parseCliInvocation(options.cliContract, options.argv);
-  const termination = await executeCli(options.cliContract, {
+  const invocation = parseCliInvocation(cliContract, options.argv);
+  const termination = await executeCli(cliContract, {
     invocation,
     dependencies: options.dependencies,
     write: async (output) => {

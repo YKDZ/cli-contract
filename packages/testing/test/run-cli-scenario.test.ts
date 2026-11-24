@@ -362,10 +362,10 @@ function verifyScenarioTypeErrors() {
 void verifyScenarioTypeErrors;
 
 void test("scenario capture includes structured and text successes and failures", async () => {
-  const structuredSuccess = await runCliScenario({
-    cliContract: consumerFixture.cli,
-    ...commandScenarios.inspect,
-  });
+  const structuredSuccess = await runCliScenario(
+    consumerFixture.cli,
+    commandScenarios.inspect,
+  );
   assert.equal(structuredSuccess.termination.kind, "applicationResult");
   assert.equal(structuredSuccess.termination.exitCode, 0);
   assert.equal(
@@ -374,10 +374,10 @@ void test("scenario capture includes structured and text successes and failures"
   );
   assert.equal(structuredSuccess.stderr, "");
 
-  const structuredFailure = await runCliScenario({
-    cliContract: consumerFixture.cli,
-    ...failureScenarios.inspect.unavailable,
-  });
+  const structuredFailure = await runCliScenario(
+    consumerFixture.cli,
+    failureScenarios.inspect.unavailable,
+  );
   assert.equal(structuredFailure.termination.kind, "applicationResult");
   assert.equal(structuredFailure.termination.exitCode, 9);
   assert.equal(structuredFailure.stdout, "");
@@ -386,16 +386,14 @@ void test("scenario capture includes structured and text successes and failures"
     '{"schemaVersion":"3","command":"inspect","outputMode":"structured","kind":"failure","variant":"unavailable","data":{"message":"remote"}}\n',
   );
 
-  const textSuccess = await runCliScenario({
-    cliContract: consumerFixture.cli,
+  const textSuccess = await runCliScenario(consumerFixture.cli, {
     argv: ["inspect", "--output", "text", "--target", "public"],
     dependencies: { serviceAvailable: true },
   });
   assert.equal(textSuccess.stdout, "Inspected public\n");
   assert.equal(textSuccess.stderr, "");
 
-  const textFailure = await runCliScenario({
-    cliContract: consumerFixture.cli,
+  const textFailure = await runCliScenario(consumerFixture.cli, {
     argv: ["inspect", "--output", "text", "--target", "private"],
     dependencies: { serviceAvailable: true },
   });
@@ -404,10 +402,10 @@ void test("scenario capture includes structured and text successes and failures"
 });
 
 void test("scenario capture preserves stream writes in order and reports termination", async () => {
-  const structured = await runCliScenario({
-    cliContract: consumerFixture.cli,
-    ...commandScenarios.watch,
-  });
+  const structured = await runCliScenario(
+    consumerFixture.cli,
+    commandScenarios.watch,
+  );
   assert.deepEqual(structured.writes, [
     {
       destination: "stdout",
@@ -432,8 +430,7 @@ void test("scenario capture preserves stream writes in order and reports termina
     exitCode: 0,
   });
 
-  const textStream = await runCliScenario({
-    cliContract: consumerFixture.cli,
+  const textStream = await runCliScenario(consumerFixture.cli, {
     argv: ["watch", "--output", "text"],
     dependencies: { serviceAvailable: true },
   });
@@ -456,8 +453,7 @@ void test("scenario capture preserves stream writes in order and reports termina
 void test("a failed write preserves the original cause in CliWriteError", async () => {
   const cause = new Error("write failure");
   await assert.rejects(
-    runCliScenario({
-      cliContract: consumerFixture.cli,
+    runCliScenario(consumerFixture.cli, {
       ...commandScenarios.inspect,
       beforeWrite: () => {
         throw cause;

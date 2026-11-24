@@ -28,16 +28,35 @@ export interface TextFragment {
   readonly [textProjectionType]: true;
 }
 
+// Keep fieldless generic functions and constructors callable. The Input member also
+// lets a generic caller supply its validated value before its shape has been resolved.
+type PresenterInput<Input> =
+  | Input
+  | (Input extends object
+      ? keyof Input extends never
+        ? never
+        : Readonly<Input>
+      : never);
+
+/** The same validated command input used by the handler, viewed as shallowly readonly. */
+export interface TextPresenterContext<Input> {
+  readonly input: PresenterInput<Input>;
+}
+
 /** Presents a completion or stream-success terminal state; may return text.silent. */
-export type CompletionTextPresenter = () => TextLine | TextLines | SilentText;
+export type CompletionTextPresenter<Input> = (
+  context: TextPresenterContext<Input>,
+) => TextLine | TextLines | SilentText;
 /** Presents one atomic data or failure payload as a line or line group. */
-export type AtomicTextPresenter<Payload> = {
-  bivarianceHack(payload: Payload): TextLine | TextLines;
-}["bivarianceHack"];
+export type AtomicTextPresenter<Payload, Input> = (
+  payload: Payload,
+  context: TextPresenterContext<Input>,
+) => TextLine | TextLines;
 /** Presents one stream record as a line or fragment. */
-export type StreamTextPresenter<Payload> = {
-  bivarianceHack(payload: Payload): TextLine | TextFragment;
-}["bivarianceHack"];
+export type StreamTextPresenter<Payload, Input> = (
+  payload: Payload,
+  context: TextPresenterContext<Input>,
+) => TextLine | TextFragment;
 
 export type TextValueErrorIssue =
   | Readonly<{
@@ -302,24 +321,6 @@ function encodeApplicationText(
   throw new ContractExecutionError([{ code: "invalidCliContract" }]);
 }
 
-/**
- * One named data-success variant. Outcome constructors accept the schema Input;
- * the text presenter receives the validated and transformed schema Output.
- */
-export type DataVariantDefinition<
-  Input = unknown,
-  TextEnabled extends boolean = boolean,
-  Output = Input,
-> = {
-  readonly description: string;
-  readonly schema: ContractSchema<Input, Output>;
-  readonly exitCode: number;
-} & (TextEnabled extends true
-  ? Readonly<{ readonly text: AtomicTextPresenter<Output> }>
-  : TextEnabled extends false
-    ? Readonly<{ readonly text?: never }>
-    : Readonly<{ readonly text?: AtomicTextPresenter<Output> }>);
-
 export type DataVariantDefinitions = Readonly<
   Record<
     string,
@@ -332,24 +333,6 @@ export type DataVariantDefinitions = Readonly<
   >
 >;
 
-/**
- * One named stream record. Outcome constructors accept the schema Input; the text
- * presenter receives the validated and transformed schema Output.
- */
-export type StreamRecordDefinition<
-  Input = unknown,
-  TextEnabled extends boolean = boolean,
-  Output = Input,
-> = Readonly<{
-  readonly description: string;
-  readonly schema: ContractSchema<Input, Output>;
-}> &
-  (TextEnabled extends true
-    ? Readonly<{ readonly text: StreamTextPresenter<Output> }>
-    : TextEnabled extends false
-      ? Readonly<{ readonly text?: never }>
-      : Readonly<{ readonly text?: StreamTextPresenter<Output> }>);
-
 export type StreamRecordDefinitions = Readonly<
   Record<
     string,
@@ -360,24 +343,6 @@ export type StreamRecordDefinitions = Readonly<
     }>
   >
 >;
-
-/**
- * One named failure variant. Outcome constructors accept the schema Input; the text
- * presenter receives the validated and transformed schema Output.
- */
-export type FailureVariantDefinition<
-  Input = unknown,
-  TextEnabled extends boolean = boolean,
-  Output = Input,
-> = {
-  readonly description: string;
-  readonly schema: ContractSchema<Input, Output>;
-  readonly exitCode: number;
-} & (TextEnabled extends true
-  ? Readonly<{ readonly text: AtomicTextPresenter<Output> }>
-  : TextEnabled extends false
-    ? Readonly<{ readonly text?: never }>
-    : Readonly<{ readonly text?: AtomicTextPresenter<Output> }>);
 
 export type FailureVariantDefinitions = Readonly<
   Record<
@@ -451,12 +416,16 @@ export interface CompletionOutcome<Command extends string> {
   completion(): CompletionFact<Command>;
 }
 
-type DataVariantPayload<Variant, Phase extends "input" | "output" = "input"> =
-  Variant extends DataVariantDefinition<infer Input, boolean, infer Output>
-    ? Phase extends "input"
-      ? Input
-      : Output
-    : never;
+type VariantPayload<
+  Variant,
+  Phase extends "input" | "output" = "input",
+> = Variant extends {
+  readonly schema: ContractSchema<infer Input, infer Output>;
+}
+  ? Phase extends "input"
+    ? Input
+    : Output
+  : never;
 
 export type DataFactUnion<
   Command extends string,
@@ -466,7 +435,7 @@ export type DataFactUnion<
   readonly [Variant in keyof Variants & string]: DataFact<
     Command,
     Variant,
-    DataVariantPayload<Variants[Variant], Phase>
+    VariantPayload<Variants[Variant], Phase>
   >;
 }[keyof Variants & string];
 
@@ -477,24 +446,10 @@ export type DataOutcome<
 > = Readonly<{
   readonly data: Readonly<{
     [Variant in keyof Variants]: (
-      payload: DataVariantPayload<Variants[Variant]>,
-    ) => DataFact<
-      Command,
-      Variant & string,
-      DataVariantPayload<Variants[Variant]>
-    >;
+      payload: VariantPayload<Variants[Variant]>,
+    ) => DataFact<Command, Variant & string, VariantPayload<Variants[Variant]>>;
   }>;
 }>;
-
-type FailureVariantPayload<
-  Variant,
-  Phase extends "input" | "output" = "input",
-> =
-  Variant extends FailureVariantDefinition<infer Input, boolean, infer Output>
-    ? Phase extends "input"
-      ? Input
-      : Output
-    : never;
 
 export type FailureFactUnion<
   Command extends string,
@@ -504,7 +459,7 @@ export type FailureFactUnion<
   readonly [Variant in keyof Failures & string]: FailureFact<
     Command,
     Variant,
-    FailureVariantPayload<Failures[Variant], Phase>
+    VariantPayload<Failures[Variant], Phase>
   >;
 }[keyof Failures & string];
 
@@ -515,21 +470,14 @@ export type FailureOutcome<
 > = Readonly<{
   readonly failure: Readonly<{
     [Variant in keyof Failures]: (
-      payload: FailureVariantPayload<Failures[Variant]>,
+      payload: VariantPayload<Failures[Variant]>,
     ) => FailureFact<
       Command,
       Variant & string,
-      FailureVariantPayload<Failures[Variant]>
+      VariantPayload<Failures[Variant]>
     >;
   }>;
 }>;
-
-type StreamRecordPayload<Variant, Phase extends "input" | "output" = "input"> =
-  Variant extends StreamRecordDefinition<infer Input, boolean, infer Output>
-    ? Phase extends "input"
-      ? Input
-      : Output
-    : never;
 
 export type StreamRecordFactUnion<
   Command extends string,
@@ -539,7 +487,7 @@ export type StreamRecordFactUnion<
   readonly [Variant in keyof Records & string]: StreamRecordFact<
     Command,
     Variant,
-    StreamRecordPayload<Records[Variant], Phase>
+    VariantPayload<Records[Variant], Phase>
   >;
 }[keyof Records & string];
 
@@ -553,11 +501,11 @@ export type StreamOutcome<
 > = Readonly<{
   readonly record: Readonly<{
     [Variant in keyof Records]: (
-      payload: StreamRecordPayload<Records[Variant]>,
+      payload: VariantPayload<Records[Variant]>,
     ) => StreamRecordFact<
       Command,
       Variant & string,
-      StreamRecordPayload<Records[Variant]>
+      VariantPayload<Records[Variant]>
     >;
   }>;
   streamSuccess(): StreamSuccessFact<Command>;

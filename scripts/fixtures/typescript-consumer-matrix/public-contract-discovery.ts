@@ -48,7 +48,7 @@ const contract = define({
   },
 });
 
-const summary: ContractQueryResult = queryCliContract(contract, []);
+const summary: ContractQueryResult = queryCliContract(contract, { path: [] });
 if (summary.kind === "summary") {
   const publicSummary: ContractSummaryQuery = summary;
   const nextArgv: readonly string[] = publicSummary.next[0]!.argv;
@@ -63,13 +63,16 @@ if (summary.kind === "summary") {
   void invalidChildren;
 }
 
-const success = queryCliContract(contract, [], "success:json");
+const success = queryCliContract(contract, {
+  path: [],
+  target: "success:json",
+});
 if (success.kind === "success") {
   const mode: string = success.mode;
   void mode;
 }
 
-const failure = queryCliContract(contract, ["missing"]);
+const failure = queryCliContract(contract, { path: ["missing"] });
 if (failure.kind === "queryFailure") {
   const reason: ContractQueryFailureReason = failure.reason;
   void reason;

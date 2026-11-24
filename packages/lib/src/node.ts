@@ -186,7 +186,7 @@ class BufferedNodeChannel {
   }
 
   #onError = (cause: unknown) => {
-    this.#error ??= new CliWriteError(this.destination, cause);
+    this.#error ??= new CliWriteError({ destination: this.destination, cause });
     this.#rejectPull?.(this.#error);
     this.#resume?.();
   };

@@ -1,9 +1,12 @@
 import {
   text,
+  type OutputModeDefinition,
+  type TextPresenterContext,
   type AtomicExecutionDefinition,
   type AtomicExecutionFactory,
   type AtomicTextOptions,
   type ContractSchema,
+  type ContractSchemaOutput,
   type DeclaredRecords,
   type DeclaredVariants,
   type StreamExecutionDefinition,
@@ -11,7 +14,10 @@ import {
   type StreamTextOptions,
 } from "@ykdz/cli-contract";
 
-declare const input: ContractSchema<{ readonly id: string }>;
+declare const input: ContractSchema<
+  { readonly rawId: string },
+  { id: string; display: { limit: number } }
+>;
 declare const payload: ContractSchema<
   { readonly encoded: string },
   { readonly decoded: number }
@@ -44,6 +50,7 @@ function wrapAtomic<
   >,
   presentation: AtomicTextOptions<
     Command,
+    InputSchema,
     DataSuccess<Variants>,
     Failures,
     SuccessKeys,
@@ -82,6 +89,7 @@ function wrapStream<
   >,
   presentation: StreamTextOptions<
     Command,
+    InputSchema,
     Records,
     Failures,
     RecordKeys,
@@ -126,8 +134,12 @@ const forwarded = wrapAtomic(
   },
   {
     description: "Human",
-    success: { found: (value) => text.line(String(value.decoded)) },
-    failures: { denied: (value) => text.line(String(value.decoded)) },
+    success: {
+      found: (value, { input }) => text.line(input.id + value.decoded),
+    },
+    failures: {
+      denied: (value, { input }) => text.line(input.id + value.decoded),
+    },
   },
 );
 
@@ -149,9 +161,11 @@ const forwardedStream = wrapStream(
   },
   {
     description: "Human",
-    records: { update: (value) => text.fragment(String(value.decoded)) },
+    records: {
+      update: (value, { input }) => text.fragment(input.id + value.decoded),
+    },
     failures: { denied: say },
-    terminal: () => text.silent,
+    terminal: ({ input }) => text.line(input.id),
   },
 );
 forwardedStream.modes.human.success.records.update
@@ -211,6 +225,63 @@ const ordinary = atomicFactory({
 });
 ordinary.text({
   description: "Human",
-  success: { found: (value) => text.line(String(value.decoded)) },
-  failures: { denied: (value) => text.line(String(value.decoded)) },
+  success: {
+    found: (value, context) => {
+      // @ts-expect-error The presenter cannot replace the context input.
+      context.input = { id: "next", display: { limit: 2 } };
+      // @ts-expect-error The validated input is shallowly readonly.
+      context.input.id = "next";
+      context.input.display.limit = 2;
+      // @ts-expect-error The raw input has been transformed by the schema.
+      void context.input.rawId;
+      return text.line(context.input.id + value.decoded);
+    },
+  },
+  failures: { denied: say },
 });
+
+const validated = { id: "alice", display: { limit: 2 } };
+forwarded.modes.human.success.variants.found.text(
+  { decoded: 1 },
+  { input: validated },
+);
+forwardedStream.modes.human.success.text({ input: validated });
+// @ts-expect-error Direct calls require the validated input context.
+forwarded.modes.human.success.variants.found.text({ decoded: 1 });
+// @ts-expect-error A raw command input cannot replace the schema output.
+forwardedStream.modes.human.success.text({ input: { rawId: "alice" } });
+
+declare const mode: OutputModeDefinition<"lookup", typeof input>;
+if (mode.delivery === "stream" && mode.format === "text") {
+  mode.success.text({ input: validated });
+  // @ts-expect-error An inspected mode still requires its transformed input.
+  mode.success.text({ input: { rawId: "alice" } });
+}
+
+declare const erasedMode: OutputModeDefinition;
+if (erasedMode.delivery === "stream" && erasedMode.format === "text") {
+  // @ts-expect-error The input type must be known to call an erased presenter.
+  erasedMode.success.text({ input: validated });
+}
+
+declare const unionContext: TextPresenterContext<
+  { id: string } | { limit: number }
+>;
+if ("limit" in unionContext.input) {
+  // @ts-expect-error Each union member is shallowly readonly.
+  unionContext.input.limit = 2;
+}
+
+declare const functionContext: TextPresenterContext<<T>(value: T) => T>;
+functionContext.input("alice") satisfies "alice";
+
+function presentStreamSuccess<Schema extends ContractSchema>(
+  mode: OutputModeDefinition<"lookup", Schema>,
+  input: ContractSchemaOutput<Schema>,
+) {
+  if (mode.delivery === "stream" && mode.format === "text") {
+    return mode.success.text({ input });
+  }
+  return text.silent;
+}
+presentStreamSuccess<typeof input>(forwardedStream.modes.human, validated);
