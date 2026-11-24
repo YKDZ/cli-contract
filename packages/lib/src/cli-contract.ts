@@ -422,12 +422,36 @@ export interface AtomicOutputModeDefinition<
   }>;
 }
 
-export interface StreamOutputModeDefinition<
+export type StreamOutputModeDefinition<
   Command extends string,
   InputSchema extends ContractSchema,
   Format extends OutputFormat,
   Records extends StreamRecordDefinitions,
   Failures extends object,
+> = StreamMode<
+  Command,
+  ModeInputSchema<InputSchema>,
+  Format,
+  Records,
+  Failures,
+  Format extends "text"
+    ? Readonly<{
+        readonly text: CompletionTextPresenter<
+          ContractSchemaOutput<InputSchema>
+        >;
+      }>
+    : Readonly<{ readonly text?: never }>
+>;
+
+// Compare the resolved terminal presenter when a stream mode is assigned to a
+// wider mode type. Widening the schema alone would allow the wrong command input.
+interface StreamMode<
+  Command extends string,
+  InputSchema extends ContractSchema,
+  Format extends OutputFormat,
+  Records extends StreamRecordDefinitions,
+  Failures extends object,
+  Terminal,
 > {
   readonly delivery: "stream";
   readonly description: string;
@@ -436,18 +460,12 @@ export interface StreamOutputModeDefinition<
     readonly kind: "stream";
     readonly records: Records;
   }> &
-    (Format extends "text"
-      ? Readonly<{
-          readonly text: CompletionTextPresenter<
-            ContractSchemaOutput<InputSchema>
-          >;
-        }>
-      : Readonly<{ readonly text?: never }>);
+    Terminal;
   readonly failures: Failures;
   readonly handler: unknown;
   readonly [cliContractType]: Readonly<{
     readonly command: Command;
-    readonly input: ModeInputSchema<InputSchema>;
+    readonly input: InputSchema;
   }>;
 }
 
@@ -1141,7 +1159,7 @@ export interface OutputExecutionFactory<
  */
 export type OutputModeTableDeclaration<
   Command extends string = string,
-  InputSchema extends ContractSchema = ContractSchema,
+  InputSchema extends ContractSchema = never,
 > = Readonly<{
   readonly default?: string;
   readonly modes: Readonly<

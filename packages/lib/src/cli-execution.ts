@@ -863,7 +863,7 @@ function projectApplicationFact(
       outputMode.format === "structured"
         ? `${JSON.stringify(createStreamRecordEnvelope(result.variant, data))}\n`
         : encodeRecordText(
-            presentStreamRecordText(record.text, data, presenterContext),
+            presentPayloadText(record.text, data, presenterContext),
           );
     return { result, output: { destination: "stdout", chunk }, exitCode: 0 };
   }
@@ -876,15 +876,13 @@ function projectApplicationFact(
         received: result.kind,
       });
     }
-    let chunk: string | undefined;
-    if (outputMode.format === "structured")
-      chunk = `${JSON.stringify(createStreamSuccessEnvelope())}\n`;
-    else {
-      const presenter = outputMode.resultContract.success.text;
-      if (typeof presenter !== "function")
-        throw new ContractExecutionError([{ code: "invalidCliContract" }]);
-      chunk = encodeTerminalText(presenter(presenterContext));
-    }
+    const chunk =
+      outputMode.format === "structured"
+        ? `${JSON.stringify(createStreamSuccessEnvelope())}\n`
+        : presentTerminalText(
+            outputMode.resultContract.success.text,
+            presenterContext,
+          );
     return {
       result,
       output:
@@ -922,15 +920,13 @@ function projectApplicationFact(
       issuedOutcomeFacts,
     );
     if (outputMode.format === "text") {
-      const presenter = failure.text;
-      if (typeof presenter !== "function") {
-        throw new ContractExecutionError([{ code: "invalidCliContract" }]);
-      }
       return {
         result: normalized,
         output: {
           destination: "stderr",
-          chunk: encodeAtomicText(presenter(data, presenterContext)),
+          chunk: encodeAtomicText(
+            presentPayloadText(failure.text, data, presenterContext),
+          ),
         },
         exitCode: failure.exitCode,
       };
@@ -954,11 +950,10 @@ function projectApplicationFact(
       });
     }
     if (outputMode.format === "text") {
-      const presenter = outputMode.resultContract.success.text;
-      if (typeof presenter !== "function") {
-        throw new ContractExecutionError([{ code: "invalidCliContract" }]);
-      }
-      const chunk = encodeTerminalText(presenter(presenterContext));
+      const chunk = presentTerminalText(
+        outputMode.resultContract.success.text,
+        presenterContext,
+      );
       return {
         result,
         output:
@@ -1008,15 +1003,13 @@ function projectApplicationFact(
     issuedOutcomeFacts,
   );
   if (outputMode.format === "text") {
-    const presenter = variant.text;
-    if (typeof presenter !== "function") {
-      throw new ContractExecutionError([{ code: "invalidCliContract" }]);
-    }
     return {
       result: normalized,
       output: {
         destination: "stdout",
-        chunk: encodeAtomicText(presenter(data, presenterContext)),
+        chunk: encodeAtomicText(
+          presentPayloadText(variant.text, data, presenterContext),
+        ),
       },
       exitCode: variant.exitCode,
     };
@@ -1031,7 +1024,7 @@ function projectApplicationFact(
   };
 }
 
-function presentStreamRecordText(
+function presentPayloadText(
   presenter: unknown,
   data: unknown,
   presenterContext: TextPresenterContext<unknown>,
@@ -1040,6 +1033,16 @@ function presentStreamRecordText(
     throw new ContractExecutionError([{ code: "invalidCliContract" }]);
   }
   return presenter(data, presenterContext);
+}
+
+function presentTerminalText(
+  presenter: unknown,
+  presenterContext: TextPresenterContext<unknown>,
+): string | undefined {
+  if (typeof presenter !== "function") {
+    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
+  }
+  return encodeTerminalText(presenter(presenterContext));
 }
 
 // oxlint-disable-next-line typescript/consistent-return -- The validation-failure branch terminates as never via throwExecutionIssue.

@@ -28,20 +28,41 @@ export interface TextFragment {
   readonly [textProjectionType]: true;
 }
 
-// Keep fieldless generic functions and constructors callable. The Input member also
-// lets a generic caller supply its validated value before its shape has been resolved.
-type PresenterInput<Input> =
-  | Input
-  | (Input extends object
-      ? keyof Input extends never
-        ? never
-        : Readonly<Input>
-      : never);
+type CallableInput = (...args: never[]) => unknown;
+type ConstructableInput = abstract new (...args: never[]) => unknown;
+
+// Readonly maps fields and erases signatures. A zero-argument, never-returning
+// signature keeps this union member callable without adding arguments or results.
+type ReadonlyInputMember<Input> = Input extends
+  | CallableInput
+  | ConstructableInput
+  ? keyof Input extends never
+    ? never
+    : Readonly<Input> &
+        (Input extends CallableInput ? () => never : unknown) &
+        (Input extends ConstructableInput ? new () => never : unknown)
+  : Readonly<Input>;
 
 /** The same validated command input used by the handler, viewed as shallowly readonly. */
-export interface TextPresenterContext<Input> {
-  readonly input: PresenterInput<Input>;
-}
+export type TextPresenterContext<Input> = {
+  readonly input: unknown;
+} & {
+  // Readonly<unknown> excludes nullish values. Apply the readonly view once
+  // the input type or one of its fields is known.
+  readonly [
+    Key in
+      | keyof Input
+      | (unknown extends Input ? never : "input") as Key extends PropertyKey
+      ? "input"
+      : never
+  ]: Readonly<Input>;
+} & {
+  // Only inputs with signatures need a second view. Keeping it on the context
+  // lets generic indexed access use the readonly fields.
+  readonly [
+    Key in Input extends CallableInput | ConstructableInput ? "input" : never
+  ]: Input | ReadonlyInputMember<Input>;
+};
 
 /** Presents a completion or stream-success terminal state; may return text.silent. */
 export type CompletionTextPresenter<Input> = (
