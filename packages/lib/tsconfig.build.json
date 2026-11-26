@@ -6,7 +6,9 @@
     "outDir": "dist",
     "paths": {},
     "rootDir": "src",
-    "sourceMap": false
+    "skipLibCheck": false,
+    "sourceMap": false,
+    "types": []
   },
   "include": ["src/**/*.ts"]
 }

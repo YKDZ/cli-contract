@@ -4,18 +4,50 @@ import { tmpdir } from "node:os";
 import { basename, resolve } from "node:path";
 
 import { verifyAuthoringDiagnosticCases } from "./authoring-diagnostic-cases.ts";
+import {
+  parseJsonObject,
+  readRuntimeMetadata,
+  requiredString,
+} from "./runtime-metadata.ts";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const corePackage = "@boringparts/cli-contract";
 const compilerVersions = ["6.0.3", "7.0.2"] as const;
 const resolutions = ["nodenext", "bundler"] as const;
 
+interface NodeTypesTarget {
+  readonly major: string;
+  readonly specifier: string;
+}
+
 async function main(): Promise<void> {
   const tarball = await parseCandidateTarball(process.argv.slice(2));
   const fixtures = await readFixtures();
+  const runtimeMetadata = await readRuntimeMetadata(
+    repositoryRoot,
+    corePackage,
+  );
+  const nodeTypesTargets: readonly NodeTypesTarget[] = [
+    {
+      major: runtimeMetadata.minimumMajor,
+      specifier: runtimeMetadata.minimumNodeTypes,
+    },
+    {
+      major: runtimeMetadata.workspaceMajor,
+      specifier: runtimeMetadata.workspaceNodeTypes,
+    },
+  ];
 
   for (const compilerVersion of compilerVersions) {
-    await verifyCompilerVersion(tarball, fixtures, compilerVersion);
+    for (const [index, nodeTypesTarget] of nodeTypesTargets.entries()) {
+      await verifyCompilerAndNodeTypes(
+        tarball,
+        fixtures,
+        compilerVersion,
+        nodeTypesTarget,
+        index === 0,
+      );
+    }
   }
 }
 
@@ -66,13 +98,18 @@ async function parseCandidateTarball(args: readonly string[]): Promise<string> {
   return tarball;
 }
 
-async function verifyCompilerVersion(
+async function verifyCompilerAndNodeTypes(
   tarball: string,
   fixtures: Readonly<Record<string, string>>,
   compilerVersion: (typeof compilerVersions)[number],
+  nodeTypesTarget: NodeTypesTarget,
+  runAuthoringDiagnostics: boolean,
 ): Promise<void> {
   const project = await mkdtemp(
-    resolve(tmpdir(), `cli-contract-typescript-${compilerVersion}-`),
+    resolve(
+      tmpdir(),
+      `cli-contract-typescript-${compilerVersion}-node${nodeTypesTarget.major}-`,
+    ),
   );
   try {
     await writeFile(
@@ -83,7 +120,7 @@ async function verifyCompilerVersion(
         type: "module",
         dependencies: { [corePackage]: `file:${tarball}` },
         devDependencies: {
-          "@types/node": "26.6.6",
+          "@types/node": nodeTypesTarget.specifier,
           "@valibot/to-json-schema": "1.7.1",
           typescript: compilerVersion,
           valibot: "1.5.0",
@@ -106,6 +143,23 @@ async function verifyCompilerVersion(
       ["install", "--ignore-scripts", "--prefer-offline"],
       project,
     );
+    const installedNodeTypes = parseJsonObject(
+      await readFile(
+        resolve(project, "node_modules/@types/node/package.json"),
+        "utf8",
+      ),
+      "installed @types/node package.json",
+    );
+    const installedNodeTypesVersion = requiredString(
+      installedNodeTypes,
+      "version",
+      "installed @types/node package.json",
+    );
+    if (!installedNodeTypesVersion.startsWith(`${nodeTypesTarget.major}.`)) {
+      throw new Error(
+        `Expected @types/node major ${nodeTypesTarget.major} for specifier ${nodeTypesTarget.specifier}, got ${installedNodeTypesVersion}`,
+      );
+    }
 
     for (const resolution of resolutions) {
       await verifyExportableDeclarations(project, resolution, fixtures);
@@ -121,11 +175,13 @@ async function verifyCompilerVersion(
       ]) {
         await compileFixture(project, resolution, fixture);
       }
-      await verifyAuthoringDiagnosticCases(
-        project,
-        resolution,
-        compilerVersion,
-      );
+      if (runAuthoringDiagnostics) {
+        await verifyAuthoringDiagnosticCases(
+          project,
+          resolution,
+          compilerVersion,
+        );
+      }
     }
   } finally {
     await rm(project, { recursive: true, force: true });
@@ -208,7 +264,9 @@ function tsconfigFor(
       skipLibCheck: false,
       strict: true,
       target: "ES2023",
-      types: fixture === "consumer.ts" ? ["node"] : [],
+      ...(fixture === "consumer.ts"
+        ? { lib: ["ES2023"], types: ["node"] }
+        : { types: [] }),
     },
     files: [fixture],
   };

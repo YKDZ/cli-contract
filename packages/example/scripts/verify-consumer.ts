@@ -10,6 +10,7 @@ interface Manifest {
   name: string;
   version?: string;
   type?: string;
+  engines?: Record<string, string>;
   scripts?: Record<string, string>;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
@@ -22,6 +23,7 @@ const corePackage = "@boringparts/cli-contract";
 export async function verifyExample(
   packedTarball?: string,
   argv?: readonly string[],
+  requestedNodeVersion?: string,
 ): Promise<void> {
   const example = await manifestAt(exampleRoot);
   if (!example.scripts)
@@ -30,11 +32,70 @@ export async function verifyExample(
   if (typeof coreVersion !== "string")
     throw new Error("The public core package metadata has no version");
   if (packedTarball === undefined) verifyPublishedSource(coreVersion);
+  const runtimeVersions = resolveTargetRuntimes(example, requestedNodeVersion);
+  for (const runtimeVersion of runtimeVersions) {
+    await verifyExampleOnRuntime(
+      example,
+      coreVersion,
+      runtimeVersion,
+      packedTarball,
+      argv,
+    );
+  }
+}
+
+function resolveTargetRuntimes(
+  example: Manifest,
+  requestedNodeVersion?: string,
+): readonly string[] {
+  if (requestedNodeVersion !== undefined) {
+    if (!/^\d+\.\d+\.\d+$/.test(requestedNodeVersion)) {
+      throw new Error(`Invalid --node-version value: ${requestedNodeVersion}`);
+    }
+    return [requestedNodeVersion];
+  }
+  const coreEngineRange = coreMetadata.engines?.node;
+  const minimumMatch = /^>=(\d+\.\d+\.\d+)$/.exec(coreEngineRange);
+  if (minimumMatch === null || minimumMatch[1] === undefined) {
+    throw new Error(
+      `Public core package engines.node must use >=x.y.z lower bound, got ${coreEngineRange}`,
+    );
+  }
+  const exampleEngineRange = example.engines?.node;
+  const baselineMatch =
+    typeof exampleEngineRange === "string"
+      ? /^(?:\^|>=)?(\d+\.\d+\.\d+)$/.exec(exampleEngineRange)
+      : null;
+  if (baselineMatch === null || baselineMatch[1] === undefined) {
+    throw new Error(
+      `Example package engines.node must contain an x.y.z baseline, got ${String(exampleEngineRange)}`,
+    );
+  }
+  return minimumMatch[1] === baselineMatch[1]
+    ? [minimumMatch[1]]
+    : [minimumMatch[1], baselineMatch[1]];
+}
+
+async function verifyExampleOnRuntime(
+  example: Manifest,
+  coreVersion: string,
+  runtimeVersion: string,
+  packedTarball?: string,
+  argv?: readonly string[],
+): Promise<void> {
   const replacements: Record<string, string> = {
     [corePackage]: packedTarball ? `file:${packedTarball}` : coreVersion,
   };
   const manifest = {
     ...example,
+    engines: { node: `>=${runtimeVersion}` },
+    devEngines: {
+      runtime: {
+        name: "node",
+        version: runtimeVersion,
+        onFail: "download",
+      },
+    },
     dependencies: await installedDependencies(
       example.dependencies,
       replacements,
@@ -46,7 +107,7 @@ export async function verifyExample(
   };
 
   const project = await mkdtemp(
-    resolve(tmpdir(), "cli-contract-example-consumer-"),
+    resolve(tmpdir(), `cli-contract-example-consumer-${runtimeVersion}-`),
   );
   try {
     await writeFile(
@@ -58,7 +119,7 @@ export async function verifyExample(
       ["install", "--ignore-scripts", "--prefer-offline"],
       project,
     );
-    await verifyIsolatedPublicEntries(project);
+    await verifyIsolatedPublicEntries(project, runtimeVersion);
 
     for (const directory of ["src", "test"]) {
       await cp(resolve(exampleRoot, directory), resolve(project, directory), {
@@ -95,10 +156,14 @@ export async function verifyExample(
       );
     }
     if (argv) {
-      const result = spawnSync(process.execPath, ["dist/main.js", ...argv], {
-        cwd: project,
-        stdio: "inherit",
-      });
+      const result = spawnSync(
+        "pnpm",
+        ["exec", "node", "dist/main.js", ...argv],
+        {
+          cwd: project,
+          stdio: "inherit",
+        },
+      );
       if (result.error) throw result.error;
       if (result.status !== 0)
         throw new Error(
@@ -110,7 +175,10 @@ export async function verifyExample(
   }
 }
 
-async function verifyIsolatedPublicEntries(project: string): Promise<void> {
+async function verifyIsolatedPublicEntries(
+  project: string,
+  expectedRuntime: string,
+): Promise<void> {
   const packageJsonPath = realpathSync(resolve(project, "package.json"));
   const nodeModulesDir = realpathSync(resolve(project, "node_modules"));
   const installedRoot = realpathSync(
@@ -123,7 +191,8 @@ import { realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const [anchorFile, expectedRoot] = process.argv.slice(1);
+const [anchorFile, expectedRoot, expectedRuntime] = process.argv.slice(1);
+assert.equal(process.versions.node, expectedRuntime);
 const anchorUrl = pathToFileURL(anchorFile).href;
 const specifiers = [
   "@boringparts/cli-contract",
@@ -212,8 +281,17 @@ assert.equal(observation.termination.exitCode, 0);
 process.stdout.write(resolved["@boringparts/cli-contract/testing"]);
 `;
   const testingEntry = runCommand(
-    process.execPath,
-    ["--input-type=module", "-e", probeScript, packageJsonPath, installedRoot],
+    "pnpm",
+    [
+      "exec",
+      "node",
+      "--input-type=module",
+      "-e",
+      probeScript,
+      packageJsonPath,
+      installedRoot,
+      expectedRuntime,
+    ],
     project,
   ).trim();
   if (!isWithinDirectory(nodeModulesDir, testingEntry)) {
@@ -227,7 +305,8 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";
 
-const [anchorFile, forbiddenTestingPath] = process.argv.slice(1);
+const [anchorFile, forbiddenTestingPath, expectedRuntime] = process.argv.slice(1);
+assert.equal(process.versions.node, expectedRuntime);
 const anchorUrl = pathToFileURL(anchorFile).href;
 const forbiddenUrl = pathToFileURL(forbiddenTestingPath).href;
 
@@ -246,13 +325,16 @@ assert.equal(typeof core.defineCli, "function");
 assert.equal(typeof nodeEntry.nodeCliOutput, "function");
 `;
   runCommand(
-    process.execPath,
+    "pnpm",
     [
+      "exec",
+      "node",
       "--input-type=module",
       "-e",
       sideEffectFreeScript,
       packageJsonPath,
       testingEntry,
+      expectedRuntime,
     ],
     project,
   );
@@ -305,6 +387,7 @@ async function manifestAt(directory: string): Promise<Manifest> {
     typeof value.name !== "string" ||
     (value.version !== undefined && typeof value.version !== "string") ||
     (value.type !== undefined && typeof value.type !== "string") ||
+    (value.engines !== undefined && !isStringRecord(value.engines)) ||
     (value.scripts !== undefined && !isStringRecord(value.scripts)) ||
     (value.dependencies !== undefined && !isStringRecord(value.dependencies)) ||
     (value.devDependencies !== undefined &&
@@ -315,6 +398,7 @@ async function manifestAt(directory: string): Promise<Manifest> {
   return {
     ...value,
     name: value.name,
+    ...(value.engines === undefined ? {} : { engines: value.engines }),
     ...(value.scripts === undefined ? {} : { scripts: value.scripts }),
     ...(value.version === undefined ? {} : { version: value.version }),
     ...(value.type === undefined ? {} : { type: value.type }),
@@ -400,14 +484,42 @@ if (import.meta.main) {
   const separator = values.indexOf("--");
   const args = separator === -1 ? values : values.slice(0, separator);
   const cliArgs = separator === -1 ? [] : values.slice(separator + 1);
-  const packedTarball =
-    args.length === 2 && args[0] === "--tarball" && args[1]
-      ? resolve(args[1])
-      : undefined;
-  const published = args[0] === "--published";
-  if ((!packedTarball && !published) || (published && args.length !== 1))
+  let packedTarball: string | undefined;
+  let published = false;
+  let requestedNodeVersion: string | undefined;
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index];
+    if (arg === "--tarball") {
+      const target = args[++index];
+      if (!target || packedTarball !== undefined) {
+        throw new Error(
+          "Usage: release:verify -- --tarball <tgz> [--node-version <x.y.z>], or verify:published [--node-version <x.y.z>] [-- <CLI args>]",
+        );
+      }
+      packedTarball = resolve(target);
+    } else if (arg === "--published") {
+      published = true;
+    } else if (arg === "--node-version") {
+      const version = args[++index];
+      if (!version || requestedNodeVersion !== undefined) {
+        throw new Error(
+          "Usage: release:verify -- --tarball <tgz> [--node-version <x.y.z>], or verify:published [--node-version <x.y.z>] [-- <CLI args>]",
+        );
+      }
+      requestedNodeVersion = version;
+    } else {
+      throw new Error(
+        "Usage: release:verify -- --tarball <tgz> [--node-version <x.y.z>], or verify:published [--node-version <x.y.z>] [-- <CLI args>]",
+      );
+    }
+  }
+  if ((!packedTarball && !published) || (packedTarball && published))
     throw new Error(
-      "Usage: release:verify -- --tarball <tgz>, or verify:published [-- <CLI args>]",
+      "Usage: release:verify -- --tarball <tgz> [--node-version <x.y.z>], or verify:published [--node-version <x.y.z>] [-- <CLI args>]",
     );
-  await verifyExample(packedTarball, published ? cliArgs : undefined);
+  await verifyExample(
+    packedTarball,
+    published ? cliArgs : undefined,
+    requestedNodeVersion,
+  );
 }

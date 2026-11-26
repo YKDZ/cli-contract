@@ -2,6 +2,9 @@ import type { CliOutput, WriteCliOutput } from "./cli-execution.ts";
 import { CliWriteError } from "./cli-write-error.ts";
 import { streamOutputs, type StreamOutput } from "./stream-output.ts";
 
+// Kept local so the build configuration can clear default global types without leaking ambient declarations.
+declare function setImmediate(callback: () => void): unknown;
+
 interface NodeOutputWritable {
   write(chunk: string, callback: (error?: Error | null) => void): boolean;
   once(event: "drain", listener: () => void): unknown;

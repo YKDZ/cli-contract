@@ -253,14 +253,17 @@ importers:
         specifier: workspace:*
         version: link:../tooling-config
       '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.6
+        specifier: ~24.0.0
+        version: 24.0.15
       '@valibot/to-json-schema':
         specifier: ^1.7.1
         version: 1.7.1(valibot@1.5.0(typescript@7.0.2))
       ajv:
         specifier: ^8.20.0
         version: 8.20.0
+      node:
+        specifier: runtime:24.0.0
+        version: runtime:24.0.0
       oxfmt:
         specifier: 'catalog:'
         version: 0.71.0
@@ -692,6 +695,9 @@ packages:
     cpu: [arm64]
     os: [win32]
 
+  '@types/node@24.0.15':
+    resolution: {integrity: sha512-oaeTSbCef7U/z7rDeJA138xpG3NuKc64/rZ2qmUFkFJmnMsAPaluIifqyWd8hSSMxyP9oie3dLAqYPblag9KgA==}
+
   '@types/node@26.6.6':
     resolution: {integrity: sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==}
 
@@ -870,6 +876,116 @@ packages:
   launch-editor@2.14.2:
     resolution: {integrity: sha512-NHJEb30MGBCkmZXLZwz25t37QR4aY03ZzPYUJXOJaOa92uWwExI9SBQUuIznBYc1xkD7cJNGX7oc3Nl3sq2kQQ==}
 
+  node@runtime:24.0.0:
+    resolution:
+      type: variations
+      variants:
+        - resolution:
+            archive: tarball
+            bin:
+              node: bin/node
+            integrity: sha256-C+/MtwZP2EMK3GzHSc8d9b5ZLHBNh27AlkwxDNNikfU=
+            type: binary
+            url: https://nodejs.org/download/release/v24.0.0/node-v24.0.0-aix-ppc64.tar.gz
+          targets:
+            - cpu: ppc64
+              os: aix
+        - resolution:
+            archive: tarball
+            bin:
+              node: bin/node
+            integrity: sha256-GU4vPdPsjCrcqnE+1A9Exco4RniA4WCXTOrBZZvmASE=
+            type: binary
+            url: https://nodejs.org/download/release/v24.0.0/node-v24.0.0-darwin-arm64.tar.gz
+          targets:
+            - cpu: arm64
+              os: darwin
+        - resolution:
+            archive: tarball
+            bin:
+              node: bin/node
+            integrity: sha256-9xazzhSn43psv5fJ3hDURNfaB++DPNjagd2UTREeako=
+            type: binary
+            url: https://nodejs.org/download/release/v24.0.0/node-v24.0.0-darwin-x64.tar.gz
+          targets:
+            - cpu: x64
+              os: darwin
+        - resolution:
+            archive: tarball
+            bin:
+              node: bin/node
+            integrity: sha256-QQQTbd09LxZ9eZ8bIbrHLM9QDYDCS+hJGV+DHfY3G4M=
+            type: binary
+            url: https://nodejs.org/download/release/v24.0.0/node-v24.0.0-linux-arm64.tar.gz
+          targets:
+            - cpu: arm64
+              os: linux
+        - resolution:
+            archive: tarball
+            bin:
+              node: bin/node
+            integrity: sha256-BGVMItj5/DAhon83qVwW+CCHCQiknNNh9M907RRQmhA=
+            type: binary
+            url: https://nodejs.org/download/release/v24.0.0/node-v24.0.0-linux-ppc64le.tar.gz
+          targets:
+            - cpu: ppc64le
+              os: linux
+        - resolution:
+            archive: tarball
+            bin:
+              node: bin/node
+            integrity: sha256-qm+nxdx9aZEWo5p4HrFoWmjjhD0tlbzZhSf9KJIt5jo=
+            type: binary
+            url: https://nodejs.org/download/release/v24.0.0/node-v24.0.0-linux-s390x.tar.gz
+          targets:
+            - cpu: s390x
+              os: linux
+        - resolution:
+            archive: tarball
+            bin:
+              node: bin/node
+            integrity: sha256-t2DtbeQMNaJesBGzz1lD0116dvDIwzHVqAHhCSWCbLM=
+            type: binary
+            url: https://nodejs.org/download/release/v24.0.0/node-v24.0.0-linux-x64.tar.gz
+          targets:
+            - cpu: x64
+              os: linux
+        - resolution:
+            archive: zip
+            bin:
+              node: node.exe
+            integrity: sha256-A7Znb0hy++RkURPejiPag0p8FGQEU2nyt6N0v0gqXhI=
+            prefix: node-v24.0.0-win-arm64
+            type: binary
+            url: https://nodejs.org/download/release/v24.0.0/node-v24.0.0-win-arm64.zip
+          targets:
+            - cpu: arm64
+              os: win32
+        - resolution:
+            archive: zip
+            bin:
+              node: node.exe
+            integrity: sha256-PQ//gMh7uajX9J8vJ4Mqo0oUd9E3r0b1sU31SYvoEwQ=
+            prefix: node-v24.0.0-win-x64
+            type: binary
+            url: https://nodejs.org/download/release/v24.0.0/node-v24.0.0-win-x64.zip
+          targets:
+            - cpu: x64
+              os: win32
+        - resolution:
+            archive: tarball
+            bin:
+              node: bin/node
+            integrity: sha256-mSPS8X9hTazu0wGlw1v+bl8lyhI2kIMY42A1QABtoOI=
+            type: binary
+            url: https://unofficial-builds.nodejs.org/download/release/v24.0.0/node-v24.0.0-linux-x64-musl.tar.gz
+          targets:
+            - cpu: x64
+              os: linux
+              libc: musl
+    version: 24.0.0
+    hasBin: true
+
   oxfmt@0.71.0:
     resolution: {integrity: sha512-lUPUl0d/+Io5pDrsPXWs6rB4N/bpB78oj9CTDpnbulfDz+0r3XXcHPlQ7kRPJ2GjIT4nX+/mcqunOeP9BvsEtg==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -946,6 +1062,9 @@ packages:
     resolution: {integrity: sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA==}
     engines: {node: '>=16.20.0'}
     hasBin: true
+
+  undici-types@7.8.0:
+    resolution: {integrity: sha512-9UJ2xGDvQ43tYyVMpuHlsgApydB8ZKfVYTsLDhXkFL/6gfkp+U8xTGdh8pMJv1SpZna0zxG1DwsKZsreLbXBxw==}
 
   undici-types@8.9.0:
     resolution: {integrity: sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==}
@@ -1253,6 +1372,10 @@ snapshots:
   '@turbo/windows-arm64@2.11.10':
     optional: true
 
+  '@types/node@24.0.15':
+    dependencies:
+      undici-types: 7.8.0
+
   '@types/node@26.6.6':
     dependencies:
       undici-types: 8.9.0
@@ -1362,6 +1485,8 @@ snapshots:
     dependencies:
       picocolors: 1.1.1
       shell-quote: 1.12.0
+
+  node@runtime:24.0.0: {}
 
   oxfmt@0.71.0:
     dependencies:
@@ -1473,6 +1598,8 @@ snapshots:
       '@typescript/typescript-sunos-x64': 7.0.2
       '@typescript/typescript-win32-arm64': 7.0.2
       '@typescript/typescript-win32-x64': 7.0.2
+
+  undici-types@7.8.0: {}
 
   undici-types@8.9.0: {}
 

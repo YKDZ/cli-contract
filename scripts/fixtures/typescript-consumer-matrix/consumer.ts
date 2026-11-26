@@ -1,4 +1,5 @@
 import { stderr, stdout } from "node:process";
+import { Writable } from "node:stream";
 
 import {
   defineCli,
@@ -14,6 +15,7 @@ import { nodeCliOutput } from "@boringparts/cli-contract/node";
 import {
   defineCommandScenarios,
   defineFailureScenarios,
+  runCliScenario,
   type CliObservation,
   // @ts-expect-error CliScenarioCapture was replaced by CliObservation.
   type CliScenarioCapture,
@@ -200,7 +202,9 @@ const cli = define({
   },
 });
 
+declare const streamWritable: Writable;
 void nodeCliOutput({ stdout, stderr });
+void nodeCliOutput({ stdout: streamWritable, stderr: streamWritable });
 
 const commandScenarios = defineCommandScenarios(cli, {
   complete: { argv: ["complete"], dependencies: { available: true } },
@@ -224,8 +228,13 @@ void commandScenarios;
 void failureScenarios;
 
 type ConsumerObservation = CliObservation<typeof cli>;
+const scenarioObservation: Promise<ConsumerObservation> = runCliScenario(cli, {
+  argv: ["complete"],
+  dependencies: { available: true },
+});
 const verifyObservationType = (observation: ConsumerObservation) =>
   observation.termination.exitCode;
+void scenarioObservation;
 void verifyObservationType;
 
 type RemovedScenarioCapture = CliScenarioCapture;

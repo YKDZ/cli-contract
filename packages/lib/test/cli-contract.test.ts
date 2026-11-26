@@ -8,6 +8,7 @@ import {
   type ContractSchema,
   type EmptyCliInput,
 } from "@boringparts/cli-contract";
+import coreMetadata from "@boringparts/cli-contract/package.json" with { type: "json" };
 
 import { englishHelpCapability, englishHelpWording } from "./english-help.ts";
 
@@ -378,4 +379,14 @@ void test("execution awaits output-seam completion and the contract can execute 
   });
 
   assert.equal(writes.length, 1);
+});
+
+void test("package tests execute on the declared minimum Node engine", () => {
+  const engineRange = coreMetadata.engines.node;
+  const match = /^>=(\d+\.\d+\.\d+)$/.exec(engineRange);
+  assert.ok(
+    match !== null && match[1] !== undefined,
+    `Expected >=x.y.z engines.node lower bound, got ${engineRange}`,
+  );
+  assert.equal(process.versions.node, match[1]);
 });

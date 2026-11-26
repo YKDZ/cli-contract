@@ -57,7 +57,7 @@
   },
   "devDependencies": {
     "@cli-contract/tooling-config": "workspace:*",
-    "@types/node": "catalog:",
+    "@types/node": "~24.0.0",
     "@valibot/to-json-schema": "^1.7.1",
     "ajv": "^8.20.0",
     "oxfmt": "catalog:",
@@ -67,7 +67,14 @@
     "valibot": "^1.5.0",
     "zod": "^4.6.5"
   },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "24.0.0",
+      "onFail": "download"
+    }
+  },
   "engines": {
-    "node": "^26.13.0"
+    "node": ">=24.0.0"
   }
 }

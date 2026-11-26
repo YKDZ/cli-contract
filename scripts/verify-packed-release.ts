@@ -4,6 +4,14 @@ import { lstat, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, relative, resolve, sep } from "node:path";
 
+import {
+  isRecord,
+  parseJsonObject,
+  readRuntimeMetadata,
+  requiredRecord,
+  requiredString,
+} from "./runtime-metadata.ts";
+
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const corePackage = "@boringparts/cli-contract";
 const expectedDescription = "Catch unhandled CLI outcomes at compile time.";
@@ -31,6 +39,10 @@ async function main(): Promise<void> {
       if (output.length > 0) process.stdout.write(output);
     }
 
+    const runtimeMetadata = await readRuntimeMetadata(
+      repositoryRoot,
+      corePackage,
+    );
     const expectedLicense = await readFile(
       resolve(repositoryRoot, "LICENSE"),
       "utf8",
@@ -38,6 +50,7 @@ async function main(): Promise<void> {
     const packed = await readPackedRelease(
       packDirectory,
       expectedLicense,
+      runtimeMetadata.expectedEnginesNode,
       requestedPackDirectory !== undefined,
     );
     if (packed === undefined) {
@@ -57,28 +70,39 @@ async function main(): Promise<void> {
     );
     if (typecheckOutput.length > 0) process.stdout.write(typecheckOutput);
 
-    process.stderr.write(
-      "Verifying real-process example consumption of the packed artifact\n",
-    );
-    const exampleOutput = runCommand(
-      "pnpm",
-      [
-        "--filter",
-        "@cli-contract/example",
-        "release:verify",
-        "--",
-        "--tarball",
-        packed.tarball,
-      ],
-      repositoryRoot,
-    );
-    if (exampleOutput.length > 0) process.stdout.write(exampleOutput);
+    for (const runtimeVersion of [
+      runtimeMetadata.minimumRuntime,
+      runtimeMetadata.workspaceRuntime,
+    ]) {
+      process.stderr.write(
+        `Verifying real-process example consumption of the packed artifact on Node ${runtimeVersion}\n`,
+      );
+      const exampleOutput = runCommand(
+        "pnpm",
+        [
+          "--filter",
+          "@cli-contract/example",
+          "release:verify",
+          "--",
+          "--tarball",
+          packed.tarball,
+          "--node-version",
+          runtimeVersion,
+        ],
+        repositoryRoot,
+      );
+      if (exampleOutput.length > 0) process.stdout.write(exampleOutput);
+    }
     process.stdout.write(
       `${JSON.stringify({
         package: {
           name: corePackage,
           version: packed.version,
           tarball: packed.tarball,
+          runtimes: [
+            runtimeMetadata.minimumRuntime,
+            runtimeMetadata.workspaceRuntime,
+          ],
         },
       })}\n`,
     );
@@ -107,6 +131,7 @@ function parsePackDirectory(args: readonly string[]): string | undefined {
 async function readPackedRelease(
   packDirectory: string,
   expectedLicense: string,
+  expectedEnginesNode: string,
   requirePackages: boolean,
 ): Promise<PackedRelease | undefined> {
   const directoryStatus = await lstat(packDirectory);
@@ -154,7 +179,12 @@ async function readPackedRelease(
     throw new Error(`Changesets tarball is not a regular tgz file: ${tarball}`);
   }
   await verifyIntegrity(tarball, release.tarball.integrity);
-  const version = await inspectTarball(tarball, release.name, expectedLicense);
+  const version = await inspectTarball(
+    tarball,
+    release.name,
+    expectedLicense,
+    expectedEnginesNode,
+  );
   if (version !== release.version) {
     throw new Error(
       `Changesets plan version does not match the artifact version of ${release.name}`,
@@ -251,11 +281,12 @@ async function inspectTarball(
   tarball: string,
   expectedName: string,
   expectedLicense: string,
+  expectedEnginesNode: string,
 ): Promise<string> {
   const entries = tarEntries(tarball);
   verifyArchiveContents(entries, tarball);
   const manifest = parseManifest(readTarText(tarball, "package/package.json"));
-  verifyManifestMetadata(manifest, expectedName);
+  verifyManifestMetadata(manifest, expectedName, expectedEnginesNode);
   verifyManifestTargets(manifest, entries);
   const version = requiredString(manifest, "version", "artifact package.json");
   verifyPublicSourceLinks(tarball, version, manifest, entries);
@@ -391,14 +422,7 @@ function isPublishedDistFile(entry: string): boolean {
 }
 
 function parseManifest(text: string): Readonly<Record<string, unknown>> {
-  let value: unknown;
-  try {
-    value = JSON.parse(text);
-  } catch {
-    throw new Error("Artifact package.json is not valid JSON");
-  }
-  if (!isRecord(value))
-    throw new Error("Artifact package.json must be an object");
+  const value = parseJsonObject(text, "Artifact package.json");
   const workspaceReference = findWorkspaceOrCatalog(value);
   if (workspaceReference !== undefined) {
     throw new Error(`Artifact package.json retains ${workspaceReference}`);
@@ -431,6 +455,7 @@ function findWorkspaceOrCatalog(value: unknown): string | undefined {
 function verifyManifestMetadata(
   manifest: Readonly<Record<string, unknown>>,
   expectedName: string,
+  expectedEnginesNode: string,
 ): void {
   if (
     requiredString(manifest, "name", "artifact package.json") !== expectedName
@@ -475,8 +500,10 @@ function verifyManifestMetadata(
     throw new Error("Artifact keywords are missing");
   }
   const engines = requiredRecord(manifest, "engines", "artifact package.json");
-  if (engines.node !== "^26.13.0") {
-    throw new Error("Artifact package does not require Node ^26.13.0");
+  if (engines.node !== expectedEnginesNode) {
+    throw new Error(
+      `Artifact package does not require Node ${expectedEnginesNode}: got ${String(engines.node)}`,
+    );
   }
   const publishConfig = requiredRecord(
     manifest,
@@ -602,33 +629,6 @@ function readTarText(tarball: string, entry: string): string {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   });
-}
-
-function requiredString(
-  record: Readonly<Record<string, unknown>>,
-  key: string,
-  context: string,
-): string {
-  const value = record[key];
-  if (typeof value !== "string") {
-    throw new Error(`${context} is missing string field ${key}`);
-  }
-  return value;
-}
-
-function requiredRecord(
-  record: Readonly<Record<string, unknown>>,
-  key: string,
-  context: string,
-): Readonly<Record<string, unknown>> {
-  const value = record[key];
-  if (!isRecord(value))
-    throw new Error(`${context} is missing object field ${key}`);
-  return value;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isWithinDirectory(directory: string, path: string): boolean {

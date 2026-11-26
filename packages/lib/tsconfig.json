@@ -5,7 +5,8 @@
       "@boringparts/cli-contract": ["./src/index.ts"],
       "@boringparts/cli-contract/node": ["./src/node.ts"],
       "@boringparts/cli-contract/testing": ["./src/testing.ts"]
-    }
+    },
+    "skipLibCheck": true
   },
   "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"]
 }
