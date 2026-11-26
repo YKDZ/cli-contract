@@ -1320,6 +1320,78 @@ interface AuthoringLanguageServiceCase {
   readonly requiredSignature?: readonly string[];
 }
 
+interface CapabilityCompletionCase {
+  readonly marker: string;
+  readonly required: readonly string[];
+  readonly forbidden: readonly string[];
+}
+
+const capabilityCompletionsFixture = "capability-completions.ts";
+
+const capabilityCompletionsSource = [
+  'import { helpCapability, schemaCapability, text, versionCapability } from "@boringparts/cli-contract";',
+  "",
+  "helpCapability({ /* help-options */ });",
+  "helpCapability({ headings: { /* help-headings */ } });",
+  "helpCapability({ wording: { /* help-wording */ } });",
+  "versionCapability({ /* version-options */ });",
+  'versionCapability({ shortAlias: "-V", /* version-partial */ });',
+  "schemaCapability({ /* schema-options */ });",
+  'void text.line("1.0.0");',
+  "",
+].join("\n");
+
+const capabilityCompletionCases: readonly CapabilityCompletionCase[] = [
+  {
+    marker: "/* help-options */",
+    required: ["shortAlias", "headings", "wording"],
+    forbidden: ["contractTypeError"],
+  },
+  {
+    marker: "/* help-headings */",
+    required: [
+      "usage",
+      "commands",
+      "arguments",
+      "options",
+      "constraints",
+      "schema",
+      "examples",
+      "supplement",
+    ],
+    forbidden: ["contractTypeError"],
+  },
+  {
+    marker: "/* help-wording */",
+    required: [
+      "commandPlaceholder",
+      "outputModePlaceholder",
+      "choices",
+      "default",
+      "choicesAndDefault",
+      "list",
+      "facts",
+      "effects",
+    ],
+    forbidden: ["contractTypeError"],
+  },
+  {
+    marker: "/* version-options */",
+    required: ["value", "description", "shortAlias"],
+    forbidden: ["contractTypeError"],
+  },
+  {
+    marker: "/* version-partial */",
+    required: ["value", "description"],
+    forbidden: ["contractTypeError"],
+  },
+  {
+    marker: "/* schema-options */",
+    required: ["description"],
+    forbidden: ["contractTypeError"],
+  },
+];
+
 function verifyAuthoringLanguageService(
   project: string,
   resolution: (typeof resolutions)[number],
@@ -1701,6 +1773,75 @@ function verifyAuthoringLanguageService(
         snapshot.dispose();
       }
     }
+    const completionConfig = resolve(
+      project,
+      diagnosticTsconfigName(resolution, capabilityCompletionsFixture),
+    );
+    const completionSnapshot = api.updateSnapshot({
+      openProject: completionConfig,
+    });
+    try {
+      const target = completionSnapshot.getProject(completionConfig);
+      if (target === undefined) {
+        throw new Error(`Cannot load project: ${completionConfig}`);
+      }
+      const completionFile = resolve(project, capabilityCompletionsFixture);
+      const installedDeclaration = realpathSync(
+        resolve(
+          project,
+          "node_modules/@boringparts/cli-contract/dist/index.d.ts",
+        ),
+      );
+      if (
+        !target.program
+          .getSourceFileNames()
+          .some((name) => realPathOrResolve(name) === installedDeclaration)
+      ) {
+        throw new Error(
+          `Completion fixture did not load the installed public declarations: ${capabilityCompletionsFixture}`,
+        );
+      }
+      for (const completionCase of capabilityCompletionCases) {
+        const position = capabilityCompletionsSource.indexOf(
+          completionCase.marker,
+        );
+        if (position < 0) {
+          throw new Error(
+            `Completion marker not found: ${completionCase.marker}`,
+          );
+        }
+        const completions = target.checker.getCompletionsAtPosition(
+          completionFile,
+          position,
+        );
+        const rawNames = (completions?.entries ?? []).map(
+          (entry) => entry.name,
+        );
+        const normalizedNames = new Set(
+          rawNames.map((name) => name.replace(/\?$/, "")),
+        );
+        const missingRequired = completionCase.required.filter(
+          (name) => !normalizedNames.has(name),
+        );
+        const presentForbidden = completionCase.forbidden.filter(
+          (name) =>
+            normalizedNames.has(name) ||
+            rawNames.some((rawName) => rawName.includes(name)),
+        );
+        if (missingRequired.length > 0 || presentForbidden.length > 0) {
+          throw new Error(
+            [
+              `Capability completions did not match public authoring options at ${completionCase.marker}`,
+              `Missing required completions: ${missingRequired.join(", ")}`,
+              `Unexpected internal completions: ${presentForbidden.join(", ")}`,
+              `Actual completions: ${rawNames.join(", ")}`,
+            ].join("\n"),
+          );
+        }
+      }
+    } finally {
+      completionSnapshot.dispose();
+    }
   } finally {
     api.close();
   }
@@ -1969,7 +2110,14 @@ async function prepareAuthoringDiagnosticCases(
   fixtures: Readonly<Record<string, string>>,
 ): Promise<void> {
   await writeFixtures(project, fixtures, authoringDiagnosticFixtureNames);
-  const configuredFixtures = new Set(authoringDiagnosticFixtureNames);
+  await writeFile(
+    resolve(project, capabilityCompletionsFixture),
+    capabilityCompletionsSource,
+  );
+  const configuredFixtures = new Set([
+    ...authoringDiagnosticFixtureNames,
+    capabilityCompletionsFixture,
+  ]);
   for (const diagnostic of authoringDiagnosticCases) {
     if (diagnostic.derivation.kind === "copy") continue;
     const source = fixtures[diagnostic.fixture];

@@ -1,5 +1,14 @@
-import { defineCli, helpCapability } from "@boringparts/cli-contract";
+import {
+  defineCli,
+  helpCapability,
+  schemaCapability,
+  text,
+  versionCapability,
+} from "@boringparts/cli-contract";
 import { z } from "zod";
+
+// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- Contextual return-type inference is the authoring pattern under test.
+declare function fromEnv<Value extends string>(fallback: string): Value;
 
 const help = helpCapability({
   wording: {
@@ -16,6 +25,43 @@ const help = helpCapability({
 
 void help;
 
+void helpCapability({});
+const emptyHelp = {} as const;
+void helpCapability(emptyHelp);
+void helpCapability({ shortAlias: fromEnv("-h") });
+void versionCapability({
+  value: text.line("1.0.0"),
+  shortAlias: fromEnv("-V"),
+});
+
+const capabilityBranch = Math.random() < 0.5;
+const helpDefinitionUnion = capabilityBranch
+  ? ({ shortAlias: "-h", headings: { usage: "用法" } } as const)
+  : ({ wording: { outputModePlaceholder: "输出方式" } } as const);
+void helpCapability(helpDefinitionUnion);
+
+const explicitHelpDefinitionUnion:
+  | { readonly shortAlias: "-h" }
+  | { readonly wording: { readonly outputModePlaceholder: "输出方式" } } =
+  capabilityBranch
+    ? { shortAlias: "-h" }
+    : { wording: { outputModePlaceholder: "输出方式" } };
+void helpCapability(explicitHelpDefinitionUnion);
+
+const optionalHelpDefinitionUnion: { readonly shortAlias: "-h" } | undefined =
+  capabilityBranch ? { shortAlias: "-h" } : undefined;
+void helpCapability(optionalHelpDefinitionUnion);
+
+const versionDefinitionUnion = capabilityBranch
+  ? ({ value: text.line("1.0.0"), shortAlias: "-V" } as const)
+  : ({ value: text.line("2.0.0"), description: "打印版本" } as const);
+void versionCapability(versionDefinitionUnion);
+
+const schemaDefinitionUnion = capabilityBranch
+  ? ({ description: text.line("查询契约") } as const)
+  : ({ description: text.line("查看模式") } as const);
+void schemaCapability(schemaDefinitionUnion);
+
 type ValidChoicesUnion =
   | { readonly choices: "{usage} 候选 {choices}" }
   | { readonly choices: "{usage} 可选 {choices}" };
@@ -25,8 +71,19 @@ const validChoicesUnion: ValidChoicesUnion =
     : { choices: "{usage} 可选 {choices}" };
 void helpCapability({ wording: validChoicesUnion });
 
+const validEmptyAndWordingUnion =
+  Math.random() < 0.5 ? {} : { wording: { choices: "{usage} 候选 {choices}" } };
+void helpCapability(validEmptyAndWordingUnion);
+
+void helpCapability(
+  // @ts-expect-error An unannotated empty branch must not let an invalid template in the other branch pass.
+  Math.random() < 0.5 ? {} : { wording: { choices: "{usage} 候选 {choises}" } },
+);
+
 const inferredEmptyWordingBranch =
-  Math.random() < 0.5 ? {} : { wording: { choices: "{usage} 候选 {choises}" } };
+  Math.random() < 0.5
+    ? {}
+    : ({ wording: { choices: "{usage} 候选 {choises}" } } as const);
 // @ts-expect-error An unannotated empty branch must not let an invalid template in the other branch pass.
 void helpCapability(inferredEmptyWordingBranch);
 

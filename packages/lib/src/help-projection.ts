@@ -161,11 +161,28 @@ export type IsPlainObjectForTypeCheck<Value> =
           : true
       : false;
 
-export type CapabilityParameter<Definition, Issues> = [Issues] extends [never]
-  ? Definition
-  : Definition extends object
-    ? Definition & Issues
-    : Issues;
+type RemainingCapabilityOptions<Shape, Definition> =
+  IsAny<Definition> extends true
+    ? Partial<Shape>
+    : {
+        readonly [Key in Exclude<keyof Shape, keyof Definition>]?: Shape[Key];
+      };
+
+// Supplies ContextualShape for contextual property typing and completions while
+// omitting already-written keys on invalid objects so ContractTypeError stays unsuppressed.
+export type CapabilityParameter<Definition, ContextualShape, Issues> = [
+  Issues,
+] extends [never]
+  ?
+      | (Definition & ContextualShape)
+      | (undefined extends Definition ? undefined : never)
+  : [Exclude<Definition, undefined>] extends [never]
+    ? Issues
+    : false extends IsPlainObjectForTypeCheck<Exclude<Definition, undefined>>
+      ? Issues
+      : Definition &
+          RemainingCapabilityOptions<ContextualShape, Definition> &
+          Issues;
 
 export type IsInvalidSingleLineLiteral<Value extends string> =
   string extends Value
@@ -339,26 +356,30 @@ type HelpFactWordingUnknownPropertyIssues<Wording> = {
 }[Exclude<Extract<keyof Wording, string>, HelpTemplateSlot>];
 
 type HelpCapabilityWording<Definition> = Definition extends unknown
-  ? Definition extends Readonly<{ readonly wording?: infer Wording }>
-    ? Exclude<Wording, undefined>
-    : never
+  ? IsAny<Definition> extends true
+    ? never
+    : "wording" extends keyof Definition
+      ? Exclude<Definition["wording"], undefined>
+      : never
   : never;
 
 type HelpCapabilityShortAliasIssues<Definition> = Definition extends unknown
-  ? "shortAlias" extends keyof Definition
-    ? [Exclude<Definition["shortAlias"], undefined>] extends [never]
-      ? never
-      : [Exclude<Definition["shortAlias"], undefined>] extends ["-h"]
+  ? IsAny<Definition> extends true
+    ? never
+    : "shortAlias" extends keyof Definition
+      ? [Exclude<Definition["shortAlias"], undefined>] extends [never]
         ? never
-        : ContractTypeError<
-            "invalidCapabilityShortAlias",
-            Readonly<{
-              readonly capability: "help";
-              readonly expected: "-h";
-              readonly received: Exclude<Definition["shortAlias"], undefined>;
-            }>
-          >
-    : never
+        : [Exclude<Definition["shortAlias"], undefined>] extends ["-h"]
+          ? never
+          : ContractTypeError<
+              "invalidCapabilityShortAlias",
+              Readonly<{
+                readonly capability: "help";
+                readonly expected: "-h";
+                readonly received: Exclude<Definition["shortAlias"], undefined>;
+              }>
+            >
+      : never
   : never;
 
 type HelpHeadingMemberIssues<Headings> =
@@ -405,9 +426,11 @@ type HelpHeadingMemberIssues<Headings> =
     }[keyof Headings & keyof HelpHeadings];
 
 type HelpCapabilityHeadingsValue<Definition> = Definition extends unknown
-  ? Definition extends Readonly<{ readonly headings?: infer Headings }>
-    ? Exclude<Headings, undefined>
-    : never
+  ? IsAny<Definition> extends true
+    ? never
+    : "headings" extends keyof Definition
+      ? Exclude<Definition["headings"], undefined>
+      : never
   : never;
 
 type HelpCapabilityHeadingsIssues<Definition> =
@@ -450,20 +473,21 @@ type HelpCapabilityIssuesForObject<Definition> =
   | HelpCapabilityHeadingsIssues<Definition>
   | HelpCapabilityWordingIssues<Definition>;
 
-type HelpCapabilityIssues<Definition> = [
-  Exclude<Definition, undefined>,
-] extends [never]
-  ? never
-  : Exclude<Definition, undefined> extends infer Defined
-    ? Defined extends unknown
-      ? IsPlainObjectForTypeCheck<Defined> extends true
-        ? HelpCapabilityIssuesForObject<Defined>
-        : ContractTypeError<
-            "invalidCapability",
-            Readonly<{ readonly capability: "help" }>
-          >
-      : never
-    : never;
+type HelpCapabilityIssues<Definition> =
+  IsAny<Definition> extends true
+    ? never
+    : [Exclude<Definition, undefined>] extends [never]
+      ? never
+      : Exclude<Definition, undefined> extends infer Defined
+        ? Defined extends unknown
+          ? IsPlainObjectForTypeCheck<Defined> extends true
+            ? HelpCapabilityIssuesForObject<Defined>
+            : ContractTypeError<
+                "invalidCapability",
+                Readonly<{ readonly capability: "help" }>
+              >
+          : never
+        : never;
 
 export type FieldPlaceholderFailureReason<Placeholder extends string> =
   Placeholder extends
@@ -562,9 +586,19 @@ export function isHelpCapability(value: unknown): value is HelpCapability {
  * appear, with completeness checked by defineCli. The core generates no default
  * natural language.
  */
-export function helpCapability<const Definition = HelpCapabilityDefinition>(
-  definition?: CapabilityParameter<
+// Separate the zero-argument call from the parameterized overload so passing a
+// union argument binds `Definition` to the full union instead of splitting across `| undefined`.
+export function helpCapability(): HelpCapability;
+/**
+ * Assemble help for the whole tree explicitly. `headings` are optional section
+ * titles; `wording` supplies the templates required by the help facts that actually
+ * appear, with completeness checked by defineCli. The core generates no default
+ * natural language.
+ */
+export function helpCapability<const Definition>(
+  definition: CapabilityParameter<
     Definition,
+    HelpCapabilityDefinition,
     HelpCapabilityIssues<Definition>
   >,
 ): HelpCapability;

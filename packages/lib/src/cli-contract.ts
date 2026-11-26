@@ -1814,8 +1814,12 @@ export type RawValueOptionInputForSchema<InputSchema extends ContractSchema> =
     [Field in Extract<keyof ContractSchemaInput<InputSchema>, string>]?: string;
   }>;
 
+// Keyed by a unique symbol so TypeScript still prints ContractTypeError<Code, Evidence>
+// in diagnostics without ever suggesting `contractTypeError` in editor completions.
+declare const contractTypeError: unique symbol;
+
 export interface ContractTypeError<Code extends string, Evidence> {
-  readonly contractTypeError: Readonly<{ readonly code: Code } & Evidence>;
+  readonly [contractTypeError]: Readonly<{ readonly code: Code } & Evidence>;
 }
 
 type InputStringKeys<Input> = Extract<keyof Input, string>;
@@ -4454,119 +4458,134 @@ type RuntimeCliDefinition = RootCliDefinitionBase<string> &
     readonly commands: Readonly<Record<string, RuntimeCommandDefinition>>;
   }>;
 
-type VersionCapabilityIssues<Definition> = Definition extends unknown
-  ? IsPlainObjectForTypeCheck<Definition> extends true
-    ?
-        | CapabilityUnknownPropertyIssues<
-            Definition,
-            "version",
-            (typeof definitionPropertyKeys.capability.version)[number]
-          >
-        | (Definition extends Readonly<{ readonly value: infer Value }>
-            ? [Value] extends [TextLine]
-              ? never
-              : ContractTypeError<
-                  "invalidVersionValue",
-                  Readonly<{
-                    readonly path: readonly ["version", "value"];
-                    readonly received: Value;
-                  }>
-                >
-            : ContractTypeError<
-                "invalidVersionValue",
-                Readonly<{
-                  readonly path: readonly ["version", "value"];
-                  readonly received: undefined;
-                }>
-              >)
-        | ("description" extends keyof Definition
-            ? [Exclude<Definition["description"], undefined>] extends [never]
-              ? never
-              : [Exclude<Definition["description"], undefined>] extends [string]
-                ? Exclude<
-                    Definition["description"],
-                    undefined
-                  > extends infer Literal extends string
-                  ? Literal extends unknown
-                    ? IsInvalidSingleLineLiteral<Literal> extends true
-                      ? ContractTypeError<
-                          "invalidCapabilityDescription",
-                          Readonly<{
-                            readonly capability: "version";
-                            readonly path: readonly ["version", "description"];
-                            readonly received: Literal;
-                          }>
-                        >
+type VersionCapabilityIssues<Definition> =
+  IsAny<Definition> extends true
+    ? never
+    : Definition extends unknown
+      ? IsPlainObjectForTypeCheck<Definition> extends true
+        ?
+            | CapabilityUnknownPropertyIssues<
+                Definition,
+                "version",
+                (typeof definitionPropertyKeys.capability.version)[number]
+              >
+            | (Definition extends Readonly<{ readonly value: infer Value }>
+                ? [Value] extends [TextLine]
+                  ? never
+                  : ContractTypeError<
+                      "invalidVersionValue",
+                      Readonly<{
+                        readonly path: readonly ["version", "value"];
+                        readonly received: Value;
+                      }>
+                    >
+                : ContractTypeError<
+                    "invalidVersionValue",
+                    Readonly<{
+                      readonly path: readonly ["version", "value"];
+                      readonly received: undefined;
+                    }>
+                  >)
+            | ("description" extends keyof Definition
+                ? [Exclude<Definition["description"], undefined>] extends [
+                    never,
+                  ]
+                  ? never
+                  : [Exclude<Definition["description"], undefined>] extends [
+                        string,
+                      ]
+                    ? Exclude<
+                        Definition["description"],
+                        undefined
+                      > extends infer Literal extends string
+                      ? Literal extends unknown
+                        ? IsInvalidSingleLineLiteral<Literal> extends true
+                          ? ContractTypeError<
+                              "invalidCapabilityDescription",
+                              Readonly<{
+                                readonly capability: "version";
+                                readonly path: readonly [
+                                  "version",
+                                  "description",
+                                ];
+                                readonly received: Literal;
+                              }>
+                            >
+                          : never
+                        : never
                       : never
-                    : never
-                  : never
+                    : ContractTypeError<
+                        "invalidCapabilityDescription",
+                        Readonly<{
+                          readonly capability: "version";
+                          readonly path: readonly ["version", "description"];
+                          readonly received: Exclude<
+                            Definition["description"],
+                            undefined
+                          >;
+                        }>
+                      >
+                : never)
+            | ("shortAlias" extends keyof Definition
+                ? [Exclude<Definition["shortAlias"], undefined>] extends [never]
+                  ? never
+                  : [Exclude<Definition["shortAlias"], undefined>] extends [
+                        "-V",
+                      ]
+                    ? never
+                    : ContractTypeError<
+                        "invalidCapabilityShortAlias",
+                        Readonly<{
+                          readonly capability: "version";
+                          readonly expected: "-V";
+                          readonly received: Exclude<
+                            Definition["shortAlias"],
+                            undefined
+                          >;
+                        }>
+                      >
+                : never)
+        : ContractTypeError<
+            "invalidCapability",
+            Readonly<{ readonly capability: "version" }>
+          >
+      : never;
+
+type SchemaCapabilityIssues<Definition> =
+  IsAny<Definition> extends true
+    ? never
+    : Definition extends unknown
+      ? IsPlainObjectForTypeCheck<Definition> extends true
+        ?
+            | CapabilityUnknownPropertyIssues<
+                Definition,
+                "schema",
+                (typeof definitionPropertyKeys.capability.schema)[number]
+              >
+            | (Definition extends Readonly<{ readonly description: infer Desc }>
+                ? [Desc] extends [TextLine]
+                  ? never
+                  : ContractTypeError<
+                      "invalidCapabilityDescription",
+                      Readonly<{
+                        readonly capability: "schema";
+                        readonly path: readonly ["schema", "description"];
+                        readonly received: Desc;
+                      }>
+                    >
                 : ContractTypeError<
                     "invalidCapabilityDescription",
                     Readonly<{
-                      readonly capability: "version";
-                      readonly path: readonly ["version", "description"];
-                      readonly received: Exclude<
-                        Definition["description"],
-                        undefined
-                      >;
+                      readonly capability: "schema";
+                      readonly path: readonly ["schema", "description"];
+                      readonly received: undefined;
                     }>
-                  >
-            : never)
-        | ("shortAlias" extends keyof Definition
-            ? [Exclude<Definition["shortAlias"], undefined>] extends [never]
-              ? never
-              : [Exclude<Definition["shortAlias"], undefined>] extends ["-V"]
-                ? never
-                : ContractTypeError<
-                    "invalidCapabilityShortAlias",
-                    Readonly<{
-                      readonly capability: "version";
-                      readonly expected: "-V";
-                      readonly received: Exclude<
-                        Definition["shortAlias"],
-                        undefined
-                      >;
-                    }>
-                  >
-            : never)
-    : ContractTypeError<
-        "invalidCapability",
-        Readonly<{ readonly capability: "version" }>
-      >
-  : never;
-
-type SchemaCapabilityIssues<Definition> = Definition extends unknown
-  ? IsPlainObjectForTypeCheck<Definition> extends true
-    ?
-        | CapabilityUnknownPropertyIssues<
-            Definition,
-            "schema",
-            (typeof definitionPropertyKeys.capability.schema)[number]
+                  >)
+        : ContractTypeError<
+            "invalidCapability",
+            Readonly<{ readonly capability: "schema" }>
           >
-        | (Definition extends Readonly<{ readonly description: infer Desc }>
-            ? [Desc] extends [TextLine]
-              ? never
-              : ContractTypeError<
-                  "invalidCapabilityDescription",
-                  Readonly<{
-                    readonly capability: "schema";
-                    readonly path: readonly ["schema", "description"];
-                    readonly received: Desc;
-                  }>
-                >
-            : ContractTypeError<
-                "invalidCapabilityDescription",
-                Readonly<{
-                  readonly capability: "schema";
-                  readonly path: readonly ["schema", "description"];
-                  readonly received: undefined;
-                }>
-              >)
-    : ContractTypeError<
-        "invalidCapability",
-        Readonly<{ readonly capability: "schema" }>
-      >
-  : never;
+      : never;
 
 /**
  * Assemble the eager version request on the root contract explicitly; it covers the
@@ -4578,9 +4597,11 @@ type SchemaCapabilityIssues<Definition> = Definition extends unknown
 export function versionCapability<const Definition>(
   definition: CapabilityParameter<
     Definition,
+    Partial<VersionCapabilityDefinition>,
     VersionCapabilityIssues<Definition>
   >,
-): VersionCapability {
+): VersionCapability;
+export function versionCapability(definition: unknown): VersionCapability {
   if (!isPlainRecord(definition)) {
     throw new ContractDefinitionError([
       { code: "invalidCapability", capability: "version" },
@@ -4642,9 +4663,11 @@ export function versionCapability<const Definition>(
 export function schemaCapability<const Definition>(
   definition: CapabilityParameter<
     Definition,
+    Partial<SchemaCapabilityDefinition>,
     SchemaCapabilityIssues<Definition>
   >,
-): SchemaCapability {
+): SchemaCapability;
+export function schemaCapability(definition: unknown): SchemaCapability {
   if (!isPlainRecord(definition)) {
     throw new ContractDefinitionError([
       { code: "invalidCapability", capability: "schema" },

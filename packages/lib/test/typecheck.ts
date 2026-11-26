@@ -93,6 +93,8 @@ function exhaustivelyRecognizeUsageIssue(issue: UsageIssue): string {
 void exhaustivelyRecognizeUsageIssue;
 
 declare const emptyInput: ContractSchema<EmptyCliInput>;
+// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- Contextual return-type inference is the authoring pattern under test.
+declare function fromEnv<Value extends string>(fallback: string): Value;
 declare const namedInput: ContractSchema<
   Readonly<{ readonly name: string }>,
   Readonly<{ readonly normalizedName: string }>
@@ -2143,7 +2145,27 @@ function verifyRootCapabilityAndAlignedTypeErrors() {
   } as const;
   helpCapability();
   helpCapability(undefined);
+  helpCapability({});
+  const emptyHelp = {} as const;
+  helpCapability(emptyHelp);
   helpCapability(validExtractedHelp);
+  helpCapability({ shortAlias: fromEnv("-h") });
+
+  const branchCondition = Math.random() < 0.5;
+  const helpUnion = branchCondition
+    ? ({ shortAlias: "-h", headings: { usage: "Usage" } } as const)
+    : ({ wording: { outputModePlaceholder: "mode" } } as const);
+  helpCapability(helpUnion);
+  const explicitHelpUnion:
+    | { readonly shortAlias: "-h" }
+    | { readonly wording: { readonly outputModePlaceholder: "mode" } } =
+    branchCondition
+      ? { shortAlias: "-h" }
+      : { wording: { outputModePlaceholder: "mode" } };
+  helpCapability(explicitHelpUnion);
+  const optionalHelpUnion: { readonly shortAlias: "-h" } | undefined =
+    branchCondition ? { shortAlias: "-h" } : undefined;
+  helpCapability(optionalHelpUnion);
 
   const validVersionDesc: string | undefined = "Print version";
   versionCapability({
@@ -2151,7 +2173,20 @@ function verifyRootCapabilityAndAlignedTypeErrors() {
     description: validVersionDesc,
     shortAlias: "-V",
   });
+  versionCapability({
+    value: text.line("1.0.0"),
+    shortAlias: fromEnv("-V"),
+  });
+  const versionUnion = branchCondition
+    ? ({ value: text.line("1.0.0"), shortAlias: "-V" } as const)
+    : ({ value: text.line("2.0.0"), description: "Print version" } as const);
+  versionCapability(versionUnion);
+
   schemaCapability({ description: text.line("Query contract") });
+  const schemaUnion = branchCondition
+    ? ({ description: text.line("Query contract") } as const)
+    : ({ description: text.line("Inspect schema") } as const);
+  schemaCapability(schemaUnion);
 
   // @ts-expect-error Help capability rejects unknown top-level properties.
   helpCapability({ extra: true });
