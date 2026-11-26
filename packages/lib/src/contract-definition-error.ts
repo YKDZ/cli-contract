@@ -1,6 +1,6 @@
 import type { SchemaIssueEvidence, UsageIssue } from "./cli-invocation.ts";
 import type { JsonValue } from "./contract-schema.ts";
-import type { HelpTemplateSlot } from "./help-projection.ts";
+import type { HelpHeadings, HelpTemplateSlot } from "./help-projection.ts";
 
 export type SchemaDefinitionTarget =
   | Readonly<{ readonly command: string; readonly location: "input" }>
@@ -151,6 +151,39 @@ export type ContractDefinitionIssue =
   | Readonly<{
       readonly code: "invalidCapability";
       readonly capability: "help" | "version" | "schema";
+    }>
+  | Readonly<{
+      readonly code: "invalidCapabilityShortAlias";
+      readonly capability: "help" | "version";
+      readonly expected: "-h" | "-V";
+      readonly received: unknown;
+    }>
+  | Readonly<{
+      readonly code: "invalidHelpHeadings";
+      readonly path: readonly ["help", "headings"];
+      readonly received: unknown;
+    }>
+  | Readonly<{
+      readonly code: "invalidHelpHeading";
+      readonly path: readonly ["help", "headings", keyof HelpHeadings];
+      readonly heading: keyof HelpHeadings;
+      readonly received: unknown;
+    }>
+  | Readonly<{
+      readonly code: "invalidHelpWording";
+      readonly path: readonly ["help", "wording"];
+      readonly received: unknown;
+    }>
+  | Readonly<{
+      readonly code: "invalidVersionValue";
+      readonly path: readonly ["version", "value"];
+      readonly received: unknown;
+    }>
+  | Readonly<{
+      readonly code: "invalidCapabilityDescription";
+      readonly capability: "version" | "schema";
+      readonly path: readonly ["version" | "schema", "description"];
+      readonly received: unknown;
     }>
   | Readonly<{
       readonly code: "invalidOutputModes";
@@ -514,6 +547,20 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `The stream of command ${issue.command} must declare at least one record`;
     case "invalidCapability":
       return `The ${issue.capability} capability of the CLI is invalid`;
+    case "invalidCapabilityShortAlias":
+      return `The short alias of the ${issue.capability} capability must be ${issue.expected}`;
+    case "invalidHelpHeadings":
+      return "Help headings at help.headings must be a plain object";
+    case "invalidHelpHeading":
+      return `Help heading ${issue.heading} must be valid single-line text`;
+    case "invalidHelpWording":
+      return "Help wording at help.wording must be a plain object";
+    case "invalidVersionValue":
+      return "The value of the version capability must be a valid text.line projection";
+    case "invalidCapabilityDescription":
+      return issue.capability === "schema"
+        ? "The description of the schema capability must be a valid text.line projection"
+        : "The description of the version capability must be valid single-line text";
     case "invalidOutputModes":
       return `The output mode set of command ${issue.command} is invalid (${issue.reason})`;
     case "invalidDefaultOutputMode":

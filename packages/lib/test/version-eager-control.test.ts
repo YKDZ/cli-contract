@@ -245,13 +245,76 @@ void test("version and help stay independent requests and termination identities
 
 void test("the version value and every control spelling close at definition time", () => {
   assert.throws(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally crosses static types to verify the version capability boundary.
+    () => versionCapability(undefined as never),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        { code: "invalidCapability", capability: "version" },
+      ]);
+      return true;
+    },
+  );
+  assert.throws(
     () =>
       versionCapability({
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally crosses static types to verify the version capability boundary.
         value: { kind: "line", value: "2.3.4\n" } as never,
       }),
-    TypeError,
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidVersionValue",
+          path: ["version", "value"],
+          received: { kind: "line", value: "2.3.4\n" },
+        },
+      ]);
+      return true;
+    },
   );
+  let getterEvaluated = false;
+  const unknownGetterDefinition = {
+    value: "2.3.4",
+    description: "",
+    shortAlias: "-x",
+  };
+  Object.defineProperty(unknownGetterDefinition, "extra", {
+    enumerable: true,
+    get() {
+      getterEvaluated = true;
+      return "should not run";
+    },
+  });
+  assert.throws(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally crosses static types to verify aggregated version capability errors.
+    () => versionCapability(unknownGetterDefinition as never),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        { code: "unknownDefinitionProperty", path: ["version", "extra"] },
+        {
+          code: "invalidVersionValue",
+          path: ["version", "value"],
+          received: "2.3.4",
+        },
+        {
+          code: "invalidCapabilityDescription",
+          capability: "version",
+          path: ["version", "description"],
+          received: "",
+        },
+        {
+          code: "invalidCapabilityShortAlias",
+          capability: "version",
+          expected: "-V",
+          received: "-x",
+        },
+      ]);
+      return true;
+    },
+  );
+  assert.equal(getterEvaluated, false);
 
   for (const [field, spelling, control] of [
     ["help", "--help", "help"],
@@ -339,11 +402,23 @@ void test("the version value and every control spelling close at definition time
 void test("the version capability copies and closes over single-line value and description", async () => {
   assert.throws(
     () =>
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally crosses static types to verify the version capability boundary.
       versionCapability({
         value: text.line("2.3.4"),
         description: "显示版本\n注入内容",
-      }),
-    TypeError,
+      } as never),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidCapabilityDescription",
+          capability: "version",
+          path: ["version", "description"],
+          received: "显示版本\n注入内容",
+        },
+      ]);
+      return true;
+    },
   );
 
   const externalValue = { kind: "line", value: "2.3.4" };

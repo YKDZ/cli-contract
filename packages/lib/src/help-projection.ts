@@ -12,21 +12,28 @@ import type {
   ContractSummaryQuery,
 } from "./contract-discovery.ts";
 import { ContractExecutionError } from "./contract-execution-error.ts";
-import { copySingleLineText } from "./description.ts";
+import { isSingleLineText } from "./description.ts";
 import { isPlainRecord } from "./json-value.ts";
 
 const helpCapabilityType = Symbol("HelpCapability.type");
 const helpCapabilities = new WeakSet<object>();
-const invalidHelpFactWordingValues = new WeakMap<
-  object,
-  ReadonlyMap<string, unknown>
->();
 
 const helpCapabilityPropertyKeys = [
   "shortAlias",
   "headings",
   "wording",
 ] as const;
+
+const helpHeadingKeys = [
+  "usage",
+  "commands",
+  "arguments",
+  "options",
+  "constraints",
+  "schema",
+  "examples",
+  "supplement",
+] as const satisfies readonly (keyof HelpHeadings)[];
 
 export interface HelpCapability {
   readonly kind: "helpCapability";
@@ -141,17 +148,54 @@ export interface HelpCapabilityDefinition {
   readonly wording?: HelpFactWording;
 }
 
-type HelpCapabilityDefinitionForTypeCheck = Omit<
-  HelpCapabilityDefinition,
-  "wording"
-> & {
-  /** Keep literal keys of unknown slots so the local closed-set diagnostic reports an actionable identity. */
-  readonly wording?: object;
-};
+type HelpCapabilityDefinitionForTypeCheck = object | undefined;
 
-type RejectUnknownProperties<Value, Allowed extends PropertyKey> = Readonly<{
-  [Property in Exclude<keyof Value, Allowed>]?: never;
-}>;
+type IsAny<Value> = 0 extends 1 & Value ? true : false;
+
+type IsPlainObjectForTypeCheck<Value> =
+  IsAny<Value> extends true
+    ? true
+    : Value extends object
+      ? Value extends readonly unknown[]
+        ? false
+        : Value extends (...args: never[]) => unknown
+          ? false
+          : true
+      : false;
+
+export type IsInvalidSingleLineLiteral<Value extends string> =
+  string extends Value
+    ? false
+    : Value extends ""
+      ? true
+      : Value extends
+            | `${string}\r${string}`
+            | `${string}\n${string}`
+            | `${string}\0${string}`
+        ? true
+        : false;
+
+export type CapabilityUnknownPropertyIssues<
+  Definition,
+  Capability extends "help" | "version" | "schema",
+  Allowed extends PropertyKey,
+> = Definition extends unknown
+  ? IsAny<Definition> extends true
+    ? never
+    : [Exclude<Extract<keyof Definition, string>, Allowed>] extends [never]
+      ? never
+      : {
+          readonly [
+            Property in Exclude<Extract<keyof Definition, string>, Allowed>
+          ]: ContractTypeError<
+            "unknownDefinitionProperty",
+            Readonly<{
+              readonly path: readonly [Capability, Property];
+              readonly property: Property;
+            }>
+          >;
+        }[Exclude<Extract<keyof Definition, string>, Allowed>]
+  : never;
 
 type HelpFactTemplateAllowedPlaceholder<Slot extends HelpTemplateSlot> =
   (typeof helpTemplateSpecifications)[Slot]["placeholders"][number];
@@ -278,10 +322,6 @@ type HelpFactWordingMemberIssues<Wording> =
     }[keyof Wording & HelpTemplateSlot]
   | HelpFactWordingUnknownPropertyIssues<Wording>;
 
-type HelpFactWordingIssues<Wording> = Wording extends unknown
-  ? HelpFactWordingMemberIssues<Wording>
-  : never;
-
 type HelpFactWordingUnknownPropertyIssues<Wording> = {
   [
     Property in Exclude<Extract<keyof Wording, string>, HelpTemplateSlot>
@@ -294,30 +334,129 @@ type HelpFactWordingUnknownPropertyIssues<Wording> = {
   >;
 }[Exclude<Extract<keyof Wording, string>, HelpTemplateSlot>];
 
-type HelpFactWordingContract<Wording> = [
-  HelpFactWordingIssues<Wording>,
-] extends [never]
-  ? unknown
-  : HelpFactWordingIssues<Wording>;
-
 type HelpCapabilityWording<Definition> = Definition extends unknown
   ? Definition extends Readonly<{ readonly wording?: infer Wording }>
     ? Exclude<Wording, undefined>
     : never
   : never;
 
-type HelpCapabilityTemplateContract<Definition> = [
-  HelpCapabilityWording<Definition>,
+type HelpCapabilityShortAliasIssues<Definition> = Definition extends unknown
+  ? "shortAlias" extends keyof Definition
+    ? [Exclude<Definition["shortAlias"], undefined>] extends [never]
+      ? never
+      : [Exclude<Definition["shortAlias"], undefined>] extends ["-h"]
+        ? never
+        : ContractTypeError<
+            "invalidCapabilityShortAlias",
+            Readonly<{
+              readonly capability: "help";
+              readonly expected: "-h";
+              readonly received: Exclude<Definition["shortAlias"], undefined>;
+            }>
+          >
+    : never
+  : never;
+
+type HelpHeadingMemberIssues<Headings> =
+  | {
+      [
+        Property in Exclude<Extract<keyof Headings, string>, keyof HelpHeadings>
+      ]: ContractTypeError<
+        "unknownDefinitionProperty",
+        Readonly<{
+          readonly path: readonly ["help", "headings", Property];
+          readonly property: Property;
+        }>
+      >;
+    }[Exclude<Extract<keyof Headings, string>, keyof HelpHeadings>]
+  | {
+      [Heading in keyof Headings & keyof HelpHeadings]: [
+        Exclude<Headings[Heading], undefined>,
+      ] extends [never]
+        ? never
+        : [Exclude<Headings[Heading], undefined>] extends [string]
+          ? Exclude<Headings[Heading], undefined> extends infer Literal extends
+              string
+            ? Literal extends unknown
+              ? IsInvalidSingleLineLiteral<Literal> extends true
+                ? ContractTypeError<
+                    "invalidHelpHeading",
+                    Readonly<{
+                      readonly path: readonly ["help", "headings", Heading];
+                      readonly heading: Heading;
+                      readonly received: Literal;
+                    }>
+                  >
+                : never
+              : never
+            : never
+          : ContractTypeError<
+              "invalidHelpHeading",
+              Readonly<{
+                readonly path: readonly ["help", "headings", Heading];
+                readonly heading: Heading;
+                readonly received: Exclude<Headings[Heading], undefined>;
+              }>
+            >;
+    }[keyof Headings & keyof HelpHeadings];
+
+type HelpCapabilityHeadingsValue<Definition> = Definition extends unknown
+  ? Definition extends Readonly<{ readonly headings?: infer Headings }>
+    ? Exclude<Headings, undefined>
+    : never
+  : never;
+
+type HelpCapabilityHeadingsIssues<Definition> =
+  HelpCapabilityHeadingsValue<Definition> extends infer Headings
+    ? Headings extends unknown
+      ? IsPlainObjectForTypeCheck<Headings> extends true
+        ? HelpHeadingMemberIssues<Headings>
+        : ContractTypeError<
+            "invalidHelpHeadings",
+            Readonly<{
+              readonly path: readonly ["help", "headings"];
+              readonly received: Headings;
+            }>
+          >
+      : never
+    : never;
+
+type HelpCapabilityWordingIssues<Definition> =
+  HelpCapabilityWording<Definition> extends infer Wording
+    ? Wording extends unknown
+      ? IsPlainObjectForTypeCheck<Wording> extends true
+        ? HelpFactWordingMemberIssues<Wording>
+        : ContractTypeError<
+            "invalidHelpWording",
+            Readonly<{
+              readonly path: readonly ["help", "wording"];
+              readonly received: Wording;
+            }>
+          >
+      : never
+    : never;
+
+type HelpCapabilityIssuesForObject<Definition> =
+  | CapabilityUnknownPropertyIssues<
+      Definition,
+      "help",
+      (typeof helpCapabilityPropertyKeys)[number]
+    >
+  | HelpCapabilityShortAliasIssues<Definition>
+  | HelpCapabilityHeadingsIssues<Definition>
+  | HelpCapabilityWordingIssues<Definition>;
+
+type HelpCapabilityIssues<Definition> = [
+  Exclude<Definition, undefined>,
+] extends [never]
+  ? never
+  : HelpCapabilityIssuesForObject<Exclude<Definition, undefined>>;
+
+type HelpCapabilityContract<Definition> = [
+  HelpCapabilityIssues<Definition>,
 ] extends [never]
   ? unknown
-  : [
-        Extract<
-          HelpCapabilityWording<Definition>,
-          (...arguments_: never[]) => unknown
-        >,
-      ] extends [never]
-    ? HelpFactWordingContract<HelpCapabilityWording<Definition>>
-    : never;
+  : HelpCapabilityIssues<Definition>;
 
 export type FieldPlaceholderFailureReason<Placeholder extends string> =
   Placeholder extends
@@ -410,12 +549,6 @@ export function isHelpCapability(value: unknown): value is HelpCapability {
   );
 }
 
-export function getInvalidHelpFactWordingValues(
-  capability: HelpCapability,
-): ReadonlyMap<string, unknown> | undefined {
-  return invalidHelpFactWordingValues.get(capability);
-}
-
 /**
  * Assemble help for the whole tree explicitly. `headings` are optional section
  * titles; `wording` supplies the templates required by the help facts that actually
@@ -425,40 +558,45 @@ export function getInvalidHelpFactWordingValues(
 export function helpCapability<
   const Definition extends HelpCapabilityDefinitionForTypeCheck =
     HelpCapabilityDefinition,
->(
-  definition?: Definition &
-    RejectUnknownProperties<
-      Definition,
-      (typeof helpCapabilityPropertyKeys)[number]
-    > &
-    (Definition extends Readonly<{ readonly headings: infer Headings }>
-      ? Readonly<{
-          readonly headings: RejectUnknownProperties<
-            Headings,
-            keyof HelpHeadings
-          >;
-        }>
-      : unknown) &
-    HelpCapabilityTemplateContract<Definition>,
-): HelpCapability;
+>(definition?: Definition & HelpCapabilityContract<Definition>): HelpCapability;
 export function helpCapability(
   definition: HelpCapabilityDefinition = {},
 ): HelpCapability {
-  const allowedProperties: readonly string[] = helpCapabilityPropertyKeys;
-  for (const property of Object.keys(definition)) {
-    if (!allowedProperties.includes(property)) {
-      throw new TypeError(
-        `The help capability contains an unknown property ${property}`,
-      );
+  if (!isPlainRecord(definition)) {
+    throw new ContractDefinitionError([
+      { code: "invalidCapability", capability: "help" },
+    ]);
+  }
+  const issues: ContractDefinitionIssue[] = [];
+  for (const property of Reflect.ownKeys(definition)) {
+    const name = String(property);
+    if (!(helpCapabilityPropertyKeys as readonly string[]).includes(name)) {
+      issues.push({
+        code: "unknownDefinitionProperty",
+        path: ["help", name],
+      });
     }
   }
   if (definition.shortAlias !== undefined && definition.shortAlias !== "-h") {
-    throw new TypeError("The help short alias must be -h");
+    issues.push({
+      code: "invalidCapabilityShortAlias",
+      capability: "help",
+      expected: "-h",
+      received: definition.shortAlias,
+    });
   }
-  const copiedWording =
+  const headings =
+    definition.headings === undefined
+      ? undefined
+      : copyHelpHeadings(definition.headings, issues);
+  const wording =
     definition.wording === undefined
       ? undefined
-      : copyHelpFactWording(definition.wording);
+      : copyHelpFactWording(definition.wording, issues);
+  const [firstIssue, ...otherIssues] = issues;
+  if (firstIssue !== undefined) {
+    throw new ContractDefinitionError([firstIssue, ...otherIssues]);
+  }
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- helpCapability is issued by this factory and registered in the WeakSet; the type brand is not emitted at runtime.
   const capability = Object.freeze({
     kind: "helpCapability" as const,
@@ -466,136 +604,138 @@ export function helpCapability(
     ...(definition.shortAlias === undefined
       ? {}
       : { shortAlias: definition.shortAlias }),
-    ...(definition.headings === undefined
-      ? {}
-      : { headings: copyHelpHeadings(definition.headings) }),
-    ...(copiedWording === undefined ? {} : { wording: copiedWording.wording }),
+    ...(headings === undefined ? {} : { headings }),
+    ...(wording === undefined ? {} : { wording }),
   }) as HelpCapability;
   helpCapabilities.add(capability);
-  if (copiedWording !== undefined && copiedWording.invalidValues.size > 0) {
-    invalidHelpFactWordingValues.set(capability, copiedWording.invalidValues);
-  }
   return capability;
 }
 
-function copyHelpHeadings(value: unknown): HelpHeadings {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new TypeError("Help headings must be an object");
+function isHelpHeadingKey(key: string): key is keyof HelpHeadings {
+  return (helpHeadingKeys as readonly string[]).includes(key);
+}
+
+function copyHelpHeadings(
+  value: unknown,
+  issues: ContractDefinitionIssue[],
+): HelpHeadings | undefined {
+  if (!isPlainRecord(value)) {
+    issues.push({
+      code: "invalidHelpHeadings",
+      path: ["help", "headings"],
+      received: value,
+    });
+    return undefined;
   }
-  const allowed = new Set([
-    "usage",
-    "commands",
-    "arguments",
-    "options",
-    "constraints",
-    "schema",
-    "examples",
-    "supplement",
-  ]);
   const headings: Record<string, string> = {};
-  for (const [key, heading] of Object.entries(value)) {
-    if (!allowed.has(key))
-      throw new TypeError("Help headings contain an unknown section");
-    headings[key] = copySingleLineText(heading, `Help heading ${key}`);
+  for (const property of Reflect.ownKeys(value)) {
+    const key = String(property);
+    if (!isHelpHeadingKey(key)) {
+      issues.push({
+        code: "unknownDefinitionProperty",
+        path: ["help", "headings", key],
+      });
+      continue;
+    }
+    const heading = value[key];
+    if (heading === undefined) {
+      continue;
+    }
+    if (!isSingleLineText(heading)) {
+      issues.push({
+        code: "invalidHelpHeading",
+        path: ["help", "headings", key],
+        heading: key,
+        received: heading,
+      });
+      continue;
+    }
+    headings[key] = heading;
   }
   return Object.freeze(headings);
 }
 
-function copyHelpFactWording(value: unknown): Readonly<{
-  readonly wording: HelpFactWording;
-  readonly invalidValues: ReadonlyMap<string, unknown>;
-}> {
+function copyHelpFactWording(
+  value: unknown,
+  issues: ContractDefinitionIssue[],
+): HelpFactWording | undefined {
   if (!isPlainRecord(value)) {
-    throw new TypeError("Help fact wording must be an object");
+    issues.push({
+      code: "invalidHelpWording",
+      path: ["help", "wording"],
+      received: value,
+    });
+    return undefined;
   }
   const wording: Record<string, string> = {};
-  const invalidValues = new Map<string, unknown>();
-  const unknownSlotIssues: ContractDefinitionIssue[] = [];
-  for (const [slot, raw] of Object.entries(value)) {
+  for (const property of Reflect.ownKeys(value)) {
+    const slot = String(property);
     if (!isHelpTemplateSlot(slot)) {
-      unknownSlotIssues.push({
+      issues.push({
         code: "unknownDefinitionProperty",
         path: ["help", "wording", slot],
       });
       continue;
     }
+    const raw = value[slot];
+    if (raw === undefined) {
+      continue;
+    }
+    const reason = validateHelpFactTemplate(slot, raw);
+    if (reason !== undefined) {
+      issues.push({
+        code: "invalidHelpFactTemplate",
+        path: ["help", "wording", slot],
+        slot,
+        received: raw,
+        reason,
+      });
+      continue;
+    }
     if (typeof raw === "string") {
       wording[slot] = raw;
-    } else {
-      invalidValues.set(slot, raw);
-      wording[slot] = "";
     }
   }
-  const [firstUnknownSlotIssue, ...otherUnknownSlotIssues] = unknownSlotIssues;
-  if (firstUnknownSlotIssue !== undefined) {
-    const templateIssues: ContractDefinitionIssue[] = [];
-    collectHelpFactTemplateIssues(wording, templateIssues, invalidValues);
-    throw new ContractDefinitionError([
-      firstUnknownSlotIssue,
-      ...otherUnknownSlotIssues,
-      ...templateIssues,
-    ]);
-  }
-  return Object.freeze({
-    wording: Object.freeze(wording),
-    invalidValues,
-  });
+  return Object.freeze(wording);
 }
 
 function isHelpTemplateSlot(slot: string): slot is HelpTemplateSlot {
   return Object.hasOwn(helpTemplateSpecifications, slot);
 }
 
-export function collectHelpFactTemplateIssues(
-  wording: HelpFactWording,
-  issues: ContractDefinitionIssue[],
-  invalidValues: ReadonlyMap<string, unknown> = new Map(),
-): void {
-  for (const [slot, template] of Object.entries(wording)) {
-    if (!isHelpTemplateSlot(slot)) continue;
-    const path = ["help", "wording", slot];
-    let reason: "singleLine" | "empty" | "placeholder" | undefined;
-    if (
-      invalidValues.has(slot) ||
-      typeof template !== "string" ||
-      template.includes("\r") ||
-      template.includes("\n") ||
-      template.includes("\0")
-    ) {
-      reason = "singleLine";
-    } else if (template.trim().length === 0) {
-      reason = "empty";
-    } else {
-      const allowed = new Set<string>(
-        helpTemplateSpecifications[slot].placeholders,
-      );
-      const placeholders = [
-        ...template.matchAll(/\{([A-Za-z][A-Za-z0-9]*)\}/g),
-      ].map((match) => match[1] ?? "");
-      const outside = template.replace(/\{[A-Za-z][A-Za-z0-9]*\}/g, "");
-      if (
-        outside.includes("{") ||
-        outside.includes("}") ||
-        placeholders.some((placeholder) => !allowed.has(placeholder)) ||
-        [...allowed].some(
-          (placeholder) => !placeholders.includes(placeholder),
-        ) ||
-        ((slot === "commandPlaceholder" || slot === "outputModePlaceholder") &&
-          (template.includes("<") || template.includes(">")))
-      ) {
-        reason = "placeholder";
-      }
-    }
-    if (reason !== undefined) {
-      issues.push({
-        code: "invalidHelpFactTemplate",
-        path,
-        slot,
-        received: invalidValues.has(slot) ? invalidValues.get(slot) : template,
-        reason,
-      });
-    }
+function validateHelpFactTemplate(
+  slot: HelpTemplateSlot,
+  template: unknown,
+): "singleLine" | "empty" | "placeholder" | undefined {
+  if (
+    typeof template !== "string" ||
+    template.includes("\r") ||
+    template.includes("\n") ||
+    template.includes("\0")
+  ) {
+    return "singleLine";
   }
+  if (template.trim().length === 0) {
+    return "empty";
+  }
+  const allowed = new Set<string>(
+    helpTemplateSpecifications[slot].placeholders,
+  );
+  const placeholders = [
+    ...template.matchAll(/\{([A-Za-z][A-Za-z0-9]*)\}/g),
+  ].map((match) => match[1] ?? "");
+  const outside = template.replace(/\{[A-Za-z][A-Za-z0-9]*\}/g, "");
+  if (
+    outside.includes("{") ||
+    outside.includes("}") ||
+    placeholders.some((placeholder) => !allowed.has(placeholder)) ||
+    [...allowed].some((placeholder) => !placeholders.includes(placeholder)) ||
+    ((slot === "commandPlaceholder" || slot === "outputModePlaceholder") &&
+      (template.includes("<") || template.includes(">")))
+  ) {
+    return "placeholder";
+  }
+  return undefined;
 }
 
 export function collectExecutableRequiredHelpSlots(

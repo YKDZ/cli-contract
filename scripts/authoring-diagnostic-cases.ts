@@ -509,6 +509,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
         'field: "count"',
         'field: "enabled"',
         'field: "tags"',
+        'location: "input"',
         "rawValue: string",
         "rawValue: true",
         "rawValue: [string, ...string[]]",
@@ -518,7 +519,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
       ],
       codes: [
         {
-          code: "fieldInputMustAcceptRawValue",
+          code: "schemaFieldDoesNotAcceptRawValue",
           cliMultiplicity: 4,
           languageServiceRequired: true,
         },
@@ -577,7 +578,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
       required: [],
       codes: [
         {
-          code: "fieldSetDoesNotMatchSchemaInput",
+          code: "schemaFieldSetMismatch",
           cliMultiplicity: 2,
         },
       ],
@@ -586,7 +587,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
       kind: "fieldSet",
       expectedDiagnostics: 2,
       required: [
-        "schemaInputWithoutFields:",
+        "missingFields:",
         '"name"',
         '"count"',
         'command: "missingRawField"',
@@ -626,7 +627,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
         'missing: "text"',
       ],
       forbidden: [
-        "fieldInputMustAcceptRawValue",
+        "schemaFieldDoesNotAcceptRawValue",
         "Property 'completion' does not exist",
         "implicitly has an 'any'",
       ],
@@ -869,6 +870,167 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
       required: [],
     },
   },
+  {
+    fixture: "invalid-capabilities.ts",
+    sourcePath:
+      "scripts/fixtures/typescript-consumer-matrix/invalid-capabilities.ts",
+    derivation: {
+      kind: "copy",
+    },
+    common: {
+      required: [
+        'path: readonly ["help", "extra"]',
+        'capability: "help"',
+        'expected: "-h"',
+        'received: "-x"',
+        'path: readonly ["help", "headings"]',
+        'path: readonly ["help", "headings", "extra"]',
+        'path: readonly ["help", "headings", "usage"]',
+        'heading: "usage"',
+        'path: readonly ["help", "headings", "commands"]',
+        'path: readonly ["help", "headings", "options"]',
+        'path: readonly ["help", "wording"]',
+        'path: readonly ["version", "extra"]',
+        'path: readonly ["version", "value"]',
+        'path: readonly ["version", "description"]',
+        'capability: "version"',
+        'expected: "-V"',
+        'received: "-v"',
+        'path: readonly ["schema", "extra"]',
+        'path: readonly ["schema", "description"]',
+        'capability: "schema"',
+      ],
+      codes: [
+        {
+          code: "unknownDefinitionProperty",
+          cliMultiplicity: 4,
+          languageServiceRequired: true,
+        },
+        {
+          code: "invalidCapabilityShortAlias",
+          cliMultiplicity: 2,
+          languageServiceRequired: true,
+        },
+        {
+          code: "invalidHelpHeadings",
+          cliMultiplicity: 1,
+          languageServiceRequired: true,
+        },
+        {
+          code: "invalidHelpHeading",
+          cliMultiplicity: 3,
+          languageServiceRequired: true,
+        },
+        {
+          code: "invalidHelpWording",
+          cliMultiplicity: 1,
+          languageServiceRequired: true,
+        },
+        {
+          code: "invalidVersionValue",
+          cliMultiplicity: 1,
+          languageServiceRequired: true,
+        },
+        {
+          code: "invalidCapabilityDescription",
+          cliMultiplicity: 3,
+          languageServiceRequired: true,
+        },
+      ],
+    },
+    cli: {
+      kind: "codes",
+      required: [],
+    },
+    languageService: {
+      count: 15,
+      required: [],
+    },
+  },
+  {
+    fixture: "invalid-field-placeholder.ts",
+    sourcePath:
+      "scripts/fixtures/typescript-consumer-matrix/invalid-field-placeholder.ts",
+    derivation: {
+      kind: "copy",
+    },
+    common: {
+      required: [
+        'command: "badPlaceholders"',
+        'field: "emptyPositional"',
+        'reason: "empty"',
+        'field: "blankVariadic"',
+        'field: "multilineOption"',
+        'reason: "singleLine"',
+        'field: "bracketedRepeatable"',
+        'reason: "placeholder"',
+      ],
+      codes: [
+        {
+          code: "invalidFieldPlaceholder",
+          cliMultiplicity: 4,
+          languageServiceRequired: true,
+        },
+      ],
+    },
+    cli: {
+      kind: "codes",
+      required: [],
+    },
+    languageService: {
+      count: 4,
+      required: [],
+    },
+  },
+  {
+    fixture: "invalid-command-examples-and-outputs.ts",
+    sourcePath:
+      "scripts/fixtures/typescript-consumer-matrix/invalid-command-examples-and-outputs.ts",
+    derivation: {
+      kind: "copy",
+    },
+    common: {
+      required: [
+        'command: "badExampleMode"',
+        'reason: "invalidOutputMode"',
+        'received: "yaml"',
+        'command: "badExampleShape"',
+        'reason: "invalidShape"',
+        'member: "input"',
+        'command: "mismatched"',
+        'reason: "mismatchedCommand"',
+        'command: "badConstraintKind"',
+        'aspect: "kind"',
+        'command: "badConstraintCollection"',
+        'aspect: "collection"',
+      ],
+      codes: [
+        {
+          code: "invalidCommandExample",
+          cliMultiplicity: 2,
+          languageServiceRequired: true,
+        },
+        {
+          code: "invalidOutputModes",
+          cliMultiplicity: 1,
+          languageServiceRequired: true,
+        },
+        {
+          code: "invalidUsageConstraint",
+          cliMultiplicity: 2,
+          languageServiceRequired: true,
+        },
+      ],
+    },
+    cli: {
+      kind: "codes",
+      required: [],
+    },
+    languageService: {
+      count: 5,
+      required: [],
+    },
+  },
 ];
 
 const authoringDiscoverySources: readonly AuthoringDiagnosticSource[] = [
@@ -1047,11 +1209,30 @@ async function verifyAuthoringDiagnostic(
   const allowAdditionalDiagnostics = cli.allowAdditionalDiagnostics ?? false;
   const forbidden = cli.forbidden ?? [];
   const observation = observeCliDiagnostic(project, resolution, fixture);
-  const firstLevelCodes = observation.firstLevelMessages.flatMap((line) => {
-    const match = /^  [^ ].*ContractTypeError<"([^"]+)"/.exec(line);
-    const code = match?.[1];
-    return code === undefined ? [] : [code];
-  });
+  const firstLevelCodes: string[] = [];
+  let currentHeaderCode: string | undefined;
+  let currentChildCodes: string[] = [];
+  const flushDiagnosticBlock = () => {
+    if (currentChildCodes.length > 0) {
+      firstLevelCodes.push(...currentChildCodes);
+    } else if (currentHeaderCode !== undefined) {
+      firstLevelCodes.push(currentHeaderCode);
+    }
+    currentHeaderCode = undefined;
+    currentChildCodes = [];
+  };
+  for (const line of observation.firstLevelMessages) {
+    if (line.startsWith(`${fixture}(`) && line.includes(": error TS")) {
+      flushDiagnosticBlock();
+      currentHeaderCode = /ContractTypeError<"([^"]+)"/.exec(line)?.[1];
+    } else {
+      const childCode = /^  [^ ].*ContractTypeError<"([^"]+)"/.exec(line)?.[1];
+      if (childCode !== undefined) {
+        currentChildCodes.push(childCode);
+      }
+    }
+  }
+  flushDiagnosticBlock();
   if (
     observation.status === 0 ||
     (allowAdditionalDiagnostics
@@ -1618,11 +1799,30 @@ async function verifyGenericForwardDiagnostic(
   const expectedCodes = expectedCliCodes(diagnostic);
   const required = [...commonEvidence(diagnostic), ...cli.required];
   const forbidden = cli.forbidden ?? [];
-  const firstLevelCodes = observation.firstLevelMessages.flatMap((line) => {
-    const match = /^  [^ ].*ContractTypeError<"([^"]+)"/.exec(line);
-    const code = match?.[1];
-    return code === undefined ? [] : [code];
-  });
+  const firstLevelCodes: string[] = [];
+  let currentHeaderCode: string | undefined;
+  let currentChildCodes: string[] = [];
+  const flushDiagnosticBlock = () => {
+    if (currentChildCodes.length > 0) {
+      firstLevelCodes.push(...currentChildCodes);
+    } else if (currentHeaderCode !== undefined) {
+      firstLevelCodes.push(currentHeaderCode);
+    }
+    currentHeaderCode = undefined;
+    currentChildCodes = [];
+  };
+  for (const line of observation.firstLevelMessages) {
+    if (line.startsWith(`${fixture}(`) && line.includes(": error TS")) {
+      flushDiagnosticBlock();
+      currentHeaderCode = /ContractTypeError<"([^"]+)"/.exec(line)?.[1];
+    } else {
+      const childCode = /^  [^ ].*ContractTypeError<"([^"]+)"/.exec(line)?.[1];
+      if (childCode !== undefined) {
+        currentChildCodes.push(childCode);
+      }
+    }
+  }
+  flushDiagnosticBlock();
   // A wrapper author names the long AtomicTextOptions/StreamTextOptions alias as
   // the parameter, so the call-site header is that alias and the branded coverage
   // evidence lands on the elaboration child (still tsc first level). The closed

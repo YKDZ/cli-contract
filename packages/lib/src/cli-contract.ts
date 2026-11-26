@@ -22,16 +22,15 @@ import type {
   JsonObject,
   JsonValue,
 } from "./contract-schema.ts";
-import { copySingleLineText, isSingleLineText } from "./description.ts";
+import { isSingleLineText, readCapabilityTextLine } from "./description.ts";
 import type { reservedFieldNames } from "./field-identity.ts";
 import {
   collectExecutableRequiredHelpSlots,
-  collectHelpFactTemplateIssues,
   formatExecutableUsageSynopsis,
   formatGroupUsageSynopsis,
-  getInvalidHelpFactWordingValues,
   helpCapability,
   isHelpCapability,
+  type CapabilityUnknownPropertyIssues,
   type FieldPlaceholderPropertyContract,
   type HelpCapability,
   type HelpCapabilityDefinition,
@@ -39,6 +38,7 @@ import {
   type HelpFactWording,
   type HelpHeadings,
   type HelpTemplateSlot,
+  type IsInvalidSingleLineLiteral,
 } from "./help-projection.ts";
 import { deepFreeze, isPlainRecord } from "./json-value.ts";
 import type {
@@ -274,7 +274,10 @@ type CommandExampleInputContext = Readonly<
 >;
 
 type CommandDefinitionExampleContext = Readonly<{
-  readonly examples?: readonly CommandExampleDefinition<CommandExampleInputContext>[];
+  readonly examples?: readonly Readonly<{
+    readonly input?: CommandExampleInputContext;
+    readonly outputMode?: string;
+  }>[];
 }>;
 
 type OutputModeKeys<Modes> = Extract<keyof Modes, string>;
@@ -2101,10 +2104,11 @@ type IncompatibleRawInputIssues<
   Input,
 > = {
   [Field in IncompatibleRawInputKeys<Fields, Input>]: ContractTypeError<
-    "fieldInputMustAcceptRawValue",
+    "schemaFieldDoesNotAcceptRawValue",
     Readonly<{
       readonly command: Command;
       readonly field: Field;
+      readonly location: "input";
       readonly rawValue: RawSchemaInputValue<Fields[Field]>;
       readonly schemaInput: Field extends keyof Input ? Input[Field] : never;
     }>
@@ -2131,16 +2135,17 @@ type HierarchyInputIssues<Commands> = {
             ContractSchemaInput<InputSchema>
           >
       : ContractTypeError<
-          "fieldSetDoesNotMatchSchemaInput",
+          "schemaFieldSetMismatch",
           Readonly<{
             readonly command: Command;
-            readonly fieldsWithoutSchemaInput: Exclude<
-              keyof HierarchyCommandFields<Commands[Command]> & string,
-              KnownInputKeys<ContractSchemaInput<InputSchema>>
-            >;
-            readonly schemaInputWithoutFields: Exclude<
+            readonly location: "input";
+            readonly missingFields: Exclude<
               KnownInputKeys<ContractSchemaInput<InputSchema>>,
               keyof HierarchyCommandFields<Commands[Command]>
+            >;
+            readonly unexpectedFields: Exclude<
+              keyof HierarchyCommandFields<Commands[Command]> & string,
+              KnownInputKeys<ContractSchemaInput<InputSchema>>
             >;
           }>
         >
@@ -3316,8 +3321,8 @@ type InvalidUsageConstraintForFields<
               }>
             >
         : ContractTypeError<
-            "invalidEffectiveUsageConstraint",
-            Readonly<{ readonly command: Command }>
+            "invalidUsageConstraint",
+            Readonly<{ readonly command: Command; readonly aspect: "kind" }>
           >;
 
 type InvalidCommandUsageConstraintIssues<Commands> = {
@@ -3343,8 +3348,11 @@ type InvalidCommandUsageConstraintIssues<Commands> = {
               HierarchyCommandInputSchema<Commands[Command]>
             >
         : ContractTypeError<
-            "invalidEffectiveUsageConstraint",
-            Readonly<{ readonly command: Command }>
+            "invalidUsageConstraint",
+            Readonly<{
+              readonly command: Command;
+              readonly aspect: "collection";
+            }>
           >
     : never;
 }[keyof Commands & string];
@@ -3895,13 +3903,37 @@ export type CliContractRoot<Contract> =
     ? Extract<Commands, string>
     : never;
 
+type HierarchyOutputModeIssues<Commands> = {
+  [Command in keyof Commands & string]: Commands[Command] extends Readonly<{
+    readonly kind: "command" | "rootCommand";
+    readonly input: infer InputSchema extends ContractSchema;
+    readonly outputs: infer RawOutputs;
+  }>
+    ? DeclaredNodeOutputs<
+        Command,
+        InputSchema,
+        RawOutputs
+      > extends OutputModesDefinition<Command, InputSchema>
+      ? never
+      : ContractTypeError<
+          "invalidOutputModes",
+          Readonly<{
+            readonly command: Command;
+            readonly reason: "mismatchedCommand";
+          }>
+        >
+    : never;
+}[keyof Commands & string];
+
 type HierarchyUsageValidation<Commands> = [
-  InvalidCommandUsageConstraintIssues<Commands>,
+  HierarchyOutputModeIssues<Commands>,
 ] extends [never]
-  ? [HierarchyInputIssues<Commands>] extends [never]
-    ? readonly []
-    : readonly [HierarchyInputIssues<Commands>]
-  : readonly [InvalidCommandUsageConstraintIssues<Commands>];
+  ? [InvalidCommandUsageConstraintIssues<Commands>] extends [never]
+    ? [HierarchyInputIssues<Commands>] extends [never]
+      ? readonly []
+      : readonly [HierarchyInputIssues<Commands>]
+    : readonly [InvalidCommandUsageConstraintIssues<Commands>]
+  : readonly [HierarchyOutputModeIssues<Commands>];
 
 type ValidationIntersection<Validation extends readonly unknown[]> =
   Validation extends readonly []
@@ -3920,13 +3952,14 @@ type MissingRootFallbackFieldsContract<
   Command extends string,
   InputSchema extends ContractSchema,
 > = ContractTypeError<
-  "fieldSetDoesNotMatchSchemaInput",
+  "schemaFieldSetMismatch",
   Readonly<{
     readonly command: Command;
-    readonly fieldsWithoutSchemaInput: never;
-    readonly schemaInputWithoutFields: DistributedInputStringKeys<
+    readonly location: "input";
+    readonly missingFields: DistributedInputStringKeys<
       ContractSchemaInput<InputSchema>
     >;
+    readonly unexpectedFields: never;
   }>
 >;
 
@@ -3971,10 +4004,11 @@ type CommandExampleOutputModeContract<
       >
       ? unknown
       : ContractTypeError<
-          "invalidCommandExampleOutputMode",
+          "invalidCommandExample",
           Readonly<{
             readonly command: Command;
-            readonly outputMode: Exclude<Mode, undefined>;
+            readonly reason: "invalidOutputMode";
+            readonly received: Exclude<Mode, undefined>;
             readonly available: OutputModeKeys<
               NoInfer<Outputs> extends Readonly<{ readonly modes: infer Modes }>
                 ? Modes
@@ -3993,25 +4027,35 @@ type CommandExampleContract<
   Outputs,
 > =
   Example extends Readonly<{ readonly input: infer Input }>
-    ? Example &
-        RejectUnknownProperties<
-          Example,
-          (typeof definitionPropertyKeys.example)[number]
-        > &
-        Readonly<{
-          readonly input: Input &
-            ContractSchemaInput<NoInfer<InputSchema>> &
-            RawFieldInput<NoInfer<Fields>> &
-            RejectUnknownProperties<
-              Input,
-              Extract<keyof NoInfer<Fields>, string>
-            >;
-        }> &
-        CommandExampleOutputModeContract<Command, Outputs, Example>
-    : ContractTypeError<
-        "invalidCommandExampleShape",
-        Readonly<{ readonly command: Command; readonly member: "input" }>
-      >;
+    ? unknown extends CommandExampleOutputModeContract<
+        Command,
+        Outputs,
+        Example
+      >
+      ? Example &
+          RejectUnknownProperties<
+            Example,
+            (typeof definitionPropertyKeys.example)[number]
+          > &
+          Readonly<{
+            readonly input: Input &
+              ContractSchemaInput<NoInfer<InputSchema>> &
+              RawFieldInput<NoInfer<Fields>> &
+              RejectUnknownProperties<
+                Input,
+                Extract<keyof NoInfer<Fields>, string>
+              >;
+          }>
+      : Example & CommandExampleOutputModeContract<Command, Outputs, Example>
+    : Example &
+        ContractTypeError<
+          "invalidCommandExample",
+          Readonly<{
+            readonly command: Command;
+            readonly reason: "invalidShape";
+            readonly member: "input";
+          }>
+        >;
 
 type CommandExamplesContract<
   Command extends string,
@@ -4097,10 +4141,7 @@ type ExecutableNodeOutputsContract<
             InputSchema,
             Outputs
           >
-    : ContractTypeError<
-        "outputModesMustMatchCommand",
-        Readonly<{ readonly command: Command }>
-      >;
+    : unknown;
 
 type ExecutableNodesContract<Commands> = {
   [Command in keyof Commands & string]: Commands[Command] extends Readonly<{
@@ -4409,6 +4450,119 @@ type RuntimeCliDefinition = RootCliDefinitionBase<string> &
     readonly commands: Readonly<Record<string, RuntimeCommandDefinition>>;
   }>;
 
+type VersionCapabilityDefinitionForTypeCheck = {
+  readonly value: unknown;
+  readonly description?: unknown;
+  readonly shortAlias?: unknown;
+};
+
+type VersionCapabilityIssues<Definition> = Definition extends unknown
+  ?
+      | CapabilityUnknownPropertyIssues<
+          Definition,
+          "version",
+          (typeof definitionPropertyKeys.capability.version)[number]
+        >
+      | (Definition extends Readonly<{ readonly value: infer Value }>
+          ? [Value] extends [TextLine]
+            ? never
+            : ContractTypeError<
+                "invalidVersionValue",
+                Readonly<{
+                  readonly path: readonly ["version", "value"];
+                  readonly received: Value;
+                }>
+              >
+          : never)
+      | ("description" extends keyof Definition
+          ? [Exclude<Definition["description"], undefined>] extends [never]
+            ? never
+            : [Exclude<Definition["description"], undefined>] extends [string]
+              ? Exclude<
+                  Definition["description"],
+                  undefined
+                > extends infer Literal extends string
+                ? Literal extends unknown
+                  ? IsInvalidSingleLineLiteral<Literal> extends true
+                    ? ContractTypeError<
+                        "invalidCapabilityDescription",
+                        Readonly<{
+                          readonly capability: "version";
+                          readonly path: readonly ["version", "description"];
+                          readonly received: Literal;
+                        }>
+                      >
+                    : never
+                  : never
+                : never
+              : ContractTypeError<
+                  "invalidCapabilityDescription",
+                  Readonly<{
+                    readonly capability: "version";
+                    readonly path: readonly ["version", "description"];
+                    readonly received: Exclude<
+                      Definition["description"],
+                      undefined
+                    >;
+                  }>
+                >
+          : never)
+      | ("shortAlias" extends keyof Definition
+          ? [Exclude<Definition["shortAlias"], undefined>] extends [never]
+            ? never
+            : [Exclude<Definition["shortAlias"], undefined>] extends ["-V"]
+              ? never
+              : ContractTypeError<
+                  "invalidCapabilityShortAlias",
+                  Readonly<{
+                    readonly capability: "version";
+                    readonly expected: "-V";
+                    readonly received: Exclude<
+                      Definition["shortAlias"],
+                      undefined
+                    >;
+                  }>
+                >
+          : never)
+  : never;
+
+type VersionCapabilityContract<Definition> = [
+  VersionCapabilityIssues<Definition>,
+] extends [never]
+  ? unknown
+  : VersionCapabilityIssues<Definition>;
+
+type SchemaCapabilityDefinitionForTypeCheck = {
+  readonly description: unknown;
+};
+
+type SchemaCapabilityIssues<Definition> = Definition extends unknown
+  ?
+      | CapabilityUnknownPropertyIssues<
+          Definition,
+          "schema",
+          (typeof definitionPropertyKeys.capability.schema)[number]
+        >
+      | (Definition extends Readonly<{ readonly description: infer Desc }>
+          ? [Desc] extends [TextLine]
+            ? never
+            : ContractTypeError<
+                "invalidCapabilityDescription",
+                Readonly<{
+                  readonly capability: "schema";
+                  readonly path: readonly ["schema", "description"];
+                  readonly received: Desc;
+                }>
+              >
+          : never)
+  : never;
+
+type SchemaCapabilityContract<Definition> = [
+  SchemaCapabilityIssues<Definition>,
+] extends [never]
+  ? unknown
+  : SchemaCapabilityIssues<Definition>;
+
 /**
  * Assemble the eager version request on the root contract explicitly; it covers the
  * whole command tree automatically. `value` and the optional `description` are owned
@@ -4417,32 +4571,56 @@ type RuntimeCliDefinition = RootCliDefinitionBase<string> &
  * description, and never treats the version as command input.
  */
 export function versionCapability<
-  const Definition extends VersionCapabilityDefinition,
+  const Definition extends VersionCapabilityDefinitionForTypeCheck,
 >(
-  definition: Definition &
-    RejectUnknownProperties<
-      Definition,
-      (typeof definitionPropertyKeys.capability.version)[number]
-    >,
+  definition: Definition & VersionCapabilityContract<Definition>,
 ): VersionCapability {
-  assertKnownCapabilityOptions(
+  if (!isPlainRecord(definition)) {
+    throw new ContractDefinitionError([
+      { code: "invalidCapability", capability: "version" },
+    ]);
+  }
+  const issues: ContractDefinitionIssue[] = [];
+  collectUnknownOwnProperties(
     definition,
+    ["version"],
     definitionPropertyKeys.capability.version,
-    "version",
+    issues,
   );
-  const value = copyTextLine(definition.value, "Version value");
-  const description =
-    definition.description === undefined
-      ? undefined
-      : copySingleLineText(definition.description, "Version description");
+  const value = readCapabilityTextLine(definition.value);
+  if (value === undefined) {
+    issues.push({
+      code: "invalidVersionValue",
+      path: ["version", "value"],
+      received: definition.value,
+    });
+  }
+  const description = definition.description;
+  if (description !== undefined && !isSingleLineText(description)) {
+    issues.push({
+      code: "invalidCapabilityDescription",
+      capability: "version",
+      path: ["version", "description"],
+      received: description,
+    });
+  }
   if (definition.shortAlias !== undefined && definition.shortAlias !== "-V") {
-    throw new TypeError("The version short alias must be -V");
+    issues.push({
+      code: "invalidCapabilityShortAlias",
+      capability: "version",
+      expected: "-V",
+      received: definition.shortAlias,
+    });
+  }
+  const [firstIssue, ...otherIssues] = issues;
+  if (firstIssue !== undefined) {
+    throw new ContractDefinitionError([firstIssue, ...otherIssues]);
   }
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- versionCapability is issued by this factory and registered in the WeakSet; the type brand is not emitted at runtime.
   const capability = Object.freeze({
     kind: "versionCapability" as const,
-    value,
-    ...(description === undefined ? {} : { description }),
+    value: value ?? "",
+    ...(typeof description === "string" ? { description } : {}),
     ...(definition.shortAlias === undefined
       ? {}
       : { shortAlias: definition.shortAlias }),
@@ -4456,44 +4634,43 @@ export function versionCapability<
  * The author supplies the description once; the core owns query facts, help and responses.
  */
 export function schemaCapability<
-  const Definition extends SchemaCapabilityDefinition,
+  const Definition extends SchemaCapabilityDefinitionForTypeCheck,
 >(
-  definition: Definition &
-    RejectUnknownProperties<
-      Definition,
-      (typeof definitionPropertyKeys.capability.schema)[number]
-    >,
+  definition: Definition & SchemaCapabilityContract<Definition>,
 ): SchemaCapability {
-  assertKnownCapabilityOptions(
+  if (!isPlainRecord(definition)) {
+    throw new ContractDefinitionError([
+      { code: "invalidCapability", capability: "schema" },
+    ]);
+  }
+  const issues: ContractDefinitionIssue[] = [];
+  collectUnknownOwnProperties(
     definition,
+    ["schema"],
     definitionPropertyKeys.capability.schema,
-    "schema",
+    issues,
   );
-  const description = copyTextLine(
-    definition.description,
-    "Schema description",
-  );
+  const description = readCapabilityTextLine(definition.description);
+  if (description === undefined) {
+    issues.push({
+      code: "invalidCapabilityDescription",
+      capability: "schema",
+      path: ["schema", "description"],
+      received: definition.description,
+    });
+  }
+  const [firstIssue, ...otherIssues] = issues;
+  if (firstIssue !== undefined) {
+    throw new ContractDefinitionError([firstIssue, ...otherIssues]);
+  }
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- schemaCapability is issued by this factory and registered in the WeakSet.
   const capability = Object.freeze({
     kind: "schemaCapability" as const,
     longOption: "--schema" as const,
-    description,
+    description: description ?? "",
   }) as SchemaCapability;
   schemaCapabilities.add(capability);
   return capability;
-}
-
-function copyTextLine(value: unknown, label: string): string {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !("kind" in value) ||
-    value.kind !== "line" ||
-    !("value" in value)
-  ) {
-    throw new TypeError(`${label} must be a text.line projection`);
-  }
-  return copySingleLineText(value.value, label);
 }
 
 function compileHelpSupplement(
@@ -4552,20 +4729,6 @@ function compileControls(definition: RuntimeCliDefinition) {
           },
         }),
   });
-}
-
-function assertKnownCapabilityOptions(
-  definition: object,
-  allowed: readonly string[],
-  capability: string,
-): void {
-  for (const property of Object.keys(definition)) {
-    if (!allowed.includes(property)) {
-      throw new TypeError(
-        `The ${capability} capability contains an unknown property ${property}`,
-      );
-    }
-  }
 }
 
 /**
@@ -4903,13 +5066,6 @@ function compileCli(raw: RuntimeCliAuthoring): CliContract {
   const helpWording = isHelpCapability(definition.help)
     ? definition.help.wording
     : undefined;
-  if (helpWording !== undefined && isHelpCapability(definition.help)) {
-    collectHelpFactTemplateIssues(
-      helpWording,
-      issues,
-      getInvalidHelpFactWordingValues(definition.help),
-    );
-  }
   let orderedIds: readonly string[];
   if (isHierarchy) {
     collectCliBaseIssues(definition, issues);

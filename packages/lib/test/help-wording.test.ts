@@ -202,14 +202,82 @@ void test("unknown slots and known template issues in help wording aggregate in 
   );
 });
 
-void test("known-only template errors still aggregate with leaf constraint issues at root assembly", () => {
-  const helpDefinition: HelpCapabilityDefinition = JSON.parse(
-    '{"wording":{"choices":"{usage} 候选 {choises}","default":"{usage} 默认 {value}"}}',
+void test("helpCapability aggregates invalid shortAlias, headings, wording, and unknown properties immediately", () => {
+  assert.throws(
+    () =>
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally bypasses static types to verify aggregated help capability errors.
+      helpCapability({
+        shortAlias: "-x",
+        extra: true,
+        headings: {
+          usage: "",
+          bad: "x",
+        },
+        wording: {
+          choices: "{usage} 候选 {choises}",
+          unknownSlot: "x",
+        },
+      } as never),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        { code: "unknownDefinitionProperty", path: ["help", "extra"] },
+        {
+          code: "invalidCapabilityShortAlias",
+          capability: "help",
+          expected: "-h",
+          received: "-x",
+        },
+        {
+          code: "invalidHelpHeading",
+          path: ["help", "headings", "usage"],
+          heading: "usage",
+          received: "",
+        },
+        {
+          code: "unknownDefinitionProperty",
+          path: ["help", "headings", "bad"],
+        },
+        {
+          code: "invalidHelpFactTemplate",
+          path: ["help", "wording", "choices"],
+          slot: "choices",
+          received: "{usage} 候选 {choises}",
+          reason: "placeholder",
+        },
+        {
+          code: "unknownDefinitionProperty",
+          path: ["help", "wording", "unknownSlot"],
+        },
+      ]);
+      return true;
+    },
   );
+
+  assert.throws(
+    () => helpCapability({ wording: "not-an-object" as never }),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidHelpWording",
+          path: ["help", "wording"],
+          received: "not-an-object",
+        },
+      ]);
+      return true;
+    },
+  );
+
   const sharedInput1 = z.object({ mode: z.enum(["safe", "force"]).optional() });
   const definition = {
     root: "choose",
-    help: helpCapability(helpDefinition),
+    help: helpCapability({
+      wording: {
+        choices: "{usage} 候选 {choices}",
+        default: "{usage} 默认 {value}",
+      },
+    }),
 
     usageFailureExitCode: 64,
     commands: {
@@ -261,18 +329,11 @@ void test("known-only template errors still aggregate with leaf constraint issue
   };
 
   assert.throws(
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The dynamic closed negative case verifies root-level issues still aggregate with leaf constraint issues.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The dynamic closed negative case verifies missing help templates aggregate with leaf constraint issues.
     () => defineCli()(definition as never),
     (error: unknown) => {
       assert.ok(error instanceof ContractDefinitionError);
       assert.deepEqual(error.issues, [
-        {
-          code: "invalidHelpFactTemplate",
-          path: ["help", "wording", "choices"],
-          slot: "choices",
-          received: "{usage} 候选 {choises}",
-          reason: "placeholder",
-        },
         {
           code: "unknownUsageConstraintField",
           command: "choose",
@@ -546,7 +607,7 @@ void test("empty effect branches do not require their help slots", async () => {
   );
 });
 
-void test("dynamic help fact templates aggregate invalid slots at root assembly", () => {
+void test("dynamic help fact templates aggregate invalid slots immediately on helpCapability", () => {
   const wording: {
     readonly outputModePlaceholder: string;
     readonly choicesAndDefault: string;
@@ -558,47 +619,8 @@ void test("dynamic help fact templates aggregate invalid slots at root assembly"
     choices: "{usage}（可选值：{unknown}）",
     default: "{usage} 默认值\n{value}",
   };
-  const sharedInput3 = z.object({ mode: z.enum(["safe", "force"]).optional() });
   assert.throws(
-    () =>
-      defineCli()({
-        root: "choose",
-        help: helpCapability({ wording }),
-
-        usageFailureExitCode: 64,
-        commands: {
-          choose: {
-            kind: "rootCommand",
-            name: "choose",
-            description: "选择模式",
-            fields: {
-              mode: {
-                kind: "valueOption",
-                longOption: "--mode",
-                description: "模式",
-              },
-            },
-            input: sharedInput3,
-
-            outputs: (mode) => ({
-              default: "structured",
-              modes: {
-                structured: mode
-                  .atomic({
-                    success: {
-                      kind: "completion",
-                    },
-                    failures: {},
-                    handler: ({ outcome }) => outcome.completion(),
-                  })
-                  .structured({
-                    description: "结构化输出",
-                  }),
-              },
-            }),
-          },
-        },
-      }),
+    () => helpCapability({ wording }),
     (error: unknown) => {
       assert.ok(error instanceof ContractDefinitionError);
       assert.deepEqual(error.issues, [
@@ -616,62 +638,19 @@ void test("dynamic help fact templates aggregate invalid slots at root assembly"
           received: "{usage} 默认值\n{value}",
           reason: "singleLine",
         },
-        {
-          code: "missingHelpFactTemplate",
-          command: "choose",
-          slot: "list",
-        },
       ]);
       return true;
     },
   );
 });
 
-void test("help template errors keep the invalid original value and keep aggregating definition issues", () => {
+void test("help template errors keep the invalid original value on helpCapability", () => {
   const helpDefinition: HelpCapabilityDefinition = JSON.parse(
     '{"wording":{"outputModePlaceholder":"mode","choicesAndDefault":"{usage} ({choices}; {value})","choices":42,"default":null,"countExactly":{},"whenOnMatch":"满足 {unknown}"}}',
   );
-  const sharedInput4 = z.object({});
-  const definition = {
-    root: "choose",
-    help: helpCapability(helpDefinition),
-
-    usageFailureExitCode: 0,
-    commands: {
-      choose: {
-        kind: "rootCommand",
-        name: "选择模式",
-        description: "选择模式",
-        input: sharedInput4,
-
-        outputs: (
-          mode: OutputExecutionFactory<
-            "choose",
-            undefined,
-            typeof sharedInput4
-          >,
-        ) => ({
-          default: "structured",
-          modes: {
-            structured: mode
-              .atomic({
-                success: {
-                  kind: "completion",
-                },
-                failures: {},
-                handler: ({ outcome }) => outcome.completion(),
-              })
-              .structured({
-                description: "结构化输出",
-              }),
-          },
-        }),
-      },
-    },
-  };
 
   assert.throws(
-    () => defineCli()(definition as never),
+    () => helpCapability(helpDefinition),
     (error: unknown) => {
       assert.ok(error instanceof ContractDefinitionError);
       assert.deepEqual(error.issues, [
@@ -702,12 +681,6 @@ void test("help template errors keep the invalid original value and keep aggrega
           slot: "whenOnMatch",
           received: "满足 {unknown}",
           reason: "placeholder",
-        },
-        {
-          code: "invalidUsageFailureExitCode",
-          received: 0,
-          minimum: 1,
-          maximum: 255,
         },
       ]);
       return true;

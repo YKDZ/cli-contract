@@ -4,6 +4,7 @@ import {
   executeCli,
   helpCapability,
   parseCliInvocation,
+  schemaCapability,
   text,
   versionCapability,
   type CliContract,
@@ -2132,3 +2133,186 @@ if (eagerDependencyInvocation.kind !== "parsed") {
     write: () => undefined,
   });
 }
+
+function verifyRootCapabilityAndAlignedTypeErrors() {
+  const validOptionalHeading: string | undefined = "Usage";
+  const validExtractedHelp = {
+    shortAlias: "-h",
+    headings: { usage: validOptionalHeading },
+    wording: { outputModePlaceholder: "mode" },
+  } as const;
+  helpCapability();
+  helpCapability(undefined);
+  helpCapability(validExtractedHelp);
+
+  const validVersionDesc: string | undefined = "Print version";
+  versionCapability({
+    value: text.line("1.0.0"),
+    description: validVersionDesc,
+    shortAlias: "-V",
+  });
+  schemaCapability({ description: text.line("Query contract") });
+
+  // @ts-expect-error Help capability rejects unknown top-level properties.
+  helpCapability({ extra: true });
+  // @ts-expect-error Help capability rejects short aliases other than -h.
+  helpCapability({ shortAlias: "-x" });
+  // @ts-expect-error Help capability rejects non-object headings.
+  helpCapability({ headings: "Usage" });
+  // @ts-expect-error Help capability rejects unknown heading sections.
+  helpCapability({ headings: { extra: "Extra" } });
+  // @ts-expect-error Help capability rejects empty heading text.
+  helpCapability({ headings: { usage: "" } });
+  // @ts-expect-error Help capability rejects multiline heading text.
+  helpCapability({ headings: { usage: "Usage\nLine" } });
+  // @ts-expect-error Help capability rejects non-string heading text.
+  helpCapability({ headings: { usage: 42 } });
+  // @ts-expect-error Help capability rejects non-object wording.
+  helpCapability({ wording: "mode" });
+
+  // @ts-expect-error Version capability rejects unknown properties.
+  versionCapability({ value: text.line("1.0.0"), extra: true });
+  // @ts-expect-error Version capability rejects empty description literals.
+  versionCapability({ value: text.line("1.0.0"), description: "" });
+  // @ts-expect-error Version capability rejects multiline description literals.
+  versionCapability({ value: text.line("1.0.0"), description: "a\nb" });
+  // @ts-expect-error Version capability rejects short aliases other than -V.
+  versionCapability({ value: text.line("1.0.0"), shortAlias: "-v" });
+
+  // @ts-expect-error Schema capability rejects unknown properties.
+  schemaCapability({ description: text.line("Schema"), extra: true });
+  // @ts-expect-error Schema capability requires a text.line description.
+  schemaCapability({ description: "Schema" });
+
+  const localDefine = defineCli();
+  const exampleInput = z.object({ mode: z.enum(["fast", "safe"]) });
+  const otherLeaf = localDefine.command("other")({
+    kind: "command",
+    parent: "tool",
+    name: "other",
+    description: "Other command",
+    fields: {
+      mode: { kind: "valueOption", longOption: "--mode", description: "Mode" },
+    },
+    input: exampleInput,
+    outputs: (mode) => ({
+      default: "structured",
+      modes: {
+        structured: mode
+          .atomic({
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          })
+          .structured({ description: "Structured" }),
+      },
+    }),
+  });
+
+  localDefine.command("sample")({
+    kind: "command",
+    parent: "tool",
+    name: "sample",
+    description: "Sample command",
+    fields: {
+      mode: { kind: "valueOption", longOption: "--mode", description: "Mode" },
+    },
+    input: exampleInput,
+    outputs: (mode) => ({
+      default: "structured",
+      modes: {
+        structured: mode
+          .atomic({
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          })
+          .structured({ description: "Structured" }),
+      },
+    }),
+    // @ts-expect-error Command examples require an input object.
+    examples: [{ outputMode: "structured" }],
+  });
+
+  // @ts-expect-error Command outputs must match the command identity they are mounted under.
+  localDefine({
+    root: "tool",
+    help: englishHelpCapability(),
+    usageFailureExitCode: 64,
+    commands: {
+      tool: { kind: "rootGroup", name: "tool", description: "Tool" },
+      mismatched: otherLeaf.other,
+    },
+  });
+
+  // @ts-expect-error Usage constraints reject unknown kinds.
+  localDefine({
+    root: "badConstraintKind",
+    help: englishHelpCapability(),
+    usageFailureExitCode: 64,
+    commands: {
+      badConstraintKind: {
+        kind: "rootCommand",
+        name: "bad-constraint-kind",
+        description: "Bad constraint kind",
+        fields: {
+          mode: {
+            kind: "valueOption",
+            longOption: "--mode",
+            description: "Mode",
+          },
+        },
+        input: exampleInput,
+        usageConstraints: [{ kind: "unknownKind" }],
+        outputs: (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
+                success: { kind: "completion" },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({ description: "Structured" }),
+          },
+        }),
+      },
+    },
+  });
+
+  // @ts-expect-error Usage constraints must be an array.
+  localDefine({
+    root: "badConstraintCollection",
+    help: englishHelpCapability(),
+    usageFailureExitCode: 64,
+    commands: {
+      badConstraintCollection: {
+        kind: "rootCommand",
+        name: "bad-constraint-collection",
+        description: "Bad constraint collection",
+        fields: {
+          mode: {
+            kind: "valueOption",
+            longOption: "--mode",
+            description: "Mode",
+          },
+        },
+        input: exampleInput,
+        usageConstraints: { kind: "count" },
+        outputs: (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
+                success: { kind: "completion" },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({ description: "Structured" }),
+          },
+        }),
+      },
+    },
+  });
+}
+void verifyRootCapabilityAndAlignedTypeErrors;

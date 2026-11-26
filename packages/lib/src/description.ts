@@ -8,9 +8,18 @@ export function isSingleLineText(value: unknown): value is string {
   );
 }
 
-export function copySingleLineText(value: unknown, label: string): string {
-  if (!isSingleLineText(value)) {
-    throw new TypeError(`${label} must be valid single-line text`);
+/** Read a `text.line` projection while copying its single-line string value. */
+export function readCapabilityTextLine(value: unknown): string | undefined {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("kind" in value) ||
+    value.kind !== "line" ||
+    !("value" in value) ||
+    !isSingleLineText(value.value)
+  ) {
+    return undefined;
   }
-  return value;
+  return value.value;
 }

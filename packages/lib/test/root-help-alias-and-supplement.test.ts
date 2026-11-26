@@ -310,17 +310,102 @@ void test("an absent heading only omits the heading line, and empty sections inj
 });
 
 void test("-h conflicts with fields and other control spellings aggregate at definition time, and forged supplements are rejected", () => {
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally bypasses static restrictions to verify help configuration rejection.
-  assert.throws(() => helpCapability({ shortAlias: "-x" } as never), TypeError);
-  for (const headings of [
-    { usage: "" },
-    { commands: "命令\n列表" },
-    { arguments: "参数\r列表" },
-    { options: "选项\0列表" },
-    { extra: "额外" },
-  ]) {
+  assert.throws(
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally bypasses static restrictions to verify help configuration rejection.
-    assert.throws(() => helpCapability({ headings } as never), TypeError);
+    () => helpCapability(null as never),
+    (error: unknown) => {
+      assert(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        { code: "invalidCapability", capability: "help" },
+      ]);
+      return true;
+    },
+  );
+  assert.throws(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally bypasses static restrictions to verify help configuration rejection.
+    () => helpCapability({ shortAlias: "-x" } as never),
+    (error: unknown) => {
+      assert(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidCapabilityShortAlias",
+          capability: "help",
+          expected: "-h",
+          received: "-x",
+        },
+      ]);
+      return true;
+    },
+  );
+  assert.throws(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally bypasses static restrictions to verify help configuration rejection.
+    () => helpCapability({ headings: "bad" } as never),
+    (error: unknown) => {
+      assert(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        {
+          code: "invalidHelpHeadings",
+          path: ["help", "headings"],
+          received: "bad",
+        },
+      ]);
+      return true;
+    },
+  );
+  for (const [headings, expectedIssue] of [
+    [
+      { usage: "" },
+      {
+        code: "invalidHelpHeading",
+        path: ["help", "headings", "usage"],
+        heading: "usage",
+        received: "",
+      },
+    ],
+    [
+      { commands: "命令\n列表" },
+      {
+        code: "invalidHelpHeading",
+        path: ["help", "headings", "commands"],
+        heading: "commands",
+        received: "命令\n列表",
+      },
+    ],
+    [
+      { arguments: "参数\r列表" },
+      {
+        code: "invalidHelpHeading",
+        path: ["help", "headings", "arguments"],
+        heading: "arguments",
+        received: "参数\r列表",
+      },
+    ],
+    [
+      { options: "选项\0列表" },
+      {
+        code: "invalidHelpHeading",
+        path: ["help", "headings", "options"],
+        heading: "options",
+        received: "选项\0列表",
+      },
+    ],
+    [
+      { extra: "额外" },
+      {
+        code: "unknownDefinitionProperty",
+        path: ["help", "headings", "extra"],
+      },
+    ],
+  ] as const) {
+    assert.throws(
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally bypasses static restrictions to verify help configuration rejection.
+      () => helpCapability({ headings } as never),
+      (error: unknown) => {
+        assert(error instanceof ContractDefinitionError);
+        assert.deepEqual(error.issues, [expectedIssue]);
+        return true;
+      },
+    );
   }
 
   const define = defineCli();

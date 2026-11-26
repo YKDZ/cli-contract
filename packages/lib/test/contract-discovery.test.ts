@@ -926,3 +926,39 @@ void test("directory and summary size ignore wider result and failure payload sc
     );
   }
 });
+
+void test("schemaCapability aggregates invalid capability, unknown properties, and invalid description immediately", () => {
+  assert.throws(
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally bypasses static types to verify schema capability validation.
+    () => schemaCapability("bad" as never),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        { code: "invalidCapability", capability: "schema" },
+      ]);
+      return true;
+    },
+  );
+
+  assert.throws(
+    () =>
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally bypasses static types to verify aggregated schema capability errors.
+      schemaCapability({
+        description: "查询契约",
+        extra: true,
+      } as never),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractDefinitionError);
+      assert.deepEqual(error.issues, [
+        { code: "unknownDefinitionProperty", path: ["schema", "extra"] },
+        {
+          code: "invalidCapabilityDescription",
+          capability: "schema",
+          path: ["schema", "description"],
+          received: "查询契约",
+        },
+      ]);
+      return true;
+    },
+  );
+});
