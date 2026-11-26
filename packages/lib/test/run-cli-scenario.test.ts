@@ -219,8 +219,9 @@ const consumerFixture = {
     help: helpCapability({
       wording: {
         commandPlaceholder: "命令",
-        choices: "（候选：{choices}）",
-        default: "（默认：{value}）",
+        outputModePlaceholder: "方式",
+        choicesAndDefault: "{usage}（候选：{choices}；默认：{value}）",
+        list: "{left}、{right}",
       },
     }),
 

@@ -153,7 +153,7 @@ void test("help is produced mechanically from the contract without running the h
     {
       destination: "stdout",
       chunk:
-        '演示最小 CLI\n\n  fixture [--output <mode>]\n\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured (atomic, structured)\n    结构化输出\n',
+        '演示最小 CLI\n\n  fixture [--output <mode>]\n\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured\n    结构化输出\n',
     },
   ]);
   assert.deepEqual(termination, {
@@ -327,7 +327,7 @@ void test("definition time requests Draft 2020-12 on both sides and exposes immu
     },
   });
   assert.equal(cli.manifest.root, "fixture");
-  assert.equal(cli.manifest.schemaVersion, "5");
+  assert.equal(cli.manifest.schemaVersion, "6");
   assert.deepEqual(cli.manifest.commands.fixture.input, {
     inputSchema: emptyJsonSchema,
     outputSchema: emptyJsonSchema,

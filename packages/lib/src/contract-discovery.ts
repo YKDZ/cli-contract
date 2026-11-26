@@ -48,7 +48,7 @@ export interface ContractQueryNext {
 
 export interface ContractDirectoryQuery {
   readonly kind: "directory";
-  readonly schemaVersion: string;
+  readonly schemaVersion: "6";
   readonly command: string;
   readonly path: readonly string[];
   readonly name: string;
@@ -64,7 +64,7 @@ export interface ContractSummaryMode {
 
 export interface ContractSummaryQuery {
   readonly kind: "summary";
-  readonly schemaVersion: string;
+  readonly schemaVersion: "6";
   readonly command: string;
   readonly path: readonly string[];
   readonly name: string;
@@ -82,7 +82,7 @@ export interface ContractSummaryQuery {
 
 export interface ContractInputQuery {
   readonly kind: "input";
-  readonly schemaVersion: string;
+  readonly schemaVersion: "6";
   readonly command: string;
   readonly path: readonly string[];
   readonly fields: readonly FieldGrammar[];
@@ -106,7 +106,7 @@ export type ContractSuccessManifest =
     }>;
 
 interface ModeQueryBase {
-  readonly schemaVersion: string;
+  readonly schemaVersion: "6";
   readonly command: string;
   readonly path: readonly string[];
   readonly mode: string;
@@ -285,7 +285,7 @@ export function canonicalCommandPath(
 }
 
 function createDirectoryQuery(
-  schemaVersion: string,
+  schemaVersion: "6",
   command: RuntimeGroup,
   path: readonly string[],
   commands: Readonly<Record<string, RuntimeCommand>>,
@@ -317,7 +317,7 @@ function createDirectoryQuery(
 }
 
 function createSummaryQuery(
-  schemaVersion: string,
+  schemaVersion: "6",
   command: RuntimeExecutable,
   manifest: CommandManifest,
   path: readonly string[],

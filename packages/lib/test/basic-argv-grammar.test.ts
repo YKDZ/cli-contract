@@ -247,7 +247,7 @@ void test("field facts project from the same grammar into usage, help, and manif
     },
   });
   assert.deepEqual(writes, [
-    '复制文件\n\n  copy-files [--output <mode>] <source> [<destination>] [--force] [--label <label>]\n\n  <source>\n    源文件\n  [<destination>]\n    目标文件\n\n  [--force, -f]\n    覆盖目标文件\n  [--label, -l <label>]\n    复制标签\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured (atomic, structured)\n    结构化输出\n',
+    '复制文件\n\n  copy-files [--output <mode>] <source> [<destination>] [--force] [--label <label>]\n\n  <source>\n    源文件\n  [<destination>]\n    目标文件\n\n  [--force, -f]\n    覆盖目标文件\n  [--label, -l <label>]\n    复制标签\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured\n    结构化输出\n',
   ]);
 });
 
@@ -609,7 +609,9 @@ void test("renaming a field identity can keep the CLI spelling while other namin
   });
   const cli = defineCli()({
     root: "constructor",
-    help: englishHelpCapability({ wording: { default: "默认 {value}" } }),
+    help: englishHelpCapability({
+      wording: { default: "{usage} 默认 {value}" },
+    }),
 
     usageFailureExitCode: 64,
     commands: {

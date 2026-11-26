@@ -90,7 +90,7 @@ void test("leaf commands declare application options independently, and manifest
     },
   });
 
-  assert.equal(cli.manifest.schemaVersion, "5");
+  assert.equal(cli.manifest.schemaVersion, "6");
   for (const command of ["deploy", "inspect"] as const) {
     const node = cli.grammar.nodes.find(
       (candidate) => candidate.id === command,

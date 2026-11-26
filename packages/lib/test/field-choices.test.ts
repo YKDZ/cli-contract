@@ -173,7 +173,7 @@ void test("direct Zod enums project from one source into grammar, manifest, syno
     },
   });
   assert.deepEqual(writes, [
-    '选择模式\n\n  choose [--output <mode>] <mode> [<files...>] [--mode <option>] [--tag <tag>]... [--refined <refined>]\n\n  <mode> (choices: "interactive", "allow-all")\n    位置模式\n  [<files...>] (choices: "a\\"b", "line\\nbreak")\n    文件\n\n  [--mode <option>] (choices: "interactive", "allow-all") (default: "interactive")\n    选项模式\n  [--tag <tag>]... (choices: "red", "green")\n    标签\n  [--refined <refined>]\n    精炼\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured (atomic, structured)\n    结构化输出\n',
+    '选择模式\n\n  choose [--output <mode>] <mode> [<files...>] [--mode <option>] [--tag <tag>]... [--refined <refined>]\n\n  <mode> (choices: "interactive", "allow-all")\n    位置模式\n  [<files...>] (choices: "a\\"b", "line\\nbreak")\n    文件\n\n  [--mode <option>] (choices: "interactive", "allow-all") (default: "interactive")\n    选项模式\n  [--tag <tag>]... (choices: "red", "green")\n    标签\n  [--refined <refined>]\n    精炼\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured\n    结构化输出\n',
   ]);
   const invalidChoices = parseCliInvocation(cli, [
     "unexpected",
@@ -656,7 +656,7 @@ void test("compositions, references, conditionals, and non-string enums do not i
     },
   });
   assert.deepEqual(writes, [
-    '反例\n\n  counterexample [--output <mode>] [--any-of <anyOf>] [--one-of <oneOf>] [--reference <reference>] [--conditional <conditional>] [--mixed <mixed>] [--empty <empty>] [--tag <tag>]... [<values...>]\n\n  [<values...>]\n    值\n\n  [--any-of <anyOf>]\n    anyOf\n  [--one-of <oneOf>]\n    oneOf\n  [--reference <reference>]\n    引用\n  [--conditional <conditional>]\n    条件\n  [--mixed <mixed>]\n    混合\n  [--empty <empty>]\n    空\n  [--tag <tag>]...\n    标签\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured (atomic, structured)\n    结构化输出\n',
+    '反例\n\n  counterexample [--output <mode>] [--any-of <anyOf>] [--one-of <oneOf>] [--reference <reference>] [--conditional <conditional>] [--mixed <mixed>] [--empty <empty>] [--tag <tag>]... [<values...>]\n\n  [<values...>]\n    值\n\n  [--any-of <anyOf>]\n    anyOf\n  [--one-of <oneOf>]\n    oneOf\n  [--reference <reference>]\n    引用\n  [--conditional <conditional>]\n    条件\n  [--mixed <mixed>]\n    混合\n  [--empty <empty>]\n    空\n  [--tag <tag>]...\n    标签\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured\n    结构化输出\n',
   ]);
 });
 

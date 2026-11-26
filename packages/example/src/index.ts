@@ -217,8 +217,9 @@ export const cli = define({
     },
     wording: {
       commandPlaceholder: "command",
-      choices: "(choices: {choices})",
-      default: "(default: {value})",
+      outputModePlaceholder: "mode",
+      choicesAndDefault: "{usage} (choices: {choices}; default: {value})",
+      list: "{left}, {right}",
       countExactly: "{fields} exactly {count}",
       whenOnMatch: "when all of {facts}, {onMatch}",
       require: "require {fields}",

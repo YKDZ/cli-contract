@@ -35,8 +35,9 @@ const cli = defineCli<Readonly<{ readonly service: string }>>()({
   root: "typed",
   help: helpCapability({
     wording: {
-      choices: "(choices: {choices})",
-      default: "(default: {value})",
+      commandPlaceholder: "command",
+      outputModePlaceholder: "mode",
+      choicesAndDefault: "{usage} (choices: {choices}; default: {value})",
     },
   }),
 
@@ -170,8 +171,9 @@ const scenarioCli = defineScenarioCli({
   root: "tool",
   help: helpCapability({
     wording: {
-      choices: "(choices: {choices})",
-      default: "(default: {value})",
+      commandPlaceholder: "command",
+      outputModePlaceholder: "mode",
+      choicesAndDefault: "{usage} (choices: {choices}; default: {value})",
     },
   }),
 

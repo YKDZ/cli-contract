@@ -71,8 +71,11 @@ const root = define({
   root: "inspect",
   help: helpCapability({
     wording: {
-      choices: "(choices: {choices})",
-      default: "(default: {value})",
+      outputModePlaceholder: "mode",
+      choices: "{usage} (choices: {choices})",
+      default: "{usage} (default: {value})",
+      choicesAndDefault: "{usage} (choices: {choices}; default: {value})",
+      list: "{left}, {right}",
     },
   }),
   usageFailureExitCode: 64,
@@ -136,8 +139,11 @@ const leaf = define({
   help: helpCapability({
     wording: {
       commandPlaceholder: "command",
-      choices: "(choices: {choices})",
-      default: "(default: {value})",
+      outputModePlaceholder: "mode",
+      choices: "{usage} (choices: {choices})",
+      default: "{usage} (default: {value})",
+      choicesAndDefault: "{usage} (choices: {choices}; default: {value})",
+      list: "{left}, {right}",
     },
   }),
   usageFailureExitCode: 64,
@@ -329,8 +335,11 @@ define({
   help: helpCapability({
     wording: {
       commandPlaceholder: "command",
-      choices: "(choices: {choices})",
-      default: "(default: {value})",
+      outputModePlaceholder: "mode",
+      choices: "{usage} (choices: {choices})",
+      default: "{usage} (default: {value})",
+      choicesAndDefault: "{usage} (choices: {choices}; default: {value})",
+      list: "{left}, {right}",
     },
   }),
   usageFailureExitCode: 64,

@@ -6,8 +6,13 @@ import {
 
 export const englishHelpWording = {
   commandPlaceholder: "command",
-  choices: "(choices: {choices})",
-  default: "(default: {value})",
+  outputModePlaceholder: "mode",
+  choices: "{usage} (choices: {choices})",
+  default: "{usage} (default: {value})",
+  choicesAndDefault: "{usage} (choices: {choices}) (default: {value})",
+  list: "{left}, {right}",
+  facts: "{left}, {right}",
+  effects: "{left}, {right}",
   whenOnMatch: "when all of {facts}, {onMatch}",
   whenOtherwise: "when not all of {facts}, {otherwise}",
   whenOnMatchOtherwise:
@@ -21,7 +26,7 @@ export const englishHelpWording = {
   countAtLeast: "{fields} at least {min}",
   countAtMost: "{fields} at most {max}",
   countBetween: "{fields} between {min} and {max}",
-} as const;
+} as const satisfies HelpFactWording;
 
 type EnglishHelpCapabilityDefinition = Omit<
   HelpCapabilityDefinition,

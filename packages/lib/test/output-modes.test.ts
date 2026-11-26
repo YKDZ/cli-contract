@@ -20,8 +20,9 @@ void test("each command selects an independent result contract per named mode an
     root: "greet",
     help: helpCapability({
       wording: {
-        choices: "(choices {choices})",
-        default: "(default {value})",
+        outputModePlaceholder: "mode",
+        choicesAndDefault: "{usage} (choices {choices}) (default {value})",
+        list: "{left}, {right}",
       },
     }),
     usageFailureExitCode: 64,
@@ -197,8 +198,9 @@ function createSingleModeCli(defaultSelection: "implicit" | "explicit") {
     root: "run",
     help: helpCapability({
       wording: {
-        choices: "(choices {choices})",
-        default: "(default {value})",
+        outputModePlaceholder: "mode",
+        choicesAndDefault: "{usage} (choices {choices}) (default {value})",
+        list: "{left}, {right}",
       },
     }),
     usageFailureExitCode: 64,
@@ -255,8 +257,9 @@ function invalidSingleModeDefinition(defaultValue: unknown) {
     root: "run",
     help: helpCapability({
       wording: {
-        choices: "(choices {choices})",
-        default: "(default {value})",
+        outputModePlaceholder: "mode",
+        choicesAndDefault: "{usage} (choices {choices}) (default {value})",
+        list: "{left}, {right}",
       },
     }),
     usageFailureExitCode: 64,
@@ -314,8 +317,9 @@ function invalidMultiModeDefinition() {
     root: "run",
     help: helpCapability({
       wording: {
-        choices: "(choices {choices})",
-        default: "(default {value})",
+        outputModePlaceholder: "mode",
+        choicesAndDefault: "{usage} (choices {choices}) (default {value})",
+        list: "{left}, {right}",
       },
     }),
     usageFailureExitCode: 64,

@@ -10,6 +10,7 @@ import type {
 import type { ContractSchema, JsonObject } from "./contract-schema.ts";
 import { isSingleLineText } from "./description.ts";
 import { invalidFieldIdentityReason } from "./field-identity.ts";
+import { validateFieldPlaceholder } from "./help-projection.ts";
 import { copyJsonObject, deepFreeze } from "./json-value.ts";
 import { findUnresolvedSchemaReferences } from "./schema-resource.ts";
 
@@ -276,11 +277,25 @@ export function compileInputFields(
             : null,
       });
     }
+    const placeholderIssue =
+      field.kind === "flag"
+        ? undefined
+        : validateFieldPlaceholder(command, key, field.placeholder);
+    if (placeholderIssue !== undefined) {
+      issues.push(placeholderIssue);
+    }
+    const { placeholder: _rawPlaceholder, ...fieldWithoutPlaceholder } =
+      field as typeof field & { readonly placeholder?: unknown };
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Field kind and spellings were checked against the declaration; the spread keeps the matching union member.
     return {
-      ...field,
+      ...fieldWithoutPlaceholder,
       key,
       required: required.has(key),
+      ...(field.kind !== "flag" &&
+      typeof field.placeholder === "string" &&
+      placeholderIssue === undefined
+        ? { placeholder: field.placeholder }
+        : {}),
       ...readSchemaDefault(schemaProperties[key]),
       ...readFieldChoices(schemaProperties[key], field.kind),
     } as FieldGrammar;

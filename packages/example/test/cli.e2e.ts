@@ -249,10 +249,12 @@ void test("the email pattern completes through the same validation command", () 
 void test("the count constraint appears in both help and the process usage failure", () => {
   const help = invoke("validate", "--help");
   assert.equal(help.status, 0);
-  assert.ok(help.stdout.includes("id, email exactly 1"));
+  assert.ok(help.stdout.includes("--id, --email exactly 1"));
   assert.ok(
-    help.stdout.includes("when all of domain is present, require email"),
+    help.stdout.includes("when all of --domain is present, require --email"),
   );
+  assert.equal(help.stdout.includes("(atomic, structured)"), false);
+  assert.equal(help.stdout.includes("(atomic, text)"), false);
 
   const result = invoke(
     "validate",

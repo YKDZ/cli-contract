@@ -40,8 +40,8 @@ void test("consumer runner captures schema termination without application input
     root: "inspect",
     help: helpCapability({
       wording: {
-        choices: "(choices: {choices})",
-        default: "(default: {value})",
+        outputModePlaceholder: "mode",
+        choicesAndDefault: "{usage} (choices: {choices}; default: {value})",
       },
     }),
     schema: schemaCapability({

@@ -1076,31 +1076,203 @@ void shortHelp;
 helpCapability({ shortAlias: "-x" });
 
 // @ts-expect-error Help fact wording only accepts closed slots.
-helpCapability({ wording: { choices: "Choices {choices}", typo: "Extra" } });
+helpCapability({
+  wording: { choices: "{usage} Choices {choices}", typo: "Extra" },
+});
 // @ts-expect-error Help fact wording must still be a non-function object.
 helpCapability({ wording: () => "Choices {choices}" });
 
 // @ts-expect-error A static template must contain every required placeholder.
-helpCapability({ wording: { choices: "Choices" } });
+helpCapability({ wording: { choices: "{usage} Choices" } });
+// @ts-expect-error Line modifier templates require {usage}.
+helpCapability({ wording: { choices: "Choices {choices}" } });
+// @ts-expect-error choicesAndDefault requires {usage}, {choices}, and {value}.
+helpCapability({ wording: { choicesAndDefault: "{usage} ({choices})" } });
+// @ts-expect-error Binary joiners require {left} and {right}.
+helpCapability({ wording: { list: "{left}" } });
 // @ts-expect-error A static template cannot reference unknown placeholders.
-helpCapability({ wording: { choices: "Choices {choices} or {other}" } });
+helpCapability({
+  wording: { choices: "{usage} Choices {choices} or {other}" },
+});
 // @ts-expect-error A static template must be single-line.
-helpCapability({ wording: { default: "Default\n{value}" } });
+helpCapability({ wording: { default: "{usage} Default\n{value}" } });
 // @ts-expect-error An equals fact template must contain both field and value.
 helpCapability({ wording: { equals: "Field {field}" } });
 // @ts-expect-error A static help template cannot be whitespace-only.
 helpCapability({ wording: { commandPlaceholder: "   " } });
 // @ts-expect-error The command group placeholder itself cannot contain angle brackets.
 helpCapability({ wording: { commandPlaceholder: "<group>" } });
+// @ts-expect-error The output mode placeholder cannot be empty.
+helpCapability({ wording: { outputModePlaceholder: "" } });
+// @ts-expect-error The output mode placeholder cannot contain angle brackets.
+helpCapability({ wording: { outputModePlaceholder: "<mode>" } });
 
 const validHelpFactTemplates = helpCapability({
   wording: {
     commandPlaceholder: "command group",
-    choices: "Choices {choices}, also written {choices}",
-    default: "Default {value}, confirm again {value}",
+    outputModePlaceholder: "output mode",
+    choices: "{usage} Choices {choices}, also written {choices}",
+    default: "{usage} Default {value}, confirm again {value}",
+    choicesAndDefault: "{usage} ({choices}; {value})",
+    list: "{left} / {right}",
+    facts: "{left} & {right}",
+    effects: "{left}; {right}",
   },
 });
 void validHelpFactTemplates;
+
+const validPlaceholderCli = defineCli()({
+  root: "placeholders",
+  help: englishHelpCapability(),
+  usageFailureExitCode: 64,
+  commands: {
+    placeholders: {
+      kind: "rootCommand",
+      name: "placeholders",
+      description: "Validate field placeholder type contracts",
+      fields: {
+        target: {
+          kind: "positional",
+          placeholder: "target-file",
+          description: "Target",
+        },
+        extras: {
+          kind: "variadicPositional",
+          placeholder: "extra-files",
+          description: "Extras",
+        },
+        token: {
+          kind: "valueOption",
+          longOption: "--token",
+          placeholder: "api-token",
+          description: "Token",
+        },
+        tags: {
+          kind: "repeatableOption",
+          longOption: "--tag",
+          placeholder: "tag-name",
+          description: "Tags",
+        },
+      },
+      input: z.object({
+        target: z.string(),
+        extras: z.array(z.string()).optional(),
+        token: z.string().optional(),
+        tags: z.array(z.string()).optional(),
+      }),
+      outputs: (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode
+            .atomic({
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            })
+            .structured({ description: "Structured" }),
+        },
+      }),
+    },
+  },
+});
+void validPlaceholderCli;
+
+defineCli()({
+  root: "badPlaceholders",
+  help: englishHelpCapability(),
+  usageFailureExitCode: 64,
+  commands: {
+    badPlaceholders: {
+      kind: "rootCommand",
+      name: "bad-placeholders",
+      description: "Reject invalid placeholders at compile time",
+      fields: {
+        emptyPositional: {
+          kind: "positional",
+          // @ts-expect-error Empty field placeholder must fail statically.
+          placeholder: "",
+          description: "Empty",
+        },
+        blankVariadic: {
+          kind: "variadicPositional",
+          // @ts-expect-error Whitespace-only field placeholder must fail statically.
+          placeholder: "   ",
+          description: "Blank",
+        },
+        multilineOption: {
+          kind: "valueOption",
+          longOption: "--multi",
+          // @ts-expect-error Multiline field placeholder must fail statically.
+          placeholder: "line1\nline2",
+          description: "Multiline",
+        },
+        bracketedRepeatable: {
+          kind: "repeatableOption",
+          longOption: "--bracket",
+          // @ts-expect-error Angle brackets in field placeholder must fail statically.
+          placeholder: "<tag>",
+          description: "Bracketed",
+        },
+      },
+      input: z.object({
+        emptyPositional: z.string(),
+        blankVariadic: z.array(z.string()).optional(),
+        multilineOption: z.string().optional(),
+        bracketedRepeatable: z.array(z.string()).optional(),
+      }),
+      outputs: (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode
+            .atomic({
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            })
+            .structured({ description: "Structured" }),
+        },
+      }),
+    },
+  },
+});
+
+const badFlagField = {
+  kind: "flag",
+  longOption: "--flag",
+  placeholder: "nope",
+  description: "Flag",
+} as const;
+defineCli()({
+  root: "badFlagPlaceholder",
+  help: englishHelpCapability(),
+  usageFailureExitCode: 64,
+  commands: {
+    badFlagPlaceholder: {
+      kind: "rootCommand",
+      name: "bad-flag-placeholder",
+      description: "Reject placeholder on flag",
+      fields: {
+        // @ts-expect-error Flags do not accept a placeholder property.
+        flagged: badFlagField,
+      },
+      input: z.object({
+        flagged: z.boolean().optional(),
+      }),
+      outputs: (mode) => ({
+        default: "structured",
+        modes: {
+          structured: mode
+            .atomic({
+              success: { kind: "completion" },
+              failures: {},
+              handler: ({ outcome }) => outcome.completion(),
+            })
+            .structured({ description: "Structured" }),
+        },
+      }),
+    },
+  },
+});
 
 // @ts-expect-error TextLines can only be issued by the controlled constructor.
 const forgedTextLines: TextLines = { kind: "lines", lines: ["Forged"] };
@@ -1486,8 +1658,9 @@ function verifyTypeErrors() {
     root: "countAuthoring",
     help: helpCapability({
       wording: {
-        choices: englishHelpWording.choices,
-        default: englishHelpWording.default,
+        outputModePlaceholder: englishHelpWording.outputModePlaceholder,
+        choicesAndDefault: englishHelpWording.choicesAndDefault,
+        list: englishHelpWording.list,
         countExactly: "{fields} appears exactly {count} times",
         countAtLeast: "{fields} appears at least {min} times",
         countAtMost: "{fields} appears at most {max} times",

@@ -250,8 +250,8 @@ const cli = core.defineCli()({
   root: "ping",
   help: core.helpCapability({
     wording: {
-      choices: "(choices: {choices})",
-      default: "(default: {value})",
+      outputModePlaceholder: "mode",
+      choicesAndDefault: "{usage} (choices: {choices}; default: {value})",
     },
   }),
   usageFailureExitCode: 64,
