@@ -5,7 +5,7 @@ import {
   type CliContract,
   type CliContractResult,
   type CompletionFact,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
 import { z } from "zod";
 
 const emptyInput = z.object({});

@@ -12,7 +12,7 @@ import {
   text,
   versionCapability,
   type OutputExecutionFactory,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { z } from "zod";
 
@@ -418,7 +418,7 @@ void test("public discovery query uses canonical paths and projects one exact se
   );
   assert.deepEqual(
     Object.keys(
-      cli.manifest.commands.inspect.outputs.modes.structured!.failures,
+      cli.manifest.commands.inspect.outputs.modes.structured.failures,
     ),
     ["missing"],
   );
@@ -449,7 +449,7 @@ void test("public discovery query uses canonical paths and projects one exact se
   if (success.kind !== "success") return;
   assert.deepEqual(
     success.success,
-    cli.manifest.commands.inspect.outputs.modes.structured!.success,
+    cli.manifest.commands.inspect.outputs.modes.structured.success,
   );
   assert.equal("failures" in success, false);
   assert.equal("wire" in success, false);

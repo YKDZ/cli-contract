@@ -5,7 +5,7 @@ import {
   type CliContract,
   type ContractSchema,
   type UsageConstraint,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
 
 type Dependencies = Readonly<{
   readonly endpoint: "primary" | "backup";

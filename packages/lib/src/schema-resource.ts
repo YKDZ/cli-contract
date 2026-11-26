@@ -1,4 +1,4 @@
-import type { JsonObject } from "#/contract-schema";
+import type { JsonObject } from "./contract-schema.ts";
 
 const schemaObjectKeywords = [
   "$defs",

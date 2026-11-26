@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { toStandardJsonSchema } from "@valibot/to-json-schema";
 import {
   ContractDefinitionError,
   ContractExecutionError,
@@ -9,7 +8,8 @@ import {
   executeCli,
   parseCliInvocation,
   type ContractSchema,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
+import { toStandardJsonSchema } from "@valibot/to-json-schema";
 import * as v from "valibot";
 import { z } from "zod";
 

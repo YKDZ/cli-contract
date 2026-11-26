@@ -2,7 +2,7 @@ import {
   helpCapability,
   type HelpCapabilityDefinition,
   type HelpFactWording,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
 
 export const englishHelpWording = {
   commandPlaceholder: "command",

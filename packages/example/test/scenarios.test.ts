@@ -5,7 +5,8 @@ import {
   defineCommandScenarios,
   defineFailureScenarios,
   runCliScenario,
-} from "@ykdz/cli-contract-testing";
+  type CliObservation,
+} from "@boringparts/cli-contract/testing";
 
 import { cli } from "../src/index.ts";
 
@@ -89,7 +90,10 @@ void test("parse grammar and contract manifest share the count and conditional r
 // The assertions below verify that each scenario actually triggers its expected result.
 for (const [command, scenario] of Object.entries(commands)) {
   void test(`${command} success scenario`, async () => {
-    const capture = await runCliScenario(cli, scenario);
+    const capture: CliObservation<typeof cli> = await runCliScenario(
+      cli,
+      scenario,
+    );
     assert.equal(capture.termination.exitCode, 0);
     assert.equal(capture.stderr, "");
     if (command === "validate") {

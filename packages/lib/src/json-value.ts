@@ -1,4 +1,4 @@
-import type { JsonObject, JsonValue } from "#/contract-schema";
+import type { JsonObject, JsonValue } from "./contract-schema.ts";
 
 export function copyJsonObject(value: Record<string, unknown>): JsonObject {
   const copy = copyJsonValue(value);

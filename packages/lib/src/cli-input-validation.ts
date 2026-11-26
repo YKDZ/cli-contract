@@ -1,11 +1,11 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 
-import { ContractExecutionError } from "#/contract-execution-error";
+import { ContractExecutionError } from "./contract-execution-error.ts";
 import type {
   ContractExecutionIssue,
   ExecutionSchemaTarget,
-} from "#/contract-execution-error";
-import type { ContractSchema } from "#/contract-schema";
+} from "./contract-execution-error.ts";
+import type { ContractSchema } from "./contract-schema.ts";
 
 export type CliInputValidation =
   | Readonly<{ readonly kind: "accepted"; readonly value: unknown }>

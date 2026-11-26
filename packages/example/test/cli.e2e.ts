@@ -5,15 +5,15 @@ import { createInterface } from "node:readline";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { queryCliContract } from "@ykdz/cli-contract";
-import coreMetadata from "@ykdz/cli-contract/package.json" with { type: "json" };
+import { queryCliContract } from "@boringparts/cli-contract";
+import coreMetadata from "@boringparts/cli-contract/package.json" with { type: "json" };
 
 import { cli } from "../src/index.ts";
 
 function invoke(...argv: string[]) {
   const result = spawnSync(
     process.execPath,
-    [fileURLToPath(new URL("../src/main.ts", import.meta.url)), ...argv],
+    [fileURLToPath(new URL("../dist/main.js", import.meta.url)), ...argv],
     { encoding: "utf8" },
   );
   if (result.error) throw result.error;
@@ -41,7 +41,7 @@ void test(
       const child = spawn(
         process.execPath,
         [
-          fileURLToPath(new URL("../src/main.ts", import.meta.url)),
+          fileURLToPath(new URL("../dist/main.js", import.meta.url)),
           "logs",
           ...(mode === "structured" ? ["--output", "structured"] : []),
         ],

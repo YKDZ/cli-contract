@@ -8,7 +8,7 @@ import {
   text,
   type AtomicExecutionDefinition,
   type OutputExecutionFactory,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
 import { z } from "zod";
 
 const input = z.object({});

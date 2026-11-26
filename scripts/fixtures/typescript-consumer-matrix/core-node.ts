@@ -1,7 +1,7 @@
 import {
   nodeCliOutput,
   type NodeCliOutputOptions,
-} from "@ykdz/cli-contract/node";
+} from "@boringparts/cli-contract/node";
 
 declare const options: NodeCliOutputOptions;
 void nodeCliOutput({ ...options });

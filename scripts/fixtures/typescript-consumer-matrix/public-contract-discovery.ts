@@ -9,7 +9,7 @@ import {
   type ContractQueryFailureReason,
   type ContractQueryResult,
   type ContractSummaryQuery,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
 import { z } from "zod";
 
 const define = defineCli<Readonly<{ readonly directory: string }>>();

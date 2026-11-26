@@ -1,6 +1,6 @@
-import type { CliOutput, WriteCliOutput } from "#/cli-execution";
-import { CliWriteError } from "#/cli-write-error";
-import { streamOutputs, type StreamOutput } from "#/stream-output";
+import type { CliOutput, WriteCliOutput } from "./cli-execution.ts";
+import { CliWriteError } from "./cli-write-error.ts";
+import { streamOutputs, type StreamOutput } from "./stream-output.ts";
 
 interface NodeOutputWritable {
   write(chunk: string, callback: (error?: Error | null) => void): boolean;

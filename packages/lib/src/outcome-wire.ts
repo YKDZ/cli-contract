@@ -1,6 +1,6 @@
-import type { JsonObject, JsonValue } from "#/contract-schema";
-import { deepFreeze } from "#/json-value";
-import { embedSchemaResource } from "#/schema-resource";
+import type { JsonObject, JsonValue } from "./contract-schema.ts";
+import { deepFreeze } from "./json-value.ts";
+import { embedSchemaResource } from "./schema-resource.ts";
 
 const schemaVersion = "3" as const;
 

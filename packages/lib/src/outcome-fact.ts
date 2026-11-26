@@ -1,5 +1,5 @@
-import { ContractExecutionError } from "#/contract-execution-error";
-import type { ContractSchema } from "#/contract-schema";
+import { ContractExecutionError } from "./contract-execution-error.ts";
+import type { ContractSchema } from "./contract-schema.ts";
 
 const outcomeFactType = Symbol("OutcomeFact.type");
 const textProjectionType = Symbol("TextProjection.type");

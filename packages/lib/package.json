@@ -1,32 +1,27 @@
 {
-  "name": "@ykdz/cli-contract",
+  "name": "@boringparts/cli-contract",
   "version": "0.7.0",
-  "description": "Framework-agnostic, executable CLI contracts for Node.js.",
+  "description": "Catch unhandled CLI outcomes at compile time.",
   "keywords": [
     "cli",
     "contract",
     "nodejs",
     "typescript"
   ],
-  "homepage": "https://github.com/YKDZ/cli-contract",
+  "homepage": "https://github.com/boringparts/cli-contract",
   "bugs": {
-    "url": "https://github.com/YKDZ/cli-contract/issues"
+    "url": "https://github.com/boringparts/cli-contract/issues"
   },
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/YKDZ/cli-contract.git"
+    "url": "git+https://github.com/boringparts/cli-contract.git"
   },
   "files": [
     "dist"
   ],
   "type": "module",
-  "imports": {
-    "#/*": {
-      "types": "./dist/*.d.ts",
-      "default": "./dist/*.js"
-    }
-  },
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -35,6 +30,10 @@
     "./node": {
       "types": "./dist/node.d.ts",
       "default": "./dist/node.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
     },
     "./package.json": {
       "types": "./package.json",
@@ -45,13 +44,12 @@
     "access": "public"
   },
   "scripts": {
-    "authoring:fixture:hierarchy-text-coverage": "cat test/hierarchy-text-coverage.typecheck.ts",
-    "build": "tsc -p tsconfig.build.json --pretty false && link-example",
+    "build": "tsc -p tsconfig.build.json --pretty false && node scripts/link-example.ts",
     "format:check": "oxfmt --list-different .",
     "format:write": "oxfmt --write .",
     "lint": "oxlint --quiet --format=unix --ignore-pattern node_modules .",
     "lint:fix": "oxlint --format=unix . --fix",
-    "test": "node --test --conditions=source test/*.test.ts",
+    "test": "node --test test/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false"
   },
   "dependencies": {

@@ -11,14 +11,9 @@
           "allow": ["tooling"]
         }
       },
-      "contract-testing": {
-        "dependencies": {
-          "allow": ["contract-core", "tooling"]
-        }
-      },
       "contract-example": {
         "dependencies": {
-          "allow": ["contract-core", "contract-testing", "tooling"]
+          "allow": ["contract-core", "tooling"]
         }
       },
       "tooling": {
@@ -29,27 +24,59 @@
     }
   },
   "tasks": {
-    "//#boundaries": { "cache": false, "tags": ["quality:light"] },
-    "//#check": { "tags": ["quality:entry"] },
-    "//#check:full": { "tags": ["quality:entry"] },
-    "//#check:heavy": { "tags": ["quality:entry"] },
-    "//#check:workspace": { "cache": false, "tags": ["quality:conditional"] },
-    "//#fix": { "tags": ["work:repair"] },
-    "//#format:check": { "outputs": [], "tags": ["quality:light"] },
+    "//#boundaries": {
+      "cache": false,
+      "tags": ["quality:light"]
+    },
+    "//#check": {
+      "tags": ["quality:entry"]
+    },
+    "//#check:full": {
+      "tags": ["quality:entry"]
+    },
+    "//#check:heavy": {
+      "tags": ["quality:entry"]
+    },
+    "//#check:workspace": {
+      "cache": false,
+      "tags": ["quality:conditional"]
+    },
+    "//#fix": {
+      "tags": ["work:repair"]
+    },
+    "//#format:check": {
+      "outputs": [],
+      "tags": ["quality:light"]
+    },
     "//#format:write": {
       "cache": false,
       "dependsOn": ["//#lint:fix"],
       "tags": ["work:repair"]
     },
-    "//#lint": { "outputs": [], "tags": ["quality:light"] },
-    "//#lint:fix": { "cache": false, "tags": ["work:repair"] },
+    "//#lint": {
+      "outputs": [],
+      "tags": ["quality:light"]
+    },
+    "//#lint:fix": {
+      "cache": false,
+      "tags": ["work:repair"]
+    },
     "//#product:verify": {
       "dependsOn": ["@cli-contract/example#build"],
       "cache": false,
       "tags": ["quality:heavy"]
     },
-    "//#typecheck": { "outputs": [], "tags": ["quality:light"] },
-    "//#consumer:types": { "cache": false, "tags": ["work:release"] },
-    "//#example:published": { "cache": false, "tags": ["work:on-demand"] }
+    "//#typecheck": {
+      "outputs": [],
+      "tags": ["quality:light"]
+    },
+    "//#consumer:types": {
+      "cache": false,
+      "tags": ["work:release"]
+    },
+    "//#example:published": {
+      "cache": false,
+      "tags": ["work:on-demand"]
+    }
   }
 }

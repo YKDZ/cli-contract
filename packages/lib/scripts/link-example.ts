@@ -1,34 +1,25 @@
-#!/usr/bin/env node
-
 import { readFile, readdir, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { resolve } from "node:path";
 
-const directory = process.cwd();
+const directory = resolve(import.meta.dirname, "..");
 const manifest: unknown = JSON.parse(
   await readFile(resolve(directory, "package.json"), "utf8"),
 );
 if (
   !isRecord(manifest) ||
-  (manifest.name !== "@ykdz/cli-contract" &&
-    manifest.name !== "@ykdz/cli-contract-testing") ||
+  manifest.name !== "@boringparts/cli-contract" ||
   typeof manifest.version !== "string" ||
+  manifest.version.length === 0 ||
   !isRecord(manifest.exports)
 ) {
   throw new TypeError(
     "Public package metadata is missing a valid name, version, or exports",
   );
 }
-const coreMetadata =
-  manifest.name === "@ykdz/cli-contract"
-    ? manifest
-    : await readCoreMetadata(directory, manifest.version);
-const coreVersion = coreMetadata.version;
-if (typeof coreVersion !== "string") {
-  throw new TypeError("core package metadata is missing a valid version");
-}
-const sourceTag = encodeURIComponent(`@ykdz/cli-contract@${coreVersion}`);
-const url = `https://github.com/YKDZ/cli-contract/tree/${sourceTag}/packages/example`;
+const sourceTag = encodeURIComponent(
+  `@boringparts/cli-contract@${manifest.version}`,
+);
+const url = `https://github.com/boringparts/cli-contract/tree/${sourceTag}/packages/example`;
 const entries = new Set<string>();
 for (const exported of Object.values(manifest.exports)) {
   if (!isRecord(exported))
@@ -36,7 +27,9 @@ for (const exported of Object.values(manifest.exports)) {
   for (const entry of Object.values(exported)) {
     if (typeof entry !== "string")
       throw new TypeError("Package exports paths must be strings");
-    entries.add(resolve(directory, entry));
+    if (entry.endsWith(".js") || entry.endsWith(".d.ts")) {
+      entries.add(resolve(directory, entry));
+    }
   }
 }
 
@@ -47,7 +40,7 @@ for (const entry of await readdir(resolve(directory, "dist"), {
   const file = resolve(directory, "dist", entry);
   const original = await readFile(file, "utf8");
   let content = original.replaceAll(
-    /https:\/\/github\.com\/YKDZ\/cli-contract\/tree\/[^/]+\/packages\/example/g,
+    /https:\/\/github\.com\/boringparts\/cli-contract\/tree\/[^/]+\/packages\/example/g,
     url,
   );
   if (entries.has(file)) {
@@ -59,22 +52,4 @@ for (const entry of await readdir(resolve(directory, "dist"), {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-async function readCoreMetadata(
-  packageDirectory: string,
-  packageVersion: string,
-): Promise<Readonly<{ version: string }>> {
-  const require = createRequire(resolve(packageDirectory, "package.json"));
-  const path = require.resolve("@ykdz/cli-contract/package.json");
-  const value: unknown = JSON.parse(await readFile(path, "utf8"));
-  if (!isRecord(value) || typeof value.version !== "string") {
-    throw new TypeError(
-      "The testing build requires valid core package metadata",
-    );
-  }
-  if (value.version !== packageVersion) {
-    throw new Error("core and testing build versions do not match");
-  }
-  return { version: value.version };
 }

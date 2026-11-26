@@ -1,14 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { cp, readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { realpathSync } from "node:fs";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 
-import {
-  installedRuntimeDevDependencies,
-  runCommand,
-  withInstalledConsumer,
-} from "@cli-contract/tooling-config/release-consumer";
-import coreMetadata from "@ykdz/cli-contract/package.json" with { type: "json" };
+import coreMetadata from "@boringparts/cli-contract/package.json" with { type: "json" };
 
 interface Manifest {
   name: string;
@@ -19,18 +15,12 @@ interface Manifest {
   devDependencies?: Record<string, string>;
 }
 
-export interface PackedTarballs {
-  readonly coreTarball: string;
-  readonly testingTarball: string;
-}
-
 const exampleRoot = resolve(import.meta.dirname, "..");
 const configPackage = "@cli-contract/tooling-config";
-const corePackage = "@ykdz/cli-contract";
-const testingPackage = "@ykdz/cli-contract-testing";
+const corePackage = "@boringparts/cli-contract";
 
 export async function verifyExample(
-  packed?: PackedTarballs,
+  packedTarball?: string,
   argv?: readonly string[],
 ): Promise<void> {
   const example = await manifestAt(exampleRoot);
@@ -39,10 +29,9 @@ export async function verifyExample(
   const coreVersion = coreMetadata.version;
   if (typeof coreVersion !== "string")
     throw new Error("The public core package metadata has no version");
-  if (packed === undefined) verifyPublishedSource(coreVersion);
+  if (packedTarball === undefined) verifyPublishedSource(coreVersion);
   const replacements: Record<string, string> = {
-    [corePackage]: packed ? `file:${packed.coreTarball}` : coreVersion,
-    [testingPackage]: packed ? `file:${packed.testingTarball}` : coreVersion,
+    [corePackage]: packedTarball ? `file:${packedTarball}` : coreVersion,
   };
   const manifest = {
     ...example,
@@ -50,60 +39,63 @@ export async function verifyExample(
       example.dependencies,
       replacements,
     ),
-    devDependencies: {
-      ...(await installedDependencies(example.devDependencies, replacements)),
-      ...installedRuntimeDevDependencies,
-    },
+    devDependencies: await installedDependencies(
+      example.devDependencies,
+      replacements,
+    ),
   };
-  await withInstalledConsumer(manifest, async (project) => {
+
+  const project = await mkdtemp(
+    resolve(tmpdir(), "cli-contract-example-consumer-"),
+  );
+  try {
+    await writeFile(
+      resolve(project, "package.json"),
+      `${JSON.stringify(manifest)}\n`,
+    );
+    runCommand(
+      "pnpm",
+      ["install", "--ignore-scripts", "--prefer-offline"],
+      project,
+    );
+    await verifyIsolatedPublicEntries(project);
+
     for (const directory of ["src", "test"]) {
       await cp(resolve(exampleRoot, directory), resolve(project, directory), {
         recursive: true,
       });
     }
-    // Flatten the Node config so the temporary project uses the same compiler options as the workspace.
-    const config = JSON.parse(
-      await readFile(resolve(exampleRoot, "tsconfig.json"), "utf8"),
-    );
-    const baseConfig = JSON.parse(
-      await readFile(
-        fileURLToPath(import.meta.resolve(`${configPackage}/base.json`)),
-        "utf8",
-      ),
-    );
-    const nodeConfig = JSON.parse(
-      await readFile(
-        fileURLToPath(import.meta.resolve(`${configPackage}/node.json`)),
-        "utf8",
-      ),
-    );
-    const { extends: _baseExtends, ...base } = baseConfig;
-    const { extends: _nodeExtends, ...node } = nodeConfig;
-    const { extends: _extends, ...local } = config;
+
+    const tsconfig = showTsconfig(exampleRoot, "tsconfig.json");
+    const buildTsconfig = showTsconfig(exampleRoot, "tsconfig.build.json");
     await writeFile(
       resolve(project, "tsconfig.json"),
-      JSON.stringify({
-        ...base,
-        ...node,
-        ...local,
+      `${JSON.stringify({
         compilerOptions: {
-          ...base.compilerOptions,
-          ...node.compilerOptions,
-          ...local.compilerOptions,
+          ...tsconfig.compilerOptions,
+          customConditions: [],
         },
-      }),
+        include: ["src/**/*.ts", "test/**/*.ts"],
+      })}\n`,
     );
-    await cp(
-      resolve(exampleRoot, "tsconfig.build.json"),
+    await writeFile(
       resolve(project, "tsconfig.build.json"),
+      `${JSON.stringify({
+        compilerOptions: {
+          ...buildTsconfig.compilerOptions,
+          customConditions: [],
+        },
+        include: ["src/**/*.ts"],
+      })}\n`,
     );
+
     for (const task of ["typecheck", "build", "test", "test:e2e"]) {
       process.stderr.write(
-        runCommand("npm", ["run", "--silent", task], project),
+        runCommand("pnpm", ["run", "--silent", task], project),
       );
     }
     if (argv) {
-      const result = spawnSync(process.execPath, ["src/main.ts", ...argv], {
+      const result = spawnSync(process.execPath, ["dist/main.js", ...argv], {
         cwd: project,
         stdio: "inherit",
       });
@@ -113,7 +105,170 @@ export async function verifyExample(
           `The example process exited with status ${result.status ?? "unknown"}`,
         );
     }
-  });
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+}
+
+async function verifyIsolatedPublicEntries(project: string): Promise<void> {
+  const packageJsonPath = realpathSync(resolve(project, "package.json"));
+  const nodeModulesDir = realpathSync(resolve(project, "node_modules"));
+  const installedRoot = realpathSync(
+    resolve(project, "node_modules/@boringparts/cli-contract"),
+  );
+
+  const probeScript = `
+import assert from "node:assert/strict";
+import { realpathSync } from "node:fs";
+import { createRequire } from "node:module";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const [anchorFile, expectedRoot] = process.argv.slice(1);
+const anchorUrl = pathToFileURL(anchorFile).href;
+const specifiers = [
+  "@boringparts/cli-contract",
+  "@boringparts/cli-contract/node",
+  "@boringparts/cli-contract/testing",
+  "@boringparts/cli-contract/package.json",
+];
+const resolved = Object.fromEntries(
+  specifiers.map((specifier) => [
+    specifier,
+    realpathSync(fileURLToPath(import.meta.resolve(specifier, anchorUrl))),
+  ]),
+);
+for (const [specifier, target] of Object.entries(resolved)) {
+  if (!target.startsWith(expectedRoot + "/")) {
+    throw new Error(\`Public entry \${specifier} escaped isolated install: \${target}\`);
+  }
+}
+const requireFromTesting = createRequire(pathToFileURL(resolved["@boringparts/cli-contract/testing"]));
+assert.equal(
+  realpathSync(requireFromTesting.resolve("@boringparts/cli-contract")),
+  resolved["@boringparts/cli-contract"],
+  "Testing subpath and consumer must resolve to the same core instance",
+);
+
+const core = await import(pathToFileURL(resolved["@boringparts/cli-contract"]).href);
+const nodeEntry = await import(pathToFileURL(resolved["@boringparts/cli-contract/node"]).href);
+const testing = await import(pathToFileURL(resolved["@boringparts/cli-contract/testing"]).href);
+assert.equal(typeof core.defineCli, "function");
+assert.equal(typeof nodeEntry.nodeCliOutput, "function");
+assert.equal(typeof testing.runCliScenario, "function");
+
+const schema = {
+  "~standard": {
+    version: 1,
+    vendor: "smoke",
+    validate: (value) => ({ value }),
+    jsonSchema: {
+      input: () => ({
+        $schema: "https://json-schema.org/draft/2020-12/schema",
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      }),
+      output: () => ({
+        $schema: "https://json-schema.org/draft/2020-12/schema",
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      }),
+    },
+  },
+};
+const cli = core.defineCli()({
+  root: "ping",
+  help: core.helpCapability({
+    wording: {
+      choices: "(choices: {choices})",
+      default: "(default: {value})",
+    },
+  }),
+  usageFailureExitCode: 64,
+  commands: {
+    ping: {
+      kind: "rootCommand",
+      name: "ping",
+      description: "Ping",
+      input: schema,
+      outputs: ({ atomic }) => ({
+        modes: {
+          structured: atomic({
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          }).structured({ description: "Structured" }),
+        },
+      }),
+    },
+  },
+});
+const observation = await testing.runCliScenario(cli, {
+  argv: [],
+  dependencies: undefined,
+});
+assert.equal(observation.termination.exitCode, 0);
+process.stdout.write(resolved["@boringparts/cli-contract/testing"]);
+`;
+  const testingEntry = runCommand(
+    process.execPath,
+    ["--input-type=module", "-e", probeScript, packageJsonPath, installedRoot],
+    project,
+  ).trim();
+  if (!isWithinDirectory(nodeModulesDir, testingEntry)) {
+    throw new Error(
+      `Resolved testing entry escaped isolated node_modules: ${testingEntry}`,
+    );
+  }
+
+  const sideEffectFreeScript = `
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import { pathToFileURL } from "node:url";
+
+const [anchorFile, forbiddenTestingPath] = process.argv.slice(1);
+const anchorUrl = pathToFileURL(anchorFile).href;
+const forbiddenUrl = pathToFileURL(forbiddenTestingPath).href;
+
+registerHooks({
+  load(url, context, nextLoad) {
+    if (url === forbiddenUrl) {
+      throw new Error(\`Unexpected load of testing subpath: \${url}\`);
+    }
+    return nextLoad(url, context);
+  },
+});
+
+const core = await import(import.meta.resolve("@boringparts/cli-contract", anchorUrl));
+const nodeEntry = await import(import.meta.resolve("@boringparts/cli-contract/node", anchorUrl));
+assert.equal(typeof core.defineCli, "function");
+assert.equal(typeof nodeEntry.nodeCliOutput, "function");
+`;
+  runCommand(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      sideEffectFreeScript,
+      packageJsonPath,
+      testingEntry,
+    ],
+    project,
+  );
+}
+
+function showTsconfig(
+  cwd: string,
+  configFile: string,
+): { readonly compilerOptions: Record<string, unknown> } {
+  const tsc = resolve(cwd, "node_modules/.bin/tsc");
+  const raw = runCommand(tsc, ["--showConfig", "-p", configFile], cwd);
+  const parsed: unknown = JSON.parse(raw);
+  if (!isRecord(parsed) || !isRecord(parsed.compilerOptions)) {
+    throw new Error(`Invalid tsc --showConfig output for ${configFile}`);
+  }
+  return { compilerOptions: { ...parsed.compilerOptions } };
 }
 
 function verifyPublishedSource(version: string): void {
@@ -124,7 +279,7 @@ function verifyPublishedSource(version: string): void {
   );
   if (modifiedExample.trim().length > 0) {
     throw new Error(
-      "Post-publish example acceptance requires the example package to match the published source; run from a clean workspace at the corresponding native Changesets package tags",
+      "Post-publish example acceptance requires the example package to match the published source; run from a clean workspace at the corresponding native Changesets package tag",
     );
   }
 
@@ -133,14 +288,10 @@ function verifyPublishedSource(version: string): void {
       .split("\n")
       .filter((tag) => tag.length > 0),
   );
-  const requiredTags = [
-    `${corePackage}@${version}`,
-    `${testingPackage}@${version}`,
-  ];
-  const missingTags = requiredTags.filter((tag) => !tagsAtHead.has(tag));
-  if (missingTags.length > 0) {
+  const requiredTag = `${corePackage}@${version}`;
+  if (!tagsAtHead.has(requiredTag)) {
     throw new Error(
-      `Post-publish example acceptance requires HEAD at the corresponding native Changesets package tags: ${missingTags.join(", ")}`,
+      `Post-publish example acceptance requires HEAD at the corresponding native Changesets package tag: ${requiredTag}`,
     );
   }
 }
@@ -187,6 +338,16 @@ function isStringRecord(value: unknown): value is Record<string, string> {
   );
 }
 
+function isWithinDirectory(directory: string, path: string): boolean {
+  const fromDirectory = relative(directory, path);
+  return (
+    fromDirectory !== "" &&
+    !isAbsolute(fromDirectory) &&
+    !fromDirectory.startsWith(`..${sep}`) &&
+    fromDirectory !== ".."
+  );
+}
+
 async function installedDependencies(
   dependencies: Readonly<Record<string, string>> = {},
   replacements: Readonly<Record<string, string>>,
@@ -215,24 +376,38 @@ async function installedDependencies(
   return Object.fromEntries(entries);
 }
 
+function runCommand(
+  command: string,
+  args: readonly string[],
+  cwd: string,
+): string {
+  const result = spawnSync(command, args, {
+    cwd,
+    encoding: "utf8",
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(
+      `${command} ${args.join(" ")} failed (${result.status ?? result.signal})\n${result.stderr}\n${result.stdout}`,
+    );
+  }
+  return result.stdout;
+}
+
 if (import.meta.main) {
   const rawArgs = process.argv.slice(2);
   const values = rawArgs[0] === "--" ? rawArgs.slice(1) : rawArgs;
   const separator = values.indexOf("--");
   const args = separator === -1 ? values : values.slice(0, separator);
   const cliArgs = separator === -1 ? [] : values.slice(separator + 1);
-  const packed =
-    args.length === 4 &&
-    args[0] === "--core" &&
-    args[2] === "--testing" &&
-    args[1] &&
-    args[3]
-      ? { coreTarball: resolve(args[1]), testingTarball: resolve(args[3]) }
+  const packedTarball =
+    args.length === 2 && args[0] === "--tarball" && args[1]
+      ? resolve(args[1])
       : undefined;
   const published = args[0] === "--published";
-  if ((!packed && !published) || (published && args.length !== 1))
+  if ((!packedTarball && !published) || (published && args.length !== 1))
     throw new Error(
-      "Usage: release:verify --core <tgz> --testing <tgz>, or verify:published [CLI args]",
+      "Usage: release:verify -- --tarball <tgz>, or verify:published [-- <CLI args>]",
     );
-  await verifyExample(packed, published ? cliArgs : undefined);
+  await verifyExample(packedTarball, published ? cliArgs : undefined);
 }

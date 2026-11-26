@@ -9,7 +9,7 @@ import {
   helpCapability,
   parseCliInvocation,
   text,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
 import { z } from "zod";
 
 void test("each command selects an independent result contract per named mode and keeps mode identity", async () => {

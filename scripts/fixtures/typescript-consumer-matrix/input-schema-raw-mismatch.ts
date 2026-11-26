@@ -1,4 +1,4 @@
-import { defineCli, helpCapability } from "@ykdz/cli-contract";
+import { defineCli, helpCapability } from "@boringparts/cli-contract";
 import { z } from "zod";
 
 const define = defineCli();

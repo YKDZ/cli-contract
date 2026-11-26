@@ -2,12 +2,6 @@
   "extends": ["//"],
   "tags": ["contract-example"],
   "tasks": {
-    "authoring:fixture:example": {
-      "inputs": [],
-      "outputs": [],
-      "cache": false,
-      "tags": ["work:on-demand"]
-    },
     "build": {
       "dependsOn": ["^build"],
       "inputs": [],

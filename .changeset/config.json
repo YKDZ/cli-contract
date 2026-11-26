@@ -1,5 +1,4 @@
 {
   "access": "public",
-  "baseBranch": "main",
-  "fixed": [["@ykdz/cli-contract", "@ykdz/cli-contract-testing"]]
+  "baseBranch": "main"
 }

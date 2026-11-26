@@ -1,4 +1,4 @@
-import type { WriteCliOutput } from "#/cli-execution";
+import type { WriteCliOutput } from "./cli-execution.ts";
 
 export interface StreamOutput {
   write: WriteCliOutput;

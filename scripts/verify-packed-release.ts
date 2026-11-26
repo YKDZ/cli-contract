@@ -4,28 +4,13 @@ import { lstat, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, relative, resolve, sep } from "node:path";
 
-import {
-  installedRuntimeDevDependencies,
-  verifyInstalledRuntime,
-  withInstalledConsumer,
-} from "@cli-contract/tooling-config/release-consumer";
-
 const repositoryRoot = resolve(import.meta.dirname, "..");
-const corePackage = "@ykdz/cli-contract";
-const testingPackage = "@ykdz/cli-contract-testing";
-
-interface PackedPackage {
-  readonly name: string;
-  readonly version: string;
-  readonly tarball: string;
-  readonly manifest: Readonly<Record<string, unknown>>;
-}
+const corePackage = "@boringparts/cli-contract";
+const expectedDescription = "Catch unhandled CLI outcomes at compile time.";
 
 interface PackedRelease {
-  readonly coreTarball: string;
-  readonly coreVersion: string;
-  readonly testingTarball: string;
-  readonly testingVersion: string;
+  readonly tarball: string;
+  readonly version: string;
 }
 
 async function main(): Promise<void> {
@@ -63,41 +48,17 @@ async function main(): Promise<void> {
     }
 
     process.stderr.write(
-      "Verifying standalone installation and public runtime entries of the packed artifacts\n",
-    );
-    await withInstalledConsumer(
-      {
-        name: "cli-contract-packed-consumer",
-        private: true,
-        type: "module",
-        dependencies: {
-          [corePackage]: `file:${packed.coreTarball}`,
-          [testingPackage]: `file:${packed.testingTarball}`,
-        },
-        devDependencies: installedRuntimeDevDependencies,
-      },
-      verifyInstalledRuntime,
-    );
-
-    process.stderr.write(
       "Verifying the standalone TypeScript 6/7 consumer matrix\n",
     );
     const typecheckOutput = runCommand(
       "pnpm",
-      [
-        "consumer:types",
-        "--",
-        "--core",
-        packed.coreTarball,
-        "--testing",
-        packed.testingTarball,
-      ],
+      ["consumer:types", "--", "--tarball", packed.tarball],
       repositoryRoot,
     );
     if (typecheckOutput.length > 0) process.stdout.write(typecheckOutput);
 
     process.stderr.write(
-      "Verifying real-process example consumption of the packed artifacts\n",
+      "Verifying real-process example consumption of the packed artifact\n",
     );
     const exampleOutput = runCommand(
       "pnpm",
@@ -106,20 +67,18 @@ async function main(): Promise<void> {
         "@cli-contract/example",
         "release:verify",
         "--",
-        "--core",
-        packed.coreTarball,
-        "--testing",
-        packed.testingTarball,
+        "--tarball",
+        packed.tarball,
       ],
       repositoryRoot,
     );
     if (exampleOutput.length > 0) process.stdout.write(exampleOutput);
     process.stdout.write(
       `${JSON.stringify({
-        core: { version: packed.coreVersion, tarball: packed.coreTarball },
-        testing: {
-          version: packed.testingVersion,
-          tarball: packed.testingTarball,
+        package: {
+          name: corePackage,
+          version: packed.version,
+          tarball: packed.tarball,
         },
       })}\n`,
     );
@@ -170,79 +129,47 @@ async function readPackedRelease(
     return undefined;
   }
 
+  if (releases.length !== 1 || releases[0]?.name !== corePackage) {
+    throw new Error(
+      `The Changesets publish plan must contain exactly ${corePackage}`,
+    );
+  }
+
+  const release = releases[0];
+  if (release.tarball === undefined) {
+    throw new Error(`Changesets did not record a tarball for ${release.name}`);
+  }
+  const tarball = resolve(packDirectory, release.tarball.path);
+  if (!isWithinDirectory(packDirectory, tarball)) {
+    throw new Error(
+      `Changesets tarball path escapes the pack-dir: ${release.name}`,
+    );
+  }
+  const status = await lstat(tarball);
   if (
-    releases.length !== 2 ||
-    new Set(releases.map((release) => release.name)).size !== 2 ||
-    !releases.some((release) => release.name === corePackage) ||
-    !releases.some((release) => release.name === testingPackage)
+    !status.isFile() ||
+    status.isSymbolicLink() ||
+    !tarball.endsWith(".tgz")
   ) {
+    throw new Error(`Changesets tarball is not a regular tgz file: ${tarball}`);
+  }
+  await verifyIntegrity(tarball, release.tarball.integrity);
+  const version = await inspectTarball(tarball, release.name, expectedLicense);
+  if (version !== release.version) {
     throw new Error(
-      "The Changesets publish plan must contain exactly the two public packages core and testing",
+      `Changesets plan version does not match the artifact version of ${release.name}`,
     );
   }
-
-  const packedPackages = await Promise.all(
-    releases.map(async (release) => {
-      if (release.tarball === undefined) {
-        throw new Error(
-          `Changesets did not record a tarball for ${release.name}`,
-        );
-      }
-      const tarball = resolve(packDirectory, release.tarball.path);
-      if (!isWithinDirectory(packDirectory, tarball)) {
-        throw new Error(
-          `Changesets tarball path escapes the pack-dir: ${release.name}`,
-        );
-      }
-      const status = await lstat(tarball);
-      if (
-        !status.isFile() ||
-        status.isSymbolicLink() ||
-        !tarball.endsWith(".tgz")
-      ) {
-        throw new Error(
-          `Changesets tarball is not a regular tgz file: ${tarball}`,
-        );
-      }
-      await verifyIntegrity(tarball, release.tarball.integrity);
-      const pkg = await inspectTarball(tarball, release.name, expectedLicense);
-      if (pkg.version !== release.version) {
-        throw new Error(
-          `Changesets plan version does not match the artifact version of ${release.name}`,
-        );
-      }
-      return pkg;
-    }),
-  );
-
-  const core = packedPackages.find((pkg) => pkg.name === corePackage);
-  const testing = packedPackages.find((pkg) => pkg.name === testingPackage);
-  if (core === undefined || testing === undefined) {
-    throw new Error(
-      "Changesets pack-dir is missing the core or testing artifact",
-    );
-  }
-  verifyLockstep(core, testing);
 
   const packageEntries = await readdir(resolve(packDirectory, "packages"));
-  const expectedEntries = new Set(
-    packedPackages.map((pkg) => basename(pkg.tarball)),
-  );
-  if (
-    packageEntries.length !== expectedEntries.size ||
-    packageEntries.some((entry) => !expectedEntries.has(entry))
-  ) {
+  const expectedEntry = basename(tarball);
+  if (packageEntries.length !== 1 || packageEntries[0] !== expectedEntry) {
     throw new Error(
       "The tgz files in the Changesets pack-dir do not match the publish plan",
     );
   }
 
-  return {
-    coreTarball: core.tarball,
-    coreVersion: core.version,
-    testingTarball: testing.tarball,
-    testingVersion: testing.version,
-  };
+  return { tarball, version };
 }
 
 interface PublishPlanRelease {
@@ -324,7 +251,7 @@ async function inspectTarball(
   tarball: string,
   expectedName: string,
   expectedLicense: string,
-): Promise<PackedPackage> {
+): Promise<string> {
   const entries = tarEntries(tarball);
   verifyArchiveContents(entries, tarball);
   const manifest = parseManifest(readTarText(tarball, "package/package.json"));
@@ -332,6 +259,18 @@ async function inspectTarball(
   verifyManifestTargets(manifest, entries);
   const version = requiredString(manifest, "version", "artifact package.json");
   verifyPublicSourceLinks(tarball, version, manifest, entries);
+  const readme = readTarText(tarball, "package/README.md");
+  if (
+    readme.trim().length === 0 ||
+    !readme.includes("https://github.com/boringparts/cli-contract") ||
+    !readme.includes(
+      "https://github.com/boringparts/cli-contract/tree/main/packages/example",
+    )
+  ) {
+    throw new Error(
+      `Artifact README.md is missing repository or example links: ${tarball}`,
+    );
+  }
   const license = readTarText(tarball, "package/LICENSE");
   if (license !== expectedLicense) {
     throw new Error(
@@ -340,18 +279,13 @@ async function inspectTarball(
   }
   if (
     !license.includes("MIT License") ||
-    !license.includes("Copyright (c) 2026 YKDZ")
+    !license.includes("Copyright (c) 2026 boringparts")
   ) {
     throw new Error(
       `Artifact LICENSE is missing MIT license content: ${tarball}`,
     );
   }
-  return {
-    name: expectedName,
-    version,
-    tarball,
-    manifest,
-  };
+  return version;
 }
 
 function verifyPublicSourceLinks(
@@ -361,7 +295,7 @@ function verifyPublicSourceLinks(
   entries: readonly string[],
 ): void {
   const sourceTag = encodeURIComponent(`${corePackage}@${version}`);
-  const expected = `https://github.com/YKDZ/cli-contract/tree/${sourceTag}/packages/example`;
+  const expected = `https://github.com/boringparts/cli-contract/tree/${sourceTag}/packages/example`;
   const publicEntries = targetStrings(manifest.exports, "exports").filter(
     (target) => target.endsWith(".js") || target.endsWith(".d.ts"),
   );
@@ -403,19 +337,19 @@ function verifyArchiveContents(
   entries: readonly string[],
   tarball: string,
 ): void {
-  const required = new Set(["package.json", "LICENSE"]);
+  const required = new Set(["package.json", "LICENSE", "README.md"]);
   for (const entry of entries) {
     if (entry === "" || entry.includes("..") || entry.startsWith("/")) {
       throw new Error(`tgz contains an invalid path: ${entry}`);
+    }
+    if (required.has(entry)) {
+      required.delete(entry);
+      continue;
     }
     if (isDeniedArchivePath(entry)) {
       throw new Error(
         `tgz contains content from a non-public directory: ${entry}`,
       );
-    }
-    if (required.has(entry)) {
-      required.delete(entry);
-      continue;
     }
     if (!isPublishedDistFile(entry)) {
       throw new Error(`tgz contains content outside dist/: ${entry}`);
@@ -512,6 +446,8 @@ function verifyManifestMetadata(
   }
   if (manifest.private === true)
     throw new Error("Artifact package is still marked private");
+  if (manifest.sideEffects !== false)
+    throw new Error("Artifact package must declare sideEffects: false");
   if (requiredString(manifest, "type", "artifact package.json") !== "module") {
     throw new Error("Artifact package is not ESM");
   }
@@ -520,15 +456,15 @@ function verifyManifestMetadata(
   }
   if (
     requiredString(manifest, "homepage", "artifact package.json") !==
-    "https://github.com/YKDZ/cli-contract"
+    "https://github.com/boringparts/cli-contract"
   ) {
     throw new Error("Artifact homepage metadata is incorrect");
   }
   if (
-    requiredString(manifest, "description", "artifact package.json").length ===
-    0
+    requiredString(manifest, "description", "artifact package.json") !==
+    expectedDescription
   ) {
-    throw new Error("Artifact description must not be empty");
+    throw new Error("Artifact description metadata is incorrect");
   }
   const keywords = manifest.keywords;
   if (
@@ -557,11 +493,13 @@ function verifyManifestMetadata(
     "repository",
     "artifact package.json",
   );
-  if (repository.url !== "git+https://github.com/YKDZ/cli-contract.git") {
+  if (
+    repository.url !== "git+https://github.com/boringparts/cli-contract.git"
+  ) {
     throw new Error("Artifact repository metadata is incorrect");
   }
   const bugs = requiredRecord(manifest, "bugs", "artifact package.json");
-  if (bugs.url !== "https://github.com/YKDZ/cli-contract/issues") {
+  if (bugs.url !== "https://github.com/boringparts/cli-contract/issues") {
     throw new Error("Artifact bugs metadata is incorrect");
   }
 }
@@ -570,9 +508,28 @@ function verifyManifestTargets(
   manifest: Readonly<Record<string, unknown>>,
   entries: readonly string[],
 ): void {
+  if (manifest.imports !== undefined) {
+    throw new Error("Artifact package.json must not declare private imports");
+  }
+  const exportsRecord = requiredRecord(
+    manifest,
+    "exports",
+    "artifact package.json",
+  );
+  for (const requiredSubpath of [
+    ".",
+    "./node",
+    "./testing",
+    "./package.json",
+  ]) {
+    if (!Object.hasOwn(exportsRecord, requiredSubpath)) {
+      throw new Error(
+        `Artifact package.json exports is missing ${requiredSubpath}`,
+      );
+    }
+  }
   const targets = [
     ...targetStrings(manifest.exports, "exports"),
-    ...targetStrings(manifest.imports, "imports"),
     ...targetStrings(manifest.types, "types"),
   ];
   if (targets.length === 0) {
@@ -637,22 +594,6 @@ function isRegistryVersionSpecifier(value: string): boolean {
 
 function isStableVersion(value: string): boolean {
   return /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value);
-}
-
-function verifyLockstep(core: PackedPackage, testing: PackedPackage): void {
-  if (core.version !== testing.version) {
-    throw new Error("core/testing versions differ in the Changesets pack");
-  }
-  const dependencies = requiredRecord(
-    testing.manifest,
-    "dependencies",
-    "testing artifact package.json",
-  );
-  if (dependencies[corePackage] !== core.version) {
-    throw new Error(
-      "testing artifact does not depend on the exact core version from the same pack",
-    );
-  }
 }
 
 function readTarText(tarball: string, entry: string): string {

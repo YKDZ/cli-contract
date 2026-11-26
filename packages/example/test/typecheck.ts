@@ -1,11 +1,14 @@
-import { defineCli, helpCapability, text } from "@ykdz/cli-contract";
+import { defineCli, helpCapability, text } from "@boringparts/cli-contract";
 import {
   defineCommandScenarios,
   defineFailureScenarios,
-} from "@ykdz/cli-contract-testing";
+  type CliObservation,
+} from "@boringparts/cli-contract/testing";
 import { z } from "zod";
 
 import { cli } from "../src/index.ts";
+
+export type ExampleObservation = CliObservation<typeof cli>;
 
 // These negative cases only participate in compilation; if a constraint stops holding, the unused @ts-expect-error becomes an error.
 export function rejectedDeclarations() {

@@ -5,17 +5,17 @@ import type {
   UsageConstraintEffect,
   UsageFact,
   WhenUsageConstraint,
-} from "#/cli-contract";
+} from "./cli-contract.ts";
 import type {
   ConditionalConstraintViolationIssue,
   CountConstraintViolationIssue,
   ForbiddenCombinationViolationIssue,
   UsageConstraintObservation,
-} from "#/cli-invocation";
-import type { ContractDefinitionIssue } from "#/contract-definition-error";
-import { ContractExecutionError } from "#/contract-execution-error";
-import type { JsonObject, JsonValue } from "#/contract-schema";
-import { deepFreeze, isPlainRecord } from "#/json-value";
+} from "./cli-invocation.ts";
+import type { ContractDefinitionIssue } from "./contract-definition-error.ts";
+import { ContractExecutionError } from "./contract-execution-error.ts";
+import type { JsonObject, JsonValue } from "./contract-schema.ts";
+import { deepFreeze, isPlainRecord } from "./json-value.ts";
 
 const countUsageConstraintPropertyKeys = [
   "kind",
@@ -1069,7 +1069,7 @@ function projectUsageConstraints(
     schema.inputSchema.$defs,
   )
     ? // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- inputSchema's $defs is a validated JSON Schema object.
-      { ...(schema.inputSchema.$defs as JsonObject) }
+      { ...schema.inputSchema.$defs }
     : {};
   let countConstraintIndex = 0;
   for (const constraint of constraints) {

@@ -9,7 +9,7 @@ import {
   text,
   versionCapability,
   type OutputExecutionFactory,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
 import { z } from "zod";
 
 import { englishHelpCapability } from "./english-help.ts";

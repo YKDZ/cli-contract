@@ -12,7 +12,7 @@ import {
   type JsonObject,
   type OutputExecutionFactory,
   type UsageConstraint,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { z } from "zod";
 
@@ -1739,7 +1739,7 @@ void test("when branch schemas checked against the parser keep root references a
           issue.code === "conditionalConstraintViolation" &&
           issue.branch === "otherwise" &&
           issue.conditions[0]?.kind === "present" &&
-          issue.conditions[0].present === false &&
+          !issue.conditions[0].present &&
           issue.missingRequiredFields.includes("token"),
       ),
     );

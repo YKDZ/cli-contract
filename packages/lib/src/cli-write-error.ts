@@ -1,4 +1,4 @@
-import type { CliOutputDestination } from "#/cli-execution";
+import type { CliOutputDestination } from "./cli-execution.ts";
 
 /**
  * The host output seam failed to complete a write. Preserves the destination

@@ -1,4 +1,3 @@
-import { toStandardJsonSchema } from "@valibot/to-json-schema";
 import {
   defineCli,
   type OutputExecutionFactory,
@@ -26,7 +25,8 @@ import {
   type UsageIssue,
   type UsageConstraint,
   type UsageFactValue,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
+import { toStandardJsonSchema } from "@valibot/to-json-schema";
 import * as v from "valibot";
 import { z } from "zod";
 

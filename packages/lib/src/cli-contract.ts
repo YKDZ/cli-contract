@@ -1,14 +1,19 @@
 import {
   compileAtomicVariants,
   type RuntimeAtomicVariant,
-} from "#/atomic-variant-compiler";
-import { validateCliInput } from "#/cli-input-validation";
-import { parseCliInvocation, type CommandUsage } from "#/cli-invocation";
+} from "./atomic-variant-compiler.ts";
+import { validateCliInput } from "./cli-input-validation.ts";
+import { parseCliInvocation, type CommandUsage } from "./cli-invocation.ts";
 import {
   ContractDefinitionError,
   type ContractDefinitionIssue,
-} from "#/contract-definition-error";
-import { ContractExecutionError } from "#/contract-execution-error";
+} from "./contract-definition-error.ts";
+import { ContractExecutionError } from "./contract-execution-error.ts";
+import {
+  compileContractSchema,
+  compileInputFields,
+  projectFieldDescriptions,
+} from "./contract-schema-compiler.ts";
 import type {
   ContractSchema,
   ContractSchemaInput,
@@ -16,15 +21,10 @@ import type {
   EmptyCliInput,
   JsonObject,
   JsonValue,
-} from "#/contract-schema";
-import {
-  compileContractSchema,
-  compileInputFields,
-  projectFieldDescriptions,
-} from "#/contract-schema-compiler";
-import { copySingleLineText, isSingleLineText } from "#/description";
-import type { reservedFieldNames } from "#/field-identity";
-import { deepFreeze, isPlainRecord } from "#/json-value";
+} from "./contract-schema.ts";
+import { copySingleLineText, isSingleLineText } from "./description.ts";
+import type { reservedFieldNames } from "./field-identity.ts";
+import { deepFreeze, isPlainRecord } from "./json-value.ts";
 import type {
   CompletionFact,
   TextPresenterContext,
@@ -44,8 +44,8 @@ import type {
   StreamRecordDefinitions,
   StreamRecordFactUnion,
   StreamSuccessFact,
-} from "#/outcome-fact";
-import { isIssuedTextProjection } from "#/outcome-fact";
+} from "./outcome-fact.ts";
+import { isIssuedTextProjection } from "./outcome-fact.ts";
 import {
   createCompletionWireSchema,
   createDataWireSchema,
@@ -54,19 +54,19 @@ import {
   createStreamRecordWireSchema,
   createStreamSuccessWireSchema,
   createUsageFailureWireSchema,
-} from "#/outcome-wire";
+} from "./outcome-wire.ts";
 import {
   compileStreamRecords,
   type RuntimeStreamRecord,
   type StreamRecordManifest,
-} from "#/stream-variant-compiler";
+} from "./stream-variant-compiler.ts";
 import {
   compileUsageConstraints,
   collectUnknownUsageConstraintDefinitionProperties,
   usageConstraintDefinitionPropertyKeys,
   type CountUsageConstraintGrammar,
   type UsageConstraintGrammar,
-} from "#/usage-constraint";
+} from "./usage-constraint.ts";
 export {
   createCompletionFact,
   createDataFact,
@@ -76,7 +76,7 @@ export {
   isIssuedOutcomeFact,
   TextValueError,
   text,
-} from "#/outcome-fact";
+} from "./outcome-fact.ts";
 export type {
   CompletionFact,
   CompletionTextPresenter,
@@ -101,7 +101,7 @@ export type {
   TextLines,
   TextValueErrorIssue,
   TextFragment,
-} from "#/outcome-fact";
+} from "./outcome-fact.ts";
 
 const cliContractType = Symbol("CliContract.type");
 const outputModesType = Symbol("OutputModes.type");
@@ -4991,7 +4991,7 @@ function assertKnownCapabilityOptions(
  * and their result projections. Dynamic declarations still report
  * `ContractDefinitionError` at definition time; that is no substitute for type
  * checking statically decidable declarations.
- * @see {@link https://github.com/YKDZ/cli-contract/tree/main/packages/example | End-to-end example}
+ * @see {@link https://github.com/boringparts/cli-contract/tree/main/packages/example | End-to-end example}
  */
 export function defineCli<Dependencies = undefined>(): DefineCli<Dependencies> {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The public generic definition interface is implemented by this runtime compilation entry; type parameters only constrain callers.

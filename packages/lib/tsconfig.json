@@ -2,10 +2,10 @@
   "extends": "@cli-contract/tooling-config/node.json",
   "compilerOptions": {
     "paths": {
-      "#/*": ["./src/*.ts"],
-      "@ykdz/cli-contract": ["./src/index.ts"],
-      "@ykdz/cli-contract/node": ["./src/node.ts"]
+      "@boringparts/cli-contract": ["./src/index.ts"],
+      "@boringparts/cli-contract/node": ["./src/node.ts"],
+      "@boringparts/cli-contract/testing": ["./src/testing.ts"]
     }
   },
-  "include": ["src/**/*.ts", "test/**/*.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"]
 }

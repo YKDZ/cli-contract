@@ -1,27 +1,21 @@
 import { spawnSync } from "node:child_process";
 import { lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, resolve } from "node:path";
+import { basename, resolve } from "node:path";
 
 import { verifyAuthoringDiagnosticCases } from "./authoring-diagnostic-cases.ts";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
-const corePackage = "@ykdz/cli-contract";
-const testingPackage = "@ykdz/cli-contract-testing";
+const corePackage = "@boringparts/cli-contract";
 const compilerVersions = ["6.0.3", "7.0.2"] as const;
 const resolutions = ["nodenext", "bundler"] as const;
 
-interface CandidateTarballs {
-  readonly core: string;
-  readonly testing: string;
-}
-
 async function main(): Promise<void> {
-  const candidate = await parseCandidateTarballs(process.argv.slice(2));
+  const tarball = await parseCandidateTarball(process.argv.slice(2));
   const fixtures = await readFixtures();
 
   for (const compilerVersion of compilerVersions) {
-    await verifyCompilerVersion(candidate, fixtures, compilerVersion);
+    await verifyCompilerVersion(tarball, fixtures, compilerVersion);
   }
 }
 
@@ -54,34 +48,13 @@ async function readFixtures(): Promise<Readonly<Record<string, string>>> {
   );
 }
 
-async function parseCandidateTarballs(
-  args: readonly string[],
-): Promise<CandidateTarballs> {
+async function parseCandidateTarball(args: readonly string[]): Promise<string> {
   const values = args[0] === "--" ? args.slice(1) : args;
-  if (
-    values.length !== 4 ||
-    values[0] !== "--core" ||
-    values[1] === undefined ||
-    values[2] !== "--testing" ||
-    values[3] === undefined
-  ) {
-    throw new Error(
-      "Usage: pnpm consumer:types -- --core <core.tgz> --testing <testing.tgz>",
-    );
+  if (values.length !== 2 || values[0] !== "--tarball" || !values[1]) {
+    throw new Error("Usage: pnpm consumer:types -- --tarball <package.tgz>");
   }
 
-  const core = resolve(values[1]);
-  const testing = resolve(values[3]);
-  if (dirname(core) !== dirname(testing)) {
-    throw new Error(
-      "Core and testing tarballs must share one candidate directory",
-    );
-  }
-  await Promise.all([verifyTarball(core), verifyTarball(testing)]);
-  return { core, testing };
-}
-
-async function verifyTarball(tarball: string): Promise<void> {
+  const tarball = resolve(values[1]);
   const status = await lstat(tarball);
   if (
     !status.isFile() ||
@@ -90,26 +63,17 @@ async function verifyTarball(tarball: string): Promise<void> {
   ) {
     throw new Error(`Candidate must be a regular .tgz file: ${tarball}`);
   }
+  return tarball;
 }
 
 async function verifyCompilerVersion(
-  candidate: CandidateTarballs,
-  fixtures: Readonly<Record<string, string>>,
-  compilerVersion: (typeof compilerVersions)[number],
-): Promise<void> {
-  await verifyCoreOnly(candidate, fixtures, compilerVersion);
-  await verifyCoreAndTesting(candidate, fixtures, compilerVersion);
-}
-
-async function verifyCoreOnly(
-  candidate: CandidateTarballs,
+  tarball: string,
   fixtures: Readonly<Record<string, string>>,
   compilerVersion: (typeof compilerVersions)[number],
 ): Promise<void> {
   const project = await mkdtemp(
     resolve(tmpdir(), `cli-contract-typescript-${compilerVersion}-`),
   );
-  const npmCache = await mkdtemp(resolve(tmpdir(), "cli-contract-npm-cache-"));
   try {
     await writeFile(
       resolve(project, "package.json"),
@@ -117,16 +81,18 @@ async function verifyCoreOnly(
         name: "cli-contract-typescript-consumer",
         private: true,
         type: "module",
-        dependencies: { [corePackage]: `file:${candidate.core}` },
+        dependencies: { [corePackage]: `file:${tarball}` },
         devDependencies: {
+          "@types/node": "26.6.6",
           "@valibot/to-json-schema": "1.7.1",
           typescript: compilerVersion,
-          valibot: "1.4.2",
-          zod: "4.5.4",
+          valibot: "1.5.0",
+          zod: "4.6.5",
         },
       })}\n`,
     );
     await writeFixtures(project, fixtures, [
+      "consumer.ts",
       "core-node.ts",
       "core-root.ts",
       "generic-text-forward.ts",
@@ -136,18 +102,9 @@ async function verifyCoreOnly(
       "valid-help-fact-templates.ts",
     ]);
     runCommand(
-      "npm",
-      [
-        "install",
-        "--ignore-scripts",
-        "--no-package-lock",
-        "--no-audit",
-        "--no-fund",
-        "--loglevel",
-        "error",
-      ],
+      "pnpm",
+      ["install", "--ignore-scripts", "--prefer-offline"],
       project,
-      { NPM_CONFIG_CACHE: npmCache },
     );
 
     for (const resolution of resolutions) {
@@ -160,6 +117,7 @@ async function verifyCoreOnly(
         "typed-command-examples.ts",
         "public-contract-discovery.ts",
         "valid-help-fact-templates.ts",
+        "consumer.ts",
       ]) {
         await compileFixture(project, resolution, fixture);
       }
@@ -170,62 +128,7 @@ async function verifyCoreOnly(
       );
     }
   } finally {
-    await Promise.all([
-      rm(project, { recursive: true, force: true }),
-      rm(npmCache, { recursive: true, force: true }),
-    ]);
-  }
-}
-
-async function verifyCoreAndTesting(
-  candidate: CandidateTarballs,
-  fixtures: Readonly<Record<string, string>>,
-  compilerVersion: (typeof compilerVersions)[number],
-): Promise<void> {
-  const project = await mkdtemp(
-    resolve(tmpdir(), `cli-contract-typescript-testing-${compilerVersion}-`),
-  );
-  const npmCache = await mkdtemp(resolve(tmpdir(), "cli-contract-npm-cache-"));
-  try {
-    await writeFile(
-      resolve(project, "package.json"),
-      `${JSON.stringify({
-        name: "cli-contract-typescript-consumer",
-        private: true,
-        type: "module",
-        dependencies: {
-          [corePackage]: `file:${candidate.core}`,
-          [testingPackage]: `file:${candidate.testing}`,
-        },
-        devDependencies: {
-          "@types/node": "26.6.6",
-          typescript: compilerVersion,
-        },
-      })}\n`,
-    );
-    await writeFixtures(project, fixtures, ["consumer.ts"]);
-    runCommand(
-      "npm",
-      [
-        "install",
-        "--ignore-scripts",
-        "--no-package-lock",
-        "--no-audit",
-        "--no-fund",
-        "--loglevel",
-        "error",
-      ],
-      project,
-      { NPM_CONFIG_CACHE: npmCache },
-    );
-    for (const resolution of resolutions) {
-      await compileFixture(project, resolution, "consumer.ts");
-    }
-  } finally {
-    await Promise.all([
-      rm(project, { recursive: true, force: true }),
-      rm(npmCache, { recursive: true, force: true }),
-    ]);
+    await rm(project, { recursive: true, force: true });
   }
 }
 
@@ -335,15 +238,10 @@ function runCommand(
   command: string,
   args: readonly string[],
   cwd: string,
-  environment?: Readonly<Record<string, string>>,
 ): void {
   const result = spawnSync(command, args, {
     cwd,
     encoding: "utf8",
-    env:
-      environment === undefined
-        ? process.env
-        : { ...process.env, ...environment },
   });
   if (result.error !== undefined) throw result.error;
   if (result.status !== 0) {

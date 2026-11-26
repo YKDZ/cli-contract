@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { defineCli, executeCli, parseCliInvocation } from "@ykdz/cli-contract";
+import {
+  defineCli,
+  executeCli,
+  parseCliInvocation,
+} from "@boringparts/cli-contract";
 import { z } from "zod";
 
 import { englishHelpCapability } from "./english-help.ts";

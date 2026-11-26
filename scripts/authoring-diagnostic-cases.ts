@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
@@ -74,7 +75,7 @@ interface CommonDiagnosticCodeExpectation {
 interface AuthoringDiagnosticSource {
   readonly fixture: string;
   readonly sourcePath?: string;
-  readonly sourceTask?: readonly [string, string];
+  readonly packageEntry?: string;
 }
 
 interface AuthoringDiagnosticCase extends AuthoringDiagnosticSource {
@@ -826,10 +827,8 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
   },
   {
     fixture: "hierarchy-text-coverage.typecheck.ts",
-    sourceTask: [
-      "@ykdz/cli-contract",
-      "authoring:fixture:hierarchy-text-coverage",
-    ],
+    sourcePath:
+      "scripts/fixtures/typescript-consumer-matrix/hierarchy-text-coverage.ts",
     derivation: {
       kind: "removeMarkedTsExpectError",
       fixture: "hierarchy-text-coverage-unchecked.ts",
@@ -875,7 +874,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
 const authoringDiscoverySources: readonly AuthoringDiagnosticSource[] = [
   {
     fixture: "authoring-example.ts",
-    sourceTask: ["@cli-contract/example", "authoring:fixture:example"],
+    packageEntry: "@cli-contract/example",
   },
   {
     fixture: "exportable-contract.ts",
@@ -893,28 +892,40 @@ async function readAuthoringDiagnosticFixtures(): Promise<
 > {
   const repositoryRoot = resolve(import.meta.dirname, "..");
   const sources: readonly AuthoringDiagnosticSource[] = [
-    ...authoringDiagnosticCases.map(({ fixture, sourcePath, sourceTask }) => ({
+    ...authoringDiagnosticCases.map(({ fixture, sourcePath }) => ({
       fixture,
       ...(sourcePath === undefined ? {} : { sourcePath }),
-      ...(sourceTask === undefined ? {} : { sourceTask }),
     })),
     ...authoringDiscoverySources,
   ];
   return Object.fromEntries(
     await Promise.all(
-      sources.map(async ({ fixture, sourcePath, sourceTask }) => {
+      sources.map(async ({ fixture, sourcePath, packageEntry }) => {
         if (sourcePath !== undefined) {
           return [
             fixture,
             await readFile(resolve(repositoryRoot, sourcePath), "utf8"),
           ];
         }
-        if (sourceTask !== undefined) {
+        if (packageEntry !== undefined) {
+          const readEntryScript =
+            'import { readFileSync } from "node:fs"; import { fileURLToPath } from "node:url"; process.stdout.write(readFileSync(fileURLToPath(import.meta.resolve(process.argv[1])), "utf8"));';
           return [
             fixture,
             runCommand(
               "pnpm",
-              ["--silent", "--filter", sourceTask[0], sourceTask[1]],
+              [
+                "--silent",
+                "--filter",
+                packageEntry,
+                "exec",
+                "node",
+                "--conditions=source",
+                "--input-type=module",
+                "-e",
+                readEntryScript,
+                packageEntry,
+              ],
               repositoryRoot,
             ),
           ];
@@ -1297,7 +1308,8 @@ function verifyAuthoringLanguageService(
       fixture: "core-node.ts",
       marker: "nodeCliOutput({",
       token: "nodeCliOutput",
-      installedDeclaration: "node_modules/@ykdz/cli-contract/dist/node.d.ts",
+      installedDeclaration:
+        "node_modules/@boringparts/cli-contract/dist/node.d.ts",
       requiredType: ["NodeCliOutputOptions", "WriteCliOutput"],
       requiredDocumentation: [
         "direct call awaits the write callback",
@@ -1355,15 +1367,17 @@ function verifyAuthoringLanguageService(
         if (target === undefined)
           throw new Error(`Cannot load project: ${config}`);
         const file = resolve(project, authoringCase.fixture);
-        const installedDeclaration = resolve(
-          project,
-          authoringCase.installedDeclaration ??
-            "node_modules/@ykdz/cli-contract/dist/index.d.ts",
+        const installedDeclaration = realpathSync(
+          resolve(
+            project,
+            authoringCase.installedDeclaration ??
+              "node_modules/@boringparts/cli-contract/dist/index.d.ts",
+          ),
         );
         if (
           !target.program
             .getSourceFileNames()
-            .some((name) => resolve(name) === installedDeclaration)
+            .some((name) => realPathOrResolve(name) === installedDeclaration)
         ) {
           throw new Error(
             `Authoring fixture did not load the installed public declarations: ${authoringCase.fixture}`,
@@ -1869,6 +1883,14 @@ async function compileFixture(
     ["--project", tsconfig, "--pretty", "false"],
     project,
   );
+}
+
+function realPathOrResolve(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return resolve(path);
+  }
 }
 
 function runCommand(

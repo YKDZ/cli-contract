@@ -217,7 +217,7 @@ importers:
 
   packages/example:
     dependencies:
-      '@ykdz/cli-contract':
+      '@boringparts/cli-contract':
         specifier: workspace:*
         version: link:../lib
       zod:
@@ -230,9 +230,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
-      '@ykdz/cli-contract-testing':
-        specifier: workspace:*
-        version: link:../testing
       oxfmt:
         specifier: 'catalog:'
         version: 0.71.0
@@ -282,31 +279,6 @@ importers:
       zod:
         specifier: ^4.6.5
         version: 4.6.5
-
-  packages/testing:
-    dependencies:
-      '@ykdz/cli-contract':
-        specifier: workspace:*
-        version: link:../lib
-    devDependencies:
-      '@cli-contract/tooling-config':
-        specifier: workspace:*
-        version: link:../tooling-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.6
-      oxfmt:
-        specifier: 'catalog:'
-        version: 0.71.0
-      oxlint:
-        specifier: 'catalog:'
-        version: 1.83.0(oxlint-tsgolint@7.0.2003)
-      oxlint-tsgolint:
-        specifier: 'catalog:'
-        version: 7.0.2003
-      typescript-7:
-        specifier: 'catalog:'
-        version: typescript@7.0.2
 
   packages/tooling-config:
     devDependencies:

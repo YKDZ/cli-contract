@@ -1,5 +1,5 @@
-import type { SchemaIssueEvidence, UsageIssue } from "#/cli-invocation";
-import type { JsonValue } from "#/contract-schema";
+import type { SchemaIssueEvidence, UsageIssue } from "./cli-invocation.ts";
+import type { JsonValue } from "./contract-schema.ts";
 
 export type SchemaDefinitionTarget =
   | Readonly<{ readonly command: string; readonly location: "input" }>

@@ -1,9 +1,9 @@
-import type { ContractDefinitionIssue } from "#/contract-definition-error";
-import type { JsonObject } from "#/contract-schema";
-import { compileContractSchema } from "#/contract-schema-compiler";
-import { isSingleLineText } from "#/description";
-import { deepFreeze } from "#/json-value";
-import type { StreamRecordDefinitions } from "#/outcome-fact";
+import type { ContractDefinitionIssue } from "./contract-definition-error.ts";
+import { compileContractSchema } from "./contract-schema-compiler.ts";
+import type { JsonObject } from "./contract-schema.ts";
+import { isSingleLineText } from "./description.ts";
+import { deepFreeze } from "./json-value.ts";
+import type { StreamRecordDefinitions } from "./outcome-fact.ts";
 
 export type RuntimeStreamRecord = StreamRecordDefinitions[string];
 

@@ -13,7 +13,7 @@ import {
   type FieldDefinitions,
   type OutputExecutionFactory,
   type UsageConstraint,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
 import { z } from "zod";
 
 import { englishHelpWording } from "./english-help.ts";

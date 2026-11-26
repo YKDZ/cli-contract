@@ -2,16 +2,16 @@ import type {
   FieldDefinitions,
   FieldGrammar,
   SchemaManifest,
-} from "#/cli-contract";
+} from "./cli-contract.ts";
 import type {
   ContractDefinitionIssue,
   SchemaDefinitionTarget,
-} from "#/contract-definition-error";
-import type { ContractSchema, JsonObject } from "#/contract-schema";
-import { isSingleLineText } from "#/description";
-import { invalidFieldIdentityReason } from "#/field-identity";
-import { copyJsonObject, deepFreeze } from "#/json-value";
-import { findUnresolvedSchemaReferences } from "#/schema-resource";
+} from "./contract-definition-error.ts";
+import type { ContractSchema, JsonObject } from "./contract-schema.ts";
+import { isSingleLineText } from "./description.ts";
+import { invalidFieldIdentityReason } from "./field-identity.ts";
+import { copyJsonObject, deepFreeze } from "./json-value.ts";
+import { findUnresolvedSchemaReferences } from "./schema-resource.ts";
 
 export function compileContractSchema(
   schema: ContractSchema,

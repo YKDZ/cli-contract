@@ -4,8 +4,8 @@ import {
   schemaCapability,
   text,
   versionCapability,
-} from "@ykdz/cli-contract";
-import coreMetadata from "@ykdz/cli-contract/package.json" with { type: "json" };
+} from "@boringparts/cli-contract";
+import coreMetadata from "@boringparts/cli-contract/package.json" with { type: "json" };
 import { z } from "zod";
 
 const users = new Map([["alice", { name: "Alice" }]]);

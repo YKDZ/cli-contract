@@ -2,12 +2,6 @@
   "extends": ["//"],
   "tags": ["contract-core"],
   "tasks": {
-    "authoring:fixture:hierarchy-text-coverage": {
-      "inputs": [],
-      "outputs": [],
-      "cache": false,
-      "tags": ["work:on-demand"]
-    },
     "build": {
       "dependsOn": ["^build"],
       "inputs": [],

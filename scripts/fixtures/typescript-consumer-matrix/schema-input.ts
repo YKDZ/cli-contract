@@ -1,11 +1,11 @@
-import { toStandardJsonSchema } from "@valibot/to-json-schema";
 import {
   defineCli,
   helpCapability,
   text,
   type CompletionTextPresenter,
   type TextPresenterContext,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
+import { toStandardJsonSchema } from "@valibot/to-json-schema";
 import * as v from "valibot";
 import { z } from "zod";
 

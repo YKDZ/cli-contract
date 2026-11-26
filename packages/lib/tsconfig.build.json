@@ -4,7 +4,7 @@
     "customConditions": [],
     "declarationMap": false,
     "outDir": "dist",
-    "paths": { "#/*": ["./src/*.ts"] },
+    "paths": {},
     "rootDir": "src",
     "sourceMap": false
   },

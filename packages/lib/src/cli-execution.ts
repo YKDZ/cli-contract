@@ -17,40 +17,40 @@ import {
   type HelpFactTemplateParameters,
   type HelpFactWording,
   type OutcomeFact,
-} from "#/cli-contract";
+} from "./cli-contract.ts";
 import {
   validateCliInput,
   validateContractSchemaSynchronously,
-} from "#/cli-input-validation";
+} from "./cli-input-validation.ts";
 import {
   invocationBelongsTo,
   type CliInvocation,
   type NonEmptyCliUsageIssues,
   type InputRejectedIssue,
   type NonEmptyUsageIssues,
-} from "#/cli-invocation";
-import { CliWriteError } from "#/cli-write-error";
-import type { ContractQueryDocument } from "#/contract-discovery";
+} from "./cli-invocation.ts";
+import { CliWriteError } from "./cli-write-error.ts";
+import type { ContractQueryDocument } from "./contract-discovery.ts";
 import {
   canonicalCommandPath,
   queryCliContract,
   type ContractDirectoryQuery,
   type ContractSummaryQuery,
-} from "#/contract-discovery";
+} from "./contract-discovery.ts";
 import {
   ContractExecutionError,
   type ContractExecutionIssue,
   type ExecutionSchemaTarget,
-} from "#/contract-execution-error";
-import type { ContractSchema } from "#/contract-schema";
-import type { JsonValue } from "#/contract-schema";
-import { copyJsonValue } from "#/json-value";
+} from "./contract-execution-error.ts";
+import type { ContractSchema } from "./contract-schema.ts";
+import type { JsonValue } from "./contract-schema.ts";
+import { copyJsonValue } from "./json-value.ts";
 import {
   encodeAtomicText,
   encodeRecordText,
   encodeTerminalText,
   type TextPresenterContext,
-} from "#/outcome-fact";
+} from "./outcome-fact.ts";
 import {
   createCompletionEnvelope,
   createDataEnvelope,
@@ -59,9 +59,9 @@ import {
   createStreamRecordEnvelope,
   createStreamSuccessEnvelope,
   createUsageFailureEnvelope,
-} from "#/outcome-wire";
-import { streamOutputs } from "#/stream-output";
-import { formatUsageConstraint } from "#/usage-constraint";
+} from "./outcome-wire.ts";
+import { streamOutputs } from "./stream-output.ts";
+import { formatUsageConstraint } from "./usage-constraint.ts";
 
 type CompiledCommand = ReturnType<typeof getCompiledCli>["commands"][string];
 type CompiledExecutable = Extract<

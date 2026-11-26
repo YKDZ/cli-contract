@@ -128,13 +128,13 @@ export {
   type UsageConstraintGrammar,
   type CountUsageConstraintGrammar,
   type WhenUsageConstraint,
-} from "#/cli-contract";
+} from "./cli-contract.ts";
 export type {
   TextPresenterContext,
   AtomicTextPresenter,
   CompletionTextPresenter,
   StreamTextPresenter,
-} from "#/outcome-fact";
+} from "./outcome-fact.ts";
 export {
   queryCliContract,
   type ContractDirectoryChild,
@@ -153,7 +153,7 @@ export {
   type ContractSummaryMode,
   type ContractSummaryQuery,
   type ContractWireQuery,
-} from "#/contract-discovery";
+} from "./contract-discovery.ts";
 export {
   executeCli,
   type CliOutput,
@@ -161,8 +161,8 @@ export {
   type CliTermination,
   type ExecuteCliOptions,
   type WriteCliOutput,
-} from "#/cli-execution";
-export { CliWriteError } from "#/cli-write-error";
+} from "./cli-execution.ts";
+export { CliWriteError } from "./cli-write-error.ts";
 export {
   parseCliInvocation,
   type CliInvocation,
@@ -197,16 +197,16 @@ export {
   type UsageConstraintObservation,
   type UsageFailure,
   type VersionRequest,
-} from "#/cli-invocation";
+} from "./cli-invocation.ts";
 export {
   ContractExecutionError,
   type ContractExecutionIssue,
-} from "#/contract-execution-error";
+} from "./contract-execution-error.ts";
 export {
   ContractDefinitionError,
   type ContractDefinitionIssue,
   type SchemaDefinitionTarget,
-} from "#/contract-definition-error";
+} from "./contract-definition-error.ts";
 export type {
   ContractSchema,
   ContractSchemaInput,
@@ -215,4 +215,4 @@ export type {
   JsonObject,
   JsonPrimitive,
   JsonValue,
-} from "#/contract-schema";
+} from "./contract-schema.ts";

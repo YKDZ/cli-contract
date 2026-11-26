@@ -4,11 +4,14 @@ import {
   type CliContract,
   type ContractSchema,
   type EmptyCliInput,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
 import {
   defineCommandScenarios,
   runCliScenario,
-} from "@ykdz/cli-contract-testing";
+  type CliObservation,
+  // @ts-expect-error CliScenarioCapture was replaced by CliObservation.
+  type CliScenarioCapture,
+} from "@boringparts/cli-contract/testing";
 
 declare const emptyInput: ContractSchema<EmptyCliInput>;
 declare const replayInput: ContractSchema<
@@ -58,10 +61,18 @@ const cli = defineCli<Readonly<{ readonly service: string }>>()({
   },
 });
 
-void runCliScenario(cli, {
-  argv: ["--help"],
-  dependencies: { service: "billing" },
-});
+const typedObservation: Promise<CliObservation<typeof cli>> = runCliScenario(
+  cli,
+  {
+    argv: ["--help"],
+    dependencies: { service: "billing" },
+  },
+);
+void typedObservation;
+
+type RemovedScenarioCapture = CliScenarioCapture;
+const verifyRemovedCaptureType = (value: RemovedScenarioCapture) => value;
+void verifyRemovedCaptureType;
 
 void runCliScenario(cli, {
   argv: [],

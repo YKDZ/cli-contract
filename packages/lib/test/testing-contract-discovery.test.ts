@@ -7,8 +7,8 @@ import {
   schemaCapability,
   text,
   type ContractSchema,
-} from "@ykdz/cli-contract";
-import { runCliScenario } from "@ykdz/cli-contract-testing";
+} from "@boringparts/cli-contract";
+import { runCliScenario } from "@boringparts/cli-contract/testing";
 
 void test("consumer runner captures schema termination without application input", async () => {
   let validations = 0;
@@ -24,7 +24,7 @@ void test("consumer runner captures schema termination without application input
   const input: ContractSchema<Readonly<{ readonly id: string }>> = {
     "~standard": {
       version: 1,
-      vendor: "@ykdz/cli-contract-testing",
+      vendor: "@boringparts/cli-contract/testing",
       validate: (value) => {
         validations += 1;
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The fixture declares the shape through its public input schema.
@@ -73,16 +73,16 @@ void test("consumer runner captures schema termination without application input
     },
   });
 
-  const capture = await runCliScenario(cli, {
+  const observation = await runCliScenario(cli, {
     argv: ["--schema=input"],
     dependencies: undefined,
   });
 
-  assert.equal(capture.termination.kind, "schema");
-  assert.equal(capture.writes.length, 1);
-  assert.equal(capture.writes[0]?.destination, "stdout");
-  assert.equal(JSON.parse(capture.stdout).kind, "input");
-  assert.equal(capture.stderr, "");
+  assert.equal(observation.termination.kind, "schema");
+  assert.equal(observation.writes.length, 1);
+  assert.equal(observation.writes[0]?.destination, "stdout");
+  assert.equal(JSON.parse(observation.stdout).kind, "input");
+  assert.equal(observation.stderr, "");
   assert.deepEqual(
     { validations, handlerRuns },
     { validations: 0, handlerRuns: 0 },

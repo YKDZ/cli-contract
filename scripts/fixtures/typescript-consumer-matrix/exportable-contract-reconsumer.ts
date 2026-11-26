@@ -10,8 +10,8 @@ import type {
   StreamRecordFactUnion,
   TextFragment,
   UsageFactValue,
-} from "@ykdz/cli-contract";
-import { executeCli, parseCliInvocation } from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
+import { executeCli, parseCliInvocation } from "@boringparts/cli-contract";
 import {
   cli,
   inspectCombination,

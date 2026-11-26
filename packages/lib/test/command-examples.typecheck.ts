@@ -4,7 +4,7 @@ import {
   text,
   type CommandExampleManifest,
   type OutputExecutionFactory,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
 import { z } from "zod";
 
 const exampleInput = z.object({

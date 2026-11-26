@@ -1,4 +1,4 @@
-import type { JsonObject, JsonValue } from "@ykdz/cli-contract";
+import type { JsonObject, JsonValue } from "@boringparts/cli-contract";
 
 export function omitPayloadRootResourceId(wire: JsonObject): JsonObject {
   const properties = wire.properties;

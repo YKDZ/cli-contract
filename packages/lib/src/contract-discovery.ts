@@ -12,11 +12,11 @@ import {
   type OutputModeWireManifest,
   type RootCommandManifest,
   type UsageConstraintGrammar,
-} from "#/cli-contract";
-import type { CommandUsage } from "#/cli-invocation";
-import type { JsonObject } from "#/contract-schema";
-import { deepFreeze } from "#/json-value";
-import type { StreamRecordManifest } from "#/stream-variant-compiler";
+} from "./cli-contract.ts";
+import type { CommandUsage } from "./cli-invocation.ts";
+import type { JsonObject } from "./contract-schema.ts";
+import { deepFreeze } from "./json-value.ts";
+import type { StreamRecordManifest } from "./stream-variant-compiler.ts";
 
 type RuntimeCommand = ReturnType<typeof getCompiledCli>["commands"][string];
 type RuntimeExecutable = Extract<
@@ -477,7 +477,7 @@ function commandWireManifest(
   if (root === undefined) return undefined;
   const wire = compiled.contract.manifest.wire;
   return isCompiledExecutable(root)
-    ? (wire as CommandWireManifest)
+    ? wire
     : (wire as Readonly<Record<string, CommandWireManifest>>)[command];
 }
 

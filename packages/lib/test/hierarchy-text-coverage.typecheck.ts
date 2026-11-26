@@ -5,7 +5,7 @@ import {
   type CliContractDependencies,
   type CliContractRawInput,
   type CliContractResult,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
 import { z } from "zod";
 
 const textCoverageHelp = helpCapability({

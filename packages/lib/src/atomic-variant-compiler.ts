@@ -1,9 +1,9 @@
-import type { DataVariantManifest } from "#/cli-contract";
-import type { ContractDefinitionIssue } from "#/contract-definition-error";
-import type { ContractSchema, JsonObject } from "#/contract-schema";
-import { compileContractSchema } from "#/contract-schema-compiler";
-import { isSingleLineText } from "#/description";
-import { deepFreeze } from "#/json-value";
+import type { DataVariantManifest } from "./cli-contract.ts";
+import type { ContractDefinitionIssue } from "./contract-definition-error.ts";
+import { compileContractSchema } from "./contract-schema-compiler.ts";
+import type { ContractSchema, JsonObject } from "./contract-schema.ts";
+import { isSingleLineText } from "./description.ts";
+import { deepFreeze } from "./json-value.ts";
 
 interface AtomicVariantDefinition {
   readonly description: string;

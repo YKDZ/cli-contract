@@ -8,13 +8,14 @@ import {
   text,
   type ContractSchema,
   type EmptyCliInput,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
 import {
   defineCommandScenarios,
   defineFailureScenarios,
   runCliScenario,
+  type CliObservation,
   type CliScenario,
-} from "@ykdz/cli-contract-testing";
+} from "@boringparts/cli-contract/testing";
 
 type ConsumerFixtureDependencies = Readonly<{
   readonly serviceAvailable: boolean;
@@ -30,7 +31,7 @@ function schema<Input, Output>(
   return {
     "~standard": {
       version: 1,
-      vendor: "@ykdz/cli-contract-testing",
+      vendor: "@boringparts/cli-contract/testing",
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- Fixture callers supply values that match the output type.
       validate: (value) => ({ value: value as Output }),
       jsonSchema: {
@@ -361,11 +362,9 @@ function verifyScenarioTypeErrors() {
 }
 void verifyScenarioTypeErrors;
 
-void test("scenario capture includes structured and text successes and failures", async () => {
-  const structuredSuccess = await runCliScenario(
-    consumerFixture.cli,
-    commandScenarios.inspect,
-  );
+void test("scenario observation includes structured and text successes and failures", async () => {
+  const structuredSuccess: CliObservation<typeof consumerFixture.cli> =
+    await runCliScenario(consumerFixture.cli, commandScenarios.inspect);
   assert.equal(structuredSuccess.termination.kind, "applicationResult");
   assert.equal(structuredSuccess.termination.exitCode, 0);
   assert.equal(
@@ -401,7 +400,7 @@ void test("scenario capture includes structured and text successes and failures"
   assert.equal(textFailure.stderr, "Inspection denied for private\n");
 });
 
-void test("scenario capture preserves stream writes in order and reports termination", async () => {
+void test("scenario observation preserves stream writes in order and reports termination", async () => {
   const structured = await runCliScenario(
     consumerFixture.cli,
     commandScenarios.watch,

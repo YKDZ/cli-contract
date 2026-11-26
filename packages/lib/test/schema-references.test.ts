@@ -8,7 +8,7 @@ import {
   parseCliInvocation,
   type CommandWireManifest,
   type ContractSchema,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { z } from "zod";
 

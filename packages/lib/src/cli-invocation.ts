@@ -5,19 +5,18 @@ import {
   type CliContractRoot,
   type AnyCliContract,
   type CliContractUsageFacts,
-  type FieldDefinitions,
   type RuntimeCompiledExecutable,
   type WhenUsageConstraint,
   type UsageFact,
-} from "#/cli-contract";
+} from "./cli-contract.ts";
 import {
   canonicalCommandPath,
   queryCliContract,
   type ContractQueryDocument,
   type ContractQueryFailureReason,
-} from "#/contract-discovery";
-import { ContractExecutionError } from "#/contract-execution-error";
-import { evaluateUsageConstraints } from "#/usage-constraint";
+} from "./contract-discovery.ts";
+import { ContractExecutionError } from "./contract-execution-error.ts";
+import { evaluateUsageConstraints } from "./usage-constraint.ts";
 
 const cliInvocationType = Symbol("CliInvocation.type");
 const invocationContracts = new WeakMap<object, object>();
@@ -227,15 +226,14 @@ type ConditionalConstraintIssueFor<
   Constraint,
   MissingField extends string,
   ForbiddenField extends string,
-> =
-  Constraint extends WhenUsageConstraint<FieldDefinitions, unknown>
-    ? ConditionalConstraintViolationIssue<
-        UsageConstraintObservationTuple<Constraint["all"]>,
-        "onMatch" | "otherwise",
-        MissingField,
-        ForbiddenField
-      >
-    : never;
+> = Constraint extends WhenUsageConstraint
+  ? ConditionalConstraintViolationIssue<
+      UsageConstraintObservationTuple<Constraint["all"]>,
+      "onMatch" | "otherwise",
+      MissingField,
+      ForbiddenField
+    >
+  : never;
 
 type ConditionalConstraintIssues<Constraints> =
   WhenConstraintUnion<Constraints> extends infer Constraint

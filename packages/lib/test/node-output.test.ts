@@ -9,8 +9,11 @@ import {
   defineCli,
   executeCli,
   parseCliInvocation,
-} from "@ykdz/cli-contract";
-import { isNodeBrokenPipe, nodeCliOutput } from "@ykdz/cli-contract/node";
+} from "@boringparts/cli-contract";
+import {
+  isNodeBrokenPipe,
+  nodeCliOutput,
+} from "@boringparts/cli-contract/node";
 import { z } from "zod";
 
 import { englishHelpCapability } from "./english-help.ts";

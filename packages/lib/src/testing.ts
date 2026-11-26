@@ -6,7 +6,7 @@ import {
   type CliContractResult,
   type CliOutput,
   type CliTermination,
-} from "@ykdz/cli-contract";
+} from "./index.ts";
 
 type ContractManifestCommands<Contract> =
   Contract extends Readonly<{
@@ -127,8 +127,8 @@ export function defineFailureScenarios<
 }
 
 /** Normalized observation of one controlled CLI invocation. */
-export interface CliScenarioCapture<Contract extends AnyCliContract> {
-  /** All output captured in production write order. */
+export interface CliObservation<Contract extends AnyCliContract> {
+  /** All output recorded in production write order. */
   readonly writes: readonly CliOutput[];
   /** Standard-output chunks. */
   readonly stdoutChunks: readonly string[];
@@ -145,20 +145,20 @@ export interface CliScenarioCapture<Contract extends AnyCliContract> {
 export interface RunCliScenarioOptions<
   Contract extends AnyCliContract,
 > extends CliScenario<Contract> {
-  /** Test-only hook for injecting write failures; called before the output is captured. */
+  /** Test-only hook for injecting write failures; called before the output is recorded. */
   readonly beforeWrite?: (output: CliOutput) => void | Promise<void>;
 }
 
 /**
  * Runs one invocation through the production parser and execution core,
- * capturing its observable results in memory. The capture is returned only
+ * recording its observable results in memory. The observation is returned only
  * after execution settles; a thrown error rejects instead of exposing
  * partial writes.
  */
 export async function runCliScenario<const Contract extends AnyCliContract>(
   cliContract: Contract,
   options: RunCliScenarioOptions<Contract>,
-): Promise<CliScenarioCapture<Contract>> {
+): Promise<CliObservation<Contract>> {
   const writes: CliOutput[] = [];
   const stdoutChunks: string[] = [];
   const stderrChunks: string[] = [];
@@ -167,16 +167,16 @@ export async function runCliScenario<const Contract extends AnyCliContract>(
     invocation,
     dependencies: options.dependencies,
     write: async (output) => {
-      const captured = Object.freeze({
+      const recorded = Object.freeze({
         destination: output.destination,
         chunk: output.chunk,
       });
-      await options.beforeWrite?.(captured);
-      writes.push(captured);
-      if (captured.destination === "stdout") {
-        stdoutChunks.push(captured.chunk);
+      await options.beforeWrite?.(recorded);
+      writes.push(recorded);
+      if (recorded.destination === "stdout") {
+        stdoutChunks.push(recorded.chunk);
       } else {
-        stderrChunks.push(captured.chunk);
+        stderrChunks.push(recorded.chunk);
       }
     },
   });

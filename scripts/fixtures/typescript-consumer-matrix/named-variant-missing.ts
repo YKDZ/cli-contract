@@ -1,4 +1,4 @@
-import { defineCli, helpCapability, text } from "@ykdz/cli-contract";
+import { defineCli, helpCapability, text } from "@boringparts/cli-contract";
 import { z } from "zod";
 
 const emptyInput = z.object({});

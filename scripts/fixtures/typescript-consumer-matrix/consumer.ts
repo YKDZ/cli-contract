@@ -9,13 +9,16 @@ import {
   type InvalidFieldChoiceIssue,
   type UnknownCommandIssue,
   type UnknownOptionIssue,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
+import { nodeCliOutput } from "@boringparts/cli-contract/node";
 import {
   defineCommandScenarios,
   defineFailureScenarios,
+  type CliObservation,
+  // @ts-expect-error CliScenarioCapture was replaced by CliObservation.
+  type CliScenarioCapture,
   type CliScenario,
-} from "@ykdz/cli-contract-testing";
-import { nodeCliOutput } from "@ykdz/cli-contract/node";
+} from "@boringparts/cli-contract/testing";
 
 type Dependencies = Readonly<{ readonly available: boolean }>;
 type InspectInput = Readonly<{ readonly target: string }>;
@@ -219,6 +222,15 @@ const failureScenarios = defineFailureScenarios(cli, {
 
 void commandScenarios;
 void failureScenarios;
+
+type ConsumerObservation = CliObservation<typeof cli>;
+const verifyObservationType = (observation: ConsumerObservation) =>
+  observation.termination.exitCode;
+void verifyObservationType;
+
+type RemovedScenarioCapture = CliScenarioCapture;
+const verifyRemovedCaptureType = (value: RemovedScenarioCapture) => value;
+void verifyRemovedCaptureType;
 
 function positiveIssueShapes(
   choice: InvalidFieldChoiceIssue,

@@ -15,7 +15,7 @@ import {
   type StreamExecutionFactory,
   type StreamTextOptions,
   type StreamTextPresenter,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
 
 declare const input: ContractSchema<
   { readonly rawId: string },

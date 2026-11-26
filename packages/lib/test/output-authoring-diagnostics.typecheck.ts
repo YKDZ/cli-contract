@@ -8,7 +8,7 @@ import {
   type ContractSchemaOutput,
   type StreamExecution,
   type StreamRecordFactUnion,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
 
 declare const input: ContractSchema<{ readonly id: string }>;
 declare const payload: ContractSchema<
@@ -161,7 +161,7 @@ stream.text({
 
 // Root and leaf contracts project closed mode keys and literal defaults.
 declare const emptyInput: ContractSchema<Record<string, never>>;
-const define = defineCli<undefined>();
+const define = defineCli();
 const root = define({
   root: "root",
   help: helpCapability(),
@@ -241,7 +241,7 @@ declare const leafGrammar: (typeof tool.grammar.nodes)[number];
 leafGrammar.outputs.default satisfies "json";
 
 // The public result projection keeps closed variant sets and the validated schema output.
-const resultDefine = defineCli<undefined>();
+const resultDefine = defineCli();
 const dataContract = resultDefine({
   root: "data",
   help: helpCapability(),

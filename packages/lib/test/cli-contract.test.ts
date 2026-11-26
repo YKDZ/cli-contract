@@ -7,7 +7,7 @@ import {
   parseCliInvocation,
   type ContractSchema,
   type EmptyCliInput,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
 
 import { englishHelpCapability, englishHelpWording } from "./english-help.ts";
 

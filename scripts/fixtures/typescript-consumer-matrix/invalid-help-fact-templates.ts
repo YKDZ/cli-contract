@@ -1,4 +1,4 @@
-import { helpCapability } from "@ykdz/cli-contract";
+import { helpCapability } from "@boringparts/cli-contract";
 
 helpCapability({ wording: { commandPlaceholder: "   " } });
 helpCapability({ wording: { commandPlaceholder: "<命令组>" } });

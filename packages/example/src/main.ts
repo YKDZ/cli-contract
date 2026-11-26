@@ -1,5 +1,5 @@
-import { executeCli, parseCliInvocation } from "@ykdz/cli-contract";
-import { nodeCliOutput } from "@ykdz/cli-contract/node";
+import { executeCli, parseCliInvocation } from "@boringparts/cli-contract";
+import { nodeCliOutput } from "@boringparts/cli-contract/node";
 
 import { cli } from "./index.ts";
 

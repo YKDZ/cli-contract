@@ -6,7 +6,7 @@ import {
   parseCliInvocation,
   text,
   versionCapability,
-} from "@ykdz/cli-contract";
+} from "@boringparts/cli-contract";
 import { z } from "zod";
 
 import { englishHelpCapability } from "./english-help.ts";
