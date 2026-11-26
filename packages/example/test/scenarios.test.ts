@@ -90,19 +90,19 @@ void test("parse grammar and contract manifest share the count and conditional r
 // The assertions below verify that each scenario actually triggers its expected result.
 for (const [command, scenario] of Object.entries(commands)) {
   void test(`${command} success scenario`, async () => {
-    const capture: CliObservation<typeof cli> = await runCliScenario(
+    const observation: CliObservation<typeof cli> = await runCliScenario(
       cli,
       scenario,
     );
-    assert.equal(capture.termination.exitCode, 0);
-    assert.equal(capture.stderr, "");
+    assert.equal(observation.termination.exitCode, 0);
+    assert.equal(observation.stderr, "");
     if (command === "validate") {
-      assert.equal(capture.stdout, "");
+      assert.equal(observation.stdout, "");
       return;
     }
     if (command === "logs") {
       assert.deepEqual(
-        capture.stdout
+        observation.stdout
           .trimEnd()
           .split("\n")
           .map((line) => JSON.parse(line)),
@@ -120,7 +120,7 @@ for (const [command, scenario] of Object.entries(commands)) {
       );
       return;
     }
-    assert.deepEqual(JSON.parse(capture.stdout), {
+    assert.deepEqual(JSON.parse(observation.stdout), {
       schemaVersion: "3",
       command: "lookup",
       outputMode: "structured",
@@ -132,22 +132,22 @@ for (const [command, scenario] of Object.entries(commands)) {
 }
 
 void test("base input schema rejection produces inputRejected at the execution stage", async () => {
-  const capture = await runCliScenario(cli, {
+  const observation = await runCliScenario(cli, {
     argv: ["validate", "--email", "not-an-email", "--domain", "example.com"],
     dependencies,
   });
-  if (capture.termination.kind !== "usageFailure") {
+  if (observation.termination.kind !== "usageFailure") {
     assert.fail(
       "expected the execution kernel to return an input usage failure",
     );
   }
-  assert.equal(capture.termination.exitCode, 64);
+  assert.equal(observation.termination.exitCode, 64);
   assert.deepEqual(
-    capture.termination.issues.map(({ code }) => code),
+    observation.termination.issues.map(({ code }) => code),
     ["inputRejected"],
   );
-  assert.equal(capture.stdout, "");
-  assert.notEqual(capture.stderr, "");
+  assert.equal(observation.stdout, "");
+  assert.notEqual(observation.stderr, "");
 });
 
 void test("identifier validation requires exactly one input field", async () => {
@@ -159,17 +159,17 @@ void test("identifier validation requires exactly one input field", async () => 
       [],
     ],
   ] as const) {
-    const capture = await runCliScenario(cli, {
+    const observation = await runCliScenario(cli, {
       argv,
       dependencies,
     });
-    if (capture.termination.kind !== "usageFailure") {
+    if (observation.termination.kind !== "usageFailure") {
       assert.fail(
         "expected the usage constraint to reject the invocation before the handler",
       );
     }
-    assert.equal(capture.termination.exitCode, 64);
-    assert.deepEqual(capture.termination.issues, [
+    assert.equal(observation.termination.exitCode, 64);
+    assert.deepEqual(observation.termination.issues, [
       {
         code: "countConstraintViolation",
         min: 1,
@@ -178,22 +178,22 @@ void test("identifier validation requires exactly one input field", async () => 
         absentFields,
       },
     ]);
-    assert.equal(capture.stdout, "");
+    assert.equal(observation.stdout, "");
   }
 });
 
 void test("specifying an email domain also requires the email", async () => {
-  const capture = await runCliScenario(cli, {
+  const observation = await runCliScenario(cli, {
     argv: ["validate", "--id", "alice", "--domain", "example.com"],
     dependencies,
   });
-  if (capture.termination.kind !== "usageFailure") {
+  if (observation.termination.kind !== "usageFailure") {
     assert.fail(
       "expected the conditional constraint to reject the invocation before the handler",
     );
   }
-  assert.equal(capture.termination.exitCode, 64);
-  assert.deepEqual(capture.termination.issues, [
+  assert.equal(observation.termination.exitCode, 64);
+  assert.deepEqual(observation.termination.issues, [
     {
       code: "conditionalConstraintViolation",
       branch: "onMatch",
@@ -202,11 +202,11 @@ void test("specifying an email domain also requires the email", async () => {
       presentForbiddenFields: [],
     },
   ]);
-  assert.equal(capture.stdout, "");
+  assert.equal(observation.stdout, "");
 });
 
 void test("a valid email and matching domain complete after satisfying the conditional branch", async () => {
-  const capture = await runCliScenario(cli, {
+  const observation = await runCliScenario(cli, {
     argv: [
       "validate",
       "--email",
@@ -216,19 +216,19 @@ void test("a valid email and matching domain complete after satisfying the condi
     ],
     dependencies,
   });
-  assert.equal(capture.termination.exitCode, 0);
-  assert.equal(capture.stdout, "");
-  assert.equal(capture.stderr, "");
+  assert.equal(observation.termination.exitCode, 0);
+  assert.equal(observation.stdout, "");
+  assert.equal(observation.stderr, "");
 });
 
 for (const [command, scenarios] of Object.entries(failures)) {
   for (const [failure, scenario] of Object.entries(scenarios)) {
     void test(`${command} ${failure} failure scenario`, async () => {
-      const capture = await runCliScenario(cli, scenario);
-      assert.equal(capture.termination.exitCode, 1);
-      assert.equal(capture.stdout, "");
+      const observation = await runCliScenario(cli, scenario);
+      assert.equal(observation.termination.exitCode, 1);
+      assert.equal(observation.stdout, "");
       if (command === "lookup") {
-        assert.deepEqual(JSON.parse(capture.stderr), {
+        assert.deepEqual(JSON.parse(observation.stderr), {
           schemaVersion: "3",
           command: "lookup",
           outputMode: "structured",
@@ -239,7 +239,7 @@ for (const [command, scenarios] of Object.entries(failures)) {
         return;
       }
       assert.equal(
-        capture.stderr,
+        observation.stderr,
         "Email alice@elsewhere.com does not belong to domain example.com\n",
       );
     });

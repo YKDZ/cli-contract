@@ -148,20 +148,24 @@ export interface HelpCapabilityDefinition {
   readonly wording?: HelpFactWording;
 }
 
-type HelpCapabilityDefinitionForTypeCheck = object | undefined;
-
 type IsAny<Value> = 0 extends 1 & Value ? true : false;
 
-type IsPlainObjectForTypeCheck<Value> =
+export type IsPlainObjectForTypeCheck<Value> =
   IsAny<Value> extends true
     ? true
     : Value extends object
       ? Value extends readonly unknown[]
         ? false
-        : Value extends (...args: never[]) => unknown
+        : Value extends (...args: infer _Args) => unknown
           ? false
           : true
       : false;
+
+export type CapabilityParameter<Definition, Issues> = [Issues] extends [never]
+  ? Definition
+  : Definition extends object
+    ? Definition & Issues
+    : Issues;
 
 export type IsInvalidSingleLineLiteral<Value extends string> =
   string extends Value
@@ -450,13 +454,16 @@ type HelpCapabilityIssues<Definition> = [
   Exclude<Definition, undefined>,
 ] extends [never]
   ? never
-  : HelpCapabilityIssuesForObject<Exclude<Definition, undefined>>;
-
-type HelpCapabilityContract<Definition> = [
-  HelpCapabilityIssues<Definition>,
-] extends [never]
-  ? unknown
-  : HelpCapabilityIssues<Definition>;
+  : Exclude<Definition, undefined> extends infer Defined
+    ? Defined extends unknown
+      ? IsPlainObjectForTypeCheck<Defined> extends true
+        ? HelpCapabilityIssuesForObject<Defined>
+        : ContractTypeError<
+            "invalidCapability",
+            Readonly<{ readonly capability: "help" }>
+          >
+      : never
+    : never;
 
 export type FieldPlaceholderFailureReason<Placeholder extends string> =
   Placeholder extends
@@ -555,10 +562,12 @@ export function isHelpCapability(value: unknown): value is HelpCapability {
  * appear, with completeness checked by defineCli. The core generates no default
  * natural language.
  */
-export function helpCapability<
-  const Definition extends HelpCapabilityDefinitionForTypeCheck =
-    HelpCapabilityDefinition,
->(definition?: Definition & HelpCapabilityContract<Definition>): HelpCapability;
+export function helpCapability<const Definition = HelpCapabilityDefinition>(
+  definition?: CapabilityParameter<
+    Definition,
+    HelpCapabilityIssues<Definition>
+  >,
+): HelpCapability;
 export function helpCapability(
   definition: HelpCapabilityDefinition = {},
 ): HelpCapability {
@@ -853,20 +862,19 @@ export function formatGroupUsageSynopsis(
   commandPath: string,
   wording: HelpFactWording | undefined,
 ): string {
-  const placeholder = wording?.commandPlaceholder ?? "command";
+  const placeholder = wording?.commandPlaceholder ?? "";
   return `${commandPath} <${placeholder}>`;
 }
 
 export function formatExecutableUsageSynopsis(
   commandPath: string,
   fields: readonly FieldGrammar[],
-  hasOutputModes: boolean,
   wording: HelpFactWording | undefined,
 ): string {
-  const outputPlaceholder = wording?.outputModePlaceholder ?? "mode";
+  const outputPlaceholder = wording?.outputModePlaceholder ?? "";
   return [
     commandPath,
-    ...(hasOutputModes ? [`[--output <${outputPlaceholder}>]`] : []),
+    `[--output <${outputPlaceholder}>]`,
     ...fields.map((field) => formatFieldUsage(field)),
   ].join(" ");
 }

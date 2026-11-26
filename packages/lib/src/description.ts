@@ -16,10 +16,10 @@ export function readCapabilityTextLine(value: unknown): string | undefined {
     Array.isArray(value) ||
     !("kind" in value) ||
     value.kind !== "line" ||
-    !("value" in value) ||
-    !isSingleLineText(value.value)
+    !("value" in value)
   ) {
     return undefined;
   }
-  return value.value;
+  const lineValue: unknown = value.value;
+  return isSingleLineText(lineValue) ? lineValue : undefined;
 }

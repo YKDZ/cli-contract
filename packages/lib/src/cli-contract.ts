@@ -30,6 +30,7 @@ import {
   formatGroupUsageSynopsis,
   helpCapability,
   isHelpCapability,
+  type CapabilityParameter,
   type CapabilityUnknownPropertyIssues,
   type FieldPlaceholderPropertyContract,
   type HelpCapability,
@@ -39,6 +40,7 @@ import {
   type HelpHeadings,
   type HelpTemplateSlot,
   type IsInvalidSingleLineLiteral,
+  type IsPlainObjectForTypeCheck,
 } from "./help-projection.ts";
 import { deepFreeze, isPlainRecord } from "./json-value.ts";
 import type {
@@ -4068,13 +4070,15 @@ type CommandExamplesContract<
     readonly examples: infer Examples extends readonly unknown[];
   }>
     ? Readonly<{
-        readonly examples: readonly CommandExampleContract<
-          Command,
-          Examples[number],
-          NoInfer<Fields>,
-          NoInfer<InputSchema>,
-          NoInfer<Outputs>
-        >[];
+        readonly examples: {
+          readonly [Index in keyof Examples]: CommandExampleContract<
+            Command,
+            Examples[Index],
+            NoInfer<Fields>,
+            NoInfer<InputSchema>,
+            NoInfer<Outputs>
+          >;
+        };
       }>
     : unknown;
 
@@ -4450,118 +4454,119 @@ type RuntimeCliDefinition = RootCliDefinitionBase<string> &
     readonly commands: Readonly<Record<string, RuntimeCommandDefinition>>;
   }>;
 
-type VersionCapabilityDefinitionForTypeCheck = {
-  readonly value: unknown;
-  readonly description?: unknown;
-  readonly shortAlias?: unknown;
-};
-
 type VersionCapabilityIssues<Definition> = Definition extends unknown
-  ?
-      | CapabilityUnknownPropertyIssues<
-          Definition,
-          "version",
-          (typeof definitionPropertyKeys.capability.version)[number]
-        >
-      | (Definition extends Readonly<{ readonly value: infer Value }>
-          ? [Value] extends [TextLine]
-            ? never
+  ? IsPlainObjectForTypeCheck<Definition> extends true
+    ?
+        | CapabilityUnknownPropertyIssues<
+            Definition,
+            "version",
+            (typeof definitionPropertyKeys.capability.version)[number]
+          >
+        | (Definition extends Readonly<{ readonly value: infer Value }>
+            ? [Value] extends [TextLine]
+              ? never
+              : ContractTypeError<
+                  "invalidVersionValue",
+                  Readonly<{
+                    readonly path: readonly ["version", "value"];
+                    readonly received: Value;
+                  }>
+                >
             : ContractTypeError<
                 "invalidVersionValue",
                 Readonly<{
                   readonly path: readonly ["version", "value"];
-                  readonly received: Value;
+                  readonly received: undefined;
                 }>
-              >
-          : never)
-      | ("description" extends keyof Definition
-          ? [Exclude<Definition["description"], undefined>] extends [never]
-            ? never
-            : [Exclude<Definition["description"], undefined>] extends [string]
-              ? Exclude<
-                  Definition["description"],
-                  undefined
-                > extends infer Literal extends string
-                ? Literal extends unknown
-                  ? IsInvalidSingleLineLiteral<Literal> extends true
-                    ? ContractTypeError<
-                        "invalidCapabilityDescription",
-                        Readonly<{
-                          readonly capability: "version";
-                          readonly path: readonly ["version", "description"];
-                          readonly received: Literal;
-                        }>
-                      >
+              >)
+        | ("description" extends keyof Definition
+            ? [Exclude<Definition["description"], undefined>] extends [never]
+              ? never
+              : [Exclude<Definition["description"], undefined>] extends [string]
+                ? Exclude<
+                    Definition["description"],
+                    undefined
+                  > extends infer Literal extends string
+                  ? Literal extends unknown
+                    ? IsInvalidSingleLineLiteral<Literal> extends true
+                      ? ContractTypeError<
+                          "invalidCapabilityDescription",
+                          Readonly<{
+                            readonly capability: "version";
+                            readonly path: readonly ["version", "description"];
+                            readonly received: Literal;
+                          }>
+                        >
+                      : never
                     : never
                   : never
-                : never
+                : ContractTypeError<
+                    "invalidCapabilityDescription",
+                    Readonly<{
+                      readonly capability: "version";
+                      readonly path: readonly ["version", "description"];
+                      readonly received: Exclude<
+                        Definition["description"],
+                        undefined
+                      >;
+                    }>
+                  >
+            : never)
+        | ("shortAlias" extends keyof Definition
+            ? [Exclude<Definition["shortAlias"], undefined>] extends [never]
+              ? never
+              : [Exclude<Definition["shortAlias"], undefined>] extends ["-V"]
+                ? never
+                : ContractTypeError<
+                    "invalidCapabilityShortAlias",
+                    Readonly<{
+                      readonly capability: "version";
+                      readonly expected: "-V";
+                      readonly received: Exclude<
+                        Definition["shortAlias"],
+                        undefined
+                      >;
+                    }>
+                  >
+            : never)
+    : ContractTypeError<
+        "invalidCapability",
+        Readonly<{ readonly capability: "version" }>
+      >
+  : never;
+
+type SchemaCapabilityIssues<Definition> = Definition extends unknown
+  ? IsPlainObjectForTypeCheck<Definition> extends true
+    ?
+        | CapabilityUnknownPropertyIssues<
+            Definition,
+            "schema",
+            (typeof definitionPropertyKeys.capability.schema)[number]
+          >
+        | (Definition extends Readonly<{ readonly description: infer Desc }>
+            ? [Desc] extends [TextLine]
+              ? never
               : ContractTypeError<
                   "invalidCapabilityDescription",
                   Readonly<{
-                    readonly capability: "version";
-                    readonly path: readonly ["version", "description"];
-                    readonly received: Exclude<
-                      Definition["description"],
-                      undefined
-                    >;
+                    readonly capability: "schema";
+                    readonly path: readonly ["schema", "description"];
+                    readonly received: Desc;
                   }>
                 >
-          : never)
-      | ("shortAlias" extends keyof Definition
-          ? [Exclude<Definition["shortAlias"], undefined>] extends [never]
-            ? never
-            : [Exclude<Definition["shortAlias"], undefined>] extends ["-V"]
-              ? never
-              : ContractTypeError<
-                  "invalidCapabilityShortAlias",
-                  Readonly<{
-                    readonly capability: "version";
-                    readonly expected: "-V";
-                    readonly received: Exclude<
-                      Definition["shortAlias"],
-                      undefined
-                    >;
-                  }>
-                >
-          : never)
-  : never;
-
-type VersionCapabilityContract<Definition> = [
-  VersionCapabilityIssues<Definition>,
-] extends [never]
-  ? unknown
-  : VersionCapabilityIssues<Definition>;
-
-type SchemaCapabilityDefinitionForTypeCheck = {
-  readonly description: unknown;
-};
-
-type SchemaCapabilityIssues<Definition> = Definition extends unknown
-  ?
-      | CapabilityUnknownPropertyIssues<
-          Definition,
-          "schema",
-          (typeof definitionPropertyKeys.capability.schema)[number]
-        >
-      | (Definition extends Readonly<{ readonly description: infer Desc }>
-          ? [Desc] extends [TextLine]
-            ? never
             : ContractTypeError<
                 "invalidCapabilityDescription",
                 Readonly<{
                   readonly capability: "schema";
                   readonly path: readonly ["schema", "description"];
-                  readonly received: Desc;
+                  readonly received: undefined;
                 }>
-              >
-          : never)
+              >)
+    : ContractTypeError<
+        "invalidCapability",
+        Readonly<{ readonly capability: "schema" }>
+      >
   : never;
-
-type SchemaCapabilityContract<Definition> = [
-  SchemaCapabilityIssues<Definition>,
-] extends [never]
-  ? unknown
-  : SchemaCapabilityIssues<Definition>;
 
 /**
  * Assemble the eager version request on the root contract explicitly; it covers the
@@ -4570,10 +4575,11 @@ type SchemaCapabilityContract<Definition> = [
  * writes the value. It reads no package metadata, adds no prefix or default
  * description, and never treats the version as command input.
  */
-export function versionCapability<
-  const Definition extends VersionCapabilityDefinitionForTypeCheck,
->(
-  definition: Definition & VersionCapabilityContract<Definition>,
+export function versionCapability<const Definition>(
+  definition: CapabilityParameter<
+    Definition,
+    VersionCapabilityIssues<Definition>
+  >,
 ): VersionCapability {
   if (!isPlainRecord(definition)) {
     throw new ContractDefinitionError([
@@ -4633,10 +4639,11 @@ export function versionCapability<
  * Assemble contract discovery for the whole tree on the root contract explicitly.
  * The author supplies the description once; the core owns query facts, help and responses.
  */
-export function schemaCapability<
-  const Definition extends SchemaCapabilityDefinitionForTypeCheck,
->(
-  definition: Definition & SchemaCapabilityContract<Definition>,
+export function schemaCapability<const Definition>(
+  definition: CapabilityParameter<
+    Definition,
+    SchemaCapabilityIssues<Definition>
+  >,
 ): SchemaCapability {
   if (!isPlainRecord(definition)) {
     throw new ContractDefinitionError([
@@ -5224,7 +5231,6 @@ function compileCli(raw: RuntimeCliAuthoring): CliContract {
       synopsis: formatExecutableUsageSynopsis(
         commandPath(id, definition.commands),
         fields,
-        true,
         helpWording,
       ),
     });

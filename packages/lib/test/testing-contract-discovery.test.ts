@@ -10,7 +10,7 @@ import {
 } from "@boringparts/cli-contract";
 import { runCliScenario } from "@boringparts/cli-contract/testing";
 
-void test("consumer runner captures schema termination without application input", async () => {
+void test("consumer runner observes schema termination without application input", async () => {
   let validations = 0;
   let handlerRuns = 0;
   const define = defineCli();

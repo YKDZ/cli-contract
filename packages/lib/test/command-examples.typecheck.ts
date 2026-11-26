@@ -162,6 +162,13 @@ const manifestExample: CommandExampleManifest = {
   shell: "'workspace' 'inspect' '--count=4'",
 };
 
+const invalidEnumExampleInput = {
+  count: "4",
+  channel: "turbo" as const,
+  enabled: true,
+  tags: ["one"],
+  paths: ["first"] as [string, ...string[]],
+};
 define.command("inspect")({
   kind: "command",
   parent: "workspace",
@@ -170,16 +177,10 @@ define.command("inspect")({
   fields: exampleFields,
   input: exampleInput,
   outputs,
-  // @ts-expect-error Input enum values come from the contract schema
   examples: [
     {
-      input: {
-        count: "4",
-        channel: "turbo",
-        enabled: true,
-        tags: ["one"],
-        paths: ["first"],
-      },
+      // @ts-expect-error Input enum values come from the contract schema
+      input: invalidEnumExampleInput,
     },
   ],
 });
@@ -192,8 +193,8 @@ define.command("inspect")({
   fields: exampleFields,
   input: exampleInput,
   outputs,
-  // @ts-expect-error A pinned output mode must come from this command's closed mode set
   examples: [
+    // @ts-expect-error A pinned output mode must come from this command's closed mode set
     {
       input: {
         count: "4",
@@ -215,9 +216,9 @@ define.command("inspect")({
   fields: exampleFields,
   input: exampleInput,
   outputs,
-  // @ts-expect-error Required schema Input fields must also appear in the sample
   examples: [
     {
+      // @ts-expect-error Required schema Input fields must also appear in the sample
       input: {
         count: "4",
         channel: "fast",
@@ -256,9 +257,9 @@ define.command("inspect")({
   fields: exampleFields,
   input: exampleInput,
   outputs,
-  // @ts-expect-error Example members must use their declared spellings.
   examples: [
     {
+      // @ts-expect-error Example members must use their declared spellings.
       input: {
         count: "4",
         channel: "fast",
@@ -266,6 +267,7 @@ define.command("inspect")({
         tags: ["one"],
         paths: ["first"],
       },
+      // @ts-expect-error Example members must use their declared spellings.
       outputmode: "text",
     },
   ],
@@ -302,6 +304,13 @@ const unnegatedFlagFields = {
     description: "Enabled",
   },
 } as const;
+const unnegatedFalseExampleInput = {
+  count: "4",
+  channel: "fast" as const,
+  enabled: false,
+  tags: ["one"],
+  paths: ["first"] as [string, ...string[]],
+};
 define.command("inspect")({
   kind: "command",
   parent: "workspace",
@@ -310,16 +319,10 @@ define.command("inspect")({
   fields: unnegatedFlagFields,
   input: exampleInput,
   outputs,
-  // @ts-expect-error A flag without a negated spelling cannot use false as a raw sample
   examples: [
     {
-      input: {
-        count: "4",
-        channel: "fast",
-        enabled: false,
-        tags: ["one"],
-        paths: ["first"],
-      },
+      // @ts-expect-error A flag without a negated spelling cannot use false as a raw sample
+      input: unnegatedFalseExampleInput,
     },
   ],
 });

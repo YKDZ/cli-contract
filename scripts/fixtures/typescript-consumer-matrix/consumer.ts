@@ -17,8 +17,6 @@ import {
   defineFailureScenarios,
   runCliScenario,
   type CliObservation,
-  // @ts-expect-error CliScenarioCapture was replaced by CliObservation.
-  type CliScenarioCapture,
   type CliScenario,
 } from "@boringparts/cli-contract/testing";
 
@@ -236,10 +234,6 @@ const verifyObservationType = (observation: ConsumerObservation) =>
   observation.termination.exitCode;
 void scenarioObservation;
 void verifyObservationType;
-
-type RemovedScenarioCapture = CliScenarioCapture;
-const verifyRemovedCaptureType = (value: RemovedScenarioCapture) => value;
-void verifyRemovedCaptureType;
 
 function positiveIssueShapes(
   choice: InvalidFieldChoiceIssue,

@@ -486,6 +486,21 @@ void test("the version capability copies and closes over single-line value and d
   assert.deepEqual(versionWrites, ["2.3.4\n"]);
   assert.match(helpWrites.join(""), /  --version\n    显示版本\n/);
   assert.doesNotMatch(helpWrites.join(""), /注入内容/);
+
+  let valueReads = 0;
+  const statefulLine = {
+    kind: "line",
+    get value() {
+      valueReads += 1;
+      return valueReads === 1 ? "2.3.4" : "2.3.4\n注入内容";
+    },
+  };
+  const getterVersion = versionCapability({
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The negative case intentionally crosses static types to verify single-read copying on getter values.
+    value: statefulLine as never,
+  });
+  assert.equal(valueReads, 1);
+  assert.equal(getterVersion.value, "2.3.4");
 });
 
 void test("a leaf application option conflicting with the version control reports the leaf identity", () => {

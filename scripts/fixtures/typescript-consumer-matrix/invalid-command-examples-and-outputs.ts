@@ -51,6 +51,33 @@ define.command("badExampleMode")({
   examples: [{ input: { mode: "fast" }, outputMode: "yaml" }],
 });
 
+define.command("multiExampleInvalidMode")({
+  kind: "command",
+  parent: "tool",
+  name: "multi-example-invalid-mode",
+  description: "Multi example invalid output mode",
+  fields: {
+    mode: { kind: "valueOption", longOption: "--mode", description: "Mode" },
+  },
+  input: exampleInput,
+  outputs: (mode) => ({
+    default: "structured",
+    modes: {
+      structured: mode
+        .atomic({
+          success: { kind: "completion" },
+          failures: {},
+          handler: ({ outcome }) => outcome.completion(),
+        })
+        .structured({ description: "Structured" }),
+    },
+  }),
+  examples: [
+    { input: { mode: "fast" } },
+    { input: { mode: "fast" }, outputMode: "yaml" },
+  ],
+});
+
 define.command("badExampleShape")({
   kind: "command",
   parent: "tool",

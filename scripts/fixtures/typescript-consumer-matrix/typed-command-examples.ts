@@ -138,6 +138,14 @@ const leaf = define({
   },
 });
 
+const invalidEnumInput = {
+  channel: "turbo" as const,
+  count: "3",
+  enabled: true,
+  tags: ["one"],
+  target: "build",
+  paths: ["src"] as [string, ...string[]],
+};
 const invalidEnumCommand = define.command("inspect")({
   kind: "command",
   parent: "workspace",
@@ -157,17 +165,10 @@ const invalidEnumCommand = define.command("inspect")({
       },
     };
   },
-  // @ts-expect-error The input schema's enum constraint also applies to raw examples.
   examples: [
     {
-      input: {
-        channel: "turbo",
-        count: "3",
-        enabled: true,
-        tags: ["one"],
-        target: "build",
-        paths: ["src"],
-      },
+      // @ts-expect-error The input schema's enum constraint also applies to raw examples.
+      input: invalidEnumInput,
     },
   ],
 });
@@ -191,8 +192,8 @@ const invalidModeCommand = define.command("inspect")({
       },
     };
   },
-  // @ts-expect-error A fixed output mode must belong to the command's closed mode set.
   examples: [
+    // @ts-expect-error A fixed output mode must belong to the command's closed mode set.
     {
       input: {
         channel: "safe",
@@ -232,8 +233,8 @@ const invalidRootModeCommand = define({
           },
         };
       },
-      // @ts-expect-error A root example cannot select a mode outside its own closed table.
       examples: [
+        // @ts-expect-error A root example cannot select a mode outside its own closed table.
         {
           input: {
             channel: "safe",
@@ -269,9 +270,9 @@ const missingInputCommand = define.command("inspect")({
       },
     };
   },
-  // @ts-expect-error Required input schema fields cannot be omitted from an example.
   examples: [
     {
+      // @ts-expect-error Required input schema fields cannot be omitted from an example.
       input: {
         channel: "fast",
         count: "3",
@@ -427,6 +428,14 @@ const unnegatedFlagFields = {
     description: "Enabled",
   },
 } as const;
+const unnegatedFalseFlagInput = {
+  channel: "fast" as const,
+  count: "3",
+  enabled: false,
+  tags: ["one"],
+  target: "build",
+  paths: ["src"] as [string, ...string[]],
+};
 const unnegatedFalseFlagCommand = define.command("inspect")({
   kind: "command",
   parent: "workspace",
@@ -446,17 +455,10 @@ const unnegatedFalseFlagCommand = define.command("inspect")({
       },
     };
   },
-  // @ts-expect-error A flag without a negated spelling cannot use a false raw value.
   examples: [
     {
-      input: {
-        channel: "fast",
-        count: "3",
-        enabled: false,
-        tags: ["one"],
-        target: "build",
-        paths: ["src"],
-      },
+      // @ts-expect-error A flag without a negated spelling cannot use a false raw value.
+      input: unnegatedFalseFlagInput,
     },
   ],
 });

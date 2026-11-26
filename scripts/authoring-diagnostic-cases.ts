@@ -25,6 +25,7 @@ type SourceDerivation =
 type CliDiagnosticExpectation =
   | {
       readonly kind: "codes";
+      readonly expectedDiagnostics?: number;
       readonly required: readonly string[];
       readonly requiredAny?: readonly string[];
       readonly allowAdditionalDiagnostics?: boolean;
@@ -903,12 +904,12 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
       codes: [
         {
           code: "unknownDefinitionProperty",
-          cliMultiplicity: 4,
+          cliMultiplicity: 5,
           languageServiceRequired: true,
         },
         {
           code: "invalidCapabilityShortAlias",
-          cliMultiplicity: 2,
+          cliMultiplicity: 3,
           languageServiceRequired: true,
         },
         {
@@ -928,22 +929,28 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
         },
         {
           code: "invalidVersionValue",
-          cliMultiplicity: 1,
+          cliMultiplicity: 2,
           languageServiceRequired: true,
         },
         {
           code: "invalidCapabilityDescription",
-          cliMultiplicity: 3,
+          cliMultiplicity: 4,
+          languageServiceRequired: true,
+        },
+        {
+          code: "invalidCapability",
+          cliMultiplicity: 12,
           languageServiceRequired: true,
         },
       ],
     },
     cli: {
       kind: "codes",
+      expectedDiagnostics: 29,
       required: [],
     },
     languageService: {
-      count: 15,
+      count: 29,
       required: [],
     },
   },
@@ -992,6 +999,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
     common: {
       required: [
         'command: "badExampleMode"',
+        'command: "multiExampleInvalidMode"',
         'reason: "invalidOutputMode"',
         'received: "yaml"',
         'command: "badExampleShape"',
@@ -1007,7 +1015,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
       codes: [
         {
           code: "invalidCommandExample",
-          cliMultiplicity: 2,
+          cliMultiplicity: 3,
           languageServiceRequired: true,
         },
         {
@@ -1027,7 +1035,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
       required: [],
     },
     languageService: {
-      count: 5,
+      count: 6,
       required: [],
     },
   },
@@ -1192,6 +1200,46 @@ function observeCliDiagnostic(
   };
 }
 
+function extractFirstLevelDiagnosticCodes(
+  firstLevelMessages: readonly string[],
+  fixture: string,
+): string[] {
+  const firstLevelCodes: string[] = [];
+  let currentHeaderCodes: string[] = [];
+  let currentChildCodes: string[] = [];
+  const flushDiagnosticBlock = () => {
+    if (currentChildCodes.length > 0) {
+      firstLevelCodes.push(...currentChildCodes);
+      for (const headerCode of currentHeaderCodes) {
+        if (!currentChildCodes.includes(headerCode)) {
+          firstLevelCodes.push(headerCode);
+        }
+      }
+    } else if (currentHeaderCodes.length > 0) {
+      firstLevelCodes.push(...currentHeaderCodes);
+    }
+    currentHeaderCodes = [];
+    currentChildCodes = [];
+  };
+  for (const line of firstLevelMessages) {
+    if (line.startsWith(`${fixture}(`) && line.includes(": error TS")) {
+      flushDiagnosticBlock();
+      currentHeaderCodes = Array.from(
+        line.matchAll(/ContractTypeError<"([^"]+)"/g),
+        (match) => match[1],
+      ).filter((code): code is string => code !== undefined);
+    } else if (/^  [^ ]/.test(line)) {
+      for (const match of line.matchAll(/ContractTypeError<"([^"]+)"/g)) {
+        if (match[1] !== undefined) {
+          currentChildCodes.push(match[1]);
+        }
+      }
+    }
+  }
+  flushDiagnosticBlock();
+  return firstLevelCodes;
+}
+
 async function verifyAuthoringDiagnostic(
   project: string,
   resolution: (typeof resolutions)[number],
@@ -1207,37 +1255,18 @@ async function verifyAuthoringDiagnostic(
     (group): group is readonly string[] => group !== undefined,
   );
   const allowAdditionalDiagnostics = cli.allowAdditionalDiagnostics ?? false;
+  const expectedHeaders = cli.expectedDiagnostics ?? expectedCodes.length;
   const forbidden = cli.forbidden ?? [];
   const observation = observeCliDiagnostic(project, resolution, fixture);
-  const firstLevelCodes: string[] = [];
-  let currentHeaderCode: string | undefined;
-  let currentChildCodes: string[] = [];
-  const flushDiagnosticBlock = () => {
-    if (currentChildCodes.length > 0) {
-      firstLevelCodes.push(...currentChildCodes);
-    } else if (currentHeaderCode !== undefined) {
-      firstLevelCodes.push(currentHeaderCode);
-    }
-    currentHeaderCode = undefined;
-    currentChildCodes = [];
-  };
-  for (const line of observation.firstLevelMessages) {
-    if (line.startsWith(`${fixture}(`) && line.includes(": error TS")) {
-      flushDiagnosticBlock();
-      currentHeaderCode = /ContractTypeError<"([^"]+)"/.exec(line)?.[1];
-    } else {
-      const childCode = /^  [^ ].*ContractTypeError<"([^"]+)"/.exec(line)?.[1];
-      if (childCode !== undefined) {
-        currentChildCodes.push(childCode);
-      }
-    }
-  }
-  flushDiagnosticBlock();
+  const firstLevelCodes = extractFirstLevelDiagnosticCodes(
+    observation.firstLevelMessages,
+    fixture,
+  );
   if (
     observation.status === 0 ||
     (allowAdditionalDiagnostics
-      ? observation.headers.length < expectedCodes.length
-      : observation.headers.length !== expectedCodes.length) ||
+      ? observation.headers.length < expectedHeaders
+      : observation.headers.length !== expectedHeaders) ||
     firstLevelCodes.length !== expectedCodes.length ||
     firstLevelCodes
       .sort((left, right) => left.localeCompare(right))
@@ -1652,9 +1681,10 @@ function verifyAuthoringLanguageService(
         const diagnostics = target.program.getSemanticDiagnostics(
           resolve(project, fixture),
         );
-        const firstLevel = diagnostics.flatMap((diagnostic) =>
-          (diagnostic.messageChain ?? []).map((message) => message.text),
-        );
+        const firstLevel = diagnostics.flatMap((diagnostic) => [
+          diagnostic.text,
+          ...(diagnostic.messageChain ?? []).map((message) => message.text),
+        ]);
         const visible = firstLevel.join("\n");
         if (
           diagnostics.length !== count ||
@@ -1799,30 +1829,10 @@ async function verifyGenericForwardDiagnostic(
   const expectedCodes = expectedCliCodes(diagnostic);
   const required = [...commonEvidence(diagnostic), ...cli.required];
   const forbidden = cli.forbidden ?? [];
-  const firstLevelCodes: string[] = [];
-  let currentHeaderCode: string | undefined;
-  let currentChildCodes: string[] = [];
-  const flushDiagnosticBlock = () => {
-    if (currentChildCodes.length > 0) {
-      firstLevelCodes.push(...currentChildCodes);
-    } else if (currentHeaderCode !== undefined) {
-      firstLevelCodes.push(currentHeaderCode);
-    }
-    currentHeaderCode = undefined;
-    currentChildCodes = [];
-  };
-  for (const line of observation.firstLevelMessages) {
-    if (line.startsWith(`${fixture}(`) && line.includes(": error TS")) {
-      flushDiagnosticBlock();
-      currentHeaderCode = /ContractTypeError<"([^"]+)"/.exec(line)?.[1];
-    } else {
-      const childCode = /^  [^ ].*ContractTypeError<"([^"]+)"/.exec(line)?.[1];
-      if (childCode !== undefined) {
-        currentChildCodes.push(childCode);
-      }
-    }
-  }
-  flushDiagnosticBlock();
+  const firstLevelCodes = extractFirstLevelDiagnosticCodes(
+    observation.firstLevelMessages,
+    fixture,
+  );
   // A wrapper author names the long AtomicTextOptions/StreamTextOptions alias as
   // the parameter, so the call-site header is that alias and the branded coverage
   // evidence lands on the elaboration child (still tsc first level). The closed

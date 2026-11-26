@@ -9,8 +9,6 @@ import {
   defineCommandScenarios,
   runCliScenario,
   type CliObservation,
-  // @ts-expect-error CliScenarioCapture was replaced by CliObservation.
-  type CliScenarioCapture,
 } from "@boringparts/cli-contract/testing";
 
 declare const emptyInput: ContractSchema<EmptyCliInput>;
@@ -70,10 +68,6 @@ const typedObservation: Promise<CliObservation<typeof cli>> = runCliScenario(
   },
 );
 void typedObservation;
-
-type RemovedScenarioCapture = CliScenarioCapture;
-const verifyRemovedCaptureType = (value: RemovedScenarioCapture) => value;
-void verifyRemovedCaptureType;
 
 void runCliScenario(cli, {
   argv: [],

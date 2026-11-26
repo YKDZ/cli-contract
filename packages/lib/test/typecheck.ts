@@ -2169,6 +2169,14 @@ function verifyRootCapabilityAndAlignedTypeErrors() {
   helpCapability({ headings: { usage: 42 } });
   // @ts-expect-error Help capability rejects non-object wording.
   helpCapability({ wording: "mode" });
+  // @ts-expect-error Help capability rejects function inputs.
+  helpCapability(() => ({ shortAlias: "-x" }));
+  // @ts-expect-error Help capability rejects array inputs.
+  helpCapability([]);
+  // @ts-expect-error Help capability rejects primitive string inputs.
+  helpCapability("help");
+  // @ts-expect-error Help capability rejects null inputs.
+  helpCapability(null);
 
   // @ts-expect-error Version capability rejects unknown properties.
   versionCapability({ value: text.line("1.0.0"), extra: true });
@@ -2178,11 +2186,34 @@ function verifyRootCapabilityAndAlignedTypeErrors() {
   versionCapability({ value: text.line("1.0.0"), description: "a\nb" });
   // @ts-expect-error Version capability rejects short aliases other than -V.
   versionCapability({ value: text.line("1.0.0"), shortAlias: "-v" });
+  // @ts-expect-error Version capability rejects primitive string inputs.
+  versionCapability("1.0.0");
+  // @ts-expect-error Version capability rejects array inputs.
+  versionCapability([]);
+  // @ts-expect-error Version capability rejects null inputs.
+  versionCapability(null);
+  // @ts-expect-error Version capability rejects function inputs even with properties.
+  versionCapability(Object.assign(() => {}, { value: text.line("1.0.0") }));
+  // @ts-expect-error Version capability reports missing value alongside invalid shortAlias.
+  versionCapability({ shortAlias: "-v" });
 
   // @ts-expect-error Schema capability rejects unknown properties.
   schemaCapability({ description: text.line("Schema"), extra: true });
   // @ts-expect-error Schema capability requires a text.line description.
   schemaCapability({ description: "Schema" });
+  // @ts-expect-error Schema capability rejects primitive string inputs.
+  schemaCapability("Schema");
+  // @ts-expect-error Schema capability rejects array inputs.
+  schemaCapability([]);
+  // @ts-expect-error Schema capability rejects null inputs.
+  schemaCapability(null);
+  const invalidSchemaFn = Object.assign(() => {}, {
+    description: text.line("Schema"),
+  });
+  // @ts-expect-error Schema capability rejects function inputs even with properties.
+  schemaCapability(invalidSchemaFn);
+  // @ts-expect-error Schema capability reports missing description alongside unknown properties.
+  schemaCapability({ extra: true });
 
   const localDefine = defineCli();
   const exampleInput = z.object({ mode: z.enum(["fast", "safe"]) });
@@ -2232,6 +2263,34 @@ function verifyRootCapabilityAndAlignedTypeErrors() {
     }),
     // @ts-expect-error Command examples require an input object.
     examples: [{ outputMode: "structured" }],
+  });
+
+  localDefine.command("multiExampleInvalidMode")({
+    kind: "command",
+    parent: "tool",
+    name: "multi-example-invalid-mode",
+    description: "Multi-example command",
+    fields: {
+      mode: { kind: "valueOption", longOption: "--mode", description: "Mode" },
+    },
+    input: exampleInput,
+    outputs: (mode) => ({
+      default: "structured",
+      modes: {
+        structured: mode
+          .atomic({
+            success: { kind: "completion" },
+            failures: {},
+            handler: ({ outcome }) => outcome.completion(),
+          })
+          .structured({ description: "Structured" }),
+      },
+    }),
+    examples: [
+      { input: { mode: "fast" } },
+      // @ts-expect-error Later elements in an examples tuple must still validate outputMode.
+      { input: { mode: "fast" }, outputMode: "yaml" },
+    ],
   });
 
   // @ts-expect-error Command outputs must match the command identity they are mounted under.
