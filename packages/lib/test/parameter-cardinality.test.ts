@@ -358,7 +358,7 @@ void test("cardinality facts project from one source into grammar, usage, help, 
     },
   });
   assert.deepEqual(writes, [
-    '归档文件\n\n  archive-files [--output <mode>] <source> [<files...>] [--tag <tag>]... [--color|--no-color]\n\n  <source>\n    源文件\n  [<files...>]\n    附加文件\n\n  [--tag, -t <tag>]...\n    归档标签\n  [--color, --no-color]\n    彩色输出\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured (atomic, structured)\n    结构化输出\n',
+    '归档文件\n\n  archive-files [--output <mode>] <source> [<files...>] [--tag <tag>]... [--color|--no-color]\n\n  <source>\n    源文件\n  [<files...>]\n    附加文件\n\n  [--tag, -t <tag>]...\n    归档标签\n  [--color, --no-color]\n    彩色输出\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured\n    结构化输出\n',
   ]);
 });
 

@@ -15,7 +15,11 @@ const input = z.object({});
 const cli = {
   root: "probe",
   help: helpCapability({
-    wording: { choices: "(choices: {choices})", default: "(default: {value})" },
+    wording: {
+      outputModePlaceholder: "mode",
+      choicesAndDefault: "{usage} (choices: {choices}) (default: {value})",
+      list: "{left}, {right}",
+    },
   }),
   usageFailureExitCode: 64,
 } as const;

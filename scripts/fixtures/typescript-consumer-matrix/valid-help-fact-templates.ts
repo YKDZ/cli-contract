@@ -4,34 +4,39 @@ import { z } from "zod";
 const help = helpCapability({
   wording: {
     commandPlaceholder: "命令 组",
-    choices: "候选 {choices}，也可写作 {choices}",
-    default: "默认值 {value}，再次确认 {value}",
+    outputModePlaceholder: "输出方式",
+    choices: "{usage} 候选 {choices}，也可写作 {choices}",
+    default: "{usage} 默认值 {value}，再次确认 {value}",
+    choicesAndDefault: "{usage}（可选：{choices}；默认：{value}）",
+    list: "{left}、{right}",
+    facts: "{left}且{right}",
+    effects: "{left}，{right}",
   },
 });
 
 void help;
 
 type ValidChoicesUnion =
-  | { readonly choices: "候选 {choices}" }
-  | { readonly choices: "可选 {choices}" };
+  | { readonly choices: "{usage} 候选 {choices}" }
+  | { readonly choices: "{usage} 可选 {choices}" };
 const validChoicesUnion: ValidChoicesUnion =
   Math.random() < 0.5
-    ? { choices: "候选 {choices}" }
-    : { choices: "可选 {choices}" };
+    ? { choices: "{usage} 候选 {choices}" }
+    : { choices: "{usage} 可选 {choices}" };
 void helpCapability({ wording: validChoicesUnion });
 
 const inferredEmptyWordingBranch =
-  Math.random() < 0.5 ? {} : { wording: { choices: "候选 {choises}" } };
+  Math.random() < 0.5 ? {} : { wording: { choices: "{usage} 候选 {choises}" } };
 // @ts-expect-error An unannotated empty branch must not let an invalid template in the other branch pass.
 void helpCapability(inferredEmptyWordingBranch);
 
 type OptionalValidWording = {
   readonly shortAlias: "-h";
-  readonly wording?: { readonly choices: "候选 {choices}" };
+  readonly wording?: { readonly choices: "{usage} 候选 {choices}" };
 };
 const optionalValidWording: OptionalValidWording = {
   shortAlias: "-h",
-  wording: { choices: "候选 {choices}" },
+  wording: { choices: "{usage} 候选 {choices}" },
 };
 void helpCapability(optionalValidWording);
 

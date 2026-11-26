@@ -156,7 +156,7 @@ void test("root-level -h configuration projects mechanically into controls, ever
     {
       destination: "stdout",
       chunk:
-        '运行任务\n\n用法\n  workspace task run [--output <mode>]\n\n选项\n  --help, -h\n  --output <mode> (choices: "structured") (default: "structured")\n  structured (atomic, structured)\n    结构化输出\n',
+        '运行任务\n\n用法\n  workspace task run [--output <mode>]\n\n选项\n  --help, -h\n  --output <mode> (choices: "structured") (default: "structured")\n  structured\n    结构化输出\n',
     },
   ]);
   assert.deepEqual(termination, {
@@ -301,7 +301,7 @@ void test("an absent heading only omits the heading line, and empty sections inj
     },
   });
   assert.deepEqual(writes, [
-    '最小命令\n\n用法\n  minimal [--output <mode>]\n\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured (atomic, structured)\n    结构化输出\n',
+    '最小命令\n\n用法\n  minimal [--output <mode>]\n\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured\n    结构化输出\n',
   ]);
   assert.doesNotMatch(
     writes.join(""),

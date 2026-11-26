@@ -1,5 +1,6 @@
 import type { SchemaIssueEvidence, UsageIssue } from "./cli-invocation.ts";
 import type { JsonValue } from "./contract-schema.ts";
+import type { HelpTemplateSlot } from "./help-projection.ts";
 
 export type SchemaDefinitionTarget =
   | Readonly<{ readonly command: string; readonly location: "input" }>
@@ -26,22 +27,7 @@ export type ContractDefinitionIssue =
   | Readonly<{
       readonly code: "missingHelpFactTemplate";
       readonly command: string;
-      readonly slot:
-        | "commandPlaceholder"
-        | "choices"
-        | "default"
-        | "forbiddenCombination"
-        | "countExactly"
-        | "countAtLeast"
-        | "countAtMost"
-        | "countBetween"
-        | "whenOnMatch"
-        | "whenOtherwise"
-        | "whenOnMatchOtherwise"
-        | "require"
-        | "forbid"
-        | "present"
-        | "equals";
+      readonly slot: HelpTemplateSlot;
     }>
   | Readonly<{
       readonly code: "invalidHelpFactTemplate";
@@ -311,6 +297,13 @@ export type ContractDefinitionIssue =
       readonly received: string | null;
     }>
   | Readonly<{
+      readonly code: "invalidFieldPlaceholder";
+      readonly command: string;
+      readonly field: string;
+      readonly received: unknown;
+      readonly reason: "singleLine" | "empty" | "placeholder";
+    }>
+  | Readonly<{
       readonly code: "duplicateFieldOptionSpelling";
       readonly command: string;
       readonly spelling: string;
@@ -567,6 +560,8 @@ function formatContractDefinitionIssue(issue: ContractDefinitionIssue): string {
       return `The kind of field ${issue.field} in command ${issue.command} is invalid`;
     case "invalidFieldShortAlias":
       return `The short alias of field ${issue.field} in command ${issue.command} is invalid`;
+    case "invalidFieldPlaceholder":
+      return `The placeholder of field ${issue.field} in command ${issue.command} is invalid: ${issue.reason}`;
     case "duplicateFieldOptionSpelling":
       return `Fields ${issue.fields.join(", ")} of command ${issue.command} reuse option spelling ${issue.spelling}`;
     case "fieldOptionConflictsWithControl":

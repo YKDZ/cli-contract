@@ -11,8 +11,11 @@ import { z } from "zod";
 const textCoverageHelp = helpCapability({
   wording: {
     commandPlaceholder: "command",
-    choices: "(choices: {choices})",
-    default: "(default: {value})",
+    outputModePlaceholder: "mode",
+    choices: "{usage} (choices: {choices})",
+    default: "{usage} (default: {value})",
+    choicesAndDefault: "{usage} (choices: {choices}; default: {value})",
+    list: "{left}, {right}",
   },
 });
 

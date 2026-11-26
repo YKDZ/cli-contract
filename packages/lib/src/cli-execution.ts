@@ -4,9 +4,7 @@ import {
   createFailureFact,
   createStreamRecordFact,
   createStreamSuccessFact,
-  formatFieldUsage,
   getCompiledCli,
-  helpTemplateSpecifications,
   isCompiledExecutable,
   isIssuedOutcomeFact,
   usageFailureHelpArgv,
@@ -14,8 +12,6 @@ import {
   type CliContractDependencies,
   type CliContractResult,
   type CliContractRoot,
-  type HelpFactTemplateParameters,
-  type HelpFactWording,
   type OutcomeFact,
 } from "./cli-contract.ts";
 import {
@@ -44,6 +40,7 @@ import {
 } from "./contract-execution-error.ts";
 import type { ContractSchema } from "./contract-schema.ts";
 import type { JsonValue } from "./contract-schema.ts";
+import { renderCommandHelp } from "./help-projection.ts";
 import { copyJsonValue } from "./json-value.ts";
 import {
   encodeAtomicText,
@@ -61,7 +58,6 @@ import {
   createUsageFailureEnvelope,
 } from "./outcome-wire.ts";
 import { streamOutputs } from "./stream-output.ts";
-import { formatUsageConstraint } from "./usage-constraint.ts";
 
 type CompiledCommand = ReturnType<typeof getCompiledCli>["commands"][string];
 type CompiledExecutable = Extract<
@@ -292,213 +288,62 @@ function createHelpText(
   compiled: ReturnType<typeof getCompiledCli>,
   command: ReturnType<typeof getCompiledCli>["commands"][string],
 ): string {
-  const headings = compiled.contract.grammar.controls.help.headings;
-  const wording = compiled.contract.grammar.controls.help.wording;
-  const segments = [command.description];
-  const commands = Object.values(compiled.commands).filter(
-    (candidate) => candidate.parent === command.id,
-  );
-  const fields = isCommandGroup(command) ? [] : command.fields;
-  const usageConstraints = isCommandGroup(command)
-    ? []
-    : command.usageConstraints;
-  const positionalFields = fields.filter(
-    (field) =>
-      field.kind === "positional" || field.kind === "variadicPositional",
-  );
-  const optionFields = fields.filter(
-    (field) =>
-      field.kind !== "positional" && field.kind !== "variadicPositional",
-  );
-  const options = [
-    ...optionFields.map((field) => formatHelpField(field, wording)),
-    ...formatCoreControls(
-      compiled,
-      isCommandGroup(command) ? undefined : command,
-    ),
-  ];
-
-  appendHelpSegment(segments, headings?.usage, [
-    helpLine(command.usage.synopsis),
-  ]);
-  appendHelpSegment(
-    segments,
-    headings?.commands,
-    commands.map((candidate) =>
-      helpDetail(
-        `${[candidate.name, ...candidate.aliases].join(", ")}${isCommandGroup(candidate) ? ` <${requireHelpFactWording(wording?.commandPlaceholder)}>` : ""}`,
-        candidate.description,
-      ),
-    ),
-  );
-  appendHelpSegment(
-    segments,
-    headings?.arguments,
-    positionalFields.map((field) => formatHelpField(field, wording)),
-  );
-  appendHelpSegment(segments, headings?.options, options);
-  appendHelpSegment(
-    segments,
-    headings?.constraints,
-    usageConstraints.map((constraint) =>
-      helpLine(
-        formatUsageConstraint(constraint, (slot, values) =>
-          renderHelpFactTemplate(slot, wording?.[slot], values),
-        ),
-      ),
-    ),
-  );
-  const schemaHeading =
-    compiled.contract.grammar.controls.help.headings?.schema;
-  appendHelpSegment(
-    segments,
-    schemaHeading,
-    createSchemaHelpEntries(compiled, command),
-  );
-  appendHelpSegment(
-    segments,
-    headings?.examples,
-    isCommandGroup(command)
-      ? []
-      : (command.examples ?? []).map((example) => helpLine(example.shell)),
-  );
-  appendHelpSegment(
-    segments,
-    headings?.supplement,
-    command.helpSupplement === undefined
-      ? []
-      : [{ kind: "lines" as const, lines: command.helpSupplement }],
-  );
-  return `${segments.join("\n\n")}\n`;
+  const children = Object.values(compiled.commands)
+    .filter((candidate) => candidate.parent === command.id)
+    .map((candidate) => ({
+      name: candidate.name,
+      aliases: candidate.aliases,
+      isGroup: isCommandGroup(candidate),
+      description: candidate.description,
+    }));
+  const schemaQuery = queryHelpSchema(compiled, command);
+  const executable = isCommandGroup(command) ? undefined : command;
+  return renderCommandHelp({
+    command: {
+      description: command.description,
+      synopsis: command.usage.synopsis,
+      ...(command.helpSupplement === undefined
+        ? {}
+        : { helpSupplement: command.helpSupplement }),
+      fields: executable === undefined ? [] : executable.fields,
+      usageConstraints:
+        executable === undefined ? [] : executable.usageConstraints,
+      ...(executable === undefined
+        ? {}
+        : {
+            outputModes: {
+              defaultMode: executable.defaultOutputMode,
+              modes: Object.values(executable.outputModes).map((mode) => ({
+                id: mode.id,
+                description: mode.description,
+              })),
+            },
+          }),
+      examples: executable?.examples ?? [],
+    },
+    children,
+    controls: compiled.contract.grammar.controls,
+    ...(schemaQuery === undefined ? {} : { schemaQuery }),
+  });
 }
 
 function isCommandGroup(command: CompiledCommand): command is CompiledGroup {
   return command.kind === "rootGroup" || command.kind === "commandGroup";
 }
 
-type HelpEntry =
-  | Readonly<{
-      readonly kind: "detail";
-      readonly summary: string;
-      readonly detail: string;
-    }>
-  | Readonly<{ readonly kind: "line"; readonly value: string }>
-  | Readonly<{ readonly kind: "lines"; readonly lines: readonly string[] }>;
-
-function helpLine(value: string): HelpEntry {
-  return { kind: "line", value };
-}
-
-function helpDetail(summary: string, detail: string): HelpEntry {
-  return { kind: "detail", summary, detail };
-}
-
-function appendHelpSegment(
-  segments: string[],
-  heading: string | undefined,
-  entries: readonly HelpEntry[],
-): void {
-  if (entries.length === 0) return;
-  const lines = heading === undefined ? [] : [heading];
-  for (const entry of entries) {
-    if (entry.kind === "line") lines.push(`  ${entry.value}`);
-    else if (entry.kind === "detail")
-      lines.push(`  ${entry.summary}`, `    ${entry.detail}`);
-    else
-      lines.push(
-        ...entry.lines.map((line) => (line === "" ? "" : `  ${line}`)),
-      );
-  }
-  segments.push(lines.join("\n"));
-}
-
-function formatCoreControls(
-  compiled: ReturnType<typeof getCompiledCli>,
-  executable?: CompiledExecutable,
-): readonly HelpEntry[] {
-  const help = compiled.contract.grammar.controls.help;
-  const version = compiled.contract.grammar.controls.version;
-  const schema = compiled.contract.grammar.controls.schema;
-  const versionEntry: HelpEntry | undefined =
-    version === undefined
-      ? undefined
-      : version.description === undefined
-        ? helpLine(
-            [version.longOption, version.shortAlias]
-              .filter((spelling) => spelling !== undefined)
-              .join(", "),
-          )
-        : helpDetail(
-            [version.longOption, version.shortAlias]
-              .filter((spelling) => spelling !== undefined)
-              .join(", "),
-            version.description,
-          );
-  return [
-    helpLine(
-      [help.longOption, help.shortAlias]
-        .filter((spelling) => spelling !== undefined)
-        .join(", "),
-    ),
-    ...(versionEntry === undefined ? [] : [versionEntry]),
-    ...(schema === undefined
-      ? []
-      : [helpDetail(schema.longOption, schema.description)]),
-    ...(executable === undefined
-      ? []
-      : [
-          helpLine(
-            [
-              "--output <mode>",
-              renderHelpFactTemplate("choices", help.wording?.choices, {
-                choices: Object.keys(executable.outputModes)
-                  .map((mode) => JSON.stringify(mode))
-                  .join(", "),
-              }),
-              renderHelpFactTemplate("default", help.wording?.default, {
-                value: JSON.stringify(executable.defaultOutputMode),
-              }),
-            ].join(" "),
-          ),
-          ...Object.values(executable.outputModes).map((mode) =>
-            helpDetail(
-              `${mode.id} (${mode.delivery}, ${mode.format})`,
-              mode.description,
-            ),
-          ),
-        ]),
-  ];
-}
-
-function createSchemaHelpEntries(
+function queryHelpSchema(
   compiled: ReturnType<typeof getCompiledCli>,
   command: CompiledCommand,
-): readonly HelpEntry[] {
-  if (compiled.contract.grammar.controls.schema === undefined) return [];
+): ContractDirectoryQuery | ContractSummaryQuery | undefined {
+  if (compiled.contract.grammar.controls.schema === undefined) {
+    return undefined;
+  }
   const path = canonicalCommandPath(compiled.commands, command.id);
   const query = queryCliContract(compiled.contract, { path });
-  if (query.kind === "queryFailure") return [];
-  if (query.kind === "directory") {
-    return directoryHelpEntries(query);
+  if (query.kind === "directory" || query.kind === "summary") {
+    return query;
   }
-  if (query.kind === "summary") {
-    return summaryHelpEntries(query);
-  }
-  return [];
-}
-
-function directoryHelpEntries(
-  query: ContractDirectoryQuery,
-): readonly HelpEntry[] {
-  return query.children.map((child) =>
-    helpDetail(JSON.stringify(child.nextArgv), child.description),
-  );
-}
-
-function summaryHelpEntries(query: ContractSummaryQuery): readonly HelpEntry[] {
-  return query.next.map((next) =>
-    helpDetail(`--schema=${next.target}`, JSON.stringify(next.argv)),
-  );
+  return undefined;
 }
 
 async function writeUsageFailure(
@@ -521,64 +366,6 @@ async function writeUsageFailure(
       ),
     )}\n`,
   });
-}
-
-function renderHelpFactTemplate<
-  Slot extends Exclude<keyof HelpFactTemplateParameters, "commandPlaceholder">,
->(
-  slot: Slot,
-  template: string | undefined,
-  values: HelpFactTemplateParameters[Slot],
-): string {
-  const factTemplate = requireHelpFactWording(template);
-  const replacements = new Map<string, string>();
-  for (const key of Object.keys(values)) {
-    const value: unknown = Reflect.get(values, key);
-    if (typeof value === "string") replacements.set(key, value);
-  }
-  if (
-    helpTemplateSpecifications[slot].placeholders.some(
-      (placeholder) => !replacements.has(placeholder),
-    )
-  ) {
-    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
-  }
-  return factTemplate.replace(
-    /\{([A-Za-z][A-Za-z0-9]*)\}/g,
-    (_match, key: string) => {
-      const value = replacements.get(key);
-      if (value === undefined) {
-        throw new ContractExecutionError([{ code: "invalidCliContract" }]);
-      }
-      return value;
-    },
-  );
-}
-
-function requireHelpFactWording(value: string | undefined): string {
-  if (value === undefined) {
-    throw new ContractExecutionError([{ code: "invalidCliContract" }]);
-  }
-  return value;
-}
-
-function formatHelpField(
-  field: CompiledExecutable["fields"][number],
-  wording: HelpFactWording | undefined,
-): HelpEntry {
-  const cardinality = formatFieldUsage(field, true);
-  const choices =
-    field.choices === undefined
-      ? ""
-      : ` ${renderHelpFactTemplate("choices", wording?.choices, { choices: field.choices.map((choice) => JSON.stringify(choice)).join(", ") })}`;
-  const defaultValue =
-    field.default === undefined
-      ? ""
-      : ` ${renderHelpFactTemplate("default", wording?.default, { value: JSON.stringify(field.default) })}`;
-  return helpDetail(
-    `${cardinality}${choices}${defaultValue}`,
-    field.description,
-  );
 }
 
 async function executeApplicationResult<

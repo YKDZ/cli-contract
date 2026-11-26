@@ -1,6 +1,5 @@
 import type {
   ForbiddenCombinationUsageConstraint,
-  HelpFactTemplateParameters,
   SchemaManifest,
   UsageConstraintEffect,
   UsageFact,
@@ -48,11 +47,6 @@ export type UsageConstraintGrammar =
   | WhenUsageConstraint
   | ForbiddenCombinationUsageConstraint;
 
-type UsageConstraintHelpSlot = Exclude<
-  keyof HelpFactTemplateParameters,
-  "commandPlaceholder" | "choices" | "default"
->;
-
 type UsageConstraintIssue =
   | CountConstraintViolationIssue
   | ConditionalConstraintViolationIssue
@@ -72,7 +66,6 @@ interface UsageConstraintField {
 
 export interface CompiledUsageConstraints {
   readonly constraints: readonly UsageConstraintGrammar[];
-  readonly requiredHelpTemplates: readonly UsageConstraintHelpSlot[];
   readonly inputProjection: SchemaManifest | undefined;
 }
 
@@ -148,57 +141,6 @@ function collectUnknownProperties(
       });
     }
   }
-}
-
-type CountHelpFact =
-  | Readonly<{
-      readonly slot: "countExactly";
-      readonly values: HelpFactTemplateParameters["countExactly"];
-    }>
-  | Readonly<{
-      readonly slot: "countAtLeast";
-      readonly values: HelpFactTemplateParameters["countAtLeast"];
-    }>
-  | Readonly<{
-      readonly slot: "countAtMost";
-      readonly values: HelpFactTemplateParameters["countAtMost"];
-    }>
-  | Readonly<{
-      readonly slot: "countBetween";
-      readonly values: HelpFactTemplateParameters["countBetween"];
-    }>;
-
-/** Derives the help slot and its placeholders from a normalized count rule. */
-function countHelpFactForConstraint(
-  constraint: CountUsageConstraintGrammar,
-): CountHelpFact {
-  const fields = constraint.fields.join(", ");
-  if (constraint.min === constraint.max) {
-    return {
-      slot: "countExactly",
-      values: { fields, count: String(constraint.min) },
-    };
-  }
-  if (constraint.max === constraint.fields.length) {
-    return {
-      slot: "countAtLeast",
-      values: { fields, min: String(constraint.min) },
-    };
-  }
-  if (constraint.min === 0) {
-    return {
-      slot: "countAtMost",
-      values: { fields, max: String(constraint.max) },
-    };
-  }
-  return {
-    slot: "countBetween",
-    values: {
-      fields,
-      min: String(constraint.min),
-      max: String(constraint.max),
-    },
-  };
 }
 
 /** Validates a dynamic count definition and produces an immutable normalized fact. */
@@ -678,11 +620,8 @@ function finishUsageConstraintCompilation(
   input: SchemaManifest | undefined,
 ): CompiledUsageConstraints {
   const normalized = deepFreeze([...constraints]);
-  const requiredHelpTemplates =
-    requiredUsageConstraintHelpTemplates(normalized);
   return deepFreeze({
     constraints: normalized,
-    requiredHelpTemplates,
     inputProjection:
       input === undefined
         ? undefined
@@ -1164,170 +1103,6 @@ function usageEffectSchema(effect: UsageConstraintEffect): JsonObject {
           },
         }),
   };
-}
-
-type UsageConstraintHelpUse = {
-  [Slot in UsageConstraintHelpSlot]: Readonly<{
-    readonly slot: Slot;
-    readonly values: HelpFactTemplateParameters[Slot];
-  }>;
-}[UsageConstraintHelpSlot];
-
-type UsageConstraintHelpRenderer = <Slot extends UsageConstraintHelpSlot>(
-  slot: Slot,
-  values: HelpFactTemplateParameters[Slot],
-) => string;
-
-interface UsageConstraintHelpPlan {
-  readonly requiredSlots: readonly UsageConstraintHelpSlot[];
-  readonly format: (render: UsageConstraintHelpRenderer) => string;
-}
-
-export function requiredUsageConstraintHelpTemplates(
-  constraints: readonly UsageConstraintGrammar[],
-): readonly UsageConstraintHelpSlot[] {
-  const slots = new Set<UsageConstraintHelpSlot>();
-  for (const constraint of constraints) {
-    for (const slot of usageConstraintHelpPlan(constraint).requiredSlots) {
-      slots.add(slot);
-    }
-  }
-  return Object.freeze([...slots]);
-}
-
-export function formatUsageConstraint(
-  constraint: UsageConstraintGrammar,
-  render: UsageConstraintHelpRenderer,
-): string {
-  return usageConstraintHelpPlan(constraint).format(render);
-}
-
-function usageConstraintHelpPlan(
-  constraint: UsageConstraintGrammar,
-): UsageConstraintHelpPlan {
-  if (constraint.kind === "count") {
-    const use = countHelpFactForConstraint(constraint);
-    return {
-      requiredSlots: [use.slot],
-      format: (render) => formatUsageConstraintHelpUse(use, render),
-    };
-  }
-
-  const facts = constraint.all.map(usageFactHelpUse);
-  if (constraint.kind === "forbiddenCombination") {
-    const primarySlot = "forbiddenCombination" as const;
-    return {
-      requiredSlots: [primarySlot, ...facts.map(({ slot }) => slot)],
-      format: (render) => {
-        const factsText = facts
-          .map((fact) => formatUsageConstraintHelpUse(fact, render))
-          .join(", ");
-        return render(primarySlot, { facts: factsText });
-      },
-    };
-  }
-
-  const onMatch = usageEffectHelpUses(constraint.onMatch);
-  const otherwise = usageEffectHelpUses(constraint.otherwise);
-  const hasOnMatch = onMatch.length > 0;
-  const hasOtherwise = otherwise.length > 0;
-  const primarySlot = hasOnMatch
-    ? hasOtherwise
-      ? "whenOnMatchOtherwise"
-      : "whenOnMatch"
-    : "whenOtherwise";
-  const requiredSlots: UsageConstraintHelpSlot[] = [
-    primarySlot,
-    ...facts.map(({ slot }) => slot),
-    ...(onMatch.some(({ slot }) => slot === "require") ||
-    otherwise.some(({ slot }) => slot === "require")
-      ? (["require"] as const)
-      : []),
-    ...(onMatch.some(({ slot }) => slot === "forbid") ||
-    otherwise.some(({ slot }) => slot === "forbid")
-      ? (["forbid"] as const)
-      : []),
-  ];
-  return {
-    requiredSlots,
-    format: (render) => {
-      const factsText = facts
-        .map((fact) => formatUsageConstraintHelpUse(fact, render))
-        .join(", ");
-      const onMatchText = onMatch
-        .map((use) => formatUsageConstraintHelpUse(use, render))
-        .join(", ");
-      const otherwiseText = otherwise
-        .map((use) => formatUsageConstraintHelpUse(use, render))
-        .join(", ");
-      if (primarySlot === "whenOnMatchOtherwise") {
-        return render(primarySlot, {
-          facts: factsText,
-          onMatch: onMatchText,
-          otherwise: otherwiseText,
-        });
-      }
-      if (primarySlot === "whenOnMatch") {
-        return render(primarySlot, { facts: factsText, onMatch: onMatchText });
-      }
-      return render(primarySlot, {
-        facts: factsText,
-        otherwise: otherwiseText,
-      });
-    },
-  };
-}
-
-function usageFactHelpUse(fact: UsageFact): UsageConstraintHelpUse {
-  return fact.kind === "present"
-    ? { slot: "present", values: { field: fact.field } }
-    : {
-        slot: "equals",
-        values: { field: fact.field, value: JSON.stringify(fact.value) },
-      };
-}
-
-function usageEffectHelpUses(
-  effect: UsageConstraintEffect | undefined,
-): readonly UsageConstraintHelpUse[] {
-  if (effect === undefined) return [];
-  const uses: UsageConstraintHelpUse[] = [];
-  const required = effect.require ?? [];
-  const forbidden = effect.forbid ?? [];
-  if (required.length > 0) {
-    uses.push({ slot: "require", values: { fields: required.join(", ") } });
-  }
-  if (forbidden.length > 0) {
-    uses.push({ slot: "forbid", values: { fields: forbidden.join(", ") } });
-  }
-  return uses;
-}
-
-function formatUsageConstraintHelpUse(
-  use: UsageConstraintHelpUse,
-  render: UsageConstraintHelpRenderer,
-): string {
-  switch (use.slot) {
-    case "countExactly":
-    case "countAtLeast":
-    case "countAtMost":
-    case "countBetween":
-    case "forbiddenCombination":
-    case "whenOnMatch":
-    case "whenOtherwise":
-    case "whenOnMatchOtherwise":
-    case "require":
-    case "forbid":
-    case "present":
-    case "equals":
-      return render(use.slot, use.values);
-    default:
-      return assertNeverUsageHelpUse(use);
-  }
-}
-
-function assertNeverUsageHelpUse(value: never): never {
-  throw new Error(`unhandledUsageConstraintHelpUse:${JSON.stringify(value)}`);
 }
 
 export function evaluateUsageConstraints(

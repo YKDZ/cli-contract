@@ -24,6 +24,22 @@ import type {
 } from "./contract-schema.ts";
 import { copySingleLineText, isSingleLineText } from "./description.ts";
 import type { reservedFieldNames } from "./field-identity.ts";
+import {
+  collectExecutableRequiredHelpSlots,
+  collectHelpFactTemplateIssues,
+  formatExecutableUsageSynopsis,
+  formatGroupUsageSynopsis,
+  getInvalidHelpFactWordingValues,
+  helpCapability,
+  isHelpCapability,
+  type FieldPlaceholderPropertyContract,
+  type HelpCapability,
+  type HelpCapabilityDefinition,
+  type HelpFactTemplateParameters,
+  type HelpFactWording,
+  type HelpHeadings,
+  type HelpTemplateSlot,
+} from "./help-projection.ts";
 import { deepFreeze, isPlainRecord } from "./json-value.ts";
 import type {
   CompletionFact,
@@ -68,6 +84,14 @@ import {
   type UsageConstraintGrammar,
 } from "./usage-constraint.ts";
 export {
+  helpCapability,
+  type HelpCapability,
+  type HelpCapabilityDefinition,
+  type HelpFactTemplateParameters,
+  type HelpFactWording,
+  type HelpHeadings,
+};
+export {
   createCompletionFact,
   createDataFact,
   createFailureFact,
@@ -105,12 +129,7 @@ export type {
 
 const cliContractType = Symbol("CliContract.type");
 const outputModesType = Symbol("OutputModes.type");
-const helpCapabilities = new WeakSet<object>();
 const schemaCapabilities = new WeakSet<object>();
-const invalidHelpFactWordingValues = new WeakMap<
-  object,
-  ReadonlyMap<string, unknown>
->();
 const boundCommandNodes = new WeakMap<object, RuntimeExecutableDefinition>();
 type OutputAuthoringIssue = Extract<
   ContractDefinitionIssue,
@@ -187,8 +206,8 @@ const definitionPropertyKeys = {
       "negatedLongOption",
       "description",
     ],
-    option: ["kind", "longOption", "shortAlias", "description"],
-    positional: ["kind", "description"],
+    option: ["kind", "longOption", "shortAlias", "placeholder", "description"],
+    positional: ["kind", "placeholder", "description"],
   },
   example: ["input", "outputMode"],
   usage: usageConstraintDefinitionPropertyKeys,
@@ -211,110 +230,6 @@ const definitionPropertyKeys = {
   atomicSuccess: ["kind", "text", "variants"],
   streamSuccess: ["kind", "text", "records"],
 } as const;
-
-export interface HelpCapability {
-  readonly kind: "helpCapability";
-  readonly longOption: "--help";
-  readonly shortAlias?: "-h";
-  readonly headings?: HelpHeadings;
-  readonly wording?: HelpFactWording;
-  readonly [cliContractType]: "help";
-}
-
-/**
- * Optional headings for the fixed sections of root help. Omitting a heading keeps
- * the section's mechanical content and indentation; the core writes no default copy.
- */
-export interface HelpHeadings {
-  readonly usage?: string;
-  readonly commands?: string;
-  readonly arguments?: string;
-  readonly options?: string;
-  readonly constraints?: string;
-  readonly schema?: string;
-  readonly examples?: string;
-  readonly supplement?: string;
-}
-
-export interface HelpFactWording {
-  /** The command-group placeholder word itself; the core adds the angle brackets. */
-  readonly commandPlaceholder?: string;
-  /** The choice set of a field or output format; must contain `{choices}`. */
-  readonly choices?: string;
-  /** The default JSON value of a field or output format; must contain `{value}`. */
-  readonly default?: string;
-  /** A valid match branch; must contain `{facts}` and `{onMatch}`. */
-  readonly whenOnMatch?: string;
-  /** A valid non-match branch; must contain `{facts}` and `{otherwise}`. */
-  readonly whenOtherwise?: string;
-  /** A conditional branch valid on both sides; must contain `{facts}`, `{onMatch}` and `{otherwise}`. */
-  readonly whenOnMatchOtherwise?: string;
-  /** A required field group in an effect; must contain `{fields}`. */
-  readonly require?: string;
-  /** A forbidden field group in an effect; must contain `{fields}`. */
-  readonly forbid?: string;
-  /** A field-presence fact; must contain `{field}`. */
-  readonly present?: string;
-  /** A field-equality fact; must contain `{field}` and `{value}`. */
-  readonly equals?: string;
-  /** A group of field facts that must not hold together; must contain `{facts}`. */
-  readonly forbiddenCombination?: string;
-  /** The field count must be exactly `{count}`; contains `{fields}`. */
-  readonly countExactly?: string;
-  /** The field count must be at least `{min}`; contains `{fields}`. */
-  readonly countAtLeast?: string;
-  /** The field count must be at most `{max}`; contains `{fields}`. */
-  readonly countAtMost?: string;
-  /** The field count must be between `{min}` and `{max}`; contains `{fields}`. */
-  readonly countBetween?: string;
-}
-
-/** The single specification of help fact slots and their required replacement parameters. */
-export const helpTemplateSpecifications = {
-  commandPlaceholder: { placeholders: [] },
-  choices: { placeholders: ["choices"] },
-  default: { placeholders: ["value"] },
-  whenOnMatch: { placeholders: ["facts", "onMatch"] },
-  whenOtherwise: { placeholders: ["facts", "otherwise"] },
-  whenOnMatchOtherwise: { placeholders: ["facts", "onMatch", "otherwise"] },
-  require: { placeholders: ["fields"] },
-  forbid: { placeholders: ["fields"] },
-  present: { placeholders: ["field"] },
-  equals: { placeholders: ["field", "value"] },
-  forbiddenCombination: { placeholders: ["facts"] },
-  countExactly: { placeholders: ["fields", "count"] },
-  countAtLeast: { placeholders: ["fields", "min"] },
-  countAtMost: { placeholders: ["fields", "max"] },
-  countBetween: { placeholders: ["fields", "min", "max"] },
-} as const satisfies Record<
-  keyof HelpFactWording,
-  Readonly<{ readonly placeholders: readonly string[] }>
->;
-
-/** Closed replacement-parameter shapes derived per help slot. */
-export type HelpFactTemplateParameters = {
-  readonly [Slot in keyof typeof helpTemplateSpecifications]: Readonly<
-    Record<
-      (typeof helpTemplateSpecifications)[Slot]["placeholders"][number],
-      string
-    >
-  >;
-};
-
-/** Help configuration assembled once on the root contract; headings are optional, but every fact that actually appears needs wording. */
-export interface HelpCapabilityDefinition {
-  readonly shortAlias?: "-h";
-  readonly headings?: HelpHeadings;
-  readonly wording?: HelpFactWording;
-}
-
-type HelpCapabilityDefinitionForTypeCheck = Omit<
-  HelpCapabilityDefinition,
-  "wording"
-> & {
-  /** Keep literal keys of unknown slots so the local closed-set diagnostic reports an actionable identity. */
-  readonly wording?: object;
-};
 
 export interface VersionCapability {
   readonly kind: "versionCapability";
@@ -1374,11 +1289,13 @@ export type ShortOptionAlias<Value extends string> = string extends Value
 
 export interface PositionalDefinition {
   readonly kind: "positional";
+  readonly placeholder?: string;
   readonly description: string;
 }
 
 export interface VariadicPositionalDefinition {
   readonly kind: "variadicPositional";
+  readonly placeholder?: string;
   readonly description: string;
 }
 
@@ -1403,6 +1320,7 @@ export interface RepeatableOptionDefinition<
   readonly kind: "repeatableOption";
   readonly longOption: LongOption;
   readonly shortAlias?: ShortAlias;
+  readonly placeholder?: string;
   readonly description: string;
 }
 
@@ -1413,6 +1331,7 @@ export interface ValueOptionDefinition<
   readonly kind: "valueOption";
   readonly longOption: LongOption;
   readonly shortAlias?: ShortAlias;
+  readonly placeholder?: string;
   readonly description: string;
 }
 
@@ -1661,12 +1580,12 @@ type InvalidNegatedLongOptionIssue<Field, Key, Command extends string> =
 
 type CheckedFieldDefinition<
   Field extends FieldDefinition,
-  Key,
+  Key extends PropertyKey,
   Command extends string,
 > = Field extends PositionalDefinition
-  ? Field
+  ? Field & FieldPlaceholderPropertyContract<Command, Key, Field>
   : Field extends VariadicPositionalDefinition
-    ? Field
+    ? Field & FieldPlaceholderPropertyContract<Command, Key, Field>
     : Field extends FlagDefinition<infer LongOption>
       ? CheckedNegatedFlagDefinition<Field, Key, LongOption, Command>
       : Field extends RepeatableOptionDefinition<infer LongOption>
@@ -1690,12 +1609,12 @@ type CheckedNegatedFlagDefinition<
 
 type CheckedOptionDefinition<
   Field,
-  Key,
+  Key extends PropertyKey,
   LongOption extends `--${string}`,
   Command extends string,
 > = [InvalidCanonicalLongOptionIssue<Command, Key, LongOption>] extends [never]
   ? [InvalidShortOptionAliasIssue<Field, Command, Key>] extends [never]
-    ? Field
+    ? Field & FieldPlaceholderPropertyContract<Command, Key, Field>
     : InvalidShortOptionAliasIssue<Field, Command, Key>
   : InvalidCanonicalLongOptionIssue<Command, Key, LongOption>;
 
@@ -1893,172 +1812,6 @@ export type RawValueOptionInputForSchema<InputSchema extends ContractSchema> =
 export interface ContractTypeError<Code extends string, Evidence> {
   readonly contractTypeError: Readonly<{ readonly code: Code } & Evidence>;
 }
-
-type HelpFactTemplateAllowedPlaceholder<Slot extends keyof HelpFactWording> =
-  (typeof helpTemplateSpecifications)[Slot]["placeholders"][number];
-
-type ParsedHelpFactTemplate<
-  Template extends string,
-  Allowed extends string,
-  Seen extends string = never,
-> = Template extends `${infer Prefix}{${infer Tail}`
-  ? Prefix extends `${string}}${string}`
-    ? false
-    : Tail extends `${infer Placeholder}}${infer Rest}`
-      ? Placeholder extends Allowed
-        ? ParsedHelpFactTemplate<Rest, Allowed, Seen | Placeholder>
-        : false
-      : false
-  : Template extends `${string}}${string}`
-    ? false
-    : Exclude<Allowed, Seen> extends never
-      ? true
-      : false;
-
-type HelpTemplateWhitespace =
-  | " "
-  | "\t"
-  | "\v"
-  | "\f"
-  | "\u00a0"
-  | "\u1680"
-  | "\u2000"
-  | "\u2001"
-  | "\u2002"
-  | "\u2003"
-  | "\u2004"
-  | "\u2005"
-  | "\u2006"
-  | "\u2007"
-  | "\u2008"
-  | "\u2009"
-  | "\u200a"
-  | "\u2028"
-  | "\u2029"
-  | "\u202f"
-  | "\u205f"
-  | "\u3000"
-  | "\ufeff";
-
-type TrimHelpTemplateWhitespace<Template extends string> =
-  Template extends `${HelpTemplateWhitespace}${infer Rest}`
-    ? TrimHelpTemplateWhitespace<Rest>
-    : Template extends `${infer Rest}${HelpTemplateWhitespace}`
-      ? TrimHelpTemplateWhitespace<Rest>
-      : Template;
-
-type HelpFactTemplateFailureReason<
-  Slot extends keyof HelpFactWording,
-  Template extends string,
-> = Template extends
-  | `${string}\r${string}`
-  | `${string}\n${string}`
-  | `${string}\0${string}`
-  ? "singleLine"
-  : TrimHelpTemplateWhitespace<Template> extends ""
-    ? "empty"
-    : Slot extends "commandPlaceholder"
-      ? Template extends `${string}<${string}` | `${string}>${string}`
-        ? "placeholder"
-        : ParsedHelpFactTemplate<
-              Template,
-              HelpFactTemplateAllowedPlaceholder<Slot>
-            > extends true
-          ? never
-          : "placeholder"
-      : ParsedHelpFactTemplate<
-            Template,
-            HelpFactTemplateAllowedPlaceholder<Slot>
-          > extends true
-        ? never
-        : "placeholder";
-
-type IsValidStaticHelpFactTemplate<
-  Slot extends keyof HelpFactWording,
-  Template extends string,
-> = HelpFactTemplateFailureReason<Slot, Template> extends never ? true : false;
-
-type HelpFactTemplateValueContract<
-  Slot extends keyof HelpFactWording,
-  Value,
-> = [Exclude<Value, undefined>] extends [never]
-  ? never
-  : [Exclude<Value, undefined>] extends [string]
-    ? string extends Exclude<Value, undefined>
-      ? never
-      : IsValidStaticHelpFactTemplate<
-            Slot,
-            Extract<Exclude<Value, undefined>, string>
-          > extends true
-        ? never
-        : ContractTypeError<
-            "invalidHelpFactTemplate",
-            Readonly<{
-              readonly slot: Slot;
-              readonly received: Extract<Exclude<Value, undefined>, string>;
-              readonly reason: HelpFactTemplateFailureReason<
-                Slot,
-                Extract<Exclude<Value, undefined>, string>
-              >;
-            }>
-          >
-    : ContractTypeError<
-        "invalidHelpFactTemplate",
-        Readonly<{
-          readonly slot: Slot;
-          readonly received: Value;
-          readonly reason: "singleLine";
-        }>
-      >;
-
-type HelpFactWordingMemberIssues<Wording> =
-  | {
-      [
-        Slot in keyof Wording & keyof HelpFactWording
-      ]: HelpFactTemplateValueContract<Slot, Wording[Slot]>;
-    }[keyof Wording & keyof HelpFactWording]
-  | HelpFactWordingUnknownPropertyIssues<Wording>;
-
-type HelpFactWordingIssues<Wording> = Wording extends unknown
-  ? HelpFactWordingMemberIssues<Wording>
-  : never;
-
-type HelpFactWordingUnknownPropertyIssues<Wording> = {
-  [
-    Property in Exclude<Extract<keyof Wording, string>, keyof HelpFactWording>
-  ]: ContractTypeError<
-    "unknownDefinitionProperty",
-    Readonly<{
-      readonly path: readonly ["help", "wording", Property];
-      readonly property: Property;
-    }>
-  >;
-}[Exclude<Extract<keyof Wording, string>, keyof HelpFactWording>];
-
-type HelpFactWordingContract<Wording> = [
-  HelpFactWordingIssues<Wording>,
-] extends [never]
-  ? unknown
-  : HelpFactWordingIssues<Wording>;
-
-type HelpCapabilityWording<Definition> = Definition extends unknown
-  ? Definition extends Readonly<{ readonly wording?: infer Wording }>
-    ? Exclude<Wording, undefined>
-    : never
-  : never;
-
-type HelpCapabilityTemplateContract<Definition> = [
-  HelpCapabilityWording<Definition>,
-] extends [never]
-  ? unknown
-  : [
-        Extract<
-          HelpCapabilityWording<Definition>,
-          (...arguments_: never[]) => unknown
-        >,
-      ] extends [never]
-    ? HelpFactWordingContract<HelpCapabilityWording<Definition>>
-    : never;
 
 type InputStringKeys<Input> = Extract<keyof Input, string>;
 
@@ -3645,12 +3398,14 @@ export interface PositionalGrammar<
   Field extends string = string,
 > extends FieldGrammarBase<Field> {
   readonly kind: "positional";
+  readonly placeholder?: string;
 }
 
 export interface VariadicPositionalGrammar<
   Field extends string = string,
 > extends FieldGrammarBase<Field> {
   readonly kind: "variadicPositional";
+  readonly placeholder?: string;
 }
 
 export interface FlagGrammar<
@@ -3668,6 +3423,7 @@ export interface RepeatableOptionGrammar<
   readonly kind: "repeatableOption";
   readonly longOption: CanonicalLongOption<string>;
   readonly shortAlias?: ShortOptionAlias<string>;
+  readonly placeholder?: string;
 }
 
 export interface ValueOptionGrammar<
@@ -3676,6 +3432,7 @@ export interface ValueOptionGrammar<
   readonly kind: "valueOption";
   readonly longOption: CanonicalLongOption<string>;
   readonly shortAlias?: ShortOptionAlias<string>;
+  readonly placeholder?: string;
 }
 
 export type FieldGrammar<Field extends string = string> =
@@ -3949,7 +3706,7 @@ export interface CliManifest<
   RootKind extends CliRootKind = CliRootKind,
   RootOutputs = OutputModesDefinition,
 > {
-  readonly schemaVersion: "5";
+  readonly schemaVersion: "6";
   readonly root: Root;
   readonly commands: RootKind extends "rootGroup"
     ? Readonly<Record<string, CommandGroupManifest | ExecutableCommandManifest>>
@@ -4045,7 +3802,7 @@ type HierarchyExecutableKeys<Commands> = {
 }[keyof Commands];
 
 export interface HierarchyCliManifest<Root extends string, Commands> {
-  readonly schemaVersion: "5";
+  readonly schemaVersion: "6";
   readonly root: Root;
   readonly commands: Readonly<{
     [Command in keyof Commands]: HierarchyManifestNode<Commands[Command]>;
@@ -4653,181 +4410,6 @@ type RuntimeCliDefinition = RootCliDefinitionBase<string> &
   }>;
 
 /**
- * Assemble help for the whole tree explicitly. `headings` are optional section
- * titles; `wording` supplies the templates required by the help facts that actually
- * appear, with completeness checked by defineCli. The core generates no default
- * natural language.
- */
-export function helpCapability<
-  const Definition extends HelpCapabilityDefinitionForTypeCheck =
-    HelpCapabilityDefinition,
->(
-  definition?: Definition &
-    RejectUnknownProperties<
-      Definition,
-      (typeof definitionPropertyKeys.capability.help)[number]
-    > &
-    (Definition extends Readonly<{ readonly headings: infer Headings }>
-      ? Readonly<{
-          readonly headings: RejectUnknownProperties<
-            Headings,
-            keyof HelpHeadings
-          >;
-        }>
-      : unknown) &
-    HelpCapabilityTemplateContract<Definition>,
-): HelpCapability;
-export function helpCapability(
-  definition: HelpCapabilityDefinition = {},
-): HelpCapability {
-  assertKnownCapabilityOptions(
-    definition,
-    definitionPropertyKeys.capability.help,
-    "help",
-  );
-  if (definition.shortAlias !== undefined && definition.shortAlias !== "-h") {
-    throw new TypeError("The help short alias must be -h");
-  }
-  const copiedWording =
-    definition.wording === undefined
-      ? undefined
-      : copyHelpFactWording(definition.wording);
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- helpCapability is issued by this factory and registered in the WeakSet; the type brand is not emitted at runtime.
-  const capability = Object.freeze({
-    kind: "helpCapability" as const,
-    longOption: "--help" as const,
-    ...(definition.shortAlias === undefined
-      ? {}
-      : { shortAlias: definition.shortAlias }),
-    ...(definition.headings === undefined
-      ? {}
-      : { headings: copyHelpHeadings(definition.headings) }),
-    ...(copiedWording === undefined ? {} : { wording: copiedWording.wording }),
-  }) as HelpCapability;
-  helpCapabilities.add(capability);
-  if (copiedWording !== undefined && copiedWording.invalidValues.size > 0) {
-    invalidHelpFactWordingValues.set(capability, copiedWording.invalidValues);
-  }
-  return capability;
-}
-
-function copyHelpHeadings(value: unknown): HelpHeadings {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new TypeError("Help headings must be an object");
-  }
-  const allowed = new Set([
-    "usage",
-    "commands",
-    "arguments",
-    "options",
-    "constraints",
-    "schema",
-    "examples",
-    "supplement",
-  ]);
-  const headings: Record<string, string> = {};
-  for (const [key, heading] of Object.entries(value)) {
-    if (!allowed.has(key))
-      throw new TypeError("Help headings contain an unknown section");
-    headings[key] = copySingleLineText(heading, `Help heading ${key}`);
-  }
-  return Object.freeze(headings);
-}
-
-function copyHelpFactWording(value: unknown): Readonly<{
-  readonly wording: HelpFactWording;
-  readonly invalidValues: ReadonlyMap<string, unknown>;
-}> {
-  if (!isPlainRecord(value)) {
-    throw new TypeError("Help fact wording must be an object");
-  }
-  const wording: Record<string, string> = {};
-  const invalidValues = new Map<string, unknown>();
-  const unknownSlotIssues: ContractDefinitionIssue[] = [];
-  for (const [slot, raw] of Object.entries(value)) {
-    if (!isHelpTemplateSlot(slot)) {
-      unknownSlotIssues.push({
-        code: "unknownDefinitionProperty",
-        path: ["help", "wording", slot],
-      });
-      continue;
-    }
-    if (typeof raw === "string") {
-      wording[slot] = raw;
-    } else {
-      invalidValues.set(slot, raw);
-      wording[slot] = "";
-    }
-  }
-  const [firstUnknownSlotIssue, ...otherUnknownSlotIssues] = unknownSlotIssues;
-  if (firstUnknownSlotIssue !== undefined) {
-    const templateIssues: ContractDefinitionIssue[] = [];
-    collectHelpFactTemplateIssues(wording, templateIssues, invalidValues);
-    throw new ContractDefinitionError([
-      firstUnknownSlotIssue,
-      ...otherUnknownSlotIssues,
-      ...templateIssues,
-    ]);
-  }
-  return Object.freeze({
-    wording: Object.freeze(wording),
-    invalidValues,
-  });
-}
-
-function isHelpTemplateSlot(
-  slot: string,
-): slot is keyof typeof helpTemplateSpecifications {
-  return Object.hasOwn(helpTemplateSpecifications, slot);
-}
-
-function collectHelpFactTemplateIssues(
-  wording: HelpFactWording,
-  issues: ContractDefinitionIssue[],
-  invalidValues: ReadonlyMap<string, unknown> = new Map(),
-): void {
-  for (const [slot, template] of Object.entries(wording)) {
-    if (!isHelpTemplateSlot(slot)) continue;
-    const path = ["help", "wording", slot];
-    let reason: "singleLine" | "empty" | "placeholder" | undefined;
-    if (invalidValues.has(slot) || !isSingleLineText(template)) {
-      reason = "singleLine";
-    } else if (template.trim().length === 0) {
-      reason = "empty";
-    } else {
-      const allowed = new Set<string>(
-        helpTemplateSpecifications[slot].placeholders,
-      );
-      const placeholders = [
-        ...template.matchAll(/\{([A-Za-z][A-Za-z0-9]*)\}/g),
-      ].map((match) => match[1] ?? "");
-      const outside = template.replace(/\{[A-Za-z][A-Za-z0-9]*\}/g, "");
-      if (
-        outside.includes("{") ||
-        outside.includes("}") ||
-        placeholders.some((placeholder) => !allowed.has(placeholder)) ||
-        [...allowed].some(
-          (placeholder) => !placeholders.includes(placeholder),
-        ) ||
-        (slot === "commandPlaceholder" &&
-          (template.includes("<") || template.includes(">")))
-      ) {
-        reason = "placeholder";
-      }
-    }
-    if (reason !== undefined) {
-      issues.push({
-        code: "invalidHelpFactTemplate",
-        path,
-        slot,
-        received: invalidValues.has(slot) ? invalidValues.get(slot) : template,
-        reason,
-      });
-    }
-  }
-}
-
-/**
  * Assemble the eager version request on the root contract explicitly; it covers the
  * whole command tree automatically. `value` and the optional `description` are owned
  * by the consumer; the core only registers the fixed spelling, projects help and
@@ -5318,14 +4900,14 @@ function compileCli(raw: RuntimeCliAuthoring): CliContract {
   collectUnknownDefinitionProperties(definition, issues);
   const isHierarchy =
     definition.commands[definition.root]?.kind === "rootGroup";
-  const helpWording = helpCapabilities.has(definition.help)
+  const helpWording = isHelpCapability(definition.help)
     ? definition.help.wording
     : undefined;
-  if (helpWording !== undefined) {
+  if (helpWording !== undefined && isHelpCapability(definition.help)) {
     collectHelpFactTemplateIssues(
       helpWording,
       issues,
-      invalidHelpFactWordingValues.get(definition.help),
+      getInvalidHelpFactWordingValues(definition.help),
     );
   }
   let orderedIds: readonly string[];
@@ -5373,8 +4955,10 @@ function compileCli(raw: RuntimeCliAuthoring): CliContract {
     if (node.kind === "rootGroup" || node.kind === "commandGroup") {
       const usage = deepFreeze({
         command: id,
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The hierarchy contract checked commandPlaceholder as required before entering the loop.
-        synopsis: `${commandPath(id, definition.commands)} <${helpWording?.commandPlaceholder as string}>`,
+        synopsis: formatGroupUsageSynopsis(
+          commandPath(id, definition.commands),
+          helpWording,
+        ),
       });
       const compiledNode: RuntimeCompiledCommand = {
         id,
@@ -5457,26 +5041,6 @@ function compileCli(raw: RuntimeCliAuthoring): CliContract {
         examples: compiledExamples,
       });
     }
-    if (Object.keys(compiledOutputs.runtime).length > 0) {
-      if (helpWording?.choices === undefined) {
-        reportMissingHelpFactTemplate(issues, id, "choices");
-      }
-      if (helpWording?.default === undefined) {
-        reportMissingHelpFactTemplate(issues, id, "default");
-      }
-    }
-    if (
-      fields.some((field) => field.choices !== undefined) &&
-      helpWording?.choices === undefined
-    ) {
-      reportMissingHelpFactTemplate(issues, id, "choices");
-    }
-    if (
-      fields.some((field) => field.default !== undefined) &&
-      helpWording?.default === undefined
-    ) {
-      reportMissingHelpFactTemplate(issues, id, "default");
-    }
     const describedInput =
       input === undefined ? undefined : projectFieldDescriptions(input, fields);
     collectControlFieldConflicts(id, fields, definition, issues);
@@ -5490,17 +5054,22 @@ function compileCli(raw: RuntimeCliAuthoring): CliContract {
       describedInput,
     );
     const usageConstraints = usageCompilation.constraints;
-    for (const slot of usageCompilation.requiredHelpTemplates) {
+    for (const slot of collectExecutableRequiredHelpSlots({
+      fields,
+      usageConstraints,
+      outputModeIds: Object.keys(compiledOutputs.runtime),
+    })) {
       if (helpWording?.[slot] === undefined) {
         reportMissingHelpFactTemplate(issues, id, slot);
       }
     }
     const usage = deepFreeze({
       command: id,
-      synopsis: createUsageSynopsis(
+      synopsis: formatExecutableUsageSynopsis(
         commandPath(id, definition.commands),
         fields,
         true,
+        helpWording,
       ),
     });
     runtimeCommands[id] = Object.freeze({
@@ -5611,7 +5180,7 @@ function compileCli(raw: RuntimeCliAuthoring): CliContract {
     controls,
   });
   const manifest = deepFreeze({
-    schemaVersion: "5" as const,
+    schemaVersion: "6" as const,
     root: definition.root,
     commands: manifestCommands,
     controls,
@@ -6055,10 +5624,7 @@ function rawInputMismatchFields(
 function reportMissingHelpFactTemplate(
   issues: ContractDefinitionIssue[],
   command: string,
-  slot: Extract<
-    ContractDefinitionIssue,
-    { readonly code: "missingHelpFactTemplate" }
-  >["slot"],
+  slot: HelpTemplateSlot,
 ): void {
   if (
     issues.some(
@@ -6428,7 +5994,7 @@ function collectCliBaseIssues(
       command: definition.root,
     });
   }
-  if (!helpCapabilities.has(definition.help)) {
+  if (!isHelpCapability(definition.help)) {
     issues.push({ code: "invalidCapability", capability: "help" });
   }
   if (
@@ -7136,7 +6702,7 @@ function collectControlFieldConflicts(
     ["--output", "outputMode"],
   ]);
   if (
-    helpCapabilities.has(definition.help) &&
+    isHelpCapability(definition.help) &&
     definition.help.shortAlias !== undefined
   ) {
     controls.set(definition.help.shortAlias, "help");
@@ -7287,47 +6853,4 @@ function compileSuccess(
     },
     wire: { data: variants.wire },
   });
-}
-
-function createUsageSynopsis(
-  commandName: string,
-  fields: readonly FieldGrammar[],
-  outputSelectable = false,
-): string {
-  return [
-    commandName,
-    ...(outputSelectable ? ["[--output <mode>]"] : []),
-    ...fields.map((field) => formatFieldUsage(field)),
-  ].join(" ");
-}
-
-export function formatFieldUsage(
-  field: FieldGrammar,
-  includeShortAlias = false,
-): string {
-  const value =
-    field.kind === "positional"
-      ? `<${field.key}>`
-      : field.kind === "variadicPositional"
-        ? `<${field.key}...>`
-        : field.kind === "flag"
-          ? [
-              field.longOption,
-              ...(includeShortAlias && field.shortAlias !== undefined
-                ? [field.shortAlias]
-                : []),
-              field.negatedLongOption,
-            ]
-              .filter((spelling) => spelling !== undefined)
-              .join(includeShortAlias ? ", " : "|")
-          : `${[
-              field.longOption,
-              ...(includeShortAlias && field.shortAlias !== undefined
-                ? [field.shortAlias]
-                : []),
-            ].join(", ")} <${field.key}>`;
-  if (field.kind === "repeatableOption") {
-    return field.required ? `(${value})...` : `[${value}]...`;
-  }
-  return field.required ? value : `[${value}]`;
 }

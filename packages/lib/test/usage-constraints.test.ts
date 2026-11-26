@@ -117,7 +117,7 @@ function countCliDefinition<
     root: "countInputs",
     help: englishHelpCapability({
       wording: {
-        default: "（默认值 {value}）",
+        default: "{usage}（默认值 {value}）",
         countExactly: "{fields} 恰好出现 {count} 项",
         countAtLeast: "{fields} 至少出现 {min} 项",
         countAtMost: "{fields} 至多出现 {max} 项",
@@ -725,14 +725,17 @@ void test("count fills default endpoints and picks help templates in a fixed ord
     });
     return writes.join("");
   };
-  assert.match(await renderHelp(exactly), /auth, quiet 恰好出现 1 项/);
-  assert.match(await renderHelp(singleField), /auth 恰好出现 1 项/);
-  assert.match(await renderHelp(minOnly), /auth, quiet 至少出现 1 项/);
-  assert.match(await renderHelp(maxOnly), /auth, quiet 至多出现 1 项/);
-  assert.match(await renderHelp(redundantRange), /auth, quiet 至少出现 0 项/);
+  assert.match(await renderHelp(exactly), /--auth, --quiet 恰好出现 1 项/);
+  assert.match(await renderHelp(singleField), /--auth 恰好出现 1 项/);
+  assert.match(await renderHelp(minOnly), /--auth, --quiet 至少出现 1 项/);
+  assert.match(await renderHelp(maxOnly), /--auth, --quiet 至多出现 1 项/);
+  assert.match(
+    await renderHelp(redundantRange),
+    /--auth, --quiet 至少出现 0 项/,
+  );
   assert.match(
     await renderHelp(between),
-    /auth, quiet, labels, paths 出现 1 到 2 项/,
+    /--auth, --quiet, --label, <paths\.\.\.> 出现 1 到 2 项/,
   );
 });
 
@@ -1777,8 +1780,9 @@ void test("an invalid count does not mask help template diagnostics required by 
     ]),
     help: helpCapability({
       wording: {
-        choices: englishHelpWording.choices,
-        default: "默认值 {value}",
+        outputModePlaceholder: englishHelpWording.outputModePlaceholder,
+        choicesAndDefault: englishHelpWording.choicesAndDefault,
+        default: "{usage} 默认值 {value}",
       },
     }),
   };
@@ -1944,7 +1948,7 @@ void test("one constraint fact projects into grammar, manifest, Draft 2020-12, a
   });
   assert.match(
     writes.join(""),
-    /--help\n  --output <mode> \(choices: "structured"\) \(default: "structured"\)\n  structured \(atomic, structured\)\n    结构化输出\n\n  output, quiet at most 1\n  when all of auth is present, require token, forbid output, quiet\n  forbidden combination of format="json", quiet=true\n$/,
+    /--help\n  --output <mode> \(choices: "structured"\) \(default: "structured"\)\n  structured\n    结构化输出\n\n  --output-file, --quiet at most 1\n  when all of --auth is present, require --token, forbid --output-file, --quiet\n  forbidden combination of --format="json", --quiet=true\n$/,
   );
 });
 

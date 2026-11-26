@@ -21,8 +21,9 @@ export function rejectedDeclarations() {
     root: "check",
     help: helpCapability({
       wording: {
-        choices: "(choices: {choices})",
-        default: "(default: {value})",
+        outputModePlaceholder: "mode",
+        choicesAndDefault: "{usage} (choices: {choices}; default: {value})",
+        list: "{left}, {right}",
       },
     }),
 
@@ -84,8 +85,9 @@ export function rejectedDeclarations() {
     root: "missingCompletion",
     help: helpCapability({
       wording: {
-        choices: "(choices: {choices})",
-        default: "(default: {value})",
+        outputModePlaceholder: "mode",
+        choicesAndDefault: "{usage} (choices: {choices}; default: {value})",
+        list: "{left}, {right}",
       },
     }),
 
@@ -122,8 +124,9 @@ export function rejectedDeclarations() {
     root: "validCompletion",
     help: helpCapability({
       wording: {
-        choices: "(choices: {choices})",
-        default: "(default: {value})",
+        outputModePlaceholder: "mode",
+        choicesAndDefault: "{usage} (choices: {choices}; default: {value})",
+        list: "{left}, {right}",
       },
     }),
 

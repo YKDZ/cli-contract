@@ -408,7 +408,7 @@ const authoringDiagnosticCases: readonly AuthoringDiagnosticCase[] = [
         'received: "<命令组>"',
         'reason: "placeholder"',
         'slot: "choices"',
-        'received: "候选 {choises}"',
+        'received: "{usage} 候选 {choises}"',
         'property: "choises"',
         'slot: "present"',
         'slot: "equals"',

@@ -120,7 +120,7 @@ void test("Zod defaults are applied only by validation and project from one sour
   });
   assert.equal(validationCalls, 0);
   assert.deepEqual(helpWrites, [
-    '生成问候\n\n  greet [--output <mode>] [--name <name>]\n\n  [--name <name>] (default: "Ada")\n    问候对象\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured (atomic, structured)\n    结构化输出\n',
+    '生成问候\n\n  greet [--output <mode>] [--name <name>]\n\n  [--name <name>] (default: "Ada")\n    问候对象\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured\n    结构化输出\n',
   ]);
 
   await executeCli(cli, {
@@ -208,7 +208,7 @@ void test("explicit false and empty-array defaults survive in the single-source 
     },
   });
   assert.deepEqual(writes, [
-    '默认值\n\n  defaults [--output <mode>] [--enabled] [--tag <tags>]...\n\n  [--enabled] (default: false)\n    启用\n  [--tag <tags>]... (default: [])\n    标签\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured (atomic, structured)\n    结构化输出\n',
+    '默认值\n\n  defaults [--output <mode>] [--enabled] [--tag <tags>]...\n\n  [--enabled] (default: false)\n    启用\n  [--tag <tags>]... (default: [])\n    标签\n  --help\n  --output <mode> (choices: "structured") (default: "structured")\n  structured\n    结构化输出\n',
   ]);
 });
 

@@ -15,16 +15,21 @@ import { z } from "zod";
 
 import { englishHelpWording } from "./english-help.ts";
 
-void test("help fact templates express choices and defaults while preserving the schema values", async () => {
+void test("three-state usage templates control word order and eliminate stray spaces around full-width punctuation", async () => {
   const sharedInput0 = z.object({
     mode: z.enum(["safe", "force"]).default("safe"),
+    level: z.enum(["low", "high"]).optional(),
+    retries: z.string().default("3"),
   });
   const cli = defineCli()({
     root: "choose",
     help: helpCapability({
       wording: {
-        choices: "（可选：{choices}）",
-        default: "（预设：{value}）",
+        outputModePlaceholder: "输出方式",
+        choices: "{usage}（可选：{choices}）",
+        default: "{usage}（默认：{value}）",
+        choicesAndDefault: "（默认：{value}；可选：{choices}）{usage}",
+        list: "{left}、{right}",
       },
     }),
 
@@ -39,6 +44,16 @@ void test("help fact templates express choices and defaults while preserving the
             kind: "valueOption",
             longOption: "--mode",
             description: "模式",
+          },
+          level: {
+            kind: "valueOption",
+            longOption: "--level",
+            description: "级别",
+          },
+          retries: {
+            kind: "valueOption",
+            longOption: "--retries",
+            description: "重试次数",
           },
         },
         input: sharedInput0,
@@ -70,10 +85,68 @@ void test("help fact templates express choices and defaults while preserving the
       writes.push(chunk);
     },
   });
+  const help = writes.join("");
+  assert.match(help, /choose \[--output <输出方式>\]/);
   assert.match(
-    writes.join(""),
-    /\[--mode <mode>\] （可选："safe", "force"） （预设："safe"）/,
+    help,
+    /（默认："safe"；可选："safe"、"force"）\[--mode <mode>\]/,
   );
+  assert.match(help, /\[--level <level>\]（可选："low"、"high"）/);
+  assert.match(help, /\[--retries <retries>\]（默认："3"）/);
+  assert.match(
+    help,
+    /（默认："structured"；可选："structured"）--output <输出方式>/,
+  );
+  assert.doesNotMatch(help, /structured \(atomic, structured\)/);
+  assert.match(help, /\n  structured\n    结构化输出\n/);
+});
+
+void test("minimal single-command single-output-mode contract only needs outputModePlaceholder and choicesAndDefault", async () => {
+  const cli = defineCli()({
+    root: "ping",
+    help: helpCapability({
+      wording: {
+        outputModePlaceholder: "方式",
+        choicesAndDefault: "{usage}（可选：{choices}；默认：{value}）",
+      },
+    }),
+    usageFailureExitCode: 64,
+    commands: {
+      ping: {
+        kind: "rootCommand",
+        name: "ping",
+        description: "探测",
+        input: z.object({}),
+        outputs: (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
+                success: { kind: "completion" },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({ description: "结构化输出" }),
+          },
+        }),
+      },
+    },
+  });
+  const writes: string[] = [];
+  await executeCli(cli, {
+    invocation: parseCliInvocation(cli, ["--help"]),
+    dependencies: undefined,
+    write: ({ chunk }) => {
+      writes.push(chunk);
+    },
+  });
+  const help = writes.join("");
+  assert.match(help, /ping \[--output <方式>\]/);
+  assert.match(
+    help,
+    /--output <方式>（可选："structured"；默认："structured"）/,
+  );
+  assert.match(help, /\n  structured\n    结构化输出\n/);
 });
 
 void test("unknown slots in extracted help facts report a closed definition issue", () => {
@@ -131,7 +204,7 @@ void test("unknown slots and known template issues in help wording aggregate in 
 
 void test("known-only template errors still aggregate with leaf constraint issues at root assembly", () => {
   const helpDefinition: HelpCapabilityDefinition = JSON.parse(
-    '{"wording":{"choices":"候选 {choises}","default":"默认 {value}"}}',
+    '{"wording":{"choices":"{usage} 候选 {choises}","default":"{usage} 默认 {value}"}}',
   );
   const sharedInput1 = z.object({ mode: z.enum(["safe", "force"]).optional() });
   const definition = {
@@ -197,7 +270,7 @@ void test("known-only template errors still aggregate with leaf constraint issue
           code: "invalidHelpFactTemplate",
           path: ["help", "wording", "choices"],
           slot: "choices",
-          received: "候选 {choises}",
+          received: "{usage} 候选 {choises}",
           reason: "placeholder",
         },
         {
@@ -208,6 +281,21 @@ void test("known-only template errors still aggregate with leaf constraint issue
           member: "all.field",
           field: "missing",
         },
+        {
+          code: "missingHelpFactTemplate",
+          command: "choose",
+          slot: "outputModePlaceholder",
+        },
+        {
+          code: "missingHelpFactTemplate",
+          command: "choose",
+          slot: "choicesAndDefault",
+        },
+        {
+          code: "missingHelpFactTemplate",
+          command: "choose",
+          slot: "list",
+        },
       ]);
       return true;
     },
@@ -217,6 +305,7 @@ void test("known-only template errors still aggregate with leaf constraint issue
 void test("a declared help fact missing its template reports command and slot at definition time", () => {
   const sharedInput0 = z.object({
     mode: z.enum(["safe", "force"]).default("safe"),
+    extra: z.string().optional(),
   });
   assert.throws(
     () =>
@@ -236,6 +325,11 @@ void test("a declared help fact missing its template reports command and slot at
                 longOption: "--mode",
                 description: "模式",
               },
+              extra: {
+                kind: "valueOption",
+                longOption: "--extra",
+                description: "附加",
+              },
             },
             input: sharedInput0,
             usageConstraints: [
@@ -252,7 +346,7 @@ void test("a declared help fact missing its template reports command and slot at
               {
                 kind: "when",
                 all: [{ kind: "equals", field: "mode", value: "force" }],
-                onMatch: { require: ["mode"] },
+                onMatch: { require: ["mode"], forbid: ["extra"] },
                 otherwise: { forbid: ["mode"] },
               },
               {
@@ -286,19 +380,24 @@ void test("a declared help fact missing its template reports command and slot at
     (error: unknown) => {
       assert.ok(error instanceof ContractDefinitionError);
       assert.deepEqual(error.issues, [
-        { code: "missingHelpFactTemplate", command: "choose", slot: "choices" },
-        { code: "missingHelpFactTemplate", command: "choose", slot: "default" },
+        {
+          code: "missingHelpFactTemplate",
+          command: "choose",
+          slot: "outputModePlaceholder",
+        },
+        {
+          code: "missingHelpFactTemplate",
+          command: "choose",
+          slot: "choicesAndDefault",
+        },
+        { code: "missingHelpFactTemplate", command: "choose", slot: "list" },
         {
           code: "missingHelpFactTemplate",
           command: "choose",
           slot: "whenOnMatch",
         },
         { code: "missingHelpFactTemplate", command: "choose", slot: "present" },
-        {
-          code: "missingHelpFactTemplate",
-          command: "choose",
-          slot: "require",
-        },
+        { code: "missingHelpFactTemplate", command: "choose", slot: "require" },
         {
           code: "missingHelpFactTemplate",
           command: "choose",
@@ -311,11 +410,13 @@ void test("a declared help fact missing its template reports command and slot at
           slot: "whenOnMatchOtherwise",
         },
         { code: "missingHelpFactTemplate", command: "choose", slot: "equals" },
+        { code: "missingHelpFactTemplate", command: "choose", slot: "effects" },
         {
           code: "missingHelpFactTemplate",
           command: "choose",
           slot: "forbiddenCombination",
         },
+        { code: "missingHelpFactTemplate", command: "choose", slot: "facts" },
       ]);
       return true;
     },
@@ -360,8 +461,16 @@ void test("output-mode choice and default facts missing author templates report 
     (error: unknown) => {
       assert.ok(error instanceof ContractDefinitionError);
       assert.deepEqual(error.issues, [
-        { code: "missingHelpFactTemplate", command: "show", slot: "choices" },
-        { code: "missingHelpFactTemplate", command: "show", slot: "default" },
+        {
+          code: "missingHelpFactTemplate",
+          command: "show",
+          slot: "outputModePlaceholder",
+        },
+        {
+          code: "missingHelpFactTemplate",
+          command: "show",
+          slot: "choicesAndDefault",
+        },
       ]);
       return true;
     },
@@ -431,13 +540,23 @@ void test("empty effect branches do not require their help slots", async () => {
       writes.push(chunk);
     },
   });
-  assert.match(writes.join(""), /当并非全部满足 存在 mode 时，不能提供 mode/);
+  assert.match(
+    writes.join(""),
+    /当并非全部满足 存在 --mode 时，不能提供 --mode/,
+  );
 });
 
 void test("dynamic help fact templates aggregate invalid slots at root assembly", () => {
-  const wording: { readonly choices: string; readonly default: string } = {
-    choices: "（可选值：{unknown}）",
-    default: "默认值\n{value}",
+  const wording: {
+    readonly outputModePlaceholder: string;
+    readonly choicesAndDefault: string;
+    readonly choices: string;
+    readonly default: string;
+  } = {
+    outputModePlaceholder: "mode",
+    choicesAndDefault: "{usage} ({choices}; {value})",
+    choices: "{usage}（可选值：{unknown}）",
+    default: "{usage} 默认值\n{value}",
   };
   const sharedInput3 = z.object({ mode: z.enum(["safe", "force"]).optional() });
   assert.throws(
@@ -487,15 +606,20 @@ void test("dynamic help fact templates aggregate invalid slots at root assembly"
           code: "invalidHelpFactTemplate",
           path: ["help", "wording", "choices"],
           slot: "choices",
-          received: "（可选值：{unknown}）",
+          received: "{usage}（可选值：{unknown}）",
           reason: "placeholder",
         },
         {
           code: "invalidHelpFactTemplate",
           path: ["help", "wording", "default"],
           slot: "default",
-          received: "默认值\n{value}",
+          received: "{usage} 默认值\n{value}",
           reason: "singleLine",
+        },
+        {
+          code: "missingHelpFactTemplate",
+          command: "choose",
+          slot: "list",
         },
       ]);
       return true;
@@ -505,7 +629,7 @@ void test("dynamic help fact templates aggregate invalid slots at root assembly"
 
 void test("help template errors keep the invalid original value and keep aggregating definition issues", () => {
   const helpDefinition: HelpCapabilityDefinition = JSON.parse(
-    '{"wording":{"choices":42,"default":null,"countExactly":{},"whenOnMatch":"满足 {unknown}"}}',
+    '{"wording":{"outputModePlaceholder":"mode","choicesAndDefault":"{usage} ({choices}; {value})","choices":42,"default":null,"countExactly":{},"whenOnMatch":"满足 {unknown}"}}',
   );
   const sharedInput4 = z.object({});
   const definition = {
@@ -591,21 +715,23 @@ void test("help template errors keep the invalid original value and keep aggrega
   );
 });
 
-void test("command group placeholders share the same boundary for static and dynamic checks", () => {
+void test("command group and output mode placeholders share the same boundary for static and dynamic checks", () => {
   const invalidTemplates = [
+    { received: "", reason: "empty" },
     { received: "   ", reason: "empty" },
     { received: "<命令组>", reason: "placeholder" },
+    { received: "mode\nline", reason: "singleLine" },
   ] as const;
 
   for (const { received, reason } of invalidTemplates) {
     const wording: {
       readonly commandPlaceholder: string;
-      readonly choices: string;
-      readonly default: string;
+      readonly outputModePlaceholder: string;
+      readonly choicesAndDefault: string;
     } = {
       commandPlaceholder: received,
-      choices: englishHelpWording.choices,
-      default: englishHelpWording.default,
+      outputModePlaceholder: received,
+      choicesAndDefault: englishHelpWording.choicesAndDefault,
     };
     const sharedInput5 = z.object({});
     assert.throws(
@@ -651,6 +777,13 @@ void test("command group placeholders share the same boundary for static and dyn
             received,
             reason,
           },
+          {
+            code: "invalidHelpFactTemplate",
+            path: ["help", "wording", "outputModePlaceholder"],
+            slot: "outputModePlaceholder",
+            received,
+            reason,
+          },
         ]);
         return true;
       },
@@ -667,8 +800,8 @@ void test("a command group missing its placeholder reports the root identity at 
         root: "tool",
         help: helpCapability({
           wording: {
-            choices: englishHelpWording.choices,
-            default: englishHelpWording.default,
+            outputModePlaceholder: englishHelpWording.outputModePlaceholder,
+            choicesAndDefault: englishHelpWording.choicesAndDefault,
           },
         }),
 
@@ -723,8 +856,8 @@ void test("the command group placeholder flows through help, usage failures, and
     help: helpCapability({
       wording: {
         commandPlaceholder: "命令",
-        choices: englishHelpWording.choices,
-        default: englishHelpWording.default,
+        outputModePlaceholder: englishHelpWording.outputModePlaceholder,
+        choicesAndDefault: englishHelpWording.choicesAndDefault,
       },
     }),
 
@@ -765,7 +898,7 @@ void test("the command group placeholder flows through help, usage failures, and
   });
 
   assert.equal(cli.grammar.root.usage.synopsis, "tool <命令>");
-  assert.equal(cli.manifest.schemaVersion, "5");
+  assert.equal(cli.manifest.schemaVersion, "6");
   assert.ok(
     JSON.stringify(cli.manifest.usageFailure.wire).includes("tool <命令>"),
   );
@@ -888,24 +1021,25 @@ void test("conditional branch templates express universal conditions and let eac
     },
   });
   const help = writes.join("");
-  assert.match(help, /token, quiet 的数量不超过 1/);
-  assert.match(help, /当全部满足 存在 auth 时，必须提供 token/);
-  assert.match(help, /当并非全部满足 存在 quiet 时，不能提供 force/);
+  assert.match(help, /--token, --quiet 的数量不超过 1/);
+  assert.match(help, /当全部满足 存在 --auth 时，必须提供 --token/);
+  assert.match(help, /当并非全部满足 存在 --quiet 时，不能提供 --force/);
   assert.match(
     help,
-    /当全部满足 quiet 等于 true 时，必须提供 auth；否则，不能提供 token/,
+    /当全部满足 --quiet 等于 true 时，必须提供 --auth；否则，不能提供 --token/,
   );
-  assert.match(help, /禁止同时出现 quiet 等于 true, force 等于 true/);
+  assert.match(help, /禁止同时出现 --quiet 等于 true, --force 等于 true/);
 });
 
-void test("the output format control reuses the choices and default templates", async () => {
+void test("the output format control reuses choicesAndDefault and list templates", async () => {
   const sharedInput8 = z.object({});
   const cli = defineCli()({
     root: "show",
     help: helpCapability({
       wording: {
-        choices: "（候选：{choices}）",
-        default: "（默认：{value}）",
+        outputModePlaceholder: "输出方式",
+        choicesAndDefault: "{usage}（候选：{choices}；默认：{value}）",
+        list: "{left}、{right}",
       },
     }),
 
@@ -957,20 +1091,25 @@ void test("the output format control reuses the choices and default templates", 
       writes.push(chunk);
     },
   });
+  const help = writes.join("");
   assert.match(
-    writes.join(""),
-    /--output <mode> （候选："structured", "text"） （默认："text"）/,
+    help,
+    /--output <输出方式>（候选："structured"、"text"；默认："text"）/,
   );
+  assert.doesNotMatch(help, /\(atomic, structured\)|\(atomic, text\)/);
+  assert.match(help, /\n  structured\n    结构化输出\n/);
+  assert.match(help, /\n  text\n    文本输出\n/);
 });
 
-void test("output-mode help lists the choices and default wording provided by the root author", async () => {
+void test("output-mode help lists the choicesAndDefault wording provided by the root author", async () => {
   const sharedInput9 = z.object({});
   const cli = defineCli()({
     root: "show",
     help: helpCapability({
       wording: {
-        choices: "candidates {choices}",
-        default: "primary {value}",
+        outputModePlaceholder: "format",
+        choicesAndDefault: "{usage} candidates {choices} primary {value}",
+        list: "{left} | {right}",
       },
     }),
 
@@ -1024,7 +1163,415 @@ void test("output-mode help lists the choices and default wording provided by th
   });
   assert.match(
     writes.join(""),
-    /--output <mode> candidates "structured", "text" primary "text"/,
+    /--output <format> candidates "structured" \| "text" primary "text"/,
   );
   assert.doesNotMatch(writes.join(""), /输出方式/);
+});
+
+void test("binary joiner templates fold left-associatively and are only required when count >= 2", async () => {
+  const singleBranchCli = defineCli()({
+    root: "check",
+    help: helpCapability({
+      wording: {
+        outputModePlaceholder: "mode",
+        choicesAndDefault: "{usage} ({choices}; {value})",
+        whenOnMatch: "when {facts}: {onMatch}",
+        present: "{field} is set",
+        require: "need {fields}",
+      },
+    }),
+    usageFailureExitCode: 64,
+    commands: {
+      check: {
+        kind: "rootCommand",
+        name: "check",
+        description: "Single-item rule needs no binary joiners",
+        fields: {
+          auth: { kind: "flag", longOption: "--auth", description: "Auth" },
+          token: {
+            kind: "valueOption",
+            longOption: "--token",
+            description: "Token",
+          },
+        },
+        input: z.object({
+          auth: z.boolean().optional(),
+          token: z.string().optional(),
+        }),
+        usageConstraints: [
+          {
+            kind: "when",
+            all: [{ kind: "present", field: "auth" }],
+            onMatch: { require: ["token"] },
+          },
+        ],
+        outputs: (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
+                success: { kind: "completion" },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({ description: "Structured" }),
+          },
+        }),
+      },
+    },
+  });
+  assert.equal(singleBranchCli.manifest.root, "check");
+
+  const foldingCli = defineCli()({
+    root: "fold",
+    help: helpCapability({
+      wording: {
+        outputModePlaceholder: "mode",
+        choicesAndDefault: "{usage} ({choices}; {value})",
+        choices: "{usage} ({choices})",
+        list: "L({left}, {right})",
+        facts: "F({left}, {right})",
+        effects: "E({left}, {right})",
+        whenOnMatch: "when {facts}: {onMatch}",
+        present: "{field}?",
+        require: "req[{fields}]",
+        forbid: "forbid[{fields}]",
+      },
+    }),
+    usageFailureExitCode: 64,
+    commands: {
+      fold: {
+        kind: "rootCommand",
+        name: "fold",
+        description: "Verify left-associative folding",
+        fields: {
+          alpha: { kind: "flag", longOption: "--alpha", description: "Alpha" },
+          beta: { kind: "flag", longOption: "--beta", description: "Beta" },
+          gamma: { kind: "flag", longOption: "--gamma", description: "Gamma" },
+          pick: {
+            kind: "valueOption",
+            longOption: "--pick",
+            description: "Pick",
+          },
+        },
+        input: z.object({
+          alpha: z.boolean().optional(),
+          beta: z.boolean().optional(),
+          gamma: z.boolean().optional(),
+          pick: z.enum(["a", "b", "c"]).optional(),
+        }),
+        usageConstraints: [
+          {
+            kind: "when",
+            all: [
+              { kind: "present", field: "alpha" },
+              { kind: "present", field: "beta" },
+              { kind: "present", field: "gamma" },
+            ],
+            onMatch: {
+              require: ["alpha", "beta", "gamma"],
+              forbid: ["pick"],
+            },
+          },
+        ],
+        outputs: (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
+                success: { kind: "completion" },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({ description: "Structured" }),
+          },
+        }),
+      },
+    },
+  });
+  const writes: string[] = [];
+  await executeCli(foldingCli, {
+    invocation: parseCliInvocation(foldingCli, ["--help"]),
+    dependencies: undefined,
+    write: ({ chunk }) => {
+      writes.push(chunk);
+    },
+  });
+  const help = writes.join("");
+  assert.match(help, /\[--pick <pick>\] \(L\(L\("a", "b"\), "c"\)\)/);
+  assert.match(
+    help,
+    /when F\(F\(--alpha\?, --beta\?\), --gamma\?\): E\(req\[L\(L\(--alpha, --beta\), --gamma\)\], forbid\[--pick\]\)/,
+  );
+});
+
+void test("field placeholder projects to grammar, manifest, help, and constraint symbols while wire keeps field keys", async () => {
+  const cli = defineCli()({
+    root: "deploy",
+    help: helpCapability({
+      wording: englishHelpWording,
+    }),
+    usageFailureExitCode: 64,
+    commands: {
+      deploy: {
+        kind: "rootCommand",
+        name: "deploy",
+        description: "Deploy artifact",
+        fields: {
+          targetEnv: {
+            kind: "positional",
+            placeholder: "environment",
+            description: "Target environment",
+          },
+          extraFiles: {
+            kind: "variadicPositional",
+            placeholder: "file path",
+            description: "Extra files",
+          },
+          authToken: {
+            kind: "valueOption",
+            longOption: "--auth-token",
+            shortAlias: "-t",
+            placeholder: "secret",
+            description: "Auth token",
+          },
+          tagList: {
+            kind: "repeatableOption",
+            longOption: "--tag",
+            placeholder: undefined as never,
+            description: "Tags",
+          },
+          colorMode: {
+            kind: "flag",
+            longOption: "--color",
+            negatedLongOption: "--no-color",
+            description: "Color output",
+          },
+        },
+        input: z.object({
+          targetEnv: z.string(),
+          extraFiles: z.array(z.string()).min(1).optional(),
+          authToken: z.string().optional(),
+          tagList: z.array(z.string()).min(1).optional(),
+          colorMode: z.boolean().optional(),
+        }),
+        usageConstraints: [
+          {
+            kind: "when",
+            all: [{ kind: "equals", field: "colorMode", value: false }],
+            onMatch: { require: ["authToken", "targetEnv"] },
+            otherwise: { forbid: ["extraFiles"] },
+          },
+          {
+            kind: "count",
+            fields: ["authToken", "tagList"],
+            min: 1,
+          },
+        ],
+        outputs: (mode) => ({
+          default: "structured",
+          modes: {
+            structured: mode
+              .atomic({
+                success: { kind: "completion" },
+                failures: {},
+                handler: ({ outcome }) => outcome.completion(),
+              })
+              .structured({ description: "Structured output" }),
+          },
+        }),
+      },
+    },
+  });
+
+  assert.equal(
+    cli.grammar.root.usage.synopsis,
+    "deploy [--output <mode>] <environment> [<file path...>] [--auth-token <secret>] [--tag <tagList>]... [--color|--no-color]",
+  );
+  const targetField = cli.grammar.root.fields.find(
+    (field) => field.key === "targetEnv",
+  );
+  const tagField = cli.grammar.root.fields.find(
+    (field) => field.key === "tagList",
+  );
+  assert.ok(targetField !== undefined && targetField.kind === "positional");
+  assert.equal(targetField.placeholder, "environment");
+  assert.ok(tagField !== undefined);
+  assert.equal(Object.hasOwn(tagField, "placeholder"), false);
+  const manifestDeploy = cli.manifest.commands.deploy;
+  assert.equal(
+    manifestDeploy.fields.find((field) => field.key === "extraFiles") &&
+      (
+        manifestDeploy.fields.find((field) => field.key === "extraFiles") as {
+          placeholder?: string;
+        }
+      ).placeholder,
+    "file path",
+  );
+  assert.equal(
+    Object.hasOwn(
+      manifestDeploy.fields.find((field) => field.key === "tagList") ?? {},
+      "placeholder",
+    ),
+    false,
+  );
+  assert.deepEqual(manifestDeploy.usageConstraints, [
+    {
+      kind: "when",
+      all: [{ kind: "equals", field: "colorMode", value: false }],
+      onMatch: { require: ["authToken", "targetEnv"] },
+      otherwise: { forbid: ["extraFiles"] },
+    },
+    {
+      kind: "count",
+      fields: ["authToken", "tagList"],
+      min: 1,
+      max: 2,
+    },
+  ]);
+
+  const writes: string[] = [];
+  await executeCli(cli, {
+    invocation: parseCliInvocation(cli, ["--help"]),
+    dependencies: undefined,
+    write: ({ chunk }) => {
+      writes.push(chunk);
+    },
+  });
+  const help = writes.join("");
+  assert.match(help, /  <environment>\n    Target environment/);
+  assert.match(help, /  \[<file path\.\.\.>\]\n    Extra files/);
+  assert.match(help, /  \[--auth-token, -t <secret>\]\n    Auth token/);
+  assert.match(help, /  \[--tag <tagList>\]\.\.\.\n    Tags/);
+  assert.match(
+    help,
+    /when all of --color=false, require --auth-token, <environment>; otherwise, forbid <file path\.\.\.>/,
+  );
+  assert.match(help, /--auth-token, --tag at least 1/);
+
+  const failureWrites: string[] = [];
+  await executeCli(cli, {
+    invocation: parseCliInvocation(cli, ["prod", "--no-color"]),
+    dependencies: undefined,
+    write: ({ chunk }) => {
+      failureWrites.push(chunk);
+    },
+  });
+  const envelope = JSON.parse(failureWrites.join(""));
+  assert.equal(envelope.schemaVersion, "3");
+  assert.equal(envelope.kind, "usageFailure");
+  assert.deepEqual(envelope.issues, [
+    {
+      code: "conditionalConstraintViolation",
+      branch: "onMatch",
+      conditions: [
+        {
+          kind: "equals",
+          field: "colorMode",
+          present: true,
+          actual: false,
+          expected: false,
+        },
+      ],
+      missingRequiredFields: ["authToken"],
+      presentForbiddenFields: [],
+    },
+    {
+      code: "countConstraintViolation",
+      min: 1,
+      max: 2,
+      presentFields: [],
+      absentFields: ["authToken", "tagList"],
+    },
+  ]);
+});
+
+void test("invalid field placeholders and flag placeholders report closed definition issues", () => {
+  for (const [received, reason] of [
+    ["", "empty"],
+    ["   ", "empty"],
+    ["bad\nname", "singleLine"],
+    ["bad\rname", "singleLine"],
+    ["bad\0name", "singleLine"],
+    ["<name>", "placeholder"],
+    ["name>", "placeholder"],
+    ["<name", "placeholder"],
+    [42, "singleLine"],
+  ] as const) {
+    assert.throws(
+      () =>
+        defineCli()({
+          root: "deploy",
+          help: helpCapability({ wording: englishHelpWording }),
+          usageFailureExitCode: 64,
+          commands: {
+            deploy: {
+              kind: "rootCommand",
+              name: "deploy",
+              description: "Deploy",
+              fields: {
+                target: {
+                  kind: "positional",
+                  placeholder: received as never,
+                  description: "Target",
+                },
+                opt: {
+                  kind: "valueOption",
+                  longOption: "--opt",
+                  placeholder: received as never,
+                  description: "Option",
+                },
+                verbose: {
+                  kind: "flag",
+                  longOption: "--verbose",
+                  placeholder: "nope",
+                  description: "Verbose",
+                } as never,
+              },
+              input: z.object({
+                target: z.string(),
+                opt: z.string().optional(),
+                verbose: z.boolean().optional(),
+              }),
+              outputs: (mode) => ({
+                default: "structured",
+                modes: {
+                  structured: mode
+                    .atomic({
+                      success: { kind: "completion" },
+                      failures: {},
+                      handler: ({ outcome }) => outcome.completion(),
+                    })
+                    .structured({ description: "Structured" }),
+                },
+              }),
+            },
+          },
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof ContractDefinitionError);
+        assert.deepEqual(error.issues, [
+          {
+            code: "unknownDefinitionProperty",
+            path: ["commands", "deploy", "fields", "verbose", "placeholder"],
+          },
+          {
+            code: "invalidFieldPlaceholder",
+            command: "deploy",
+            field: "target",
+            received,
+            reason,
+          },
+          {
+            code: "invalidFieldPlaceholder",
+            command: "deploy",
+            field: "opt",
+            received,
+            reason,
+          },
+        ]);
+        return true;
+      },
+    );
+  }
 });

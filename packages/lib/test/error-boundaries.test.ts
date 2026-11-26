@@ -499,12 +499,12 @@ void test("defineCli reports dynamic invalid values in the current declaration i
         {
           code: "missingHelpFactTemplate",
           command: "fixture",
-          slot: "choices",
+          slot: "outputModePlaceholder",
         },
         {
           code: "missingHelpFactTemplate",
           command: "fixture",
-          slot: "default",
+          slot: "choicesAndDefault",
         },
       ]);
       return true;
@@ -520,8 +520,8 @@ void test("defineCli rejects a text completion missing its presenter", () => {
         root: "fixture",
         help: helpCapability({
           wording: {
-            choices: "(choices: {choices})",
-            default: "(default: {value})",
+            outputModePlaceholder: "mode",
+            choicesAndDefault: "{usage} (choices: {choices}; default: {value})",
           },
         }),
 

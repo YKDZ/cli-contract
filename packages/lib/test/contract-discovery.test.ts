@@ -53,7 +53,11 @@ function createDiscoveryCli(payloadWidth = 0) {
         longOption: "--format",
         description: "结果格式。",
       },
-      id: { kind: "positional", description: "项目标识。" },
+      id: {
+        kind: "positional",
+        placeholder: "item-id",
+        description: "项目标识。",
+      },
       note: {
         kind: "valueOption",
         longOption: "--note",
@@ -295,6 +299,7 @@ void test("public discovery query uses canonical paths and projects one exact se
   const directory = queryCliContract(cli, { path: [] });
   assert.equal(directory.kind, "directory");
   if (directory.kind !== "directory") return;
+  assert.equal(directory.schemaVersion, "6");
   assert.deepEqual(
     directory.children.map((child) => child.path),
     [["tools"]],
@@ -314,6 +319,7 @@ void test("public discovery query uses canonical paths and projects one exact se
   const summary = queryCliContract(cli, { path: ["tools", "inspect"] });
   assert.equal(summary.kind, "summary");
   if (summary.kind !== "summary") return;
+  assert.equal(summary.schemaVersion, "6");
   assert.deepEqual(summary.path, ["tools", "inspect"]);
   assert.equal(summary.outputs.default, "text");
   assert.deepEqual(summary.fields[0], {
@@ -325,6 +331,26 @@ void test("public discovery query uses canonical paths and projects one exact se
     choices: ["json", "text"],
     default: "json",
   });
+  assert.deepEqual(summary.fields[1], {
+    key: "id",
+    kind: "positional",
+    placeholder: "item-id",
+    description: "项目标识。",
+    required: true,
+  });
+  const inputDoc = queryCliContract(cli, {
+    path: ["tools", "inspect"],
+    target: "input",
+  });
+  assert.equal(inputDoc.kind, "input");
+  if (inputDoc.kind === "input") {
+    assert.equal(inputDoc.schemaVersion, "6");
+    assert.equal(
+      (inputDoc.fields[1] as { placeholder?: string } | undefined)?.placeholder,
+      "item-id",
+    );
+    assert.equal(Object.hasOwn(inputDoc.fields[0] ?? {}, "placeholder"), false);
+  }
   assert.ok(
     summary.next.some(
       (next) =>
